@@ -727,6 +727,12 @@ public sealed class ProfileService : IProfileService
             warnings.Add("xterm scrollback size was invalid.");
         }
 
+        if (settings.XtermScrollbackSize < settings.MaxVisibleLogLines)
+        {
+            settings.XtermScrollbackSize = settings.MaxVisibleLogLines;
+            warnings.Add("xterm scrollback was raised to match visible log max lines.");
+        }
+
         settings.LastSearchText = settings.LastSearchText?.Trim() ?? string.Empty;
         settings.MarkerText = settings.MarkerText?.Trim() ?? string.Empty;
         settings.CuteBackgroundImagePath = NormalizeCuteBackgroundImagePath(

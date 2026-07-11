@@ -165,6 +165,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
     private readonly DispatcherQueueTimer _diagnosticsTimer;
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
+    private readonly SemaphoreSlim _visualLogEnqueueGate = new(1, 1);
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
     private readonly Queue<Guid> _eventContextOrder = new();
     private CancellationTokenSource? _connectionCancellation;
@@ -179,6 +180,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _isConnected;
     private bool _isBusy;
     private bool _isManualLogRenderingPaused;
+    private bool _isXtermAppendBackpressureActive;
     private bool _isAutoScrollEnabled = true;
     private bool _isXtermReady;
     private SerialSettings _currentSerialSettings = new();
@@ -227,6 +229,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _minimizedVisualCoalescedCharacterCount;
     private long _maxMinimizedVisualCoalescedLineCount;
     private long _maxMinimizedVisualCoalescedCharacterCount;
+    private int _suspendedXtermPendingLineCount;
+    private long _suspendedXtermPendingCharacterCount;
+    private long _suspendedXtermQueueCollapseCount;
+    private string _lastSuspendedXtermQueueCollapseReason = "(none)";
     private long _xtermCopyRequestCount;
     private long _xtermCopiedCharacterCount;
     private long _xtermCopyErrorCount;
@@ -244,6 +250,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _maxXtermAppendCharacterCount;
     private long _lastXtermAppendDurationMs;
     private long _maxXtermAppendDurationMs;
+    private long _xtermBackpressureSearchRefreshSuppressedCount;
+    private long _xtermBackpressureEventAutoScrollSuppressedCount;
+    private long _xtermBackpressureAutoScrollSuppressedCount;
+    private long _xtermBackpressureFullRerenderDeferredCount;
     private string _lastSentCommandText = string.Empty;
     private TxSendMode _lastTxMode = TxSendMode.Terminal;
     private string _lastTxRawInput = string.Empty;
@@ -341,8 +351,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _contextRenderErrorCount;
     private long _xtermFitResizeCount;
     private long _xtermLayoutErrorCount;
+    private int _lastAppliedXtermScrollbackSize;
     private long _ruleEditErrorCount;
     private long _commandEditErrorCount;
+    private long _eventContextUiDroppedCount;
     private string _lastEventContextUiError = string.Empty;
     private string _lastEventSelectionError = string.Empty;
     private string _lastEventListScrollError = string.Empty;
@@ -523,7 +535,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             TimeSpan.FromMilliseconds(SmoothVisualRenderIntervalMs),
             ApplyLogRenderBatch,
             maxPendingItems: 10_000,
-            maxItemsPerTick: SmoothVisualAppendMaxLines);
+            maxItemsPerTick: SmoothVisualAppendMaxLines,
+            dropOldestWhenFull: false,
+            catchUpMaxItemsPerTick: 400,
+            catchUpPendingThreshold: 1_000);
 
         _eventBatchDispatcher = new UiBatchDispatcher<DetectedEvent>(
             dispatcherQueue,
@@ -539,8 +554,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             maxPendingItems: 5_000,
             maxItemsPerTick: EventUiMaxItemsPerTick);
 
-        ConnectCommand = new AsyncRelayCommand(ConnectAsync, () => !IsBusy && !IsConnected);
-        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => !IsBusy);
+        ConnectCommand = new AsyncRelayCommand(ConnectAsync, () => CanConnect);
+        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => !IsBusy && (IsConnected || CanConnect));
         DisconnectCommand = new AsyncRelayCommand(DisconnectAsync, () => IsConnected && !IsBusy);
         SendCommand = new AsyncRelayCommand(SendCurrentCommandAsync, CanSendCurrentCommand);
         SendSavedCommandCommand = new AsyncRelayCommand(SendSavedCommandAsync, parameter => IsConnected && !IsBusy && parameter is TxCommand);
@@ -622,6 +637,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public ObservableCollection<int> BaudRates { get; } = new()
     {
+        1200,
+        4800,
         9600,
         19200,
         38400,
@@ -1075,6 +1092,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
                 OnPropertyChanged(nameof(CurrentPortIsMock));
+                NotifyConnectionSelectionCommandState();
             }
         }
     }
@@ -1097,6 +1115,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 RecordSettingsChange("Baudrate", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
+                NotifyConnectionSelectionCommandState();
             }
         }
     }
@@ -1561,6 +1580,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.MaxVisibleLogLines = value;
+            if (_currentUiSettings.XtermScrollbackSize < value)
+            {
+                _currentUiSettings.XtermScrollbackSize = value;
+                OnPropertyChanged(nameof(XtermScrollbackSize));
+                OnPropertyChanged(nameof(XtermScrollbackSizeText));
+            }
             SetVisibleLogRebuildReason("visible log capacity change");
             Log.SetCapacity(value);
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
@@ -1655,13 +1680,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            if (_currentUiSettings.XtermScrollbackSize == value)
+            var normalizedValue = Math.Max(value, MaxVisibleLogLines);
+            if (_currentUiSettings.XtermScrollbackSize == normalizedValue)
             {
+                if (normalizedValue != value)
+                {
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(XtermScrollbackSizeText));
+                }
                 return;
             }
 
-            _currentUiSettings.XtermScrollbackSize = value;
-            RecordSettingsChange("xterm scrollback", SettingsApplyBehavior.Immediate, value.ToString(CultureInfo.InvariantCulture));
+            _currentUiSettings.XtermScrollbackSize = normalizedValue;
+            RecordSettingsChange("xterm scrollback", SettingsApplyBehavior.Immediate, normalizedValue.ToString(CultureInfo.InvariantCulture));
             OnPropertyChanged();
             OnPropertyChanged(nameof(XtermScrollbackSizeText));
             OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
@@ -1891,6 +1922,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
                 OnPropertyChanged(nameof(CanEditSizeRotationBytes));
                 OnPropertyChanged(nameof(CanManualDisconnect));
+                OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
             }
         }
@@ -1906,6 +1938,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
                 OnPropertyChanged(nameof(CanEditSizeRotationBytes));
                 OnPropertyChanged(nameof(CanManualDisconnect));
+                OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
             }
         }
@@ -1917,12 +1950,29 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanManualDisconnect => IsConnected && !IsBusy;
 
+    public bool CanConnect =>
+        !IsConnected &&
+        !IsBusy &&
+        SelectedPortAvailable &&
+        BaudRates.Contains(SelectedBaudRate);
+
     public bool IsLogRenderingPaused
     {
         get => _isManualLogRenderingPaused;
     }
 
     public bool IsManualLogRenderingPaused => _isManualLogRenderingPaused;
+
+    public bool IsXtermAppendBackpressureActive => _isXtermAppendBackpressureActive;
+
+    public bool IsEffectiveXtermAutoScrollEnabled =>
+        IsAutoScrollEnabled && !IsXtermAppendBackpressureActive;
+
+    public bool IsSearchAutoRefreshSuppressedByXtermBackpressure =>
+        IsXtermAppendBackpressureActive && IsSearchResultAutoRefreshEnabled;
+
+    public bool IsEventAutoScrollSuppressedByXtermBackpressure =>
+        IsXtermAppendBackpressureActive && IsEventAutoScrollEnabled;
 
     public bool IsAutoScrollEnabled
     {
@@ -1932,6 +1982,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isAutoScrollEnabled, value))
             {
                 _currentUiSettings.AutoScrollEnabled = value;
+                OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
                 RecordSettingsChange("xterm auto-scroll", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
                 RecordAutoScrollAction(value ? "Auto Scroll enabled" : "Auto Scroll disabled", null);
             }
@@ -2243,7 +2294,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string PauseRenderingToolTip => IsLogRenderingPaused ? "Resume rendering" : "Pause rendering";
 
-    public string RenderingPauseReason => _isManualLogRenderingPaused ? "manual pause" : "none";
+    public string RenderingPauseReason => _isManualLogRenderingPaused
+        ? "manual pause"
+        : _isXtermAppendBackpressureActive
+            ? "xterm append backlog"
+            : "none";
 
     public string ConnectionStateText =>
         $"{_serialService.ConnectionState}: {SelectedPort ?? "(no port selected)"} @ {SelectedBaudRate:N0} bps";
@@ -2256,6 +2311,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ? "Rendering suspended: minimized"
         : IsLogRenderingPaused
             ? $"Rendering paused: {RenderingPauseReason}"
+            : _isXtermAppendBackpressureActive
+                ? "Rendering catching up: xterm backlog"
             : "Rendering live";
 
     public int PendingVisualLineCount => _logBatchDispatcher.PendingItemCount;
@@ -2427,6 +2484,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long MaxMinimizedVisualCoalescedCharacterCount => Interlocked.Read(ref _maxMinimizedVisualCoalescedCharacterCount);
 
+    public int SuspendedXtermPendingLineCount => Volatile.Read(ref _suspendedXtermPendingLineCount);
+
+    public long SuspendedXtermPendingCharacterCount => Interlocked.Read(ref _suspendedXtermPendingCharacterCount);
+
+    public long SuspendedXtermQueueCollapseCount => Interlocked.Read(ref _suspendedXtermQueueCollapseCount);
+
+    public string LastSuspendedXtermQueueCollapseReason => _lastSuspendedXtermQueueCollapseReason;
+
     public int LastXtermAppendLineCount => Volatile.Read(ref _lastXtermAppendLineCount);
 
     public int LastXtermAppendCharacterCount => Volatile.Read(ref _lastXtermAppendCharacterCount);
@@ -2438,6 +2503,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string LastXtermAppendDurationText => $"{Interlocked.Read(ref _lastXtermAppendDurationMs):N0} ms";
 
     public string MaxXtermAppendDurationText => $"{Interlocked.Read(ref _maxXtermAppendDurationMs):N0} ms";
+
+    public long XtermBackpressureSearchRefreshSuppressedCount =>
+        Interlocked.Read(ref _xtermBackpressureSearchRefreshSuppressedCount);
+
+    public long XtermBackpressureEventAutoScrollSuppressedCount =>
+        Interlocked.Read(ref _xtermBackpressureEventAutoScrollSuppressedCount);
+
+    public long XtermBackpressureAutoScrollSuppressedCount =>
+        Interlocked.Read(ref _xtermBackpressureAutoScrollSuppressedCount);
+
+    public long XtermBackpressureFullRerenderDeferredCount =>
+        Interlocked.Read(ref _xtermBackpressureFullRerenderDeferredCount);
 
     public long XtermCopyRequestCount => Interlocked.Read(ref _xtermCopyRequestCount);
 
@@ -2561,6 +2638,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isSearchResultAutoRefreshEnabled, value))
             {
                 _currentUiSettings.SearchResultAutoRefreshEnabled = value;
+                OnPropertyChanged(nameof(IsSearchAutoRefreshSuppressedByXtermBackpressure));
                 if (value)
                 {
                     _lastSearchResultAutoRefreshAt = DateTimeOffset.MinValue;
@@ -2725,6 +2803,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isEventAutoScrollEnabled, value))
             {
                 _currentUiSettings.EventAutoScrollEnabled = value;
+                OnPropertyChanged(nameof(IsEventAutoScrollSuppressedByXtermBackpressure));
                 RecordSettingsChange("Event auto-scroll", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             }
         }
@@ -2764,6 +2843,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long CopiedEventContextCount => Interlocked.Read(ref _copiedEventContextCount);
 
     public long EventContextUiErrorCount => Interlocked.Read(ref _eventContextUiErrorCount);
+
+    public long EventContextUiDroppedCount => Interlocked.Read(ref _eventContextUiDroppedCount);
+
+    public int PendingEventContextUiCount => _eventContextBatchDispatcher.PendingItemCount;
 
     public string LastEventContextUiError => _lastEventContextUiError;
 
@@ -2848,6 +2931,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long XtermLayoutErrorCount => Interlocked.Read(ref _xtermLayoutErrorCount);
 
     public string LastXtermLayoutError => _lastXtermLayoutError;
+
+    public int LastAppliedXtermScrollbackSize => Volatile.Read(ref _lastAppliedXtermScrollbackSize);
 
     public string LastAutoScrollActionTimeText => _lastAutoScrollActionTimeText;
 
@@ -3612,6 +3697,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastDisconnectPreservedPort));
         OnPropertyChanged(nameof(LastPortRefreshResult));
         OnPropertyChanged(nameof(SelectedPortAvailable));
+        NotifyConnectionSelectionCommandState();
+    }
+
+    private void NotifyConnectionSelectionCommandState()
+    {
+        OnPropertyChanged(nameof(CanConnect));
+        ConnectCommand.NotifyCanExecuteChanged();
+        ToggleConnectionCommand.NotifyCanExecuteChanged();
     }
 
     private static IReadOnlyList<string> NormalizePortList(IEnumerable<string> ports, bool includeMock)
@@ -4406,6 +4499,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        if (!SelectedPortAvailable)
+        {
+            SetStatus("Select an available serial port.");
+            return;
+        }
+
+        if (!BaudRates.Contains(SelectedBaudRate))
+        {
+            SetStatus("Select a baud rate.");
+            return;
+        }
+
         if (IsConnected || _serialService.IsConnected)
         {
             SetStatus("Already connected.");
@@ -4836,9 +4941,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await foreach (var line in _logPipeline.Logs.ReadAllAsync(cancellationToken))
             {
                 VerifyMockSequence(line);
-                QueueLogForRendering(line);
                 if (line.IsPartialRxTerminator)
                 {
+                    await QueueLogForRenderingAsync(line, cancellationToken);
                     continue;
                 }
 
@@ -4848,6 +4953,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 }
 
                 _eventDetector.TryEnqueue(line);
+                await QueueLogForRenderingAsync(line, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -4889,7 +4995,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var context in _eventDetector.CompletedEventContexts.ReadAllAsync(cancellationToken))
             {
-                RunOnUiThread(() => StoreCompletedEventContext(context));
+                var dropped = _eventContextBatchDispatcher.Post(context);
+                if (dropped > 0)
+                {
+                    Interlocked.Add(ref _eventContextUiDroppedCount, dropped);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -4925,16 +5035,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private Task AddMarkerAsync()
+    private async Task AddMarkerAsync()
     {
-        AddMarker(MarkerText, string.IsNullOrWhiteSpace(MarkerText) ? "Quick marker" : "Custom marker");
-        return Task.CompletedTask;
+        await AddMarkerAsync(
+            MarkerText,
+            string.IsNullOrWhiteSpace(MarkerText) ? "Quick marker" : "Custom marker");
     }
 
-    public Task AddDefaultMarkerAsync()
+    public async Task AddDefaultMarkerAsync()
     {
-        AddMarker(null, "Quick marker");
-        return Task.CompletedTask;
+        await AddMarkerAsync(null, "Quick marker");
     }
 
     public string GetVisibleLogPlainTextSnapshot(out int lineCount)
@@ -5219,28 +5329,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
     }
 
-    private Task SetSessionAsync()
+    private async Task SetSessionAsync()
     {
         try
         {
             if (!IsConnected)
             {
                 RecordSessionError("Set session failed: serial monitor is disconnected.");
-                return Task.CompletedTask;
+                return;
             }
 
             var normalizedName = NormalizeSessionName(SessionName);
             if (string.IsNullOrWhiteSpace(normalizedName))
             {
                 RecordSessionError("Session name is empty.");
-                return Task.CompletedTask;
+                return;
             }
 
             CurrentSessionName = normalizedName;
             _sessionStartedTime = DateTimeOffset.Now;
             OnPropertyChanged(nameof(SessionStartedTimeText));
             ApplySessionFileNaming(requestNewFile: true);
-            AddMarker($"Session start: {normalizedName}", "Session start marker");
+            await AddMarkerAsync($"Session start: {normalizedName}", "Session start marker");
             RecordSessionAction($"Session started: {normalizedName}");
         }
         catch (Exception ex)
@@ -5248,27 +5358,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RecordSessionError($"Set session failed: {ex.Message}");
         }
 
-        return Task.CompletedTask;
     }
 
-    private Task EndSessionAsync()
+    private async Task EndSessionAsync()
     {
         try
         {
             if (!IsConnected)
             {
                 RecordSessionError("End session failed: serial monitor is disconnected.");
-                return Task.CompletedTask;
+                return;
             }
 
             if (string.IsNullOrWhiteSpace(CurrentSessionName))
             {
                 RecordSessionError("No active session to end.");
-                return Task.CompletedTask;
+                return;
             }
 
             var endedSessionName = CurrentSessionName;
-            AddMarker($"Session end: {endedSessionName}", "Session end marker");
+            await AddMarkerAsync($"Session end: {endedSessionName}", "Session end marker");
             CurrentSessionName = string.Empty;
             _sessionStartedTime = null;
             OnPropertyChanged(nameof(SessionStartedTimeText));
@@ -5280,10 +5389,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RecordSessionError($"End session failed: {ex.Message}");
         }
 
-        return Task.CompletedTask;
     }
 
-    private void AddMarker(string? markerText, string action)
+    private async Task AddMarkerAsync(string? markerText, string action)
     {
         try
         {
@@ -5297,13 +5405,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var text = FormatMarkerText(insertedAt, markerText);
             var markerLine = new LogLine(insertedAt, LogDirection.Mark, text);
 
-            QueueLogForRendering(markerLine);
             if (FileLoggingEnabled)
             {
                 _fileLogWriter.TryEnqueue(markerLine);
             }
 
             _eventDetector.TryEnqueue(markerLine);
+            await QueueLogForRenderingAsync(markerLine, CancellationToken.None);
             RecordMarkerSuccess(text, action, insertedAt);
             SetFooter(CreateFooterStatus());
         }
@@ -5509,13 +5617,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             var txLine = LogLine.Tx(txDisplayText, txRawBytes);
-            QueueLogForRendering(txLine);
             if (FileLoggingEnabled)
             {
                 _fileLogWriter.TryEnqueue(txLine);
             }
 
             _eventDetector.TryEnqueue(txLine);
+            await QueueLogForRenderingAsync(txLine, CancellationToken.None);
             RecordTxSuccess(txDisplayText, sendMode, command.CommandText, txByteCount, hexParseError);
             if (addToHistory)
             {
@@ -6301,7 +6409,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ActiveInspectorTabText = string.IsNullOrWhiteSpace(tabName)
             ? "(unknown)"
             : tabName;
-        RefreshDiagnostics();
+        RefreshDiagnostics(forceDetailed: IsDiagnosticsTabActive);
     }
 
     public void RecordInspectorTabLayoutError(string message)
@@ -6412,6 +6520,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastXtermLayoutError = string.Empty;
         OnPropertyChanged(nameof(XtermFitResizeCount));
         OnPropertyChanged(nameof(LastXtermLayoutError));
+    }
+
+    public void RecordXtermScrollbackApplied(int size)
+    {
+        Volatile.Write(ref _lastAppliedXtermScrollbackSize, Math.Max(0, size));
+        OnPropertyChanged(nameof(LastAppliedXtermScrollbackSize));
     }
 
     public void RecordXtermLayoutError(string message)
@@ -7233,12 +7347,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Volatile.Write(ref _lastXtermAppendCharacterCount, Math.Max(0, appendedCharacterCount));
         UpdateMax(ref _maxXtermAppendLineCount, appendedLineCount);
         UpdateMax(ref _maxXtermAppendCharacterCount, appendedCharacterCount);
-        OnPropertyChanged(nameof(XtermAppendedLineCount));
-        OnPropertyChanged(nameof(XtermAppendBatchCount));
-        OnPropertyChanged(nameof(LastXtermAppendLineCount));
-        OnPropertyChanged(nameof(LastXtermAppendCharacterCount));
-        OnPropertyChanged(nameof(MaxXtermAppendLineCount));
-        OnPropertyChanged(nameof(MaxXtermAppendCharacterCount));
     }
 
     public void RecordXtermAppendDuration(TimeSpan duration)
@@ -7257,8 +7365,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         var pending = Interlocked.Add(ref _xtermPendingCharacterCount, characterCount);
         UpdateMax(ref _maxXtermPendingCharacterCount, pending);
-        OnPropertyChanged(nameof(XtermPendingCharacterCount));
-        OnPropertyChanged(nameof(MaxXtermPendingCharacterCount));
     }
 
     public void RecordXtermAppendDequeued(int characterCount)
@@ -7274,7 +7380,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Interlocked.Exchange(ref _xtermPendingCharacterCount, 0);
         }
 
-        OnPropertyChanged(nameof(XtermPendingCharacterCount));
     }
 
     public void RecordWindowMinimizeState(bool isMinimized)
@@ -7340,6 +7445,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var totalChars = Interlocked.Add(ref _minimizedVisualCoalescedCharacterCount, characterCount);
             UpdateMax(ref _maxMinimizedVisualCoalescedCharacterCount, totalChars);
         }
+    }
+
+    public void RecordSuspendedXtermQueueState(int lineCount, long characterCount)
+    {
+        Volatile.Write(ref _suspendedXtermPendingLineCount, Math.Max(0, lineCount));
+        Interlocked.Exchange(ref _suspendedXtermPendingCharacterCount, Math.Max(0, characterCount));
+    }
+
+    public void RecordSuspendedXtermQueueCollapsed(string reason)
+    {
+        Interlocked.Increment(ref _suspendedXtermQueueCollapseCount);
+        _lastSuspendedXtermQueueCollapseReason = string.IsNullOrWhiteSpace(reason)
+            ? "suspended xterm queue exceeded its bound"
+            : reason.Trim();
     }
 
     public void RecordRestoreRenderStarted()
@@ -7537,8 +7656,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         Interlocked.Exchange(ref _lastRenderedSequenceId, Math.Max(0, lastRenderedSequenceId));
         Interlocked.Exchange(ref _pendingVisualDeltaLineCount, Math.Max(0, pendingDeltaLineCount));
-        OnPropertyChanged(nameof(LastRenderedSequenceId));
-        OnPropertyChanged(nameof(PendingVisualDeltaLineCount));
     }
 
     private static void UpdateMax(ref int target, int value)
@@ -7802,6 +7919,43 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    public void SetXtermAppendBackpressure(bool active)
+    {
+        if (_isXtermAppendBackpressureActive == active)
+        {
+            return;
+        }
+
+        _isXtermAppendBackpressureActive = active;
+        _logBatchDispatcher.IsPaused = IsLogRenderingPaused || _isXtermAppendBackpressureActive;
+        OnPropertyChanged(nameof(IsXtermAppendBackpressureActive));
+        OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
+        OnPropertyChanged(nameof(IsSearchAutoRefreshSuppressedByXtermBackpressure));
+        OnPropertyChanged(nameof(IsEventAutoScrollSuppressedByXtermBackpressure));
+        OnPropertyChanged(nameof(RenderingPauseReason));
+        OnPropertyChanged(nameof(RenderingStateText));
+    }
+
+    public void RecordXtermBackpressureSearchRefreshSuppressed()
+    {
+        Interlocked.Increment(ref _xtermBackpressureSearchRefreshSuppressedCount);
+    }
+
+    public void RecordXtermBackpressureEventAutoScrollSuppressed()
+    {
+        Interlocked.Increment(ref _xtermBackpressureEventAutoScrollSuppressedCount);
+    }
+
+    public void RecordXtermBackpressureAutoScrollSuppressed()
+    {
+        Interlocked.Increment(ref _xtermBackpressureAutoScrollSuppressedCount);
+    }
+
+    public void RecordXtermBackpressureFullRerenderDeferred()
+    {
+        Interlocked.Increment(ref _xtermBackpressureFullRerenderDeferredCount);
+    }
+
     private Task ClearScreenAsync()
     {
         _logBatchDispatcher.ClearPending();
@@ -7819,7 +7973,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            RefreshDiagnostics();
+            RefreshDiagnostics(forceDetailed: true);
 
             var package = new DataPackage();
             package.SetText(DiagnosticsText);
@@ -8726,13 +8880,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastBackgroundError = message;
     }
 
-    private void QueueLogForRendering(LogLine line)
+    private async ValueTask QueueLogForRenderingAsync(LogLine line, CancellationToken cancellationToken)
     {
-        var dropped = _logBatchDispatcher.Post(line);
-        UpdateMax(ref _maxVisualBacklogLineCount, PendingVisualLineCount);
-        if (dropped > 0)
+        await _visualLogEnqueueGate.WaitAsync(cancellationToken);
+        try
         {
-            Interlocked.Add(ref _pendingLogDropCount, dropped);
+            await _logBatchDispatcher.PostAsync(line, cancellationToken);
+            UpdateMax(ref _maxVisualBacklogLineCount, PendingVisualLineCount);
+        }
+        finally
+        {
+            _visualLogEnqueueGate.Release();
         }
     }
 
@@ -8749,15 +8907,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Interlocked.Increment(ref _visualAppendBatchCount);
         }
 
-        OnPropertyChanged(nameof(PendingVisualLineCount));
-        OnPropertyChanged(nameof(LastVisualAppendLineCount));
-        OnPropertyChanged(nameof(MaxVisualAppendLineCount));
-        OnPropertyChanged(nameof(VisualAppendBatchCount));
-        OnPropertyChanged(nameof(MaxVisualBacklogLineCount));
-
         if (batch.Count == 0)
         {
-            SetFooter(CreateFooterStatus());
             return;
         }
 
@@ -8771,13 +8922,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             MarkSearchResultsStale();
         }
 
-        SetFooter(CreateFooterStatus());
     }
 
     private bool ShouldAutoRefreshSearchResults()
     {
         if (!IsSearchResultAutoRefreshEnabled || string.IsNullOrWhiteSpace(SearchText))
         {
+            return false;
+        }
+
+        if (IsXtermAppendBackpressureActive)
+        {
+            RecordXtermBackpressureSearchRefreshSuppressed();
             return false;
         }
 
@@ -8859,18 +9015,30 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(EventSelectionLostCount));
     }
 
-    private void StoreCompletedEventContext(DetectedEventContext context)
+    private void ApplyEventContextBatch(IReadOnlyList<DetectedEventContext> contexts)
     {
-        var isNewContext = !_eventContextsById.ContainsKey(context.EventId);
-        _eventContextsById[context.EventId] = context;
-        if (isNewContext)
+        if (contexts.Count == 0)
         {
-            _eventContextOrder.Enqueue(context.EventId);
+            return;
+        }
+
+        var selectedEventId = SelectedEvent?.Id;
+        var selectedContextUpdated = false;
+        foreach (var context in contexts)
+        {
+            var isNewContext = !_eventContextsById.ContainsKey(context.EventId);
+            _eventContextsById[context.EventId] = context;
+            if (isNewContext)
+            {
+                _eventContextOrder.Enqueue(context.EventId);
+            }
+
+            selectedContextUpdated |= selectedEventId == context.EventId;
         }
 
         TrimRetainedEventContextsToLimit();
 
-        if (SelectedEvent?.Id == context.EventId)
+        if (selectedContextUpdated)
         {
             RefreshSelectedEventContextText();
         }
@@ -8879,7 +9047,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedEventContextLineCount));
         OnPropertyChanged(nameof(SelectedEventContextHeaderText));
         CopyEventContextCommand.NotifyCanExecuteChanged();
-        RefreshDiagnostics();
     }
 
     private int TrimRetainedEventContextsToLimit()
@@ -9022,7 +9189,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void UpdateLogRenderingPauseState(string statusMessage)
     {
-        _logBatchDispatcher.IsPaused = IsLogRenderingPaused;
+        _logBatchDispatcher.IsPaused = IsLogRenderingPaused || _isXtermAppendBackpressureActive;
         OnPropertyChanged(nameof(IsLogRenderingPaused));
         OnPropertyChanged(nameof(IsManualLogRenderingPaused));
         OnPropertyChanged(nameof(RenderingPauseReason));
@@ -9521,86 +9688,56 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
-        RunOnUiThread(() =>
-        {
-            IsConnected = _serialService.IsConnected;
-            OnPropertyChanged(nameof(ConnectionStateText));
-            OnPropertyChanged(nameof(CompactConnectionStatusText));
-            RefreshMockStressProperties();
-            FooterStatusText = CreateFooterStatus();
-
-            if (_serialService.ConnectionState == SerialConnectionState.Faulted &&
-                !string.IsNullOrWhiteSpace(_serialService.LastError))
-            {
-                StatusText = $"Serial fault: {_serialService.LastError}";
-                return;
-            }
-
-            if (_serialService.ConnectionState is SerialConnectionState.Connecting or SerialConnectionState.Disconnecting)
-            {
-                StatusText = _serialService.ConnectionState.ToString();
-            }
-        });
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnPipelineStatusChanged(object? sender, EventArgs args)
     {
-        RunOnUiThread(() =>
-        {
-            SetFooter(CreateFooterStatus());
-            RefreshDiagnostics();
-        });
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnFileLogStatusChanged(object? sender, EventArgs args)
     {
-        if (_dispatcherQueue.HasThreadAccess)
-        {
-            ApplyFileLogStatusChanged();
-            return;
-        }
-
-        var queued = _dispatcherQueue.TryEnqueue(ApplyFileLogStatusChanged);
-        if (!queued)
-        {
-            RecordStatusChangedThreadMarshalErrorWithoutUi("FileLogWriter status marshal failed: DispatcherQueue rejected update.");
-        }
-    }
-
-    private void ApplyFileLogStatusChanged()
-    {
-        try
-        {
-            RefreshLogFileActionProperties();
-            FooterStatusText = CreateFooterStatus();
-            RefreshDiagnostics();
-        }
-        catch (Exception ex)
-        {
-            RecordStatusChangedThreadMarshalError($"FileLogWriter status update failed: {ex.Message}");
-        }
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnEventDetectorStatusChanged(object? sender, EventArgs args)
     {
-        RunOnUiThread(() =>
-        {
-            RefreshLogFileActionProperties();
-            FooterStatusText = CreateFooterStatus();
-            RefreshDiagnostics();
-        });
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
     {
+        var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
+        if (backgroundStatusChanged)
+        {
+            IsConnected = _serialService.IsConnected;
+            OnPropertyChanged(nameof(ConnectionStateText));
+            OnPropertyChanged(nameof(CompactConnectionStatusText));
+        }
+
         OnPropertyChanged(nameof(PendingVisualLineCount));
         OnPropertyChanged(nameof(VisualDispatcherFlushCount));
         OnPropertyChanged(nameof(MaxVisualDispatcherBatchSize));
+        OnPropertyChanged(nameof(LastVisualAppendLineCount));
+        OnPropertyChanged(nameof(MaxVisualAppendLineCount));
+        OnPropertyChanged(nameof(VisualAppendBatchCount));
+        OnPropertyChanged(nameof(MaxVisualBacklogLineCount));
         OnPropertyChanged(nameof(PendingEventUiCount));
+        OnPropertyChanged(nameof(PendingEventContextUiCount));
+        OnPropertyChanged(nameof(EventContextUiDroppedCount));
         OnPropertyChanged(nameof(EventUiFlushCount));
         OnPropertyChanged(nameof(MaxEventUiBatchSize));
+        OnPropertyChanged(nameof(XtermAppendedLineCount));
+        OnPropertyChanged(nameof(XtermAppendBatchCount));
+        OnPropertyChanged(nameof(LastXtermAppendLineCount));
+        OnPropertyChanged(nameof(LastXtermAppendCharacterCount));
+        OnPropertyChanged(nameof(MaxXtermAppendLineCount));
+        OnPropertyChanged(nameof(MaxXtermAppendCharacterCount));
         OnPropertyChanged(nameof(XtermPendingCharacterCount));
         OnPropertyChanged(nameof(MaxXtermPendingCharacterCount));
+        OnPropertyChanged(nameof(LastRenderedSequenceId));
+        OnPropertyChanged(nameof(PendingVisualDeltaLineCount));
         OnPropertyChanged(nameof(MinimizedVisualCoalescedLineCount));
         OnPropertyChanged(nameof(MinimizedVisualCoalescedCharacterCount));
         OnPropertyChanged(nameof(MaxMinimizedVisualCoalescedLineCount));
@@ -9684,6 +9821,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"Minimized visual redraw backlog high: {MinimizedVisualCoalescedLineCount:N0}/{PendingVisualWarningThreshold:N0}");
         AddWarningIf(warnings, Log.DroppedPendingLineCount > 0, $"UI pending lines dropped: {Log.DroppedPendingLineCount:N0}");
         AddWarningIf(warnings, _eventDetector.ContextCaptureDroppedCount > 0, $"Event context captures dropped: {_eventDetector.ContextCaptureDroppedCount:N0}");
+        AddWarningIf(
+            warnings,
+            _eventDetector.MaxContextCaptureScanCount >= 500,
+            $"High event context scan fan-out: {_eventDetector.MaxContextCaptureScanCount:N0} captures on one line");
+        AddWarningIf(
+            warnings,
+            _eventDetector.IsContextCaptureOverloadActive,
+            $"Event context overload active: {_eventDetector.ActivePendingContextCount:N0} pending; new contexts are temporarily skipped");
+        AddWarningIf(
+            warnings,
+            _eventDetector.ContextCaptureOverloadSkippedCount > 0,
+            $"Event contexts skipped during overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
+        AddWarningIf(warnings, EventContextUiDroppedCount > 0, $"UI-only event context updates dropped: {EventContextUiDroppedCount:N0}");
         AddWarningIf(warnings, _eventDetector.ContextCaptureFailedCount > 0, $"Event context captures failed: {_eventDetector.ContextCaptureFailedCount:N0}");
         AddWarningIf(warnings, Log.XtermFormattingErrorCount > 0, $"xterm formatting errors: {Log.XtermFormattingErrorCount:N0}");
         AddWarningIf(warnings, XtermLayoutErrorCount > 0, $"xterm layout errors: {XtermLayoutErrorCount:N0}");
@@ -9771,13 +9921,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return compact.Length <= 200 ? compact : compact[..200];
     }
 
-    private void RefreshDiagnostics()
+    private bool IsDiagnosticsTabActive =>
+        string.Equals(ActiveInspectorTabText, "Diag", StringComparison.OrdinalIgnoreCase);
+
+    private void RefreshDiagnostics(bool forceDetailed = false)
     {
         var lastRuntimeError = RuntimeDiagnostics.ReadLastError();
         RefreshHealthSummary(lastRuntimeError);
         FooterStatusText = CreateFooterStatus();
         DiagnosticsSummaryText = BuildDiagnosticsSummaryText();
-        DiagnosticsText = BuildDiagnosticsText(lastRuntimeError);
+        if (forceDetailed || IsDiagnosticsTabActive)
+        {
+            DiagnosticsText = BuildDiagnosticsText(lastRuntimeError);
+        }
     }
 
     private string BuildDiagnosticsSummaryText()
@@ -10179,6 +10335,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Rendering paused: {IsLogRenderingPaused}");
         builder.AppendLine($"  Rendering pause reason: {RenderingPauseReason}");
         builder.AppendLine($"  Manual pause active: {IsManualLogRenderingPaused}");
+        builder.AppendLine($"  xterm append backpressure active: {IsXtermAppendBackpressureActive}");
+        builder.AppendLine($"  xterm backlog UI relief active: {IsXtermAppendBackpressureActive}");
+        builder.AppendLine($"  Effective xterm auto-scroll: {IsEffectiveXtermAutoScrollEnabled}");
+        builder.AppendLine($"  Search auto-refresh suppressed by xterm backlog: {IsSearchAutoRefreshSuppressedByXtermBackpressure}");
+        builder.AppendLine($"  Event auto-scroll suppressed by xterm backlog: {IsEventAutoScrollSuppressedByXtermBackpressure}");
+        builder.AppendLine($"  Backlog search refresh suppressions: {XtermBackpressureSearchRefreshSuppressedCount:N0}");
+        builder.AppendLine($"  Backlog event auto-scroll suppressions: {XtermBackpressureEventAutoScrollSuppressedCount:N0}");
+        builder.AppendLine($"  Backlog xterm auto-scroll suppressions: {XtermBackpressureAutoScrollSuppressedCount:N0}");
+        builder.AppendLine($"  Backlog full re-renders deferred: {XtermBackpressureFullRerenderDeferredCount:N0}");
         builder.AppendLine($"  Window minimized: {IsWindowMinimized}");
         builder.AppendLine($"  Visual append suspended by minimize: {IsVisualAppendSuspendedForMinimize}");
         builder.AppendLine($"  xterm needs full re-render after restore: {XtermNeedsFullRerenderAfterRestore}");
@@ -10214,6 +10379,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last visible cap change time: {LastVisibleCapChangeTimeText}");
         builder.AppendLine($"  xterm scrollback setting: {XtermScrollbackSize:N0}");
         builder.AppendLine($"  Effective xterm scrollback size: {EffectiveXtermScrollbackSize:N0}");
+        builder.AppendLine($"  Last applied xterm scrollback size: {LastAppliedXtermScrollbackSize:N0}");
         builder.AppendLine($"  Pending visual line count: {PendingVisualLineCount:N0}");
         builder.AppendLine($"  Visual pending char count: {XtermPendingCharacterCount:N0}");
         builder.AppendLine($"  Max visual pending char count: {MaxXtermPendingCharacterCount:N0}");
@@ -10221,6 +10387,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Minimized coalesced visual chars: {MinimizedVisualCoalescedCharacterCount:N0}");
         builder.AppendLine($"  Max minimized coalesced visual lines: {MaxMinimizedVisualCoalescedLineCount:N0}");
         builder.AppendLine($"  Max minimized coalesced visual chars: {MaxMinimizedVisualCoalescedCharacterCount:N0}");
+        builder.AppendLine($"  Suspended xterm pending lines: {SuspendedXtermPendingLineCount:N0}");
+        builder.AppendLine($"  Suspended xterm pending chars: {SuspendedXtermPendingCharacterCount:N0}");
+        builder.AppendLine($"  Suspended xterm queue collapse count: {SuspendedXtermQueueCollapseCount:N0}");
+        builder.AppendLine($"  Last suspended xterm queue collapse: {LastSuspendedXtermQueueCollapseReason}");
         builder.AppendLine($"  Last visual append line count: {LastVisualAppendLineCount:N0}");
         builder.AppendLine($"  Max visual append line count: {MaxVisualAppendLineCount:N0}");
         builder.AppendLine($"  Max visual backlog line count: {MaxVisualBacklogLineCount:N0}");
@@ -10380,6 +10550,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Event context captures completed: {_eventDetector.ContextCapturesCompletedCount:N0}");
         builder.AppendLine($"  Active pending event contexts: {_eventDetector.ActivePendingContextCount:N0}");
         builder.AppendLine($"  Event context dropped count: {_eventDetector.ContextCaptureDroppedCount:N0}");
+        builder.AppendLine($"  Event context scan lines: {_eventDetector.ContextCaptureScanLineCount:N0}");
+        builder.AppendLine($"  Event context capture entries visited: {_eventDetector.ContextCaptureEntriesVisited:N0}");
+        builder.AppendLine($"  Event context max captures scanned per line: {_eventDetector.MaxContextCaptureScanCount:N0}");
+        builder.AppendLine($"  Event context overload active: {_eventDetector.IsContextCaptureOverloadActive}");
+        builder.AppendLine($"  Event context overload high/low: {_eventDetector.ContextCaptureOverloadHighWatermark:N0}/{_eventDetector.ContextCaptureOverloadLowWatermark:N0}");
+        builder.AppendLine($"  Event contexts skipped by overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
+        builder.AppendLine($"  Event context overload transitions: {_eventDetector.ContextCaptureOverloadTransitionCount:N0}");
+        builder.AppendLine($"  Last event context overload transition: {(_eventDetector.LastContextCaptureOverloadTransitionTime?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) ?? "(none)")}");
+        builder.AppendLine($"  Event context UI pending count: {PendingEventContextUiCount:N0}");
+        builder.AppendLine($"  UI-only event context updates dropped: {EventContextUiDroppedCount:N0}");
         builder.AppendLine($"  Event context failed count: {_eventDetector.ContextCaptureFailedCount:N0}");
         builder.AppendLine($"  Retained UI event context cap: {RetainedEventContextLimit:N0}");
         builder.AppendLine($"  Retained UI event contexts: {_eventContextsById.Count:N0}");

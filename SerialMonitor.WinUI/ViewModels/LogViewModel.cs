@@ -27,6 +27,7 @@ public sealed class LogTextBatch
 public sealed class LogViewModel : ViewModelBase
 {
     private const string AnsiReset = "\u001b[0m";
+    private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
 
@@ -223,7 +224,10 @@ public sealed class LogViewModel : ViewModelBase
             return;
         }
 
-        var builder = new StringBuilder();
+        var estimatedCapacity = (int)Math.Min(
+            SnapshotPreallocationMaxChars,
+            Math.Max(0, VisibleCharacterCount));
+        var builder = new StringBuilder(estimatedCapacity);
         var highlightedLines = 0;
         var formattingErrors = 0;
         var appendedVisibleLineCount = 0;

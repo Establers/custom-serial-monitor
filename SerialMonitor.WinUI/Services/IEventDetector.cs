@@ -45,6 +45,24 @@ public interface IEventDetector : IAsyncDisposable
 
     long ContextCaptureFailedCount { get; }
 
+    long ContextCaptureScanLineCount { get; }
+
+    long ContextCaptureEntriesVisited { get; }
+
+    int MaxContextCaptureScanCount { get; }
+
+    bool IsContextCaptureOverloadActive { get; }
+
+    int ContextCaptureOverloadHighWatermark { get; }
+
+    int ContextCaptureOverloadLowWatermark { get; }
+
+    long ContextCaptureOverloadSkippedCount { get; }
+
+    long ContextCaptureOverloadTransitionCount { get; }
+
+    DateTimeOffset? LastContextCaptureOverloadTransitionTime { get; }
+
     long RuleEvaluationErrorCount { get; }
 
     string? LastRuleEvaluationError { get; }

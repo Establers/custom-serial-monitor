@@ -739,6 +739,8 @@
                                       SelectedItem="{Binding SelectedEvent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       SelectionMode="Single"
                                       IsItemClickEnabled="True"
+                                      PointerEntered="EventListView_PointerEntered"
+                                      PointerExited="EventListView_PointerExited"
                                       ItemClick="EventListView_ItemClick"
                                       SelectionChanged="EventListView_SelectionChanged"
                                       DoubleTapped="EventListView_DoubleTapped">
@@ -2185,15 +2187,15 @@
                                 </ScrollViewer>
                             </Border>
 
-                            <TextBox Grid.Row="2"
-                                     Text="{Binding DiagnosticsText, Mode=OneWay}"
-                                     FontFamily="Consolas"
-                                     FontSize="12"
-                                     IsReadOnly="True"
-                                     AcceptsReturn="True"
-                                     TextWrapping="NoWrap"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                            <ScrollViewer Grid.Row="2"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <TextBlock Text="{Binding DiagnosticsText, Mode=OneWay}"
+                                           FontFamily="Consolas"
+                                           FontSize="12"
+                                           IsTextSelectionEnabled="True"
+                                           TextWrapping="NoWrap" />
+                            </ScrollViewer>
                         </Grid>
                     </TabViewItem>
 

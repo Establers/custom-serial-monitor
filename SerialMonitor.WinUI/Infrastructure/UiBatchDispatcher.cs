@@ -10,6 +10,10 @@ public sealed class UiBatchDispatcher<T> : IDisposable
     private readonly Action<IReadOnlyList<T>> _onBatch;
     private readonly int _maxPendingItems;
     private readonly int _maxItemsPerTick;
+    private readonly int _catchUpMaxItemsPerTick;
+    private readonly int _catchUpPendingThreshold;
+    private readonly bool _dropOldestWhenFull;
+    private readonly SemaphoreSlim? _pendingSlots;
     private readonly List<T> _batch = new();
     private int _pendingItemCount;
     private int _isPaused;
@@ -22,11 +26,25 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         TimeSpan interval,
         Action<IReadOnlyList<T>> onBatch,
         int maxPendingItems = 10_000,
-        int maxItemsPerTick = 0)
+        int maxItemsPerTick = 0,
+        bool dropOldestWhenFull = true,
+        int catchUpMaxItemsPerTick = 0,
+        int catchUpPendingThreshold = 0)
     {
         _onBatch = onBatch;
         _maxPendingItems = maxPendingItems <= 0 ? 1 : maxPendingItems;
         _maxItemsPerTick = maxItemsPerTick <= 0 ? int.MaxValue : maxItemsPerTick;
+        _catchUpMaxItemsPerTick = catchUpMaxItemsPerTick <= 0
+            ? _maxItemsPerTick
+            : Math.Max(_maxItemsPerTick, catchUpMaxItemsPerTick);
+        _catchUpPendingThreshold = catchUpPendingThreshold <= 0
+            ? int.MaxValue
+            : catchUpPendingThreshold;
+        _dropOldestWhenFull = dropOldestWhenFull;
+        if (!_dropOldestWhenFull)
+        {
+            _pendingSlots = new SemaphoreSlim(_maxPendingItems, _maxPendingItems);
+        }
         _timer = dispatcherQueue.CreateTimer();
         _timer.Interval = interval;
         _timer.Tick += OnTick;
@@ -49,9 +67,14 @@ public sealed class UiBatchDispatcher<T> : IDisposable
 
     public int Post(T item)
     {
-        if (_disposed)
+        if (Volatile.Read(ref _disposed))
         {
             return 1;
+        }
+
+        if (!_dropOldestWhenFull)
+        {
+            throw new InvalidOperationException("Use PostAsync for a lossless UI dispatcher.");
         }
 
         var dropped = 0;
@@ -66,12 +89,34 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         return dropped;
     }
 
+    public async ValueTask PostAsync(T item, CancellationToken cancellationToken = default)
+    {
+        if (_dropOldestWhenFull)
+        {
+            Post(item);
+            return;
+        }
+
+        var pendingSlots = _pendingSlots
+            ?? throw new InvalidOperationException("Lossless dispatcher slots are not initialized.");
+        await pendingSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (Volatile.Read(ref _disposed))
+        {
+            pendingSlots.Release();
+            throw new ObjectDisposedException(nameof(UiBatchDispatcher<T>));
+        }
+
+        _queue.Enqueue(item);
+        Interlocked.Increment(ref _pendingItemCount);
+    }
+
     public int ClearPending()
     {
         var cleared = 0;
         while (_queue.TryDequeue(out _))
         {
             Interlocked.Decrement(ref _pendingItemCount);
+            _pendingSlots?.Release();
             cleared++;
         }
 
@@ -80,27 +125,33 @@ public sealed class UiBatchDispatcher<T> : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        if (Volatile.Read(ref _disposed))
         {
             return;
         }
 
+        Volatile.Write(ref _disposed, true);
         _timer.Stop();
         _timer.Tick -= OnTick;
-        _disposed = true;
+        ClearPending();
     }
 
     private void OnTick(DispatcherQueueTimer sender, object args)
     {
-        if (_disposed || IsPaused || _queue.IsEmpty)
+        if (Volatile.Read(ref _disposed) || IsPaused || _queue.IsEmpty)
         {
             return;
         }
 
         _batch.Clear();
-        while (_batch.Count < _maxItemsPerTick && _queue.TryDequeue(out var item))
+        var pendingCount = PendingItemCount;
+        var batchLimit = pendingCount >= _catchUpPendingThreshold
+            ? _catchUpMaxItemsPerTick
+            : _maxItemsPerTick;
+        while (_batch.Count < batchLimit && _queue.TryDequeue(out var item))
         {
             Interlocked.Decrement(ref _pendingItemCount);
+            _pendingSlots?.Release();
             _batch.Add(item);
         }
 

@@ -11,6 +11,8 @@ public sealed class EventDetector : IEventDetector
     private const int OutputQueueCapacity = 20_000;
     private const int EventLogQueueCapacity = 50_000;
     private const int MaxPendingContextCaptures = 1_000;
+    private const int ContextCaptureOverloadHighWatermarkValue = 200;
+    private const int ContextCaptureOverloadLowWatermarkValue = 100;
     private const int FlushLineInterval = 50;
     private static readonly TimeSpan FlushTimeInterval = TimeSpan.FromSeconds(2);
 
@@ -49,11 +51,18 @@ public sealed class EventDetector : IEventDetector
     private long _contextCapturesCompletedCount;
     private long _contextCaptureDroppedCount;
     private long _contextCaptureFailedCount;
+    private long _contextCaptureScanLineCount;
+    private long _contextCaptureEntriesVisited;
+    private int _maxContextCaptureScanCount;
+    private long _contextCaptureOverloadSkippedCount;
+    private long _contextCaptureOverloadTransitionCount;
+    private long _lastContextCaptureOverloadTransitionUtcTicks;
     private long _ruleEvaluationErrorCount;
     private int _compiledTextRuleCount;
     private int _compiledHexRuleCount;
     private int _invalidCompiledRuleCount;
     private int _activePendingContextCount;
+    private int _isContextCaptureOverloadActive;
     private bool _isRunning;
     private bool _disposed;
 
@@ -114,6 +123,31 @@ public sealed class EventDetector : IEventDetector
     public long ContextCaptureDroppedCount => Interlocked.Read(ref _contextCaptureDroppedCount);
 
     public long ContextCaptureFailedCount => Interlocked.Read(ref _contextCaptureFailedCount);
+
+    public long ContextCaptureScanLineCount => Interlocked.Read(ref _contextCaptureScanLineCount);
+
+    public long ContextCaptureEntriesVisited => Interlocked.Read(ref _contextCaptureEntriesVisited);
+
+    public int MaxContextCaptureScanCount => Volatile.Read(ref _maxContextCaptureScanCount);
+
+    public bool IsContextCaptureOverloadActive => Volatile.Read(ref _isContextCaptureOverloadActive) != 0;
+
+    public int ContextCaptureOverloadHighWatermark => ContextCaptureOverloadHighWatermarkValue;
+
+    public int ContextCaptureOverloadLowWatermark => ContextCaptureOverloadLowWatermarkValue;
+
+    public long ContextCaptureOverloadSkippedCount => Interlocked.Read(ref _contextCaptureOverloadSkippedCount);
+
+    public long ContextCaptureOverloadTransitionCount => Interlocked.Read(ref _contextCaptureOverloadTransitionCount);
+
+    public DateTimeOffset? LastContextCaptureOverloadTransitionTime
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastContextCaptureOverloadTransitionUtcTicks);
+            return ticks <= 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
 
     public long RuleEvaluationErrorCount => Interlocked.Read(ref _ruleEvaluationErrorCount);
 
@@ -212,6 +246,7 @@ public sealed class EventDetector : IEventDetector
             Interlocked.Exchange(ref _eventLogCloseRequested, 0);
             _beforeContextBuffer.Clear();
             _pendingContextCaptures.Clear();
+            Volatile.Write(ref _isContextCaptureOverloadActive, 0);
             SetActivePendingContextCount();
             _input = CreateInputQueue();
             _events = CreateEventQueue();
@@ -428,8 +463,8 @@ public sealed class EventDetector : IEventDetector
             {
                 CaptureAfterContext(line);
 
-                var beforeContext = _beforeContextBuffer.ToArray();
-                foreach (var detectedEvent in Detect(line, beforeContext))
+                var captureContextForNewEvents = !IsContextCaptureOverloadActive;
+                foreach (var detectedEvent in Detect(line, captureContextForNewEvents))
                 {
                     RecordDetectedEvent(detectedEvent);
 
@@ -459,7 +494,7 @@ public sealed class EventDetector : IEventDetector
         }
     }
 
-    private IEnumerable<DetectedEvent> Detect(LogLine line, IReadOnlyList<LogLine> beforeContext)
+    private IEnumerable<DetectedEvent> Detect(LogLine line, bool captureContextForNewEvents)
     {
         var rules = Volatile.Read(ref _rules);
         if (rules.Length == 0)
@@ -467,6 +502,7 @@ public sealed class EventDetector : IEventDetector
             yield break;
         }
 
+        IReadOnlyList<LogLine>? beforeContext = null;
         foreach (var rule in rules)
         {
             bool isMatch;
@@ -489,6 +525,9 @@ public sealed class EventDetector : IEventDetector
 
             if (isMatch)
             {
+                beforeContext ??= captureContextForNewEvents
+                    ? _beforeContextBuffer.ToArray()
+                    : Array.Empty<LogLine>();
                 var sourceRule = rule.Rule;
                 if (sourceRule.MatchMode == LogRuleMatchMode.Hex)
                 {
@@ -567,34 +606,64 @@ public sealed class EventDetector : IEventDetector
     {
         if (_pendingContextCaptures.Count == 0)
         {
+            UpdateContextCaptureOverloadState();
             return;
         }
 
         var changed = false;
-        for (var i = 0; i < _pendingContextCaptures.Count;)
+        var pendingCount = _pendingContextCaptures.Count;
+        Interlocked.Increment(ref _contextCaptureScanLineCount);
+        Interlocked.Add(ref _contextCaptureEntriesVisited, pendingCount);
+        UpdateMax(ref _maxContextCaptureScanCount, pendingCount);
+
+        var writeIndex = 0;
+        for (var readIndex = 0; readIndex < pendingCount; readIndex++)
         {
-            var capture = _pendingContextCaptures[i];
+            var capture = _pendingContextCaptures[readIndex];
             capture.AddAfterLine(line);
             if (capture.IsComplete)
             {
-                _pendingContextCaptures.RemoveAt(i);
                 changed = true;
                 QueueCompletedContextCapture(capture);
                 continue;
             }
 
-            i++;
+            if (writeIndex != readIndex)
+            {
+                _pendingContextCaptures[writeIndex] = capture;
+            }
+
+            writeIndex++;
+        }
+
+        if (writeIndex < pendingCount)
+        {
+            _pendingContextCaptures.RemoveRange(writeIndex, pendingCount - writeIndex);
         }
 
         if (changed)
         {
             SetActivePendingContextCount();
         }
+
+        UpdateContextCaptureOverloadState();
     }
 
     private void StartContextCapture(DetectedEvent detectedEvent)
     {
+        UpdateContextCaptureOverloadState();
         Interlocked.Increment(ref _contextCapturesStartedCount);
+        if (IsContextCaptureOverloadActive)
+        {
+            Interlocked.Increment(ref _contextCaptureOverloadSkippedCount);
+            QueueCompletedContextCapture(new EventContextCapture(
+                detectedEvent,
+                Array.Empty<LogLine>(),
+                beforeContextLineLimit: 0,
+                afterContextLineLimit: 0));
+            return;
+        }
+
         var contextSettings = Volatile.Read(ref _contextSettings);
 
         var capture = new EventContextCapture(
@@ -618,6 +687,7 @@ public sealed class EventDetector : IEventDetector
 
         _pendingContextCaptures.Add(capture);
         SetActivePendingContextCount();
+        UpdateContextCaptureOverloadState();
         RaiseStatusChanged();
     }
 
@@ -626,6 +696,7 @@ public sealed class EventDetector : IEventDetector
         if (_pendingContextCaptures.Count == 0)
         {
             SetActivePendingContextCount();
+            UpdateContextCaptureOverloadState();
             return;
         }
 
@@ -636,6 +707,7 @@ public sealed class EventDetector : IEventDetector
 
         _pendingContextCaptures.Clear();
         SetActivePendingContextCount();
+        UpdateContextCaptureOverloadState();
     }
 
     private void QueueCompletedContextCapture(EventContextCapture capture)
@@ -888,6 +960,26 @@ public sealed class EventDetector : IEventDetector
         Volatile.Write(ref _activePendingContextCount, _pendingContextCaptures.Count);
     }
 
+    private void UpdateContextCaptureOverloadState()
+    {
+        var pendingCount = _pendingContextCaptures.Count;
+        var currentlyActive = IsContextCaptureOverloadActive;
+        var shouldBeActive = currentlyActive
+            ? pendingCount > ContextCaptureOverloadLowWatermarkValue
+            : pendingCount >= ContextCaptureOverloadHighWatermarkValue;
+        if (shouldBeActive == currentlyActive)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _isContextCaptureOverloadActive, shouldBeActive ? 1 : 0);
+        Interlocked.Increment(ref _contextCaptureOverloadTransitionCount);
+        Interlocked.Exchange(
+            ref _lastContextCaptureOverloadTransitionUtcTicks,
+            DateTimeOffset.UtcNow.UtcTicks);
+        RaiseStatusChanged();
+    }
+
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -1094,6 +1186,21 @@ public sealed class EventDetector : IEventDetector
             SingleReader = true,
             SingleWriter = true
         });
+    }
+
+    private static void UpdateMax(ref int target, int candidate)
+    {
+        var current = Volatile.Read(ref target);
+        while (candidate > current)
+        {
+            var previous = Interlocked.CompareExchange(ref target, candidate, current);
+            if (previous == current)
+            {
+                return;
+            }
+
+            current = previous;
+        }
     }
 
     private readonly record struct LogFileNamingSnapshot(

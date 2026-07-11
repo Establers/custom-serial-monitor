@@ -61,6 +61,51 @@
       background: #0c0d0e;
     }
 
+    #restoreOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #0c0d0e;
+      font-family: "Segoe UI", sans-serif;
+      color: #f2f2f2;
+    }
+
+    #restoreOverlay.visible {
+      display: flex;
+    }
+
+    #restoreOverlay .restore-card {
+      display: flex;
+      max-width: 280px;
+      padding: 14px 18px;
+      border: 1px solid #3a3d42;
+      background: #16181a;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #restoreOverlay img {
+      width: 150px;
+      height: 140px;
+      object-fit: contain;
+    }
+
+    #restoreOverlayTitle {
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    #restoreOverlayDetail {
+      color: #c8cdd2;
+      font-size: 11px;
+      text-align: center;
+    }
+
     #contextMenu {
       position: fixed;
       z-index: 10000;
@@ -106,6 +151,13 @@
 </head>
 <body>
   <div id="terminal"></div>
+  <div id="restoreOverlay" aria-hidden="true">
+    <div class="restore-card">
+      <img src="https://serialmonitor-loading.local/log_restore.png" alt="">
+      <div id="restoreOverlayTitle">로그 화면 복원 중...</div>
+      <div id="restoreOverlayDetail">Preparing log view</div>
+    </div>
+  </div>
   <div id="contextMenu" role="menu" aria-hidden="true">
     <button type="button" data-action="copy" data-requires-selection="true">Copy</button>
     <button type="button" data-action="copyAllVisible">Copy all visible</button>
@@ -152,8 +204,6 @@
     fitAddon.fit();
 
     const appendQueue = [];
-    const appendMaxLines = 40;
-    const appendMaxChars = 32768;
     const replaceQueue = [];
     let appendQueueHead = 0;
     let replaceQueueHead = 0;
@@ -162,41 +212,12 @@
     let replaceWriting = false;
     let contextMenuSelection = '';
     const contextMenu = document.getElementById('contextMenu');
+    const restoreOverlay = document.getElementById('restoreOverlay');
+    const restoreOverlayTitle = document.getElementById('restoreOverlayTitle');
+    const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
 
     function normalizeLogText(text) {
       return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-    }
-
-    function splitAppendText(text) {
-      const chunks = [];
-      let start = 0;
-      let next = 0;
-      let linesInChunk = 0;
-      let lastLineEnd = 0;
-
-      while (next < text.length) {
-        const newlineIndex = text.indexOf('\n', next);
-        const lineEnd = newlineIndex >= 0 ? newlineIndex + 1 : text.length;
-        const wouldExceedChunk = linesInChunk > 0 &&
-          (linesInChunk >= appendMaxLines || lineEnd - start > appendMaxChars);
-
-        if (wouldExceedChunk) {
-          chunks.push(text.slice(start, lastLineEnd));
-          start = lastLineEnd;
-          linesInChunk = 0;
-          continue;
-        }
-
-        linesInChunk += 1;
-        lastLineEnd = lineEnd;
-        next = lineEnd;
-      }
-
-      if (start < text.length) {
-        chunks.push(text.slice(start));
-      }
-
-      return chunks;
     }
 
     function queueAppendDrain() {
@@ -219,6 +240,21 @@
       }
     }
 
+    function postAppendResult(item, success, error) {
+      if (!item || !Number.isFinite(Number(item.requestId)) || Number(item.requestId) <= 0) {
+        return;
+      }
+
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+          type: 'xtermAppendCompleted',
+          requestId: Number(item.requestId),
+          success: !!success,
+          error: error ? String(error) : ''
+        });
+      }
+    }
+
     function drainAppendQueue() {
       appendDrainScheduled = false;
       if (appendWriting || replaceWriting || appendQueueLength() === 0) {
@@ -230,9 +266,10 @@
       appendWriting = true;
       try {
         terminal.write(item.text, () => {
-          if (item.autoScroll) {
+          if (item.autoScroll && appendQueueLength() === 0) {
             terminal.scrollToBottom();
           }
+          postAppendResult(item, true, '');
           appendWriting = false;
           if (appendQueueLength() > 0) {
             queueAppendDrain();
@@ -240,6 +277,7 @@
         });
       } catch (error) {
         appendWriting = false;
+        postAppendResult(item, false, error);
         console.error('xterm append failed', error);
         if (appendQueueLength() > 0) {
           queueAppendDrain();
@@ -247,27 +285,38 @@
       }
     }
 
-    function drainReplaceQueue(autoScroll) {
+    function finishReplace(autoScroll) {
+      replaceQueue.length = 0;
+      replaceQueueHead = 0;
+      replaceWriting = false;
+      if (autoScroll) {
+        terminal.scrollToBottom();
+      }
+      queueAppendDrain();
+    }
+
+    function commitReplaceQueue(autoScroll) {
       if (replaceQueueHead >= replaceQueue.length) {
-        replaceQueue.length = 0;
-        replaceQueueHead = 0;
-        replaceWriting = false;
-        if (autoScroll) {
-          terminal.scrollToBottom();
-        }
-        queueAppendDrain();
+        finishReplace(autoScroll);
         return;
       }
 
-      const text = replaceQueue[replaceQueueHead++];
       try {
         // Full restores are already covered by the native loading overlay. Avoid
-        // the normal one-request-per-animation-frame path for this exceptional
-        // bulk operation, while retaining the regular smooth live append path.
-        terminal.write(text, () => drainReplaceQueue(autoScroll));
+        // both the normal frame pacing and a callback gap between transport
+        // chunks. xterm keeps write ordering and invokes the last callback only
+        // after every previously queued chunk has been parsed.
+        const lastIndex = replaceQueue.length - 1;
+        for (let index = replaceQueueHead; index <= lastIndex; index += 1) {
+          terminal.write(
+            replaceQueue[index],
+            index === lastIndex ? () => finishReplace(autoScroll) : undefined);
+        }
+        replaceQueueHead = replaceQueue.length;
       } catch (error) {
         replaceWriting = false;
         replaceQueue.length = 0;
+        replaceQueueHead = 0;
         console.error('xterm bulk replace failed', error);
         queueAppendDrain();
       }
@@ -445,17 +494,16 @@
       contextMenu.style.top = `${Math.max(0, top)}px`;
     }
 
-    window.serialMonitorAppendLog = function (text, autoScroll) {
+    window.serialMonitorAppendLog = function (text, autoScroll, requestId) {
       const normalized = normalizeLogText(text);
       if (!normalized) {
+        postAppendResult({ requestId }, true, '');
         return true;
       }
 
-      for (const chunk of splitAppendText(normalized)) {
-        if (chunk) {
-          appendQueue.push({ text: chunk, autoScroll: !!autoScroll });
-        }
-      }
+      // C# already coalesces and bounds live batches. Keep one acknowledgement
+      // boundary per host batch so completion means xterm parsed all its text.
+      appendQueue.push({ text: normalized, autoScroll: !!autoScroll, requestId });
 
       queueAppendDrain();
 
@@ -487,7 +535,7 @@
       }
 
       replaceWriting = true;
-      drainReplaceQueue(!!autoScroll);
+      commitReplaceQueue(!!autoScroll);
       return true;
     };
 
@@ -515,6 +563,20 @@
       };
     };
 
+    window.serialMonitorShowRestoreOverlay = function (title, detail) {
+      restoreOverlayTitle.textContent = String(title || '로그 화면 복원 중...');
+      restoreOverlayDetail.textContent = String(detail || 'Preparing log view');
+      restoreOverlay.classList.add('visible');
+      restoreOverlay.setAttribute('aria-hidden', 'false');
+      return true;
+    };
+
+    window.serialMonitorHideRestoreOverlay = function () {
+      restoreOverlay.classList.remove('visible');
+      restoreOverlay.setAttribute('aria-hidden', 'true');
+      return true;
+    };
+
     window.serialMonitorClear = function () {
       appendQueue.length = 0;
       appendQueueHead = 0;
@@ -533,6 +595,10 @@
 
       terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
       return true;
+    };
+
+    window.serialMonitorGetScrollback = function () {
+      return Number(terminal.options.scrollback || 0);
     };
 
     window.serialMonitorFit = function () {

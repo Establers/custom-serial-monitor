@@ -8,8 +8,6 @@ public readonly record struct BoundedLogBufferResult(int AcceptedCount, int Drop
 
 public sealed class BatchedObservableCollection<T> : ObservableCollection<T>
 {
-    private const int BulkReplaceRemoveThreshold = 64;
-
     public void ReplaceAll(IEnumerable<T> items)
     {
         CheckReentrancy();
@@ -32,40 +30,15 @@ public sealed class BatchedObservableCollection<T> : ObservableCollection<T>
         CheckReentrancy();
 
         removeCount = Math.Min(removeCount, Items.Count);
-        if (removeCount >= BulkReplaceRemoveThreshold)
-        {
-            var replacement = new List<T>(Math.Max(0, Items.Count - removeCount) + items.Count);
-            for (var index = removeCount; index < Items.Count; index++)
-            {
-                replacement.Add(Items[index]);
-            }
-
-            foreach (var item in items)
-            {
-                replacement.Add(item);
-            }
-
-            Items.Clear();
-            foreach (var item in replacement)
-            {
-                Items.Add(item);
-            }
-
-            RaiseReset();
-            return;
-        }
-
         for (var index = 0; index < removeCount; index++)
         {
-            Items.RemoveAt(0);
+            RemoveAt(0);
         }
 
         foreach (var item in items)
         {
-            Items.Add(item);
+            Add(item);
         }
-
-        RaiseReset();
     }
 
     public void ClearBatch()
