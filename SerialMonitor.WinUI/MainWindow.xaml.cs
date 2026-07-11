@@ -1,0 +1,3868 @@
+using System.Diagnostics;
+using System.Text.Json;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.Web.WebView2.Core;
+using SerialMonitor.WinUI.Infrastructure;
+using SerialMonitor.WinUI.Models;
+using SerialMonitor.WinUI.Services;
+using SerialMonitor.WinUI.ViewModels;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.Graphics;
+using Windows.Storage.Pickers;
+using Windows.System;
+
+namespace SerialMonitor.WinUI;
+
+public sealed partial class MainWindow : Window
+{
+    private const string LineEndingHelpText = @"Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.";
+    private const int LogRestoreOverlayLineThreshold = 1_000;
+    private const int XtermFullRenderTransportMaxChars = 64 * 1024;
+    private static readonly string BundledCuteBackgroundPath =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
+
+    private readonly MainViewModel _viewModel;
+    private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
+    private bool _isXtermReady;
+    private bool _isContextWebViewReady;
+    private bool _eventAutoScrollQueued;
+    private bool _contextWebViewUpdateQueued;
+    private bool _xtermFitQueued;
+    private bool _closeAllowed;
+    private bool _closeCleanupStarted;
+    private bool _isWindowMinimized;
+    private bool _isVisualAppendSuspendedForMinimize;
+    private bool _xtermNeedsFullRerenderAfterRestore;
+    private bool _restoreRerenderQueued;
+    private bool _restoreDeltaCatchUpQueued;
+    private int _restoreRerenderRetryCount;
+    private string _pendingXtermFullRerenderReason = "full re-render";
+    private long _xtermSyncedThroughDisplayedLineCount;
+    private long _xtermRenderGeneration;
+    private readonly object _suspendedXtermBatchGate = new();
+    private readonly Queue<LogTextBatch> _suspendedXtermBatches = new();
+    private bool _suspendedXtermClearRequested;
+    private readonly object _fullXtermRerenderGate = new();
+    private bool _fullXtermRerenderQueued;
+    private bool _fullXtermRerenderRunning;
+    private bool _fullXtermRerenderRequestedWhileRunning;
+    private bool _queuedFullXtermRerenderIsRestore;
+    private string _queuedFullXtermRerenderReason = "full re-render";
+    private long _fullXtermRerenderGeneration;
+    private bool? _lastAppliedCuteBackgroundEnabled;
+    private string? _lastAppliedCuteBackgroundPath;
+    private string? _lastAppliedCuteBackgroundCustomPath;
+    private string? _lastAppliedCuteBackgroundSource;
+    private double? _lastAppliedCuteBackgroundOpacity;
+    private string? _cachedCuteBackgroundPath;
+    private BitmapImage? _cachedCuteBackgroundImage;
+
+    private readonly record struct XtermAppendChunk(string Text, int LineCount);
+    private sealed record XtermScrollState(bool Ok, int ViewportY, int BaseY, int Rows, bool AtBottom);
+
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int virtualKey);
+
+    private bool IsClosingOrClosed => _closeCleanupStarted || _closeAllowed;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _viewModel = new MainViewModel(
+            new SerialService(),
+            new LogPipeline(new EncodingDecoder(), new LineParser()),
+            new FileLogWriter(),
+            new EventDetector(),
+            new ProfileService(),
+            dispatcherQueue);
+
+        Root.DataContext = _viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.Events.Events.CollectionChanged += OnDetectedEventsCollectionChanged;
+        _viewModel.Log.TextBatchAppended += OnLogTextBatchAppended;
+        _viewModel.Log.TextCleared += OnLogTextCleared;
+        _viewModel.Log.TextRebuilt += OnLogTextRebuilt;
+        _viewModel.XtermSearchRequested += OnXtermSearchRequested;
+        _viewModel.ConnectFailureDialogRequested += OnConnectFailureDialogRequested;
+        AppWindow.Closing += OnAppWindowClosing;
+        AppWindow.Changed += OnAppWindowChanged;
+        Activated += OnWindowActivated;
+        Closed += OnClosed;
+        UpdateCuteBackgroundImage();
+        _ = InitializeXtermWebViewAsync();
+        _ = InitializeContextWebViewAsync();
+
+        AppWindow.Resize(new SizeInt32(1200, 800));
+    }
+
+    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_closeAllowed)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        if (_closeCleanupStarted)
+        {
+            return;
+        }
+
+        _closeCleanupStarted = true;
+        _ = ShutdownAndCloseAsync();
+    }
+
+    private async Task ShutdownAndCloseAsync()
+    {
+        try
+        {
+            await _viewModel.ShutdownAsync(TimeSpan.FromSeconds(8));
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.ShutdownAndCloseAsync", ex);
+        }
+        finally
+        {
+            _closeAllowed = true;
+            Close();
+        }
+    }
+
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        UpdateWindowMinimizedState(IsAppWindowCurrentlyMinimized());
+    }
+
+    private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
+    {
+        UpdateWindowMinimizedState(IsAppWindowCurrentlyMinimized());
+        if (!_isWindowMinimized &&
+            !_xtermNeedsFullRerenderAfterRestore &&
+            !HasSuspendedXtermWork())
+        {
+            _viewModel.RecordWindowActivationRerenderSuppressed();
+        }
+    }
+
+    private bool IsAppWindowCurrentlyMinimized()
+    {
+        return AppWindow.Presenter is OverlappedPresenter presenter &&
+            presenter.State == OverlappedPresenterState.Minimized;
+    }
+
+    private void UpdateWindowMinimizedState(bool isMinimized)
+    {
+        if (_isWindowMinimized == isMinimized)
+        {
+            return;
+        }
+
+        _isWindowMinimized = isMinimized;
+        _isVisualAppendSuspendedForMinimize = isMinimized;
+        _viewModel.RecordWindowMinimizeState(isMinimized);
+        _viewModel.SetVisualAppendSuspendedForMinimize(isMinimized);
+
+        if (isMinimized)
+        {
+            _restoreRerenderRetryCount = 0;
+            _viewModel.RecordRenderedSequenceState(
+                _xtermSyncedThroughDisplayedLineCount,
+                _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount);
+            return;
+        }
+
+        if (_xtermNeedsFullRerenderAfterRestore)
+        {
+            QueueXtermFullRerenderAfterRestore(_pendingXtermFullRerenderReason);
+            return;
+        }
+
+        QueueXtermDeltaCatchUpAfterRestore("window restored");
+    }
+
+    private async void OnClosed(object sender, WindowEventArgs args)
+    {
+        AppWindow.Closing -= OnAppWindowClosing;
+        AppWindow.Changed -= OnAppWindowChanged;
+        Activated -= OnWindowActivated;
+        _viewModel.Log.TextBatchAppended -= OnLogTextBatchAppended;
+        _viewModel.Log.TextCleared -= OnLogTextCleared;
+        _viewModel.Log.TextRebuilt -= OnLogTextRebuilt;
+        _viewModel.XtermSearchRequested -= OnXtermSearchRequested;
+        _viewModel.ConnectFailureDialogRequested -= OnConnectFailureDialogRequested;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.Events.Events.CollectionChanged -= OnDetectedEventsCollectionChanged;
+        XtermLogWebView.NavigationCompleted -= OnXtermNavigationCompleted;
+        if (XtermLogWebView.CoreWebView2 is not null)
+        {
+            XtermLogWebView.CoreWebView2.WebMessageReceived -= OnXtermWebMessageReceived;
+        }
+
+        ContextWebView.NavigationCompleted -= OnContextNavigationCompleted;
+        if (ContextWebView.CoreWebView2 is not null)
+        {
+            ContextWebView.CoreWebView2.WebMessageReceived -= OnContextWebMessageReceived;
+        }
+
+        try
+        {
+            await _viewModel.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.OnClosed.Dispose", ex);
+        }
+    }
+
+    private async void DisconnectButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (!_viewModel.IsConnected)
+        {
+            _viewModel.RecordDisconnectConfirmationResult("skipped");
+            return;
+        }
+
+        if (!_viewModel.ConfirmBeforeDisconnect)
+        {
+            _viewModel.RecordDisconnectConfirmationResult("skipped");
+            ExecuteDisconnectCommand();
+            return;
+        }
+
+        bool confirmed;
+        try
+        {
+            confirmed = await ShowDisconnectConfirmationAsync();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordDisconnectConfirmationError($"Disconnect confirmation failed: {ex.Message}");
+            return;
+        }
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        ExecuteDisconnectCommand();
+    }
+
+    private void ExecuteDisconnectCommand()
+    {
+        if (_viewModel.DisconnectCommand.CanExecute(null))
+        {
+            _viewModel.DisconnectCommand.Execute(null);
+        }
+    }
+
+    private async Task<bool> ShowDisconnectConfirmationAsync()
+    {
+        _viewModel.RecordDisconnectConfirmationResult("shown");
+
+        var dontAskAgainBox = new CheckBox
+        {
+            Content = "Don't ask again",
+            IsChecked = false
+        };
+        ToolTipService.SetToolTip(dontAskAgainBox, "Turn off manual disconnect confirmation.");
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = "The serial connection is currently active. Disconnect now?",
+            TextWrapping = TextWrapping.WrapWholeWords
+        });
+        panel.Children.Add(dontAskAgainBox);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = "Disconnect serial port?",
+            Content = panel,
+            PrimaryButtonText = "Disconnect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            _viewModel.RecordDisconnectConfirmationResult("canceled");
+            return false;
+        }
+
+        if (dontAskAgainBox.IsChecked == true)
+        {
+            _viewModel.ConfirmBeforeDisconnect = false;
+        }
+
+        _viewModel.RecordDisconnectConfirmationResult("confirmed");
+        return true;
+    }
+
+    private async void OnConnectFailureDialogRequested(object? sender, ConnectFailureDialogRequest request)
+    {
+        try
+        {
+            await ShowConnectFailureDialogAsync(request);
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.OnConnectFailureDialogRequested", ex);
+        }
+    }
+
+    private async Task ShowConnectFailureDialogAsync(ConnectFailureDialogRequest request)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = "Failed to connect",
+            Content = new TextBlock
+            {
+                Text = request.Message,
+                TextWrapping = TextWrapping.WrapWholeWords,
+                MaxWidth = 420
+            },
+            CloseButtonText = "OK",
+            DefaultButton = ContentDialogButton.Close
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    private void OnLogTextBatchAppended(object? sender, LogTextBatch batch)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            EnqueueSuspendedXtermBatch(batch);
+            return;
+        }
+
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            var generation = Interlocked.Read(ref _xtermRenderGeneration);
+            DispatcherQueue.TryEnqueue(() => _ = AppendLogBatchToXtermAsync(batch, generation));
+            return;
+        }
+
+        _ = AppendLogBatchToXtermAsync(batch, Interlocked.Read(ref _xtermRenderGeneration));
+    }
+
+    private void OnLogTextCleared(object? sender, EventArgs args)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            MarkXtermClearNeededAfterRestore();
+            return;
+        }
+
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => _ = ClearXtermAsync());
+            return;
+        }
+
+        _ = ClearXtermAsync();
+    }
+
+    private void OnLogTextRebuilt(object? sender, EventArgs args)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            var rebuildReason = _viewModel.LastVisibleLogRebuildReason;
+            if (ShouldForceFullRerenderWhileMinimized(rebuildReason))
+            {
+                MarkXtermFullRerenderNeeded(rebuildReason);
+            }
+            else
+            {
+                _viewModel.RecordRestoreFullRerenderSuppressed($"minimized rebuild ignored: {rebuildReason}");
+            }
+
+            return;
+        }
+
+        var reason = _viewModel.LastVisibleLogRebuildReason;
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => QueueFullXtermRerender(reason));
+            return;
+        }
+
+        QueueFullXtermRerender(reason);
+    }
+
+    private void OnXtermSearchRequested(object? sender, XtermSearchRequest request)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => _ = SearchXtermAsync(request));
+            return;
+        }
+
+        _ = SearchXtermAsync(request);
+    }
+
+    private bool IsXtermVisualAppendSuspended()
+    {
+        return _isVisualAppendSuspendedForMinimize;
+    }
+
+    private void MarkXtermFullRerenderNeeded(string reason, int coalescedLineCount = 0, int coalescedCharacterCount = 0)
+    {
+        _xtermNeedsFullRerenderAfterRestore = true;
+        _pendingXtermFullRerenderReason = string.IsNullOrWhiteSpace(reason)
+            ? "full re-render"
+            : reason.Trim();
+        _viewModel.SetXtermNeedsFullRerenderAfterRestore(true);
+        _viewModel.RecordMinimizedVisualAppendCoalesced(coalescedLineCount, coalescedCharacterCount);
+        ClearSuspendedXtermBatches();
+    }
+
+    private void MarkXtermClearNeededAfterRestore()
+    {
+        lock (_suspendedXtermBatchGate)
+        {
+            _suspendedXtermBatches.Clear();
+            _suspendedXtermClearRequested = true;
+        }
+
+        _xtermSyncedThroughDisplayedLineCount = _viewModel.Log.DisplayedLineCount;
+        _viewModel.RecordRenderedSequenceState(
+            _xtermSyncedThroughDisplayedLineCount,
+            pendingDeltaLineCount: 0);
+    }
+
+    private void EnqueueSuspendedXtermBatch(LogTextBatch batch)
+    {
+        if (batch.LineCount <= 0 || string.IsNullOrEmpty(batch.AppendedText))
+        {
+            return;
+        }
+
+        if (_xtermNeedsFullRerenderAfterRestore)
+        {
+            var pendingAfterFullRender = Math.Max(0, batch.EndDisplayedLineCount - _xtermSyncedThroughDisplayedLineCount);
+            _viewModel.RecordMinimizedVisualAppendCoalesced(batch.LineCount, batch.AppendedText.Length);
+            _viewModel.RecordRenderedSequenceState(_xtermSyncedThroughDisplayedLineCount, pendingAfterFullRender);
+            return;
+        }
+
+        lock (_suspendedXtermBatchGate)
+        {
+            _suspendedXtermBatches.Enqueue(batch);
+        }
+
+        var pendingDelta = Math.Max(0, batch.EndDisplayedLineCount - _xtermSyncedThroughDisplayedLineCount);
+        _viewModel.RecordMinimizedVisualAppendCoalesced(batch.LineCount, batch.AppendedText.Length);
+        _viewModel.RecordRenderedSequenceState(_xtermSyncedThroughDisplayedLineCount, pendingDelta);
+    }
+
+    private void ClearSuspendedXtermBatches()
+    {
+        lock (_suspendedXtermBatchGate)
+        {
+            _suspendedXtermBatches.Clear();
+            _suspendedXtermClearRequested = false;
+        }
+    }
+
+    private (LogTextBatch[] Batches, bool ClearRequested, int LineCount, int CharacterCount) DrainSuspendedXtermBatches()
+    {
+        lock (_suspendedXtermBatchGate)
+        {
+            if (_suspendedXtermBatches.Count == 0 && !_suspendedXtermClearRequested)
+            {
+                return (Array.Empty<LogTextBatch>(), false, 0, 0);
+            }
+
+            var batches = _suspendedXtermBatches.ToArray();
+            _suspendedXtermBatches.Clear();
+            var clearRequested = _suspendedXtermClearRequested;
+            _suspendedXtermClearRequested = false;
+            var lineCount = 0;
+            var characterCount = 0;
+            foreach (var batch in batches)
+            {
+                lineCount += batch.LineCount;
+                characterCount += batch.AppendedText.Length;
+            }
+
+            return (batches, clearRequested, lineCount, characterCount);
+        }
+    }
+
+    private bool HasSuspendedXtermWork()
+    {
+        lock (_suspendedXtermBatchGate)
+        {
+            return _suspendedXtermClearRequested || _suspendedXtermBatches.Count > 0;
+        }
+    }
+
+    private void QueueXtermFullRerenderAfterRestore(string reason)
+    {
+        if (_restoreRerenderQueued || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _restoreRerenderQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _restoreRerenderQueued = false;
+            if (IsClosingOrClosed ||
+                _isVisualAppendSuspendedForMinimize ||
+                _viewModel.IsLogRenderingPaused ||
+                !_xtermNeedsFullRerenderAfterRestore)
+            {
+                return;
+            }
+
+            QueueFullXtermRerender(reason, isRestoreRender: true, debounce: false);
+        });
+    }
+
+    private void QueueXtermDeltaCatchUpAfterRestore(string reason)
+    {
+        if (_restoreDeltaCatchUpQueued || IsClosingOrClosed || !HasSuspendedXtermWork())
+        {
+            return;
+        }
+
+        if (!_isXtermReady)
+        {
+            MarkXtermFullRerenderNeeded("xterm not ready during restore delta catch-up");
+            return;
+        }
+
+        _restoreDeltaCatchUpQueued = true;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            _restoreDeltaCatchUpQueued = false;
+            await AppendSuspendedXtermDeltaAfterRestoreAsync(reason);
+        });
+    }
+
+    private static bool ShouldShowLogRestoreOverlay(bool isFullRender, int lineCount)
+    {
+        return isFullRender || lineCount >= LogRestoreOverlayLineThreshold;
+    }
+
+    private void ShowLogRestoreOverlay(string title, int lineCount)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => ShowLogRestoreOverlay(title, lineCount));
+            return;
+        }
+
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        LogRestoreOverlayTitle.Text = string.IsNullOrWhiteSpace(title)
+            ? "로그 화면 복원 중..."
+            : title.Trim();
+        LogRestoreOverlayDetail.Text = lineCount > 0
+            ? $"{lineCount:N0} lines"
+            : "Preparing log view";
+        LogRestoreOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void HideLogRestoreOverlay()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(HideLogRestoreOverlay);
+            return;
+        }
+
+        LogRestoreOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private async Task AppendSuspendedXtermDeltaAfterRestoreAsync(string reason)
+    {
+        if (!_isXtermReady ||
+            IsClosingOrClosed ||
+            _isVisualAppendSuspendedForMinimize ||
+            _viewModel.IsLogRenderingPaused)
+        {
+            return;
+        }
+
+        var restoreStartedAt = DateTimeOffset.Now;
+        var drained = DrainSuspendedXtermBatches();
+        if (!drained.ClearRequested && drained.Batches.Length == 0)
+        {
+            _viewModel.RecordRestoreFullRerenderSuppressed("restore delta append; no pending visual delta");
+            _viewModel.RecordRenderedSequenceState(
+                _xtermSyncedThroughDisplayedLineCount,
+                Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+            return;
+        }
+
+        var showRestoreOverlay = ShouldShowLogRestoreOverlay(isFullRender: false, drained.LineCount);
+        if (showRestoreOverlay)
+        {
+            ShowLogRestoreOverlay("로그 화면 복원 중...", drained.LineCount);
+        }
+
+        _viewModel.RecordRestoreFullRerenderSuppressed(
+            string.IsNullOrWhiteSpace(reason) ? "restore delta append" : reason);
+        _viewModel.RecordRestoreRenderStarted(
+            "delta append",
+            drained.LineCount,
+            _xtermSyncedThroughDisplayedLineCount,
+            Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+
+        await _xtermAppendGate.WaitAsync();
+        try
+        {
+            if (_isVisualAppendSuspendedForMinimize || _viewModel.IsLogRenderingPaused)
+            {
+                RequeueSuspendedXtermBatches(drained.Batches, drained.ClearRequested);
+                return;
+            }
+
+            await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(5));
+
+            if (drained.ClearRequested)
+            {
+                Interlocked.Increment(ref _xtermRenderGeneration);
+                await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
+                _xtermSyncedThroughDisplayedLineCount = drained.Batches.Length == 0
+                    ? _viewModel.Log.DisplayedLineCount
+                    : 0;
+            }
+
+            foreach (var batch in drained.Batches)
+            {
+                if (_isVisualAppendSuspendedForMinimize || _viewModel.IsLogRenderingPaused)
+                {
+                    RequeueSuspendedXtermBatches(
+                        drained.Batches.SkipWhile(item => !ReferenceEquals(item, batch)).ToArray(),
+                        clearRequested: false);
+                    return;
+                }
+
+                if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount)
+                {
+                    continue;
+                }
+
+                _viewModel.RecordXtermAppendQueued(batch.AppendedText.Length);
+                try
+                {
+                    var appendCompleted = await ExecuteXtermAppendScriptAsync(
+                        batch.AppendedText,
+                        batch.LineCount,
+                        autoScroll: false);
+                    if (!appendCompleted)
+                    {
+                        MarkXtermFullRerenderNeeded("restore delta append interrupted");
+                        return;
+                    }
+
+                    _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
+                }
+                finally
+                {
+                    _viewModel.RecordXtermAppendDequeued(batch.AppendedText.Length);
+                }
+            }
+
+            await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(30));
+            if (_viewModel.IsAutoScrollEnabled)
+            {
+                await ScrollXtermToBottomAsync("Restore delta final scroll");
+            }
+
+            var pendingDelta = Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount);
+            _viewModel.RecordRenderedSequenceState(_xtermSyncedThroughDisplayedLineCount, pendingDelta);
+            _viewModel.RecordRestoreRenderCompleted(
+                drained.LineCount,
+                DateTimeOffset.Now - restoreStartedAt,
+                "delta append");
+        }
+        catch (Exception ex)
+        {
+            RequeueSuspendedXtermBatches(drained.Batches, drained.ClearRequested);
+            _viewModel.RecordXtermAppendError($"restore delta append failed: {ex.Message}");
+            MarkXtermFullRerenderNeeded("restore delta append failed");
+        }
+        finally
+        {
+            if (showRestoreOverlay)
+            {
+                HideLogRestoreOverlay();
+            }
+
+            _xtermAppendGate.Release();
+        }
+    }
+
+    private void RequeueSuspendedXtermBatches(IReadOnlyList<LogTextBatch> batches, bool clearRequested)
+    {
+        lock (_suspendedXtermBatchGate)
+        {
+            var existing = _suspendedXtermBatches.ToArray();
+            _suspendedXtermBatches.Clear();
+
+            if (clearRequested)
+            {
+                _suspendedXtermClearRequested = true;
+            }
+
+            foreach (var batch in batches)
+            {
+                _suspendedXtermBatches.Enqueue(batch);
+            }
+
+            foreach (var batch in existing)
+            {
+                _suspendedXtermBatches.Enqueue(batch);
+            }
+        }
+    }
+
+    private void QueueFullXtermRerender(
+        string reason,
+        bool isRestoreRender = false,
+        bool debounce = true)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        var normalizedReason = NormalizeFullXtermRerenderReason(reason);
+        if (!_isXtermReady)
+        {
+            _viewModel.RecordFullXtermRerenderCanceled(
+                normalizedReason,
+                "xterm is not ready");
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            MarkXtermFullRerenderNeeded(normalizedReason);
+            _viewModel.RecordFullXtermRerenderCanceled(
+                normalizedReason,
+                "xterm visual append is suspended");
+            return;
+        }
+
+        if (isRestoreRender && _viewModel.IsLogRenderingPaused)
+        {
+            _viewModel.RecordFullXtermRerenderCanceled(
+                normalizedReason,
+                "rendering is paused");
+            return;
+        }
+
+        var shouldSchedule = false;
+        lock (_fullXtermRerenderGate)
+        {
+            _viewModel.RecordFullXtermRerenderRequested(normalizedReason);
+
+            if (_fullXtermRerenderRunning)
+            {
+                _fullXtermRerenderRequestedWhileRunning = true;
+                _queuedFullXtermRerenderIsRestore |= isRestoreRender;
+                _queuedFullXtermRerenderReason = MergeFullXtermRerenderReason(
+                    _queuedFullXtermRerenderReason,
+                    normalizedReason);
+                _viewModel.RecordFullXtermRerenderCoalesced(normalizedReason);
+                return;
+            }
+
+            if (_fullXtermRerenderQueued)
+            {
+                _queuedFullXtermRerenderIsRestore |= isRestoreRender;
+                _queuedFullXtermRerenderReason = MergeFullXtermRerenderReason(
+                    _queuedFullXtermRerenderReason,
+                    normalizedReason);
+                _viewModel.RecordFullXtermRerenderCoalesced(normalizedReason);
+                return;
+            }
+
+            _fullXtermRerenderQueued = true;
+            _queuedFullXtermRerenderIsRestore = isRestoreRender;
+            _queuedFullXtermRerenderReason = normalizedReason;
+            shouldSchedule = true;
+        }
+
+        if (shouldSchedule)
+        {
+            ScheduleQueuedFullXtermRerender(debounce);
+        }
+    }
+
+    private void ScheduleQueuedFullXtermRerender(bool debounce)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (debounce)
+            {
+                await Task.Delay(75);
+            }
+
+            await DrainQueuedFullXtermRerenderAsync();
+        });
+    }
+
+    private async Task DrainQueuedFullXtermRerenderAsync()
+    {
+        string reason;
+        bool isRestoreRender;
+        lock (_fullXtermRerenderGate)
+        {
+            if (!_fullXtermRerenderQueued || _fullXtermRerenderRunning)
+            {
+                return;
+            }
+
+            _fullXtermRerenderQueued = false;
+            _fullXtermRerenderRunning = true;
+            reason = _queuedFullXtermRerenderReason;
+            isRestoreRender = _queuedFullXtermRerenderIsRestore;
+            _queuedFullXtermRerenderReason = "full re-render";
+            _queuedFullXtermRerenderIsRestore = false;
+        }
+
+        var renderGeneration = Interlocked.Increment(ref _fullXtermRerenderGeneration);
+        try
+        {
+            await SyncXtermFromVisibleLogAsync(isRestoreRender, reason, renderGeneration);
+        }
+        finally
+        {
+            var shouldScheduleAgain = false;
+            lock (_fullXtermRerenderGate)
+            {
+                _fullXtermRerenderRunning = false;
+                if (_fullXtermRerenderRequestedWhileRunning)
+                {
+                    _fullXtermRerenderRequestedWhileRunning = false;
+                    _fullXtermRerenderQueued = true;
+                    shouldScheduleAgain = true;
+                }
+            }
+
+            if (shouldScheduleAgain)
+            {
+                ScheduleQueuedFullXtermRerender(debounce: true);
+            }
+        }
+    }
+
+    private static string NormalizeFullXtermRerenderReason(string? reason)
+    {
+        return string.IsNullOrWhiteSpace(reason)
+            ? "full re-render"
+            : reason.Trim();
+    }
+
+    private static string MergeFullXtermRerenderReason(string existingReason, string nextReason)
+    {
+        var existing = NormalizeFullXtermRerenderReason(existingReason);
+        var next = NormalizeFullXtermRerenderReason(nextReason);
+        if (string.Equals(existing, next, StringComparison.Ordinal))
+        {
+            return existing;
+        }
+
+        if (string.Equals(existing, "full re-render", StringComparison.Ordinal) &&
+            !string.Equals(next, "full re-render", StringComparison.Ordinal))
+        {
+            return next;
+        }
+
+        if (existing.Contains(next, StringComparison.Ordinal))
+        {
+            return existing;
+        }
+
+        var merged = $"{existing}; {next}";
+        return merged.Length <= 160 ? merged : merged[^160..];
+    }
+
+    private static bool ShouldForceFullRerenderWhileMinimized(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return false;
+        }
+
+        var normalized = reason.Trim();
+        return normalized.Contains("RX view", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("timestamp", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("capacity", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("filter", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("profile", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void QueueRestoreRerenderRetry()
+    {
+        if (_restoreRerenderRetryCount >= 1 || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _restoreRerenderRetryCount++;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(750);
+            if (!IsClosingOrClosed &&
+                !_isVisualAppendSuspendedForMinimize &&
+                !_viewModel.IsLogRenderingPaused &&
+                _xtermNeedsFullRerenderAfterRestore)
+            {
+                QueueXtermFullRerenderAfterRestore("restore retry");
+            }
+        });
+    }
+
+    private async Task InitializeXtermWebViewAsync()
+    {
+        try
+        {
+            var assetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "xterm");
+            var indexPath = Path.Combine(assetDirectory, "index.html");
+            if (!File.Exists(indexPath))
+            {
+                _viewModel.RecordXtermAppendError($"xterm asset missing: {indexPath}");
+                return;
+            }
+
+            await XtermLogWebView.EnsureCoreWebView2Async();
+            XtermLogWebView.CoreWebView2.WebMessageReceived += OnXtermWebMessageReceived;
+            XtermLogWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                "serialmonitor.local",
+                assetDirectory,
+                CoreWebView2HostResourceAccessKind.Allow);
+            XtermLogWebView.NavigationCompleted += OnXtermNavigationCompleted;
+            XtermLogWebView.Source = new Uri("https://serialmonitor.local/index.html");
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermAppendError($"xterm WebView2 init failed: {ex.Message}");
+        }
+    }
+
+    private async Task InitializeContextWebViewAsync()
+    {
+        try
+        {
+            var assetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "context");
+            var indexPath = Path.Combine(assetDirectory, "index.html");
+            if (!File.Exists(indexPath))
+            {
+                _viewModel.RecordContextWebViewUpdateError($"Context viewer asset missing: {indexPath}");
+                return;
+            }
+
+            await ContextWebView.EnsureCoreWebView2Async();
+            ContextWebView.CoreWebView2.WebMessageReceived += OnContextWebMessageReceived;
+            ContextWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                "serialmonitor-context.local",
+                assetDirectory,
+                CoreWebView2HostResourceAccessKind.Allow);
+            ContextWebView.NavigationCompleted += OnContextNavigationCompleted;
+            ContextWebView.Source = new Uri("https://serialmonitor-context.local/index.html");
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordContextWebViewUpdateError($"Context WebView2 init failed: {ex.Message}");
+        }
+    }
+
+    private void OnXtermNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (!args.IsSuccess)
+        {
+            _viewModel.RecordXtermAppendError($"xterm navigation failed: {args.WebErrorStatus}");
+            return;
+        }
+
+        _isXtermReady = true;
+        _viewModel.SetXtermReady(true);
+        _ = SyncXtermScrollbackSizeAsync();
+        QueueXtermFit();
+        if (_xtermNeedsFullRerenderAfterRestore)
+        {
+            QueueXtermFullRerenderAfterRestore("xterm ready");
+        }
+        else
+        {
+            QueueFullXtermRerender("xterm ready", debounce: false);
+        }
+    }
+
+    private void OnContextNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (!args.IsSuccess)
+        {
+            _viewModel.RecordContextWebViewUpdateError($"Context viewer navigation failed: {args.WebErrorStatus}");
+            return;
+        }
+
+        _isContextWebViewReady = true;
+        _viewModel.SetContextWebViewReady(true);
+        QueueContextWebViewUpdate();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(MainViewModel.SelectedEventContextText) ||
+            args.PropertyName == nameof(MainViewModel.SelectedEvent))
+        {
+            QueueContextWebViewUpdate();
+            return;
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
+        {
+            _ = SyncXtermScrollbackSizeAsync();
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.IsAutoScrollEnabled) &&
+            _viewModel.IsAutoScrollEnabled &&
+            !_isVisualAppendSuspendedForMinimize)
+        {
+            _ = ScrollXtermToBottomAsync("Auto Scroll enabled");
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.IsLogRenderingPaused) &&
+            !_viewModel.IsLogRenderingPaused &&
+            !_isVisualAppendSuspendedForMinimize)
+        {
+            if (_xtermNeedsFullRerenderAfterRestore)
+            {
+                QueueXtermFullRerenderAfterRestore("rendering resumed");
+            }
+            else
+            {
+                QueueXtermDeltaCatchUpAfterRestore("rendering resumed");
+            }
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.CuteBackgroundMode) ||
+            args.PropertyName == nameof(MainViewModel.CuteBackgroundImagePath) ||
+            args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
+        {
+            UpdateCuteBackgroundImage();
+        }
+    }
+
+    private void UpdateCuteBackgroundImage()
+    {
+        try
+        {
+            var enabled = _viewModel.CuteBackgroundMode;
+            var customPath = _viewModel.CuteBackgroundImagePath?.Trim() ?? string.Empty;
+            var opacity = _viewModel.CuteBackgroundOpacity;
+            var bundledPath = BundledCuteBackgroundPath;
+            var customExists = false;
+            var bundledExists = false;
+
+            if (!string.IsNullOrWhiteSpace(customPath))
+            {
+                try
+                {
+                    customExists = File.Exists(customPath);
+                }
+                catch
+                {
+                    customExists = false;
+                }
+            }
+
+            try
+            {
+                bundledExists = File.Exists(bundledPath);
+            }
+            catch
+            {
+                bundledExists = false;
+            }
+
+            var resolvedPath = string.Empty;
+            var source = "none";
+            string? error = null;
+
+            if (enabled)
+            {
+                if (customExists)
+                {
+                    resolvedPath = customPath;
+                    source = "custom path";
+                }
+                else if (bundledExists)
+                {
+                    resolvedPath = bundledPath;
+                    if (string.IsNullOrWhiteSpace(customPath))
+                    {
+                        source = "bundled default";
+                    }
+                    else
+                    {
+                        source = "fallback bundled default";
+                        error = $"Custom background image not found; using bundled default: {customPath}";
+                    }
+                }
+                else
+                {
+                    error = string.IsNullOrWhiteSpace(customPath)
+                        ? "Bundled background image not found."
+                        : "Custom and bundled background images were not found.";
+                }
+            }
+
+            var stateUnchanged =
+                _lastAppliedCuteBackgroundEnabled == enabled &&
+                string.Equals(_lastAppliedCuteBackgroundPath, resolvedPath, StringComparison.Ordinal) &&
+                string.Equals(_lastAppliedCuteBackgroundCustomPath, customPath, StringComparison.Ordinal) &&
+                string.Equals(_lastAppliedCuteBackgroundSource, source, StringComparison.Ordinal) &&
+                _lastAppliedCuteBackgroundOpacity.HasValue &&
+                Math.Abs(_lastAppliedCuteBackgroundOpacity.Value - opacity) < 0.0001;
+
+            if (stateUnchanged)
+            {
+                _viewModel.RecordCuteBackgroundApplySkipped();
+                return;
+            }
+
+            var pathChanged = !string.Equals(_lastAppliedCuteBackgroundPath, resolvedPath, StringComparison.Ordinal);
+            _lastAppliedCuteBackgroundEnabled = enabled;
+            _lastAppliedCuteBackgroundPath = resolvedPath;
+            _lastAppliedCuteBackgroundCustomPath = customPath;
+            _lastAppliedCuteBackgroundSource = source;
+            _lastAppliedCuteBackgroundOpacity = opacity;
+
+            if (!enabled)
+            {
+                _viewModel.RecordCuteBackgroundApplyResult(
+                    fileExists: false,
+                    loaded: false,
+                    error: null,
+                    source: source,
+                    bundledPath: bundledPath);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(resolvedPath))
+            {
+                if (CuteBackgroundImage.Source is not null)
+                {
+                    CuteBackgroundImage.Source = null;
+                }
+
+                _cachedCuteBackgroundPath = null;
+                _cachedCuteBackgroundImage = null;
+                _viewModel.RecordCuteBackgroundApplyResult(
+                    fileExists: false,
+                    loaded: false,
+                    error: error,
+                    source: source,
+                    bundledPath: bundledPath);
+                return;
+            }
+
+            if (pathChanged ||
+                _cachedCuteBackgroundImage is null ||
+                !string.Equals(_cachedCuteBackgroundPath, resolvedPath, StringComparison.Ordinal))
+            {
+                _cachedCuteBackgroundImage = new BitmapImage(new Uri(resolvedPath, UriKind.Absolute));
+                _cachedCuteBackgroundPath = resolvedPath;
+                _viewModel.RecordCuteBackgroundImageReloaded();
+            }
+
+            if (!ReferenceEquals(CuteBackgroundImage.Source, _cachedCuteBackgroundImage))
+            {
+                CuteBackgroundImage.Source = _cachedCuteBackgroundImage;
+            }
+
+            _viewModel.RecordCuteBackgroundApplyResult(
+                fileExists: true,
+                loaded: true,
+                error: error,
+                source: source,
+                bundledPath: bundledPath);
+        }
+        catch (Exception ex)
+        {
+            if (CuteBackgroundImage.Source is not null)
+            {
+                CuteBackgroundImage.Source = null;
+            }
+
+            _cachedCuteBackgroundPath = null;
+            _cachedCuteBackgroundImage = null;
+            _viewModel.RecordCuteBackgroundApplyResult(
+                fileExists: false,
+                loaded: false,
+                error: $"Background image failed to load: {ex.Message}",
+                source: "none",
+                bundledPath: BundledCuteBackgroundPath);
+        }
+    }
+
+    private void OnDetectedEventsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (_viewModel.IsEventAutoScrollEnabled)
+        {
+            QueueEventAutoScrollToLatest(selectLatest: false);
+        }
+    }
+
+    private void OnXtermWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("type", out var typeElement))
+            {
+                return;
+            }
+
+            var messageType = typeElement.GetString();
+            if (string.Equals(messageType, "shortcut", StringComparison.Ordinal))
+            {
+                if (root.TryGetProperty("shortcut", out var shortcutElement))
+                {
+                    _ = ExecuteSavedCommandShortcutAsync(shortcutElement.GetString());
+                }
+
+                return;
+            }
+
+            if (string.Equals(messageType, "markerShortcut", StringComparison.Ordinal))
+            {
+                _ = _viewModel.AddDefaultMarkerAsync();
+                return;
+            }
+
+            if (string.Equals(messageType, "searchShortcut", StringComparison.Ordinal))
+            {
+                var action = root.TryGetProperty("action", out var actionElement)
+                    ? actionElement.GetString()
+                    : string.Empty;
+                var source = root.TryGetProperty("source", out var sourceElement)
+                    ? sourceElement.GetString()
+                    : "xterm";
+                _ = HandleSearchShortcutAsync(action, source ?? "xterm");
+                return;
+            }
+
+            if (string.Equals(messageType, "copySelection", StringComparison.Ordinal))
+            {
+                if (!root.TryGetProperty("text", out var textElement))
+                {
+                    return;
+                }
+
+                var selectedText = textElement.GetString();
+                if (string.IsNullOrEmpty(selectedText))
+                {
+                    return;
+                }
+
+                var package = new DataPackage();
+                package.SetText(selectedText);
+                Clipboard.SetContent(package);
+                Clipboard.Flush();
+                _viewModel.RecordXtermCopySuccess(selectedText.Length);
+                return;
+            }
+
+            if (string.Equals(messageType, "contextMenuAction", StringComparison.Ordinal))
+            {
+                var action = root.TryGetProperty("action", out var actionElement)
+                    ? actionElement.GetString()
+                    : string.Empty;
+                var selectedText = root.TryGetProperty("selectedText", out var selectedTextElement)
+                    ? selectedTextElement.GetString()
+                    : string.Empty;
+                _ = HandleXtermContextMenuActionAsync(action, selectedText);
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermCopyError($"xterm message failed: {ex.Message}");
+        }
+    }
+
+    private async Task HandleXtermContextMenuActionAsync(string? action, string? selectedText)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (action)
+            {
+                case "copy":
+                    if (CopyTextToClipboard(selectedText, "Copy"))
+                    {
+                        _viewModel.RecordXtermCopySuccess(selectedText?.Length ?? 0);
+                        _viewModel.RecordXtermContextMenuAction("Copy xterm selection");
+                    }
+                    break;
+
+                case "copyAllVisible":
+                    var visibleText = _viewModel.GetVisibleLogPlainTextSnapshot(out var lineCount);
+                    if (CopyTextToClipboard(visibleText, "Copy all visible"))
+                    {
+                        _viewModel.RecordCopyAllVisibleSuccess(lineCount);
+                    }
+                    break;
+
+                case "copySinceLastTx":
+                    if (!_viewModel.TryGetVisibleLogSinceLastTxPlainTextSnapshot(
+                            out var txText,
+                            out var txLineCount,
+                            out var txCharacterCount))
+                    {
+                        _viewModel.RecordCopySinceLastTxNoTx();
+                        break;
+                    }
+
+                    if (CopyTextToClipboard(txText, "Copy since last TX"))
+                    {
+                        _viewModel.RecordCopySinceLastTxSuccess(txLineCount, txCharacterCount);
+                    }
+                    break;
+
+                case "copySinceLastMark":
+                    if (!_viewModel.TryGetVisibleLogSinceLastMarkPlainTextSnapshot(
+                            out var markText,
+                            out var markLineCount,
+                            out var markCharacterCount))
+                    {
+                        _viewModel.RecordCopySinceLastMarkNoMark();
+                        break;
+                    }
+
+                    if (CopyTextToClipboard(markText, "Copy since last MARK"))
+                    {
+                        _viewModel.RecordCopySinceLastMarkSuccess(markLineCount, markCharacterCount);
+                    }
+                    break;
+
+                case "clear":
+                    await _viewModel.ClearScreenFromXtermContextMenuAsync();
+                    break;
+
+                case "quickMarker":
+                    await _viewModel.AddDefaultMarkerAsync();
+                    _viewModel.RecordXtermContextMenuAction("Quick marker");
+                    break;
+
+                case "searchSelected":
+                    _viewModel.SearchSelectedTextFromXterm(selectedText);
+                    break;
+
+                default:
+                    _viewModel.RecordXtermContextMenuError($"Unknown xterm context menu action: {action ?? "(null)"}");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (string.Equals(action, "copySinceLastTx", StringComparison.Ordinal))
+            {
+                _viewModel.RecordCopySinceLastTxError($"Copy since last TX failed: {ex.Message}");
+                return;
+            }
+
+            if (string.Equals(action, "copySinceLastMark", StringComparison.Ordinal))
+            {
+                _viewModel.RecordCopySinceLastMarkError($"Copy since last MARK failed: {ex.Message}");
+                return;
+            }
+
+            _viewModel.RecordXtermContextMenuError($"xterm context menu action failed: {ex.Message}");
+        }
+    }
+
+    private bool CopyTextToClipboard(string? text, string label)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            _viewModel.RecordXtermContextMenuError($"{label} failed: no text available.");
+            return false;
+        }
+
+        var package = new DataPackage();
+        package.SetText(text);
+        Clipboard.SetContent(package);
+        Clipboard.Flush();
+        return true;
+    }
+
+    private void OnContextWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("type", out var typeElement))
+            {
+                return;
+            }
+
+            var messageType = typeElement.GetString();
+            if (!string.Equals(messageType, "copySelection", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!root.TryGetProperty("text", out var textElement))
+            {
+                return;
+            }
+
+            var selectedText = textElement.GetString();
+            if (string.IsNullOrEmpty(selectedText))
+            {
+                return;
+            }
+
+            var package = new DataPackage();
+            package.SetText(selectedText);
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordContextWebViewUpdateError($"Context viewer message failed: {ex.Message}");
+        }
+    }
+
+    private async Task SyncXtermFromVisibleLogAsync(
+        bool isRestoreRender = false,
+        string reason = "full re-render",
+        long renderGeneration = 0)
+    {
+        if (!_isXtermReady || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            MarkXtermFullRerenderNeeded(reason);
+            _viewModel.RecordFullXtermRerenderCanceled(
+                reason,
+                "xterm visual append is suspended");
+            return;
+        }
+
+        if (isRestoreRender && _viewModel.IsLogRenderingPaused)
+        {
+            _viewModel.RecordFullXtermRerenderCanceled(
+                reason,
+                "rendering is paused");
+            return;
+        }
+
+        var restoreStartedAt = DateTimeOffset.Now;
+        var renderStartedAt = restoreStartedAt;
+        XtermScrollState? previousScrollState = null;
+        var finalScrollAction = "unchanged";
+        var scrollRestoreAttempted = false;
+        var suppressedIntermediateAutoScrollCount = 0;
+        var clearCount = 0;
+        var visibilityToggleCount = 0;
+        var overlayLineCount = _viewModel.Log.CurrentVisibleLineCount;
+        var showRestoreOverlay = ShouldShowLogRestoreOverlay(isRestoreRender, overlayLineCount);
+        if (showRestoreOverlay)
+        {
+            ShowLogRestoreOverlay(
+                isRestoreRender ? "로그 화면 복원 중..." : "로그 화면 다시 그리는 중...",
+                overlayLineCount);
+        }
+
+        if (renderGeneration <= 0)
+        {
+            renderGeneration = Interlocked.Increment(ref _fullXtermRerenderGeneration);
+        }
+
+        if (isRestoreRender)
+        {
+            _viewModel.RecordRestoreRenderStarted();
+        }
+
+        _viewModel.RecordFullXtermRerenderStarted(reason, renderGeneration);
+
+        await _xtermAppendGate.WaitAsync();
+        try
+        {
+            if (IsXtermVisualAppendSuspended() ||
+                (isRestoreRender && _viewModel.IsLogRenderingPaused))
+            {
+                MarkXtermFullRerenderNeeded("xterm sync suspended");
+                _viewModel.RecordFullXtermRerenderEndedAfterError(
+                    "suspended",
+                    "xterm sync suspended",
+                    renderGeneration,
+                    canceled: true);
+                return;
+            }
+
+            await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(5));
+            previousScrollState = await GetXtermScrollStateAsync();
+            var shouldScrollToBottomAfterRender =
+                _viewModel.IsAutoScrollEnabled || previousScrollState?.AtBottom == true;
+
+            var xtermRenderGeneration = Interlocked.Increment(ref _xtermRenderGeneration);
+            var text = _viewModel.Log.GetVisibleTextSnapshot();
+            var currentVisibleLineCount = _viewModel.Log.CurrentVisibleLineCount;
+            var displayedLineCount = _viewModel.Log.DisplayedLineCount;
+            // The bulk-replace bridge does not scroll between transport chunks.
+            suppressedIntermediateAutoScrollCount = 0;
+
+            _viewModel.RecordXtermAppendQueued(text.Length);
+            var appendCompleted = false;
+            try
+            {
+                appendCompleted = await ReplaceXtermLogAsync(
+                    text,
+                    autoScroll: false,
+                    expectedGeneration: xtermRenderGeneration);
+                clearCount = 1;
+            }
+            finally
+            {
+                _viewModel.RecordXtermAppendDequeued(text.Length);
+            }
+
+            if (!appendCompleted)
+            {
+                MarkXtermFullRerenderNeeded("xterm sync append interrupted");
+                _viewModel.RecordFullXtermRerenderEndedAfterError(
+                    "interrupted",
+                    "xterm sync append interrupted",
+                    renderGeneration,
+                    canceled: true);
+                return;
+            }
+
+            _xtermSyncedThroughDisplayedLineCount = displayedLineCount;
+            ClearSuspendedXtermBatches();
+            _viewModel.RecordRenderedSequenceState(displayedLineCount, pendingDeltaLineCount: 0);
+            await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(30));
+
+            if (shouldScrollToBottomAfterRender)
+            {
+                await ScrollXtermToBottomAsync("Full re-render final scroll");
+                finalScrollAction = "bottom";
+            }
+            else if (previousScrollState?.Ok == true)
+            {
+                scrollRestoreAttempted = true;
+                finalScrollAction = await RestoreXtermScrollStateAsync(previousScrollState)
+                    ? "restored"
+                    : "unchanged";
+            }
+
+            _viewModel.RecordFullXtermRerenderCompleted(
+                _viewModel.Log.CurrentVisibleLineCount,
+                DateTimeOffset.Now - renderStartedAt,
+                scrollRestoreAttempted,
+                finalScrollAction,
+                suppressedIntermediateAutoScrollCount,
+                renderGeneration,
+                clearCount,
+                visibilityToggleCount);
+
+            if (isRestoreRender)
+            {
+                _xtermNeedsFullRerenderAfterRestore = false;
+                _pendingXtermFullRerenderReason = "full re-render";
+                _restoreRerenderRetryCount = 0;
+                _viewModel.SetXtermNeedsFullRerenderAfterRestore(false);
+                _viewModel.RecordRestoreRenderCompleted(
+                    _viewModel.Log.CurrentVisibleLineCount,
+                    DateTimeOffset.Now - restoreStartedAt);
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermAppendError($"xterm sync failed: {ex.Message}");
+            _viewModel.RecordFullXtermRerenderEndedAfterError(
+                "error",
+                ex.Message,
+                renderGeneration);
+            if (isRestoreRender)
+            {
+                MarkXtermFullRerenderNeeded("restore sync failed");
+                QueueRestoreRerenderRetry();
+            }
+        }
+        finally
+        {
+            if (showRestoreOverlay)
+            {
+                HideLogRestoreOverlay();
+            }
+
+            _xtermAppendGate.Release();
+        }
+    }
+
+    private async Task AppendLogBatchToXtermAsync(LogTextBatch batch, long generation)
+    {
+        if (!_isXtermReady || IsClosingOrClosed || string.IsNullOrEmpty(batch.AppendedText))
+        {
+            return;
+        }
+
+        if (IsXtermVisualAppendSuspended())
+        {
+            EnqueueSuspendedXtermBatch(batch);
+            return;
+        }
+
+        _viewModel.RecordXtermAppendQueued(batch.AppendedText.Length);
+        await _xtermAppendGate.WaitAsync();
+        try
+        {
+            if (IsXtermVisualAppendSuspended())
+            {
+                EnqueueSuspendedXtermBatch(batch);
+                return;
+            }
+
+            if (generation != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return;
+            }
+
+            if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount)
+            {
+                return;
+            }
+
+            var appendCompleted = await ExecuteXtermAppendScriptAsync(batch.AppendedText, batch.LineCount, _viewModel.IsAutoScrollEnabled);
+            if (!appendCompleted)
+            {
+                MarkXtermFullRerenderNeeded("xterm append interrupted", batch.LineCount, batch.AppendedText.Length);
+                return;
+            }
+
+            _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
+            _viewModel.RecordRenderedSequenceState(
+                _xtermSyncedThroughDisplayedLineCount,
+                Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermAppendError($"xterm append failed: {ex.Message}");
+            if (!_isVisualAppendSuspendedForMinimize)
+            {
+                MarkXtermFullRerenderNeeded("xterm append failed");
+            }
+        }
+        finally
+        {
+            _viewModel.RecordXtermAppendDequeued(batch.AppendedText.Length);
+            _xtermAppendGate.Release();
+        }
+    }
+
+    private async Task<bool> ExecuteXtermAppendScriptAsync(string text, int lineCount, bool autoScroll)
+    {
+        return await ExecuteXtermAppendChunksAsync(SplitXtermAppendText(text, lineCount), autoScroll);
+    }
+
+    private async Task<bool> ReplaceXtermLogAsync(string text, bool autoScroll, long expectedGeneration)
+    {
+        if (IsXtermVisualAppendSuspended() ||
+            expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+        {
+            return false;
+        }
+
+        var beginResult = await XtermLogWebView.ExecuteScriptAsync(
+            "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
+        if (TryParseScriptBoolean(beginResult) != true)
+        {
+            return false;
+        }
+
+        foreach (var chunk in SplitXtermFullRenderTransportText(text))
+        {
+            if (IsXtermVisualAppendSuspended() ||
+                expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return false;
+            }
+
+            var encodedText = JsonSerializer.Serialize(chunk);
+            var queuedResult = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
+            if (TryParseScriptBoolean(queuedResult) != true)
+            {
+                return false;
+            }
+        }
+
+        if (IsXtermVisualAppendSuspended() ||
+            expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+        {
+            return false;
+        }
+
+        var commitResult = await XtermLogWebView.ExecuteScriptAsync(
+            $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}) : false;");
+        return TryParseScriptBoolean(commitResult) == true;
+    }
+
+    private async Task<bool> ExecuteXtermAppendChunksAsync(
+        IEnumerable<XtermAppendChunk> chunks,
+        bool autoScroll,
+        long? expectedGeneration = null)
+    {
+        foreach (var chunk in chunks)
+        {
+            if (IsXtermVisualAppendSuspended())
+            {
+                MarkXtermFullRerenderNeeded("xterm append chunk suspended", chunk.LineCount, chunk.Text.Length);
+                return false;
+            }
+
+            if (expectedGeneration.HasValue &&
+                expectedGeneration.Value != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return false;
+            }
+
+            var encodedText = JsonSerializer.Serialize(chunk.Text);
+            var autoScrollLiteral = autoScroll ? "true" : "false";
+            var appendStartedAt = Stopwatch.GetTimestamp();
+            await XtermLogWebView.ExecuteScriptAsync($"window.serialMonitorAppendLog && window.serialMonitorAppendLog({encodedText}, {autoScrollLiteral});");
+            _viewModel.RecordXtermAppendDuration(Stopwatch.GetElapsedTime(appendStartedAt));
+            _viewModel.RecordXtermAppendSuccess(chunk.LineCount, chunk.Text.Length);
+
+            if (IsClosingOrClosed)
+            {
+                return false;
+            }
+
+            await Task.Yield();
+        }
+
+        return true;
+    }
+
+    private async Task SyncXtermScrollbackSizeAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        {
+            return;
+        }
+
+        try
+        {
+            var scrollbackSize = Math.Max(1_000, _viewModel.EffectiveXtermScrollbackSize);
+            await XtermLogWebView.ExecuteScriptAsync($"window.serialMonitorSetScrollback && window.serialMonitorSetScrollback({scrollbackSize});");
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm scrollback update failed: {ex.Message}");
+        }
+    }
+
+    private async Task ScrollXtermToBottomAsync(string action)
+    {
+        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorScrollToBottom ? window.serialMonitorScrollToBottom() : false;");
+            _viewModel.RecordAutoScrollAction(action, TryParseScriptBoolean(result));
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordAutoScrollError($"Auto Scroll failed: {ex.Message}");
+        }
+    }
+
+    private async Task<XtermScrollState?> GetXtermScrollStateAsync()
+    {
+        try
+        {
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                "window.serialMonitorGetScrollState ? window.serialMonitorGetScrollState() : null;");
+            if (string.IsNullOrWhiteSpace(result) || string.Equals(result.Trim(), "null", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(result);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            return new XtermScrollState(
+                TryGetBoolean(root, "ok") ?? false,
+                TryGetInt(root, "viewportY") ?? 0,
+                TryGetInt(root, "baseY") ?? 0,
+                TryGetInt(root, "rows") ?? 0,
+                TryGetBoolean(root, "atBottom") ?? true);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm scroll state capture failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<bool> RestoreXtermScrollStateAsync(XtermScrollState state)
+    {
+        try
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                viewportY = state.ViewportY,
+                baseY = state.BaseY,
+                rows = state.Rows,
+                atBottom = state.AtBottom
+            });
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorRestoreScrollState ? window.serialMonitorRestoreScrollState({payload}) : false;");
+            return TryParseScriptBoolean(result) == true;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm scroll restore failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task WaitForXtermAppendQueueIdleAsync(TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+            {
+                return;
+            }
+
+            try
+            {
+                var result = await XtermLogWebView.ExecuteScriptAsync(
+                    "window.serialMonitorGetAppendQueueState ? window.serialMonitorGetAppendQueueState() : { queueLength: 0, writing: false };");
+                using var document = JsonDocument.Parse(result);
+                var root = document.RootElement;
+                var queueLength = TryGetInt(root, "queueLength") ?? 0;
+                var writing = TryGetBoolean(root, "writing") ?? false;
+                if (queueLength <= 0 && !writing)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _viewModel.RecordXtermLayoutError($"xterm append queue wait failed: {ex.Message}");
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+    }
+
+    private static bool? TryParseScriptBoolean(string? scriptResult)
+    {
+        if (string.IsNullOrWhiteSpace(scriptResult))
+        {
+            return null;
+        }
+
+        if (bool.TryParse(scriptResult.Trim(), out var directValue))
+        {
+            return directValue;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(scriptResult);
+            return document.RootElement.ValueKind == JsonValueKind.True
+                ? true
+                : document.RootElement.ValueKind == JsonValueKind.False
+                    ? false
+                    : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int? TryGetInt(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out var value)
+                ? value
+                : null;
+    }
+
+    private static bool? TryGetBoolean(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.True
+            ? true
+            : property.ValueKind == JsonValueKind.False
+                ? false
+                : null;
+    }
+
+    private IEnumerable<XtermAppendChunk> SplitXtermAppendText(string text, int fallbackLineCount)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            yield break;
+        }
+
+        var maxLines = Math.Max(1, _viewModel.VisualDrainBatchSize);
+        var maxChars = Math.Max(4 * 1024, _viewModel.VisualDrainMaxChars);
+        var start = 0;
+        var next = 0;
+        var linesInChunk = 0;
+        var lastLineEnd = 0;
+
+        while (next < text.Length)
+        {
+            var newlineIndex = text.IndexOf('\n', next);
+            var lineEnd = newlineIndex >= 0 ? newlineIndex + 1 : text.Length;
+            var wouldExceedChunk = linesInChunk > 0 &&
+                (linesInChunk >= maxLines || lineEnd - start > maxChars);
+
+            if (wouldExceedChunk)
+            {
+                yield return new XtermAppendChunk(text[start..lastLineEnd], linesInChunk);
+                start = lastLineEnd;
+                linesInChunk = 0;
+                continue;
+            }
+
+            linesInChunk++;
+            lastLineEnd = lineEnd;
+            next = lineEnd;
+        }
+
+        if (start < text.Length)
+        {
+            var lineCount = linesInChunk > 0 ? linesInChunk : Math.Max(1, fallbackLineCount);
+            yield return new XtermAppendChunk(text[start..], lineCount);
+        }
+    }
+
+    private static IEnumerable<string> SplitXtermFullRenderTransportText(string text)
+    {
+        for (var start = 0; start < text.Length;)
+        {
+            var end = Math.Min(text.Length, start + XtermFullRenderTransportMaxChars);
+            if (end < text.Length)
+            {
+                var newline = text.LastIndexOf('\n', end - 1, end - start);
+                if (newline >= start)
+                {
+                    end = newline + 1;
+                }
+                else if (end > start && text[end - 1] == '\r' && text[end] == '\n')
+                {
+                    end--;
+                }
+            }
+
+            if (end <= start)
+            {
+                end = Math.Min(text.Length, start + XtermFullRenderTransportMaxChars);
+            }
+
+            yield return text[start..end];
+            start = end;
+        }
+    }
+
+    private async Task ClearXtermAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || IsXtermVisualAppendSuspended())
+        {
+            if (IsXtermVisualAppendSuspended())
+            {
+                MarkXtermClearNeededAfterRestore();
+            }
+
+            return;
+        }
+
+        await _xtermAppendGate.WaitAsync();
+        try
+        {
+            if (IsXtermVisualAppendSuspended())
+            {
+                MarkXtermClearNeededAfterRestore();
+                return;
+            }
+
+            Interlocked.Increment(ref _xtermRenderGeneration);
+            await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
+            _xtermSyncedThroughDisplayedLineCount = _viewModel.Log.DisplayedLineCount;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermAppendError($"xterm clear failed: {ex.Message}");
+        }
+        finally
+        {
+            _xtermAppendGate.Release();
+        }
+    }
+
+    private async Task FitXtermAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        {
+            return;
+        }
+
+        try
+        {
+            await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorFit && window.serialMonitorFit();");
+            _viewModel.RecordXtermFitResizeSuccess();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm fit failed: {ex.Message}");
+        }
+    }
+
+    private void QueueXtermFit()
+    {
+        if (_xtermFitQueued || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _xtermFitQueued = true;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            _xtermFitQueued = false;
+            if (IsClosingOrClosed)
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+            await FitXtermAsync();
+        });
+    }
+
+    private async Task SearchXtermAsync(XtermSearchRequest request)
+    {
+        _viewModel.RecordXtermSearchRequested();
+
+        if (IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        {
+            return;
+        }
+
+        if (!_isXtermReady)
+        {
+            _viewModel.RecordXtermSearchError("xterm search failed: terminal is not ready.");
+            return;
+        }
+
+        await _xtermAppendGate.WaitAsync();
+        try
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                requestId = request.RequestId,
+                text = request.SearchText,
+                caseSensitive = request.IsCaseSensitive,
+                direction = request.Direction,
+                resultIndex = request.ResultIndex
+            });
+            var resultJson = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorSearch ? window.serialMonitorSearch({payload}) : {{ ok: false, found: false, error: 'xterm search bridge is not available' }};");
+
+            if (string.IsNullOrWhiteSpace(resultJson))
+            {
+                _viewModel.RecordXtermSearchError("xterm search failed: empty bridge response.");
+                return;
+            }
+
+            using var document = JsonDocument.Parse(resultJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("ok", out var okElement) ||
+                !okElement.GetBoolean())
+            {
+                var error = root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty("error", out var errorElement)
+                        ? errorElement.GetString()
+                        : "invalid bridge response";
+                _viewModel.RecordXtermSearchError($"xterm search failed: {error}");
+                return;
+            }
+
+            var found = root.TryGetProperty("found", out var foundElement) &&
+                foundElement.ValueKind == JsonValueKind.True;
+            _viewModel.RecordXtermSearchResult(found);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermSearchError($"xterm search failed: {ex.Message}");
+        }
+        finally
+        {
+            _xtermAppendGate.Release();
+        }
+    }
+
+    private void XtermLogWebView_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        QueueXtermFit();
+    }
+
+    private void SelectLatestEvent_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (_viewModel.SelectLatestEventFromUi())
+            {
+                ScrollSelectedEventIntoView();
+                QueueContextWebViewUpdate();
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordEventSelectionError($"Select latest event click failed: {ex.Message}");
+        }
+    }
+
+    private void EventListView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        try
+        {
+            if (sender is ListView listView)
+            {
+                _viewModel.SelectEventFromUi(listView.SelectedItem);
+                QueueContextWebViewUpdate();
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordEventSelectionError($"Event selection failed: {ex.Message}");
+        }
+    }
+
+    private void EventListView_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        try
+        {
+            if (args.ClickedItem is DetectedEvent)
+            {
+                _viewModel.SelectEventFromUi(args.ClickedItem);
+                QueueContextWebViewUpdate();
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordEventSelectionError($"Event item click failed: {ex.Message}");
+        }
+    }
+
+    private void EventListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    {
+        try
+        {
+            var detectedEvent = EventListView.SelectedItem as DetectedEvent;
+            if (args.OriginalSource is FrameworkElement element &&
+                element.DataContext is DetectedEvent sourceEvent)
+            {
+                detectedEvent = sourceEvent;
+            }
+
+            if (detectedEvent is null)
+            {
+                return;
+            }
+
+            EventListView.SelectedItem = detectedEvent;
+            SelectEventAndShowContext(detectedEvent);
+            args.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordEventSelectionError($"Event double-click failed: {ex.Message}");
+        }
+    }
+
+    private async void SearchResultsListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    {
+        try
+        {
+            var searchResult = SearchResultsListView.SelectedItem as VisibleSearchResult;
+            if (args.OriginalSource is FrameworkElement element &&
+                element.DataContext is VisibleSearchResult sourceResult)
+            {
+                searchResult = sourceResult;
+            }
+
+            if (searchResult is null)
+            {
+                return;
+            }
+
+            SearchResultsListView.SelectedItem = searchResult;
+            await _viewModel.JumpToSearchResultAsync(searchResult);
+            args.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermSearchError($"Search result jump failed: {ex.Message}");
+        }
+    }
+
+    private void InspectorTabView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        try
+        {
+            _viewModel.SetActiveInspectorTab(GetInspectorTabName(InspectorTabView.SelectedItem));
+            if (ReferenceEquals(InspectorTabView.SelectedItem, ContextTabViewItem))
+            {
+                _viewModel.RecordContextTabActivated();
+                _viewModel.RefreshSelectedEventContextForUi();
+                InspectorTabView.UpdateLayout();
+                ContextTabViewItem.UpdateLayout();
+                QueueContextWebViewUpdate();
+            }
+
+            QueueXtermFit();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordInspectorTabLayoutError($"Inspector tab layout failed: {ex.Message}");
+        }
+    }
+
+    private static string GetInspectorTabName(object? selectedItem)
+    {
+        return selectedItem is TabViewItem tabViewItem
+            ? tabViewItem.Header?.ToString() ?? "(unknown)"
+            : "(unknown)";
+    }
+
+    private void SelectEventAndShowContext(DetectedEvent detectedEvent)
+    {
+        _viewModel.SelectEventFromUi(detectedEvent);
+        _viewModel.RefreshSelectedEventContextForUi();
+        InspectorTabView.SelectedItem = ContextTabViewItem;
+        InspectorTabView.UpdateLayout();
+        ContextTabViewItem.UpdateLayout();
+        QueueContextWebViewUpdate();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _viewModel.RefreshSelectedEventContextForUi();
+            QueueContextWebViewUpdate();
+        });
+    }
+
+    private void QueueEventAutoScrollToLatest(bool selectLatest)
+    {
+        if (_eventAutoScrollQueued || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _eventAutoScrollQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _eventAutoScrollQueued = false;
+            if (IsClosingOrClosed)
+            {
+                return;
+            }
+
+            try
+            {
+                var latestEvent = _viewModel.Events.Events.LastOrDefault();
+                if (latestEvent is null)
+                {
+                    return;
+                }
+
+                if (selectLatest)
+                {
+                    EventListView.SelectedItem = latestEvent;
+                    _viewModel.SelectEventFromUi(latestEvent);
+                }
+
+                EventListView.ScrollIntoView(latestEvent);
+            }
+            catch (Exception ex)
+            {
+                _viewModel.RecordEventListScrollError($"Event auto-scroll failed: {ex.Message}");
+            }
+        });
+    }
+
+    private void ScrollSelectedEventIntoView()
+    {
+        try
+        {
+            if (_viewModel.SelectedEvent is null)
+            {
+                return;
+            }
+
+            EventListView.SelectedItem = _viewModel.SelectedEvent;
+            EventListView.ScrollIntoView(_viewModel.SelectedEvent);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordEventListScrollError($"Event latest scroll failed: {ex.Message}");
+        }
+    }
+
+    private void QueueContextWebViewUpdate()
+    {
+        if (_contextWebViewUpdateQueued || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _contextWebViewUpdateQueued = true;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            _contextWebViewUpdateQueued = false;
+            await UpdateContextWebViewAsync();
+        });
+    }
+
+    private async Task UpdateContextWebViewAsync()
+    {
+        if (!_isContextWebViewReady || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            ContextWebView.UpdateLayout();
+
+            var contextText = _viewModel.SelectedEventContextText;
+            if (string.IsNullOrEmpty(contextText))
+            {
+                contextText = "Select an event.";
+            }
+
+            var encodedText = JsonSerializer.Serialize(contextText);
+            var resultJson = await ContextWebView.ExecuteScriptAsync(
+                $"window.setContextText ? window.setContextText({encodedText}) : {{ ok: false, error: 'context viewer bridge is not available' }};");
+
+            if (string.IsNullOrWhiteSpace(resultJson))
+            {
+                _viewModel.RecordContextWebViewUpdateError("Context WebView update failed: empty bridge response.");
+                return;
+            }
+
+            using var document = JsonDocument.Parse(resultJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("ok", out var okElement) ||
+                !okElement.GetBoolean())
+            {
+                var error = root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty("error", out var errorElement)
+                        ? errorElement.GetString()
+                        : "invalid bridge response";
+                _viewModel.RecordContextWebViewUpdateError($"Context WebView update failed: {error}");
+                return;
+            }
+
+            _viewModel.RecordContextRenderRefresh();
+            _viewModel.RecordContextVisualRefresh(
+                contextText.Length,
+                _viewModel.SelectedEvent?.Id.ToString("N", CultureInfo.InvariantCulture) ?? "(none)",
+                CreateSelectedEventContextRefreshSummary());
+            _viewModel.RecordContextWebViewUpdate(contextText.Length, CreateSelectedEventContextRefreshSummary());
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordContextRenderRefreshError($"Context render refresh failed: {ex.Message}");
+            _viewModel.RecordContextWebViewUpdateError($"Context WebView update failed: {ex.Message}");
+        }
+    }
+
+    private string CreateSelectedEventContextRefreshSummary()
+    {
+        var selectedEvent = _viewModel.SelectedEvent;
+        return selectedEvent is null
+            ? "(none)"
+            : $"{selectedEvent.RuleName} | {selectedEvent.CompactDirectionText} | {selectedEvent.TimeText}";
+    }
+
+    private async void Root_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (IsWebViewSource(args.OriginalSource))
+        {
+            return;
+        }
+
+        if (IsSearchFocusShortcut(args.Key))
+        {
+            args.Handled = true;
+            FocusSearchBox("window");
+            return;
+        }
+
+        if (IsSearchBoxSource(args.OriginalSource))
+        {
+            return;
+        }
+
+        if (IsTextInputSource(args.OriginalSource))
+        {
+            return;
+        }
+
+        if (TryHandleSearchNavigationShortcut(args, "window"))
+        {
+            return;
+        }
+
+        if (IsMarkerShortcut(args.Key))
+        {
+            args.Handled = true;
+            await _viewModel.AddDefaultMarkerAsync();
+            return;
+        }
+
+        var shortcutText = CreateShortcutText(args.Key);
+        if (string.IsNullOrWhiteSpace(shortcutText))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        await ExecuteSavedCommandShortcutAsync(shortcutText);
+    }
+
+    private async void SearchTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (IsSearchFocusShortcut(args.Key))
+        {
+            args.Handled = true;
+            FocusSearchBox("search box");
+            return;
+        }
+
+        if (args.Key == VirtualKey.Escape && !IsModifierDown(VirtualKey.Control) && !IsModifierDown(VirtualKey.Menu))
+        {
+            args.Handled = true;
+            _viewModel.RecordSearchEscapeShortcut("search box");
+            XtermLogWebView.Focus(FocusState.Programmatic);
+            return;
+        }
+
+        if ((args.Key == VirtualKey.Up || args.Key == VirtualKey.Down) &&
+            !IsModifierDown(VirtualKey.Control) &&
+            !IsModifierDown(VirtualKey.Menu))
+        {
+            args.Handled = true;
+            if (_viewModel.RecallSearchHistory(args.Key == VirtualKey.Up ? -1 : 1))
+            {
+                SearchTextBox.Select(SearchTextBox.Text.Length, 0);
+            }
+
+            return;
+        }
+
+        if (TryHandleSearchNavigationShortcut(args, "search box"))
+        {
+            return;
+        }
+
+        if (args.Key != VirtualKey.Enter || IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        if (IsModifierDown(VirtualKey.Shift))
+        {
+            await _viewModel.FindPreviousFromShortcutAsync("search box");
+            return;
+        }
+
+        await _viewModel.FindNextFromShortcutAsync("search box");
+    }
+
+    private async Task HandleSearchShortcutAsync(string? action, string source)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        switch (action)
+        {
+            case "focus":
+                FocusSearchBox(source);
+                break;
+            case "previous":
+                await _viewModel.FindPreviousFromShortcutAsync(source);
+                break;
+            case "next":
+                await _viewModel.FindNextFromShortcutAsync(source);
+                break;
+            default:
+                _viewModel.RecordXtermSearchError($"Unknown search shortcut action: {action ?? "(null)"}");
+                break;
+        }
+    }
+
+    private bool TryHandleSearchNavigationShortcut(KeyRoutedEventArgs args, string source)
+    {
+        if (args.Key != VirtualKey.F3 || IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        {
+            return false;
+        }
+
+        args.Handled = true;
+        if (IsModifierDown(VirtualKey.Shift))
+        {
+            _ = _viewModel.FindPreviousFromShortcutAsync(source);
+            return true;
+        }
+
+        _ = _viewModel.FindNextFromShortcutAsync(source);
+        return true;
+    }
+
+    private void FocusSearchBox(string source)
+    {
+        SearchTextBox.Focus(FocusState.Programmatic);
+        SearchTextBox.SelectAll();
+        _viewModel.RecordSearchFocusShortcut(source);
+    }
+
+    private async void InsertDefaultMarker_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            await _viewModel.AddDefaultMarkerAsync();
+            MarkerFlyout.Hide();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordMarkerError($"Marker flyout failed: {ex.Message}");
+        }
+    }
+
+    private async void BrowseLogFolder_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            var picker = new FolderPicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary
+            };
+            picker.FileTypeFilter.Add("*");
+
+            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
+
+            var folder = await picker.PickSingleFolderAsync();
+            _viewModel.SetLogSaveDirectoryFromPicker(folder?.Path);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordSaveDirectoryBrowseError($"Browse log folder failed: {ex.Message}");
+        }
+    }
+
+    private async void BrowseCuteBackgroundImage_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.PicturesLibrary
+            };
+            picker.FileTypeFilter.Add(".png");
+            picker.FileTypeFilter.Add(".jpg");
+            picker.FileTypeFilter.Add(".jpeg");
+            picker.FileTypeFilter.Add(".webp");
+
+            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
+
+            var file = await picker.PickSingleFileAsync();
+            _viewModel.SetCuteBackgroundImagePathFromPicker(file?.Path);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordCuteBackgroundLoadResult(fileExists: false, loaded: false, $"Browse background image failed: {ex.Message}");
+        }
+    }
+
+    private void InsertCustomMarker_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            _viewModel.MarkerText = MarkerFlyoutTextBox.Text;
+            if (_viewModel.AddMarkerCommand.CanExecute(null))
+            {
+                _viewModel.AddMarkerCommand.Execute(null);
+            }
+
+            MarkerFlyout.Hide();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordMarkerError($"Marker flyout failed: {ex.Message}");
+        }
+    }
+
+    private void CommandHistoryFlyout_Opening(object sender, object args)
+    {
+        CommandHistoryEmptyText.Visibility = _viewModel.Commands.CommandHistory.Count == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (_viewModel.Commands.CommandHistory.Count > 0 && CommandHistoryListView.SelectedItem is null)
+        {
+            CommandHistoryListView.SelectedIndex = 0;
+        }
+    }
+
+    private void CommandHistoryListView_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        if (args.ClickedItem is CommandHistoryEntry entry)
+        {
+            SelectHistoryCommand(entry);
+        }
+    }
+
+    private async void CommandHistoryListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    {
+        await SendSelectedHistoryCommandAsync();
+    }
+
+    private async void CommandHistoryListView_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.Key == VirtualKey.Enter)
+        {
+            args.Handled = true;
+            await SendSelectedHistoryCommandAsync();
+        }
+    }
+
+    private async void SendSelectedHistoryCommand_Click(object sender, RoutedEventArgs args)
+    {
+        await SendSelectedHistoryCommandAsync();
+    }
+
+    private void ClearCommandHistory_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.ClearCommandHistory();
+        CommandHistoryListView.SelectedItem = null;
+        CommandHistoryEmptyText.Visibility = Visibility.Visible;
+    }
+
+    private void SelectHistoryCommand(CommandHistoryEntry entry)
+    {
+        _viewModel.SelectCommandHistoryEntry(entry);
+        CommandTextBox.Focus(FocusState.Programmatic);
+        CommandTextBox.SelectionStart = CommandTextBox.Text.Length;
+    }
+
+    private async Task SendSelectedHistoryCommandAsync()
+    {
+        if (CommandHistoryListView.SelectedItem is not CommandHistoryEntry entry)
+        {
+            return;
+        }
+
+        await _viewModel.SendCommandHistoryEntryAsync(entry);
+        CommandHistoryFlyout.Hide();
+        CommandTextBox.Focus(FocusState.Programmatic);
+        CommandTextBox.SelectionStart = CommandTextBox.Text.Length;
+    }
+
+    private async Task<bool> ExecuteSavedCommandShortcutAsync(string? shortcutText)
+    {
+        if (string.IsNullOrWhiteSpace(shortcutText))
+        {
+            return false;
+        }
+
+        return await _viewModel.SendSavedCommandShortcutAsync(shortcutText);
+    }
+
+    private async void AddLogRule_Click(object sender, RoutedEventArgs args)
+    {
+        var rule = await ShowLogRuleDialogAsync(
+            "Add log rule",
+            new LogRule
+            {
+                UseForEvent = false,
+                UseForHighlight = true,
+                UseAsViewFilter = false,
+                ForegroundColor = "Green",
+                Priority = 10,
+                MatchDirection = HighlightMatchDirection.RxOnly
+            });
+        if (rule is not null)
+        {
+            _viewModel.AddLogRule(rule);
+        }
+    }
+
+    private async Task EditSelectedLogRuleAsync()
+    {
+        if (_viewModel.SelectedLogRule is null)
+        {
+            return;
+        }
+
+        var rule = await ShowLogRuleDialogAsync("Edit log rule", CloneLogRule(_viewModel.SelectedLogRule));
+        if (rule is not null)
+        {
+            _viewModel.ReplaceSelectedLogRule(rule);
+        }
+    }
+
+    private async Task DeleteSelectedLogRuleAsync()
+    {
+        if (_viewModel.SelectedLogRule is null)
+        {
+            return;
+        }
+
+        if (await ConfirmDeleteAsync("Delete log rule", $"Delete log rule '{_viewModel.SelectedLogRule.Name}'?"))
+        {
+            _viewModel.DeleteSelectedLogRule();
+        }
+    }
+
+    private async void EditLogRuleRow_Click(object sender, RoutedEventArgs args)
+    {
+        SelectLogRuleFromSender(sender);
+        await EditSelectedLogRuleAsync();
+    }
+
+    private async void DeleteLogRuleRow_Click(object sender, RoutedEventArgs args)
+    {
+        SelectLogRuleFromSender(sender);
+        await DeleteSelectedLogRuleAsync();
+    }
+
+    private void LogRuleInlineChanged(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { DataContext: LogRule rule })
+        {
+            if (sender is CheckBox checkBox)
+            {
+                switch (checkBox.Tag?.ToString())
+                {
+                    case "Case":
+                        rule.CaseSensitive = checkBox.IsChecked == true;
+                        break;
+                    case "Event":
+                        rule.UseForEvent = checkBox.IsChecked == true;
+                        break;
+                    case "Highlight":
+                        rule.UseForHighlight = checkBox.IsChecked == true;
+                        break;
+                    case "Filter":
+                        rule.UseAsViewFilter = checkBox.IsChecked == true;
+                        break;
+                    default:
+                        rule.Enabled = checkBox.IsChecked == true;
+                        break;
+                }
+            }
+
+            _viewModel.SelectedLogRule = rule;
+            _viewModel.ApplyLogRuleChangesFromUi($"Updated log rule: {rule.Name}");
+        }
+    }
+
+    private void LogRuleColorButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button button || button.DataContext is not LogRule rule)
+        {
+            _viewModel.RecordRuleColorChangeError("Color menu could not identify the selected log rule.");
+            return;
+        }
+
+        _viewModel.SelectedLogRule = rule;
+        LogRuleListView.SelectedItem = rule;
+
+        var flyout = new MenuFlyout();
+        foreach (var color in _viewModel.HighlightColorPresets)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = color,
+                Tag = color,
+                Icon = new FontIcon
+                {
+                    Glyph = "\u25A0",
+                    FontSize = 11,
+                    Foreground = HighlightColorBrushConverter.CreateBrush(color)
+                }
+            };
+
+            item.Click += (_, _) =>
+            {
+                if (item.Tag is string selectedColor)
+                {
+                    _viewModel.UpdateLogRuleColorFromUi(rule, selectedColor);
+                }
+            };
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(button);
+    }
+
+    private void SelectLogRuleFromSender(object sender)
+    {
+        if (sender is FrameworkElement { DataContext: LogRule rule })
+        {
+            _viewModel.SelectedLogRule = rule;
+            LogRuleListView.SelectedItem = rule;
+        }
+    }
+
+    private async void AddSavedCommand_Click(object sender, RoutedEventArgs args)
+    {
+        var command = await ShowSavedCommandDialogAsync("Add saved command", new TxCommand());
+        if (command is not null)
+        {
+            _viewModel.AddSavedCommand(command);
+        }
+    }
+
+    private async void EditSavedCommand_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedSavedCommand is null)
+        {
+            return;
+        }
+
+        var command = await ShowSavedCommandDialogAsync("Edit saved command", CloneTxCommand(_viewModel.SelectedSavedCommand));
+        if (command is not null)
+        {
+            _viewModel.ReplaceSelectedSavedCommand(command);
+        }
+    }
+
+    private async void DeleteSavedCommand_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedSavedCommand is null)
+        {
+            return;
+        }
+
+        if (await ConfirmDeleteAsync("Delete saved command", $"Delete saved command '{_viewModel.SelectedSavedCommand.Name}'?"))
+        {
+            _viewModel.DeleteSelectedSavedCommand();
+        }
+    }
+
+    private async void AddCommandSequence_Click(object sender, RoutedEventArgs args)
+    {
+        var sequence = await ShowCommandSequenceDialogAsync("Add sequence", new CommandSequence());
+        if (sequence is not null)
+        {
+            _viewModel.AddCommandSequence(sequence);
+        }
+    }
+
+    private async void EditCommandSequence_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedCommandSequence is null)
+        {
+            return;
+        }
+
+        var sequence = await ShowCommandSequenceDialogAsync("Edit sequence", CloneCommandSequence(_viewModel.SelectedCommandSequence));
+        if (sequence is not null)
+        {
+            _viewModel.ReplaceSelectedCommandSequence(sequence);
+        }
+    }
+
+    private async void DeleteCommandSequence_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedCommandSequence is null)
+        {
+            return;
+        }
+
+        if (await ConfirmDeleteAsync("Delete sequence", $"Delete sequence '{_viewModel.SelectedCommandSequence.Name}'?"))
+        {
+            _viewModel.DeleteSelectedCommandSequence();
+        }
+    }
+
+    private async void AddCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    {
+        var step = await ShowCommandSequenceStepDialogAsync(
+            "Add sequence step",
+            new CommandSequenceStep { DelayAfterMs = 300 });
+        if (step is not null)
+        {
+            _viewModel.AddCommandSequenceStep(step);
+        }
+    }
+
+    private async void EditCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedCommandSequenceStep is null)
+        {
+            return;
+        }
+
+        var step = await ShowCommandSequenceStepDialogAsync("Edit sequence step", CloneCommandSequenceStep(_viewModel.SelectedCommandSequenceStep));
+        if (step is not null)
+        {
+            _viewModel.ReplaceSelectedCommandSequenceStep(step);
+        }
+    }
+
+    private void EditCommandSequenceStepRow_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { DataContext: CommandSequenceStep step })
+        {
+            _viewModel.SelectedCommandSequenceStep = step;
+            CommandSequenceStepListView.SelectedItem = step;
+        }
+
+        EditCommandSequenceStep_Click(sender, args);
+    }
+
+    private async void DeleteCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedCommandSequenceStep is null)
+        {
+            return;
+        }
+
+        if (await ConfirmDeleteAsync("Delete sequence step", $"Delete sequence step '{_viewModel.SelectedCommandSequenceStep.DisplayName}'?"))
+        {
+            _viewModel.DeleteSelectedCommandSequenceStep();
+        }
+    }
+
+    private void DeleteCommandSequenceStepRow_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { DataContext: CommandSequenceStep step })
+        {
+            _viewModel.SelectedCommandSequenceStep = step;
+            CommandSequenceStepListView.SelectedItem = step;
+        }
+
+        DeleteCommandSequenceStep_Click(sender, args);
+    }
+
+    private void MoveCommandSequenceStepUp_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.MoveSelectedCommandSequenceStep(-1);
+    }
+
+    private void MoveCommandSequenceStepDown_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.MoveSelectedCommandSequenceStep(1);
+    }
+
+    private void CommandSequenceInlineChanged(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { DataContext: CommandSequence sequence })
+        {
+            _viewModel.SelectedCommandSequence = sequence;
+            _viewModel.ApplyCommandSequenceChangesFromUi($"Updated sequence: {sequence.Name}");
+            return;
+        }
+
+        if (_viewModel.SelectedCommandSequence is { } selectedSequence)
+        {
+            _viewModel.ApplyCommandSequenceChangesFromUi($"Updated sequence: {selectedSequence.Name}");
+        }
+    }
+
+    private async Task<LogRule?> ShowLogRuleDialogAsync(string title, LogRule source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name, "e.g. RESET");
+        var keywordBox = CreateDialogTextBox(source.Keyword, "ERROR or 49 4E");
+        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
+        var eventBox = new CheckBox { Content = "Event", IsChecked = source.UseForEvent };
+        var highlightBox = new CheckBox { Content = "Highlight", IsChecked = source.UseForHighlight };
+        var filterBox = new CheckBox { Content = "Filter", IsChecked = source.UseAsViewFilter };
+        var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
+        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var directionBox = CreateEnumComboBox(source.MatchDirection);
+        var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
+        var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
+        var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
+        var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
+        var errorText = CreateDialogErrorText();
+
+        ToolTipService.SetToolTip(eventBox, "Event: add matching lines to Events.");
+        ToolTipService.SetToolTip(highlightBox, "Highlight: color matching lines in the log view.");
+        ToolTipService.SetToolTip(filterBox, "Filter: make this rule available in the Filter dropdown.");
+        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(CreateDialogField("Keyword", keywordBox));
+        panel.Children.Add(CreateInlineDialogRow(enabledBox, eventBox, highlightBox, filterBox));
+        panel.Children.Add(CreateDialogField("Match", matchModeBox));
+        panel.Children.Add(CreateInlineDialogRow(caseBox));
+        panel.Children.Add(CreateDialogField("Direction", directionBox));
+        panel.Children.Add(CreateDialogField("Color", foregroundBox));
+        panel.Children.Add(CreateDialogField("Background", backgroundBox));
+        panel.Children.Add(CreateDialogField("Priority", priorityBox));
+        panel.Children.Add(errorText);
+
+        var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
+        {
+            if (string.IsNullOrWhiteSpace(keywordBox.Text))
+            {
+                errorText.Text = "Keyword is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        });
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        var priority = int.TryParse(priorityBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPriority)
+            ? parsedPriority
+            : source.Priority;
+        var background = GetSelectedString(backgroundBox, "(none)");
+
+        return new LogRule
+        {
+            Name = nameBox.Text,
+            Keyword = keywordBox.Text,
+            Enabled = enabledBox.IsChecked == true,
+            UseForEvent = eventBox.IsChecked == true,
+            UseForHighlight = highlightBox.IsChecked == true,
+            UseAsViewFilter = filterBox.IsChecked == true,
+            CaseSensitive = caseBox.IsChecked == true,
+            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            MatchDirection = directionBox.SelectedItem is HighlightMatchDirection direction ? direction : HighlightMatchDirection.Both,
+            ForegroundColor = GetSelectedString(foregroundBox, "Default"),
+            BackgroundColor = background == "(none)" ? null : background,
+            Priority = priority
+        };
+    }
+
+    private async Task<EventRule?> ShowEventRuleDialogAsync(string title, EventRule source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name, "e.g. ERROR");
+        var keywordBox = CreateDialogTextBox(source.Keyword, "ERROR or 49 4E");
+        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
+        var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
+        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var directionBox = CreateEnumComboBox(source.MatchDirection);
+        var errorText = CreateDialogErrorText();
+        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(CreateDialogField("Keyword", keywordBox));
+        panel.Children.Add(CreateDialogField("Match", matchModeBox));
+        panel.Children.Add(CreateDialogField("Direction", directionBox));
+        panel.Children.Add(CreateInlineDialogRow(enabledBox, caseBox));
+        panel.Children.Add(errorText);
+
+        var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
+        {
+            if (string.IsNullOrWhiteSpace(keywordBox.Text))
+            {
+                errorText.Text = "Keyword is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        });
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        return new EventRule
+        {
+            Name = nameBox.Text,
+            Keyword = keywordBox.Text,
+            Enabled = enabledBox.IsChecked == true,
+            CaseSensitive = caseBox.IsChecked == true,
+            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            MatchDirection = directionBox.SelectedItem is EventMatchDirection direction ? direction : EventMatchDirection.RxOnly,
+            HighlightColor = source.HighlightColor
+        };
+    }
+
+    private async Task<HighlightRule?> ShowHighlightRuleDialogAsync(string title, HighlightRule source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name, "e.g. WARN");
+        var keywordBox = CreateDialogTextBox(source.Keyword, "ERROR or 49 4E");
+        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
+        var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
+        var filterBox = new CheckBox { Content = "View filter", IsChecked = source.UseAsViewFilter };
+        ToolTipService.SetToolTip(filterBox, "Make this rule available in the xterm visible filter selector.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
+        var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
+        var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
+        var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
+        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var directionBox = CreateEnumComboBox(source.MatchDirection);
+        var errorText = CreateDialogErrorText();
+        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(CreateDialogField("Keyword", keywordBox));
+        panel.Children.Add(CreateInlineDialogRow(enabledBox, caseBox, filterBox));
+        panel.Children.Add(CreateDialogField("Match", matchModeBox));
+        panel.Children.Add(CreateDialogField("Foreground", foregroundBox));
+        panel.Children.Add(CreateDialogField("Background", backgroundBox));
+        panel.Children.Add(CreateDialogField("Priority", priorityBox));
+        panel.Children.Add(CreateDialogField("Direction", directionBox));
+        panel.Children.Add(errorText);
+
+        var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
+        {
+            if (string.IsNullOrWhiteSpace(keywordBox.Text))
+            {
+                errorText.Text = "Keyword is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        });
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        var priority = int.TryParse(priorityBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPriority)
+            ? parsedPriority
+            : source.Priority;
+        var background = GetSelectedString(backgroundBox, "(none)");
+
+        return new HighlightRule
+        {
+            Name = nameBox.Text,
+            Keyword = keywordBox.Text,
+            Enabled = enabledBox.IsChecked == true,
+            CaseSensitive = caseBox.IsChecked == true,
+            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            UseAsViewFilter = filterBox.IsChecked == true,
+            ForegroundColor = GetSelectedString(foregroundBox, "Default"),
+            BackgroundColor = background == "(none)" ? null : background,
+            Priority = priority,
+            MatchDirection = directionBox.SelectedItem is HighlightMatchDirection direction ? direction : HighlightMatchDirection.Both
+        };
+    }
+
+    private async Task<TxCommand?> ShowSavedCommandDialogAsync(string title, TxCommand source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name, "e.g. reboot");
+        var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
+        var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
+        var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
+        ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
+        var shortcutBox = CreateDialogTextBox(source.OptionalShortcut ?? string.Empty, "Ctrl+1 or Alt+S");
+        var errorText = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Visibility = Visibility.Collapsed
+        };
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(CreateDialogField("Command", commandBox));
+        panel.Children.Add(CreateDialogField("Line ending", endingBox));
+        panel.Children.Add(CreateDialogHint(LineEndingHelpText));
+        panel.Children.Add(CreateDialogField("Shortcut (Ctrl+digit or Alt+key)", shortcutBox));
+        panel.Children.Add(errorText);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = panel,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        dialog.PrimaryButtonClick += (dialogSender, clickArgs) =>
+        {
+            if (string.IsNullOrWhiteSpace(nameBox.Text))
+            {
+                errorText.Text = "Name is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(commandBox.Text))
+            {
+                errorText.Text = "Command text is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (!MainViewModel.TryNormalizeSavedCommandShortcut(shortcutBox.Text, out var ignoredShortcut, out var shortcutError))
+            {
+                errorText.Text = shortcutError;
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        MainViewModel.TryNormalizeSavedCommandShortcut(shortcutBox.Text, out var normalizedShortcut, out _);
+        return new TxCommand(nameBox.Text, commandBox.Text)
+        {
+            LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
+            OptionalShortcut = normalizedShortcut
+        };
+    }
+
+    private async Task<CommandSequence?> ShowCommandSequenceDialogAsync(string title, CommandSequence source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name, "e.g. Boot Check");
+        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
+        var errorText = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Visibility = Visibility.Collapsed
+        };
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(enabledBox);
+        panel.Children.Add(errorText);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = panel,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        dialog.PrimaryButtonClick += (_, clickArgs) =>
+        {
+            if (string.IsNullOrWhiteSpace(nameBox.Text))
+            {
+                errorText.Text = "Name is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        var sequence = CloneCommandSequence(source);
+        sequence.Name = nameBox.Text;
+        sequence.Enabled = enabledBox.IsChecked == true;
+        return sequence;
+    }
+
+    private async Task<CommandSequenceStep?> ShowCommandSequenceStepDialogAsync(string title, CommandSequenceStep source)
+    {
+        var nameBox = CreateDialogTextBox(source.Name ?? string.Empty, "Optional step name");
+        var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
+        var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
+        var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
+        ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
+        var delayBox = CreateDialogTextBox(source.DelayAfterMs.ToString(CultureInfo.InvariantCulture), "Delay after ms");
+        var commentBox = CreateDialogTextBox(source.Comment ?? string.Empty, "Optional note");
+        var errorText = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Visibility = Visibility.Collapsed
+        };
+
+        var panel = CreateDialogPanel();
+        panel.Children.Add(CreateDialogField("Name", nameBox));
+        panel.Children.Add(CreateDialogField("Command", commandBox));
+        panel.Children.Add(CreateDialogField("Line ending", endingBox));
+        panel.Children.Add(CreateDialogHint(LineEndingHelpText));
+        panel.Children.Add(CreateDialogField("Delay after ms", delayBox));
+        panel.Children.Add(CreateDialogField("Comment", commentBox));
+        panel.Children.Add(errorText);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = panel,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        dialog.PrimaryButtonClick += (_, clickArgs) =>
+        {
+            if (string.IsNullOrWhiteSpace(commandBox.Text))
+            {
+                errorText.Text = "Command text is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (!int.TryParse(delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delay) ||
+                delay is < 0 or > 600_000)
+            {
+                errorText.Text = "Delay must be between 0 and 600,000 ms.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+            }
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        var parsedDelay = int.TryParse(delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delayAfterMs)
+            ? delayAfterMs
+            : source.DelayAfterMs;
+        return new CommandSequenceStep
+        {
+            Name = string.IsNullOrWhiteSpace(nameBox.Text) ? null : nameBox.Text,
+            CommandText = commandBox.Text,
+            LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
+            DelayAfterMs = parsedDelay,
+            Comment = string.IsNullOrWhiteSpace(commentBox.Text) ? null : commentBox.Text
+        };
+    }
+
+    private async Task<ContentDialogResult> ShowEditorDialogAsync(string title, object content)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = content,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        return await dialog.ShowAsync();
+    }
+
+    private async Task<ContentDialogResult> ShowValidatedEditorDialogAsync(
+        string title,
+        object content,
+        Action<ContentDialogButtonClickEventArgs> validatePrimaryClick)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = content,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        dialog.PrimaryButtonClick += (_, clickArgs) => validatePrimaryClick(clickArgs);
+
+        return await dialog.ShowAsync();
+    }
+
+    private async Task<bool> ConfirmDeleteAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = new TextBlock
+            {
+                Text = message,
+                TextWrapping = TextWrapping.WrapWholeWords
+            },
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private static StackPanel CreateDialogPanel()
+    {
+        return new StackPanel
+        {
+            Spacing = 6,
+            MinWidth = 320
+        };
+    }
+
+    private static TextBox CreateDialogTextBox(string text, string placeholder)
+    {
+        return new TextBox
+        {
+            Text = text,
+            PlaceholderText = placeholder,
+            MinWidth = 280
+        };
+    }
+
+    private static ComboBox CreateEnumComboBox<T>(T selected)
+        where T : struct, Enum
+    {
+        return new ComboBox
+        {
+            ItemsSource = Enum.GetValues<T>(),
+            SelectedItem = selected,
+            MinWidth = 180
+        };
+    }
+
+    private static ComboBox CreateLogRuleMatchModeComboBox(LogRuleMatchMode selected)
+    {
+        var textItem = new ComboBoxItem
+        {
+            Content = "Text",
+            Tag = LogRuleMatchMode.Text
+        };
+        var hexItem = new ComboBoxItem
+        {
+            Content = "HEX",
+            Tag = LogRuleMatchMode.Hex
+        };
+        var comboBox = new ComboBox
+        {
+            MinWidth = 180
+        };
+        comboBox.Items.Add(textItem);
+        comboBox.Items.Add(hexItem);
+        comboBox.SelectedItem = selected == LogRuleMatchMode.Hex
+            ? hexItem
+            : textItem;
+        return comboBox;
+    }
+
+    private static LogRuleMatchMode GetSelectedLogRuleMatchMode(ComboBox comboBox)
+    {
+        return comboBox.SelectedItem is ComboBoxItem { Tag: LogRuleMatchMode mode }
+            ? mode
+            : LogRuleMatchMode.Text;
+    }
+
+    private static ComboBox CreateStringComboBox(IEnumerable<string> items, string? selected)
+    {
+        var values = items.ToArray();
+        return new ComboBox
+        {
+            ItemsSource = values,
+            SelectedItem = values.FirstOrDefault(value => string.Equals(value, selected, StringComparison.OrdinalIgnoreCase)) ?? values.FirstOrDefault(),
+            MinWidth = 180
+        };
+    }
+
+    private static FrameworkElement CreateDialogField(string label, FrameworkElement input)
+    {
+        var panel = new StackPanel
+        {
+            Spacing = 2
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12
+        });
+        panel.Children.Add(input);
+        return panel;
+    }
+
+    private static FrameworkElement CreateDialogHint(string text)
+    {
+        return new TextBlock
+        {
+            Text = text,
+            FontSize = 11,
+            Opacity = 0.82,
+            TextWrapping = TextWrapping.WrapWholeWords
+        };
+    }
+
+    private static TextBlock CreateDialogErrorText()
+    {
+        return new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Visibility = Visibility.Collapsed
+        };
+    }
+
+    private static FrameworkElement CreateInlineDialogRow(params UIElement[] children)
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12
+        };
+        foreach (var child in children)
+        {
+            panel.Children.Add(child);
+        }
+
+        return panel;
+    }
+
+    private static string GetSelectedString(ComboBox comboBox, string fallback)
+    {
+        return comboBox.SelectedItem as string ?? fallback;
+    }
+
+    private static TxLineEndingMode? ParseOptionalTxLineEnding(string value)
+    {
+        if (string.Equals(value, "Global", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<TxLineEndingMode>(value, ignoreCase: true, out var mode)
+            ? mode
+            : null;
+    }
+
+    private static string? CreateShortcutText(VirtualKey key)
+    {
+        var isCtrlDown = IsModifierDown(VirtualKey.Control);
+        var isAltDown = IsModifierDown(VirtualKey.Menu);
+        var isShiftDown = IsModifierDown(VirtualKey.Shift);
+
+        if (isShiftDown)
+        {
+            return null;
+        }
+
+        if (isCtrlDown && !isAltDown && TryGetDigitKeyText(key, out var digitKey))
+        {
+            return $"Ctrl+{digitKey}";
+        }
+
+        if (isAltDown && !isCtrlDown && TryGetLetterOrDigitKeyText(key, out var altKey))
+        {
+            return $"Alt+{altKey}";
+        }
+
+        return null;
+    }
+
+    private static bool IsMarkerShortcut(VirtualKey key)
+    {
+        return key == VirtualKey.M &&
+            IsModifierDown(VirtualKey.Control) &&
+            !IsModifierDown(VirtualKey.Menu) &&
+            !IsModifierDown(VirtualKey.Shift);
+    }
+
+    private static bool IsSearchFocusShortcut(VirtualKey key)
+    {
+        return key == VirtualKey.F &&
+            IsModifierDown(VirtualKey.Control) &&
+            !IsModifierDown(VirtualKey.Menu) &&
+            !IsModifierDown(VirtualKey.Shift);
+    }
+
+    private static bool IsModifierDown(VirtualKey key)
+    {
+        return (GetKeyState((int)key) & 0x8000) != 0;
+    }
+
+    private static bool TryGetDigitKeyText(VirtualKey key, out char digit)
+    {
+        if (key is >= VirtualKey.Number0 and <= VirtualKey.Number9)
+        {
+            digit = (char)('0' + (key - VirtualKey.Number0));
+            return true;
+        }
+
+        if (key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
+        {
+            digit = (char)('0' + (key - VirtualKey.NumberPad0));
+            return true;
+        }
+
+        digit = '\0';
+        return false;
+    }
+
+    private static bool TryGetLetterOrDigitKeyText(VirtualKey key, out char keyText)
+    {
+        if (TryGetDigitKeyText(key, out keyText))
+        {
+            return true;
+        }
+
+        if (key is >= VirtualKey.A and <= VirtualKey.Z)
+        {
+            keyText = (char)('A' + (key - VirtualKey.A));
+            return true;
+        }
+
+        keyText = '\0';
+        return false;
+    }
+
+    private static bool IsTextInputSource(object? source)
+    {
+        return HasAncestor<TextBox>(source) ||
+            HasAncestor<PasswordBox>(source) ||
+            HasAncestor<RichEditBox>(source);
+    }
+
+    private bool IsSearchBoxSource(object? source)
+    {
+        var current = source as DependencyObject;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, SearchTextBox))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current) ??
+                (current as FrameworkElement)?.Parent as DependencyObject;
+        }
+
+        return false;
+    }
+
+    private static bool IsWebViewSource(object? source)
+    {
+        return HasAncestor<WebView2>(source);
+    }
+
+    private static bool HasAncestor<T>(object? source)
+        where T : DependencyObject
+    {
+        var current = source as DependencyObject;
+        while (current is not null)
+        {
+            if (current is T)
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current) ??
+                (current as FrameworkElement)?.Parent as DependencyObject;
+        }
+
+        return false;
+    }
+
+    private static EventRule CloneEventRule(EventRule rule)
+    {
+        return new EventRule
+        {
+            Name = rule.Name,
+            Keyword = rule.Keyword,
+            Enabled = rule.Enabled,
+            CaseSensitive = rule.CaseSensitive,
+            MatchMode = rule.MatchMode,
+            MatchDirection = rule.MatchDirection,
+            HighlightColor = rule.HighlightColor
+        };
+    }
+
+    private static LogRule CloneLogRule(LogRule rule)
+    {
+        return new LogRule
+        {
+            Name = rule.Name,
+            Keyword = rule.Keyword,
+            Enabled = rule.Enabled,
+            UseForEvent = rule.UseForEvent,
+            UseForHighlight = rule.UseForHighlight,
+            UseAsViewFilter = rule.UseAsViewFilter,
+            CaseSensitive = rule.CaseSensitive,
+            MatchMode = rule.MatchMode,
+            MatchDirection = rule.MatchDirection,
+            ForegroundColor = rule.ForegroundColor,
+            BackgroundColor = rule.BackgroundColor,
+            Priority = rule.Priority
+        };
+    }
+
+    private static HighlightRule CloneHighlightRule(HighlightRule rule)
+    {
+        return new HighlightRule
+        {
+            Name = rule.Name,
+            Keyword = rule.Keyword,
+            Enabled = rule.Enabled,
+            CaseSensitive = rule.CaseSensitive,
+            MatchMode = rule.MatchMode,
+            UseAsViewFilter = rule.UseAsViewFilter,
+            ForegroundColor = rule.ForegroundColor,
+            BackgroundColor = rule.BackgroundColor,
+            Priority = rule.Priority,
+            MatchDirection = rule.MatchDirection
+        };
+    }
+
+    private static TxCommand CloneTxCommand(TxCommand command)
+    {
+        return new TxCommand(command.Name, command.CommandText)
+        {
+            LineEndingMode = command.LineEndingMode,
+            OptionalShortcut = command.OptionalShortcut
+        };
+    }
+
+    private static CommandSequence CloneCommandSequence(CommandSequence sequence)
+    {
+        return new CommandSequence
+        {
+            Name = sequence.Name,
+            Enabled = sequence.Enabled,
+            Steps = new System.Collections.ObjectModel.ObservableCollection<CommandSequenceStep>(
+                sequence.Steps.Select(CloneCommandSequenceStep))
+        };
+    }
+
+    private static CommandSequenceStep CloneCommandSequenceStep(CommandSequenceStep step)
+    {
+        return new CommandSequenceStep
+        {
+            Name = step.Name,
+            CommandText = step.CommandText,
+            LineEndingMode = step.LineEndingMode,
+            DelayAfterMs = step.DelayAfterMs,
+            Comment = step.Comment
+        };
+    }
+
+    private void CommandTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        {
+            return;
+        }
+
+        if (args.Key == VirtualKey.Up)
+        {
+            args.Handled = _viewModel.NavigateCommandHistory(direction: -1);
+            if (args.Handled)
+            {
+                CommandTextBox.SelectionStart = CommandTextBox.Text.Length;
+            }
+
+            return;
+        }
+
+        if (args.Key == VirtualKey.Down)
+        {
+            args.Handled = _viewModel.NavigateCommandHistory(direction: 1);
+            if (args.Handled)
+            {
+                CommandTextBox.SelectionStart = CommandTextBox.Text.Length;
+            }
+
+            return;
+        }
+
+        if (args.Key == VirtualKey.Enter && _viewModel.SendCommand.CanExecute(null))
+        {
+            args.Handled = true;
+            _viewModel.SendCommand.Execute(null);
+        }
+    }
+}

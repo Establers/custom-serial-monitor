@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serial Monitor xterm Log View</title>
+  <link rel="stylesheet" href="./xterm.css">
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0c0d0e;
+    }
+
+    body {
+      position: fixed;
+      inset: 0;
+    }
+
+    #terminal {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #0c0d0e;
+    }
+
+    .xterm {
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+      background: #0c0d0e;
+    }
+
+    .xterm .xterm-viewport {
+      background-color: #0c0d0e !important;
+      scrollbar-color: #3a3a3a #0c0d0e;
+      scrollbar-width: thin;
+    }
+
+    .xterm .xterm-viewport::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+      background: #0c0d0e;
+    }
+
+    .xterm .xterm-viewport::-webkit-scrollbar-track {
+      background: #0c0d0e;
+    }
+
+    .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+      background: #3a3a3a;
+      border: 2px solid #0c0d0e;
+    }
+
+    .xterm .xterm-viewport::-webkit-scrollbar-corner,
+    ::-webkit-scrollbar-corner {
+      background: #0c0d0e;
+    }
+
+    #contextMenu {
+      position: fixed;
+      z-index: 10000;
+      display: none;
+      min-width: 154px;
+      padding: 3px;
+      border: 1px solid #3a3a3a;
+      background: #18191a;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+      font-family: "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: #d6d6d6;
+      user-select: none;
+    }
+
+    #contextMenu button {
+      display: block;
+      width: 100%;
+      height: 24px;
+      margin: 0;
+      padding: 0 8px;
+      border: 0;
+      background: transparent;
+      color: #d6d6d6;
+      font: inherit;
+      text-align: left;
+    }
+
+    #contextMenu button:hover:not(:disabled) {
+      background: #2d2f31;
+    }
+
+    #contextMenu button:disabled {
+      color: #6b6d70;
+    }
+
+    #contextMenu .separator {
+      height: 1px;
+      margin: 3px 4px;
+      background: #303234;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <div id="contextMenu" role="menu" aria-hidden="true">
+    <button type="button" data-action="copy" data-requires-selection="true">Copy</button>
+    <button type="button" data-action="copyAllVisible">Copy all visible</button>
+    <button type="button" data-action="copySinceLastTx" title="Copy visible log region starting at the most recent TX">Copy since last TX</button>
+    <button type="button" data-action="copySinceLastMark" title="Copy visible log region starting at the most recent MARK">Copy since last MARK</button>
+    <div class="separator"></div>
+    <button type="button" data-action="clear">Clear screen</button>
+    <button type="button" data-action="quickMarker">Quick marker</button>
+    <button type="button" data-action="searchSelected" data-requires-selection="true">Search selected text</button>
+  </div>
+  <script src="./xterm.js"></script>
+  <script src="./xterm-addon-fit.js"></script>
+  <script src="./xterm-addon-search.js"></script>
+  <script>
+    const terminal = new Terminal({
+      allowTransparency: false,
+      convertEol: true,
+      cursorBlink: false,
+      disableStdin: true,
+      fontFamily: 'Consolas, Cascadia Mono, Menlo, monospace',
+      fontSize: 13,
+      scrollback: 50000,
+      theme: {
+        background: '#0c0d0e',
+        foreground: '#d6d6d6',
+        selectionBackground: '#375a7f',
+        cursor: '#d6d6d6',
+        black: '#0c0d0e',
+        red: '#d9534f',
+        green: '#5cb85c',
+        yellow: '#f0ad4e',
+        blue: '#5bc0de',
+        magenta: '#b066d8',
+        cyan: '#5bc0de',
+        white: '#d6d6d6'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    const searchAddon = new SearchAddon.SearchAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
+    terminal.open(document.getElementById('terminal'));
+    fitAddon.fit();
+
+    const appendQueue = [];
+    const appendMaxLines = 40;
+    const appendMaxChars = 32768;
+    const replaceQueue = [];
+    let appendQueueHead = 0;
+    let replaceQueueHead = 0;
+    let appendDrainScheduled = false;
+    let appendWriting = false;
+    let replaceWriting = false;
+    let contextMenuSelection = '';
+    const contextMenu = document.getElementById('contextMenu');
+
+    function normalizeLogText(text) {
+      return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+    }
+
+    function splitAppendText(text) {
+      const chunks = [];
+      let start = 0;
+      let next = 0;
+      let linesInChunk = 0;
+      let lastLineEnd = 0;
+
+      while (next < text.length) {
+        const newlineIndex = text.indexOf('\n', next);
+        const lineEnd = newlineIndex >= 0 ? newlineIndex + 1 : text.length;
+        const wouldExceedChunk = linesInChunk > 0 &&
+          (linesInChunk >= appendMaxLines || lineEnd - start > appendMaxChars);
+
+        if (wouldExceedChunk) {
+          chunks.push(text.slice(start, lastLineEnd));
+          start = lastLineEnd;
+          linesInChunk = 0;
+          continue;
+        }
+
+        linesInChunk += 1;
+        lastLineEnd = lineEnd;
+        next = lineEnd;
+      }
+
+      if (start < text.length) {
+        chunks.push(text.slice(start));
+      }
+
+      return chunks;
+    }
+
+    function queueAppendDrain() {
+      if (appendDrainScheduled || appendWriting || replaceWriting) {
+        return;
+      }
+
+      appendDrainScheduled = true;
+      window.requestAnimationFrame(drainAppendQueue);
+    }
+
+    function appendQueueLength() {
+      return appendQueue.length - appendQueueHead;
+    }
+
+    function compactAppendQueueIfNeeded() {
+      if (appendQueueHead > 1024 && appendQueueHead * 2 > appendQueue.length) {
+        appendQueue.splice(0, appendQueueHead);
+        appendQueueHead = 0;
+      }
+    }
+
+    function drainAppendQueue() {
+      appendDrainScheduled = false;
+      if (appendWriting || replaceWriting || appendQueueLength() === 0) {
+        return;
+      }
+
+      const item = appendQueue[appendQueueHead++];
+      compactAppendQueueIfNeeded();
+      appendWriting = true;
+      try {
+        terminal.write(item.text, () => {
+          if (item.autoScroll) {
+            terminal.scrollToBottom();
+          }
+          appendWriting = false;
+          if (appendQueueLength() > 0) {
+            queueAppendDrain();
+          }
+        });
+      } catch (error) {
+        appendWriting = false;
+        console.error('xterm append failed', error);
+        if (appendQueueLength() > 0) {
+          queueAppendDrain();
+        }
+      }
+    }
+
+    function drainReplaceQueue(autoScroll) {
+      if (replaceQueueHead >= replaceQueue.length) {
+        replaceQueue.length = 0;
+        replaceQueueHead = 0;
+        replaceWriting = false;
+        if (autoScroll) {
+          terminal.scrollToBottom();
+        }
+        queueAppendDrain();
+        return;
+      }
+
+      const text = replaceQueue[replaceQueueHead++];
+      try {
+        // Full restores are already covered by the native loading overlay. Avoid
+        // the normal one-request-per-animation-frame path for this exceptional
+        // bulk operation, while retaining the regular smooth live append path.
+        terminal.write(text, () => drainReplaceQueue(autoScroll));
+      } catch (error) {
+        replaceWriting = false;
+        replaceQueue.length = 0;
+        console.error('xterm bulk replace failed', error);
+        queueAppendDrain();
+      }
+    }
+
+    function isAtBottom() {
+      const buffer = terminal.buffer && terminal.buffer.active;
+      if (!buffer) {
+        return true;
+      }
+
+      return buffer.viewportY >= buffer.baseY;
+    }
+
+    function getScrollState() {
+      const buffer = terminal.buffer && terminal.buffer.active;
+      if (!buffer) {
+        return {
+          ok: false,
+          viewportY: 0,
+          baseY: 0,
+          rows: 0,
+          atBottom: true
+        };
+      }
+
+      return {
+        ok: true,
+        viewportY: buffer.viewportY,
+        baseY: buffer.baseY,
+        rows: terminal.rows,
+        atBottom: isAtBottom()
+      };
+    }
+
+    function restoreScrollState(state) {
+      const buffer = terminal.buffer && terminal.buffer.active;
+      if (!buffer || !state || !Number.isFinite(Number(state.viewportY))) {
+        return false;
+      }
+
+      const target = Math.max(0, Math.min(buffer.baseY, Math.floor(Number(state.viewportY))));
+      if (typeof terminal.scrollToLine === 'function') {
+        terminal.scrollToLine(target);
+      } else if (typeof terminal.scrollLines === 'function') {
+        terminal.scrollLines(target - buffer.viewportY);
+      } else {
+        return false;
+      }
+      return true;
+    }
+
+    function copySelectedText(source) {
+      const selectedText = terminal.getSelection();
+      if (!selectedText) {
+        return false;
+      }
+
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({ type: 'copySelection', text: selectedText, source });
+        return true;
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(selectedText).catch(() => {});
+        return true;
+      }
+
+      return false;
+    }
+
+    function buildCommandShortcut(event) {
+      if (event.shiftKey) {
+        return null;
+      }
+
+      const key = String(event.key || '').toUpperCase();
+      if (event.ctrlKey && !event.altKey && /^[0-9]$/.test(key)) {
+        return `Ctrl+${key}`;
+      }
+
+      if (event.altKey && !event.ctrlKey && /^[A-Z0-9]$/.test(key)) {
+        return `Alt+${key}`;
+      }
+
+      return null;
+    }
+
+    function postCommandShortcut(event, source) {
+      const shortcut = buildCommandShortcut(event);
+      if (!shortcut || !window.chrome || !window.chrome.webview) {
+        return false;
+      }
+
+      window.chrome.webview.postMessage({ type: 'shortcut', shortcut, source });
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
+    function postMarkerShortcut(event, source) {
+      const key = String(event.key || '').toLowerCase();
+      if (!event.ctrlKey || event.altKey || event.shiftKey || key !== 'm' ||
+          !window.chrome || !window.chrome.webview) {
+        return false;
+      }
+
+      window.chrome.webview.postMessage({ type: 'markerShortcut', source });
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
+    function postSearchShortcut(event, source) {
+      if (!window.chrome || !window.chrome.webview) {
+        return false;
+      }
+
+      const key = String(event.key || '');
+      const lowerKey = key.toLowerCase();
+      let action = null;
+
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && lowerKey === 'f') {
+        action = 'focus';
+      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === 'F3') {
+        action = event.shiftKey ? 'previous' : 'next';
+      }
+
+      if (!action) {
+        return false;
+      }
+
+      window.chrome.webview.postMessage({ type: 'searchShortcut', action, source });
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
+    function postContextMenuAction(action) {
+      if (!window.chrome || !window.chrome.webview) {
+        return;
+      }
+
+      window.chrome.webview.postMessage({
+        type: 'contextMenuAction',
+        action,
+        selectedText: contextMenuSelection,
+        source: 'xterm-context-menu'
+      });
+    }
+
+    function hideContextMenu() {
+      contextMenu.style.display = 'none';
+      contextMenu.setAttribute('aria-hidden', 'true');
+    }
+
+    function showContextMenu(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      contextMenuSelection = terminal.getSelection() || '';
+      const hasSelection = contextMenuSelection.length > 0;
+      for (const button of contextMenu.querySelectorAll('button[data-requires-selection="true"]')) {
+        button.disabled = !hasSelection;
+      }
+
+      contextMenu.style.display = 'block';
+      contextMenu.setAttribute('aria-hidden', 'false');
+
+      const width = contextMenu.offsetWidth;
+      const height = contextMenu.offsetHeight;
+      const left = Math.min(event.clientX, Math.max(0, window.innerWidth - width - 2));
+      const top = Math.min(event.clientY, Math.max(0, window.innerHeight - height - 2));
+      contextMenu.style.left = `${Math.max(0, left)}px`;
+      contextMenu.style.top = `${Math.max(0, top)}px`;
+    }
+
+    window.serialMonitorAppendLog = function (text, autoScroll) {
+      const normalized = normalizeLogText(text);
+      if (!normalized) {
+        return true;
+      }
+
+      for (const chunk of splitAppendText(normalized)) {
+        if (chunk) {
+          appendQueue.push({ text: chunk, autoScroll: !!autoScroll });
+        }
+      }
+
+      queueAppendDrain();
+
+      return true;
+    };
+
+    window.serialMonitorBeginReplaceLog = function () {
+      appendQueue.length = 0;
+      appendQueueHead = 0;
+      replaceQueue.length = 0;
+      replaceQueueHead = 0;
+      replaceWriting = false;
+      terminal.clear();
+      return true;
+    };
+
+    window.serialMonitorQueueReplaceChunk = function (text) {
+      const normalized = normalizeLogText(text);
+      if (normalized) {
+        replaceQueue.push(normalized);
+      }
+
+      return true;
+    };
+
+    window.serialMonitorCommitReplaceLog = function (autoScroll) {
+      if (replaceWriting) {
+        return false;
+      }
+
+      replaceWriting = true;
+      drainReplaceQueue(!!autoScroll);
+      return true;
+    };
+
+    window.serialMonitorScrollToBottom = function () {
+      terminal.scrollToBottom();
+      return isAtBottom();
+    };
+
+    window.serialMonitorIsAtBottom = function () {
+      return isAtBottom();
+    };
+
+    window.serialMonitorGetScrollState = function () {
+      return getScrollState();
+    };
+
+    window.serialMonitorRestoreScrollState = function (state) {
+      return restoreScrollState(state);
+    };
+
+    window.serialMonitorGetAppendQueueState = function () {
+      return {
+        queueLength: appendQueueLength() + replaceQueue.length - replaceQueueHead,
+        writing: appendWriting || replaceWriting
+      };
+    };
+
+    window.serialMonitorClear = function () {
+      appendQueue.length = 0;
+      appendQueueHead = 0;
+      replaceQueue.length = 0;
+      replaceQueueHead = 0;
+      replaceWriting = false;
+      terminal.clear();
+      return true;
+    };
+
+    window.serialMonitorSetScrollback = function (size) {
+      const parsedSize = Number(size);
+      if (!Number.isFinite(parsedSize) || parsedSize < 1000) {
+        return false;
+      }
+
+      terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
+      return true;
+    };
+
+    window.serialMonitorFit = function () {
+      try {
+        fitAddon.fit();
+      } catch (error) {
+        console.error('xterm fit failed', error);
+      }
+
+      return true;
+    };
+
+    window.serialMonitorSearch = function (request) {
+      try {
+        const searchText = String(request?.text ?? '');
+        if (!searchText) {
+          terminal.clearSelection();
+          searchAddon.clearDecorations();
+          return { ok: true, found: false };
+        }
+
+        const options = {
+          caseSensitive: !!request?.caseSensitive,
+          regex: false,
+          wholeWord: false
+        };
+
+        if (Number.isInteger(request?.resultIndex) && request.resultIndex >= 0) {
+          terminal.clearSelection();
+          searchAddon.clearDecorations();
+          terminal.scrollToTop();
+
+          let found = false;
+          for (let i = 0; i <= request.resultIndex; i++) {
+            found = searchAddon.findNext(searchText, options);
+            if (!found) {
+              break;
+            }
+          }
+
+          return { ok: true, found: !!found };
+        }
+
+        const direction = request?.direction === 'previous' ? 'previous' : 'next';
+        const found = direction === 'previous'
+          ? searchAddon.findPrevious(searchText, options)
+          : searchAddon.findNext(searchText, options);
+
+        return { ok: true, found: !!found };
+      } catch (error) {
+        return {
+          ok: false,
+          found: false,
+          error: error && error.message ? error.message : String(error)
+        };
+      }
+    };
+
+    let pendingFit = 0;
+    function queueFit() {
+      if (pendingFit) {
+        window.clearTimeout(pendingFit);
+      }
+
+      pendingFit = window.setTimeout(() => {
+        pendingFit = 0;
+        window.serialMonitorFit();
+      }, 25);
+    }
+
+    window.addEventListener('resize', queueFit);
+    requestAnimationFrame(queueFit);
+
+    terminal.attachCustomKeyEventHandler(event => {
+      if (event.type !== 'keydown') {
+        return true;
+      }
+
+      const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'c';
+      if (isCopyShortcut) {
+        if (!copySelectedText('xterm-key-handler')) {
+          return true;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+
+      if (postMarkerShortcut(event, 'xterm-key-handler')) {
+        return false;
+      }
+
+      if (postSearchShortcut(event, 'xterm-key-handler')) {
+        return false;
+      }
+
+      if (postCommandShortcut(event, 'xterm-key-handler')) {
+          return false;
+      }
+
+      return true;
+    });
+
+    document.addEventListener('keydown', event => {
+      const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'c';
+      if (isCopyShortcut) {
+        if (!copySelectedText('document-keydown')) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      if (postMarkerShortcut(event, 'document-keydown')) {
+        return;
+      }
+
+      if (postSearchShortcut(event, 'document-keydown')) {
+        return;
+      }
+
+      if (postCommandShortcut(event, 'document-keydown')) {
+        return;
+      }
+    }, true);
+
+    document.addEventListener('contextmenu', showContextMenu, true);
+
+    contextMenu.addEventListener('pointerdown', event => {
+      event.stopPropagation();
+    });
+
+    contextMenu.addEventListener('click', event => {
+      const button = event.target.closest('button[data-action]');
+      if (!button || button.disabled) {
+        return;
+      }
+
+      const action = button.getAttribute('data-action');
+      hideContextMenu();
+      postContextMenuAction(action);
+    });
+
+    document.addEventListener('pointerdown', event => {
+      if (!contextMenu.contains(event.target)) {
+        hideContextMenu();
+      }
+    }, true);
+
+    document.addEventListener('scroll', hideContextMenu, true);
+    window.addEventListener('blur', hideContextMenu);
+    // TODO: Add optional "Save visible buffer to file" after a file-picker bridge is needed.
+  </script>
+</body>
+</html>

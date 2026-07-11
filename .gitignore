@@ -1,0 +1,31 @@
+# Build and IDE output
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Generated publish and package output
+artifacts/
+release/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+
+# WebView2 runtime profiles and crash data
+**/*.WebView2/
+**/EBWebView/
+
+# Local runtime data
+logs/
+profiles/
+diagnostics/
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak

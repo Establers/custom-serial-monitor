@@ -1,0 +1,2421 @@
+<Window
+    x:Class="SerialMonitor.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
+    Title="Serial Monitor">
+
+    <Grid x:Name="Root"
+          Background="#0C0D0E"
+          Padding="4"
+          RowSpacing="3"
+          KeyDown="Root_KeyDown">
+        <Grid.Resources>
+            <infra:HighlightColorBrushConverter x:Key="HighlightColorBrushConverter" />
+            <infra:DisplayModeNameConverter x:Key="DisplayModeNameConverter" />
+            <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
+                <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}" />
+            </DataTemplate>
+
+            <ControlTemplate x:Key="CompactCheckBoxTemplate"
+                             TargetType="CheckBox">
+                <Grid x:Name="CheckRoot"
+                      Height="{TemplateBinding Height}"
+                      MinHeight="{TemplateBinding MinHeight}"
+                      Background="Transparent">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.BorderBrush"
+                                            Value="#FFB8B8B8" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background"
+                                            Value="#FF2B2B2B" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckRoot.Opacity"
+                                            Value="0.45" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                        <VisualStateGroup x:Name="CheckStates">
+                            <VisualState x:Name="Unchecked" />
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background"
+                                            Value="#FF0078D4" />
+                                    <Setter Target="CheckBorder.BorderBrush"
+                                            Value="#FF3A96DD" />
+                                    <Setter Target="CheckGlyph.Text"
+                                            Value="✓" />
+                                    <Setter Target="CheckGlyph.Opacity"
+                                            Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Indeterminate">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background"
+                                            Value="#FF0078D4" />
+                                    <Setter Target="CheckBorder.BorderBrush"
+                                            Value="#FF3A96DD" />
+                                    <Setter Target="CheckGlyph.Text"
+                                            Value="-" />
+                                    <Setter Target="CheckGlyph.Opacity"
+                                            Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+
+                    <Grid ColumnSpacing="5"
+                          VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="CheckBorder"
+                                Width="14"
+                                Height="14"
+                                BorderThickness="1"
+                                CornerRadius="2"
+                                BorderBrush="#FF7A7A7A"
+                                Background="#FF101010"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="CheckGlyph"
+                                       Text="✓"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Opacity="0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="0,-1,0,0" />
+                        </Border>
+
+                        <ContentPresenter Grid.Column="1"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+            </ControlTemplate>
+
+            <Style TargetType="Button">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="5,0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+            </Style>
+            <Style TargetType="ComboBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="5,0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+            </Style>
+            <Style TargetType="TextBox">
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="5,0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+            </Style>
+            <Style TargetType="CheckBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+                <Setter Property="Padding"
+                        Value="0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactCheckBoxTemplate}" />
+            </Style>
+            <Style TargetType="TabViewItem">
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="MinHeight"
+                        Value="26" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+                <Setter Property="MaxWidth"
+                        Value="86" />
+                <Setter Property="Padding"
+                        Value="8,0" />
+            </Style>
+            <Style x:Key="ToolbarIconButtonStyle"
+                   TargetType="Button">
+                <Setter Property="Height"
+                        Value="22" />
+                <Setter Property="MinWidth"
+                        Value="22" />
+                <Setter Property="MinHeight"
+                        Value="22" />
+                <Setter Property="Padding"
+                        Value="2,0" />
+                <Setter Property="FontSize"
+                        Value="11" />
+            </Style>
+            <Style x:Key="CompactTextBoxStyle"
+                   TargetType="TextBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="5,0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+            </Style>
+            <Style x:Key="CompactComboBoxStyle"
+                   TargetType="ComboBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="5,0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+            </Style>
+            <Style x:Key="CompactCheckBoxStyle"
+                   TargetType="CheckBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="0" />
+                <Setter Property="FontSize"
+                        Value="12" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactCheckBoxTemplate}" />
+            </Style>
+            <Style x:Key="RuleHeaderTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize"
+                        Value="10" />
+                <Setter Property="Opacity"
+                        Value="0.75" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="RuleCellTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="CompactCellTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+                <Setter Property="MaxLines"
+                        Value="1" />
+            </Style>
+            <Style x:Key="InspectorTabGridStyle"
+                   TargetType="Grid">
+                <Setter Property="Padding"
+                        Value="0,2,0,0" />
+                <Setter Property="RowSpacing"
+                        Value="2" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+            </Style>
+            <Style x:Key="InspectorSectionBorderStyle"
+                   TargetType="Border">
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource SystemControlForegroundBaseLowBrush}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="CornerRadius"
+                        Value="3" />
+                <Setter Property="Padding"
+                        Value="2" />
+                <Setter Property="MinHeight"
+                        Value="0" />
+            </Style>
+            <Style x:Key="InspectorSectionHeaderTextStyle"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource CompactCellTextStyle}">
+                <Setter Property="FontWeight"
+                        Value="SemiBold" />
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="Height"
+                        Value="22" />
+            </Style>
+            <Style x:Key="InspectorTableHeaderTextStyle"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource CompactCellTextStyle}">
+                <Setter Property="FontSize"
+                        Value="10" />
+                <Setter Property="Opacity"
+                        Value="0.75" />
+            </Style>
+            <Style x:Key="CompactListViewItemStyle"
+                   TargetType="ListViewItem">
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Stretch" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="2,0" />
+            </Style>
+            <Style x:Key="RuleActionButtonStyle"
+                   TargetType="Button">
+                <Setter Property="Height"
+                        Value="22" />
+                <Setter Property="MinWidth"
+                        Value="28" />
+                <Setter Property="MinHeight"
+                        Value="22" />
+                <Setter Property="Padding"
+                        Value="3,0" />
+                <Setter Property="FontSize"
+                        Value="11" />
+            </Style>
+            <Style x:Key="RuleCheckBoxStyle"
+                   TargetType="CheckBox">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="0" />
+                <Setter Property="HorizontalAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactCheckBoxTemplate}" />
+            </Style>
+            <Style x:Key="SavedCommandChipButtonStyle"
+                   TargetType="Button">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+                <Setter Property="Padding"
+                        Value="7,0" />
+                <Setter Property="FontSize"
+                        Value="11" />
+            </Style>
+            <Style x:Key="SettingLabelTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="Width"
+                        Value="86" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="SettingValueTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+                <Setter Property="MaxLines"
+                        Value="1" />
+            </Style>
+            <Style x:Key="SettingApplyHintTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="FontSize"
+                        Value="10" />
+                <Setter Property="Opacity"
+                        Value="0.72" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="TextTrimming"
+                        Value="CharacterEllipsis" />
+                <Setter Property="MaxLines"
+                        Value="1" />
+            </Style>
+            <Style x:Key="SettingApplyBadgeTextStyle"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource SettingApplyHintTextStyle}">
+                <Setter Property="Width"
+                        Value="58" />
+                <Setter Property="HorizontalAlignment"
+                        Value="Left" />
+                <Setter Property="TextAlignment"
+                        Value="Left" />
+            </Style>
+        </Grid.Resources>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LayoutStates">
+                <VisualState x:Name="NarrowLayout" />
+                <VisualState x:Name="WideLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1120" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MainContentGrid.ColumnSpacing"
+                                Value="8" />
+                        <Setter Target="MainContentGrid.RowSpacing"
+                                Value="0" />
+                        <Setter Target="ContentLogRow.Height"
+                                Value="*" />
+                        <Setter Target="ContentInspectorRow.Height"
+                                Value="0" />
+                        <Setter Target="LogColumn.Width"
+                                Value="3*" />
+                        <Setter Target="InspectorColumn.Width"
+                                Value="390" />
+                        <Setter Target="InspectorPanel.(Grid.Row)"
+                                Value="0" />
+                        <Setter Target="InspectorPanel.(Grid.Column)"
+                                Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.RowSpan="5"
+              IsHitTestVisible="False"
+              Opacity="{Binding CuteBackgroundLayerOpacity}">
+            <Image x:Name="CuteBackgroundImage"
+                   Stretch="UniformToFill"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"
+                   Opacity="{Binding CuteBackgroundOpacity}" />
+            <Rectangle Fill="#FF0C0D0E"
+                       Opacity="{Binding CuteBackgroundOverlayOpacity}" />
+        </Grid>
+
+        <Border BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="3">
+            <Grid ColumnSpacing="4"
+                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,*">
+                <TextBlock Grid.Column="0"
+                           Text="Port"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding PortNames}"
+                          SelectedItem="{Binding SelectedPort, Mode=TwoWay}"
+                          IsEnabled="{Binding CanEditConnectionSettings}"
+                          MinWidth="110"
+                          HorizontalAlignment="Stretch" />
+
+                <TextBlock Grid.Column="2"
+                           Text="Baud"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="3"
+                          ItemsSource="{Binding BaudRates}"
+                          SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
+                          IsEnabled="{Binding CanEditConnectionSettings}"
+                          MinWidth="86"
+                          HorizontalAlignment="Stretch" />
+
+                <Button Grid.Column="4"
+                        Content="Connect"
+                        Command="{Binding ConnectCommand}" />
+                <Button Grid.Column="5"
+                        Content="Disconnect"
+                        Click="DisconnectButton_Click"
+                        IsEnabled="{Binding CanManualDisconnect}" />
+
+                <Button Grid.Column="6"
+                        Content="{Binding FileLoggingToggleText}"
+                        Command="{Binding ToggleFileLoggingCommand}"
+                        Style="{StaticResource RuleActionButtonStyle}"
+                        ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
+
+                <TextBlock Grid.Column="7"
+                           Text="{Binding CompactConnectionStatusText}"
+                           FontSize="12"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <Grid x:Name="MainContentGrid"
+              Grid.Row="1"
+              RowSpacing="4"
+              ColumnSpacing="0">
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="ContentLogRow"
+                               Height="2*" />
+                <RowDefinition x:Name="ContentInspectorRow"
+                               Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LogColumn"
+                                  Width="*" />
+                <ColumnDefinition x:Name="InspectorColumn"
+                                  Width="0" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="LogPanel"
+                  Grid.Row="0"
+                  Grid.Column="0"
+                  RowSpacing="3"
+                  RowDefinitions="Auto,*">
+                <Border Grid.Row="0"
+                        BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="3">
+                    <Grid ColumnSpacing="5"
+                          ColumnDefinitions="270,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBox x:Name="SearchTextBox"
+                                 Grid.Column="0"
+                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PlaceholderText="Search visible log"
+                                 Style="{StaticResource CompactTextBoxStyle}"
+                                 MinWidth="240"
+                                 MaxWidth="380"
+                                 VerticalAlignment="Center"
+                                 KeyDown="SearchTextBox_KeyDown"
+                                 ToolTipService.ToolTip="Search visible log (Ctrl+F, Up/Down history)" />
+                        <Button Grid.Column="1"
+                                Content="Next"
+                                Command="{Binding FindNextCommand}"
+                                ToolTipService.ToolTip="Next (Enter, F3)" />
+                        <Button Grid.Column="2"
+                                Content="Prev"
+                                Command="{Binding FindPreviousCommand}"
+                                ToolTipService.ToolTip="Previous (Shift+Enter, Shift+F3)" />
+                        <CheckBox Grid.Column="3"
+                                  Content="Case"
+                                  IsChecked="{Binding IsSearchCaseSensitive, Mode=TwoWay}"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4"
+                                   Text="{Binding SearchSummaryText}"
+                                   FontWeight="SemiBold"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="5"
+                                   Text="RX"
+                                   FontSize="11"
+                                   Opacity="0.78"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="6"
+                                  ItemsSource="{Binding RxDisplayModes}"
+                                  SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                                  ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  Width="96"
+                                  ToolTipService.ToolTip="RX View: Terminal for RTOS shell logs, HEX for raw byte display." />
+                        <TextBlock Grid.Column="7"
+                                   Text="Filter"
+                                   FontSize="11"
+                                   Opacity="0.78"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="8"
+                                  ItemsSource="{Binding VisibleLogFilterOptions}"
+                                  SelectedItem="{Binding SelectedViewFilterOption, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayName"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  Width="96"
+                                  ToolTipService.ToolTip="Filter the visible xterm log using rules marked as Filter. Log files still keep all lines." />
+                        <TextBlock Grid.Column="9"
+                                   Text="{Binding CurrentSearchMatchedLine}"
+                                   FontFamily="Consolas"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <CheckBox Grid.Column="10"
+                                  Content="Auto"
+                                  IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Turn off to inspect older logs without being pulled to the bottom." />
+                        <TextBlock Grid.Column="11"
+                                   Text="{Binding RenderingStateText}"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="12"
+                                Content="{Binding CompactPauseRenderingButtonText}"
+                                Command="{Binding ToggleLogRenderingPauseCommand}"
+                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}" />
+                        <Button Grid.Column="13"
+                                Content="Clr"
+                                Command="{Binding ClearScreenCommand}"
+                                ToolTipService.ToolTip="Clear visible log" />
+                        <Button Grid.Column="14"
+                                Content="Mark"
+                                Command="{Binding AddDefaultMarkerCommand}"
+                                ToolTipService.ToolTip="Quick marker inserts current MARK TIME" />
+                        <Button x:Name="CustomMarkerButton"
+                                Grid.Column="15"
+                                Content="Custom"
+                                IsEnabled="{Binding IsConnected}"
+                                ToolTipService.ToolTip="Custom marker inserts MARK TIME with memo">
+                            <Button.Flyout>
+                                <Flyout x:Name="MarkerFlyout"
+                                        Placement="BottomEdgeAlignedRight">
+                                    <StackPanel Spacing="6"
+                                                MinWidth="220">
+                                        <TextBlock Text="Marker"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="12" />
+                                        <TextBox x:Name="MarkerFlyoutTextBox"
+                                                 Text="{Binding MarkerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 PlaceholderText="Optional marker memo"
+                                                 Style="{StaticResource CompactTextBoxStyle}"
+                                                 MinWidth="210"
+                                                 ToolTipService.ToolTip="Optional marker memo appended after MARK TIME" />
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="4"
+                                                    HorizontalAlignment="Right">
+                                            <Button Content="Insert"
+                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Click="InsertCustomMarker_Click"
+                                                    ToolTipService.ToolTip="Insert custom marker" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <WebView2 x:Name="XtermLogWebView"
+                          Grid.Row="1"
+                          MinHeight="150"
+                          SizeChanged="XtermLogWebView_SizeChanged" />
+
+                <Border x:Name="LogRestoreOverlay"
+                        Grid.Row="1"
+                        Background="#DD0C0D0E"
+                        CornerRadius="3"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="True">
+                    <Border HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="#D916181A"
+                            BorderBrush="#553A3D42"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="16,12"
+                            MaxWidth="280">
+                        <StackPanel Spacing="8"
+                                    HorizontalAlignment="Center">
+                            <Image Source="ms-appx:///Assets/Loading/log_restore.png"
+                                   Width="150"
+                                   Height="140"
+                                   Stretch="Uniform"
+                                   Opacity="0.96" />
+                            <TextBlock x:Name="LogRestoreOverlayTitle"
+                                       Text="로그 화면 복원 중..."
+                                       Foreground="#FFF2F2F2"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock x:Name="LogRestoreOverlayDetail"
+                                       Text="Preparing log view"
+                                       Foreground="#FFC8CDD2"
+                                       FontSize="11"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="InspectorPanel"
+                  Grid.Row="1"
+                  Grid.Column="0"
+                  RowSpacing="0"
+                  RowDefinitions="*"
+                  MinHeight="160">
+                <TabView x:Name="InspectorTabView"
+                         Grid.Row="0"
+                         IsAddTabButtonVisible="False"
+                         CanDragTabs="False"
+                         TabWidthMode="SizeToContent"
+                         HorizontalAlignment="Stretch"
+                         SelectionChanged="InspectorTabView_SelectionChanged">
+                    <TabViewItem Header="Events"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Events">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              RowDefinitions="Auto,*">
+                            <Grid ColumnSpacing="4"
+                                  ColumnDefinitions="*,Auto,Auto">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="5"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="Events"
+                                               Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                    <TextBlock Text="{Binding DetectedEventUiCountText}"
+                                               Style="{StaticResource CompactCellTextStyle}" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1"
+                                          Content="Auto"
+                                          IsChecked="{Binding IsEventAutoScrollEnabled, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="Auto-scroll events"
+                                          VerticalAlignment="Center" />
+                                <Button Grid.Column="2"
+                                        Content="Latest"
+                                        Style="{StaticResource RuleActionButtonStyle}"
+                                        ToolTipService.ToolTip="Select latest event"
+                                        Click="SelectLatestEvent_Click" />
+                            </Grid>
+
+                            <ListView x:Name="EventListView"
+                                      Grid.Row="1"
+                                      ItemsSource="{Binding Events.Events}"
+                                      SelectedItem="{Binding SelectedEvent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectionMode="Single"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="EventListView_ItemClick"
+                                      SelectionChanged="EventListView_SelectionChanged"
+                                      DoubleTapped="EventListView_DoubleTapped">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem"
+                                           BasedOn="{StaticResource CompactListViewItemStyle}" />
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnSpacing="5"
+                                              MinHeight="24"
+                                              ColumnDefinitions="76,58,28,*">
+                                            <TextBlock Text="{Binding TimeText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding RuleName}"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding CompactDirectionText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding MessagePreview}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem x:Name="ContextTabViewItem"
+                                 Header="Context"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Context">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              Padding="0"
+                              RowSpacing="2"
+                              RowDefinitions="Auto,*">
+                            <Grid ColumnSpacing="4"
+                                  ColumnDefinitions="*,Auto,Auto">
+                                <TextBlock Text="{Binding SelectedEventContextHeaderText}"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+
+                                <Button Grid.Column="1"
+                                        Style="{StaticResource ToolbarIconButtonStyle}"
+                                        Command="{Binding CopyEventContextCommand}"
+                                        ToolTipService.ToolTip="Copy event context">
+                                    <SymbolIcon Symbol="Copy" />
+                                </Button>
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource ToolbarIconButtonStyle}"
+                                        Command="{Binding OpenEventLogFolderCommand}"
+                                        ToolTipService.ToolTip="Open event log folder">
+                                    <SymbolIcon Symbol="OpenFile" />
+                                </Button>
+                            </Grid>
+
+                            <WebView2 x:Name="ContextWebView"
+                                      Grid.Row="1"
+                                      MinHeight="120" />
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Search"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Search results">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              MinWidth="0"
+                              RowSpacing="2"
+                              RowDefinitions="Auto,*">
+                            <Grid ColumnSpacing="5"
+                                  MinWidth="0"
+                                  ColumnDefinitions="Auto,96,Auto,Auto,Auto,*">
+                                <TextBlock Text="Search"
+                                           Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding SearchText}"
+                                           FontFamily="Consolas"
+                                           Style="{StaticResource CompactCellTextStyle}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="96"
+                                           MinWidth="0"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="2"
+                                        Content="Refresh"
+                                        Style="{StaticResource RuleActionButtonStyle}"
+                                        Command="{Binding RefreshSearchResultsCommand}"
+                                        ToolTipService.ToolTip="Refresh search results" />
+                                <CheckBox Grid.Column="3"
+                                          Content="Auto"
+                                          IsChecked="{Binding IsSearchResultAutoRefreshEnabled, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="Auto-refresh search results while logs append"
+                                          VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4"
+                                           Text="{Binding SearchSummaryText}"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="5"
+                                           Text="{Binding SearchResultStatusText}"
+                                           Style="{StaticResource CompactCellTextStyle}"
+                                           MinWidth="0"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <ListView x:Name="SearchResultsListView"
+                                      Grid.Row="1"
+                                      MinWidth="0"
+                                      ItemsSource="{Binding SearchResults}"
+                                      SelectedItem="{Binding SelectedSearchResult, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectionMode="Single"
+                                      DoubleTapped="SearchResultsListView_DoubleTapped"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem"
+                                           BasedOn="{StaticResource CompactListViewItemStyle}" />
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnSpacing="5"
+                                              MinHeight="24"
+                                              ColumnDefinitions="76,42,*">
+                                            <TextBlock Text="{Binding TimeText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding DirectionText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding MessagePreview}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Sequences"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Command sequences">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              MinHeight="0"
+                              RowSpacing="3"
+                              RowDefinitions="Auto,Auto,*">
+                            <Border Grid.Row="0"
+                                    Style="{StaticResource InspectorSectionBorderStyle}">
+                                <Grid ColumnSpacing="4"
+                                      ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Text="Sequence"
+                                               Style="{StaticResource CompactCellTextStyle}" />
+                                    <ComboBox Grid.Column="1"
+                                              MinWidth="118"
+                                              MaxWidth="170"
+                                              ItemsSource="{Binding CommandSequences}"
+                                              SelectedItem="{Binding SelectedCommandSequence, Mode=TwoWay}"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource CompactComboBoxStyle}"
+                                              ToolTipService.ToolTip="{Binding SequenceStatusText}" />
+                                    <CheckBox Grid.Column="2"
+                                              Content="En"
+                                              IsEnabled="{Binding HasSelectedCommandSequence}"
+                                              IsChecked="{Binding SelectedCommandSequence.Enabled, Mode=TwoWay}"
+                                              Style="{StaticResource RuleCheckBoxStyle}"
+                                              Checked="CommandSequenceInlineChanged"
+                                              Unchecked="CommandSequenceInlineChanged"
+                                              ToolTipService.ToolTip="Enable selected sequence" />
+                                    <Button Grid.Column="3"
+                                            Content="+"
+                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            Click="AddCommandSequence_Click"
+                                            ToolTipService.ToolTip="Add sequence" />
+                                    <Button Grid.Column="4"
+                                            Content="Edit"
+                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="EditCommandSequence_Click"
+                                            ToolTipService.ToolTip="Edit sequence" />
+                                    <Button Grid.Column="5"
+                                            Content="Del"
+                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="DeleteCommandSequence_Click"
+                                            ToolTipService.ToolTip="Delete sequence" />
+                                    <Button Grid.Column="6"
+                                            Content="Run"
+                                            Command="{Binding RunCommandSequenceCommand}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            ToolTipService.ToolTip="Run sequence" />
+                                    <Button Grid.Column="7"
+                                            Content="Stop"
+                                            Command="{Binding StopCommandSequenceCommand}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            ToolTipService.ToolTip="Stop sequence" />
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Row="1"
+                                    Style="{StaticResource InspectorSectionBorderStyle}">
+                                <Grid ColumnSpacing="4"
+                                      ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Text="{Binding SelectedCommandSequenceName}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
+                                               Style="{StaticResource InspectorSectionHeaderTextStyle}"
+                                               ToolTipService.ToolTip="{Binding LastSequenceActionStatus}" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding SequenceRuntimeStateText}"
+                                               Style="{StaticResource CompactCellTextStyle}"
+                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding SelectedCommandSequenceStepCountText}"
+                                               FontFamily="Consolas"
+                                               Style="{StaticResource CompactCellTextStyle}"
+                                               ToolTipService.ToolTip="Selected sequence step count" />
+                                    <Button Grid.Column="3"
+                                            Content="+"
+                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            Click="AddCommandSequenceStep_Click"
+                                            ToolTipService.ToolTip="Add step" />
+                                    <Button Grid.Column="4"
+                                            Content="Edit"
+                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="EditCommandSequenceStep_Click"
+                                            ToolTipService.ToolTip="Edit step" />
+                                    <Button Grid.Column="5"
+                                            Content="Del"
+                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="DeleteCommandSequenceStep_Click"
+                                            ToolTipService.ToolTip="Delete step" />
+                                    <Button Grid.Column="6"
+                                            Content="Up"
+                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="MoveCommandSequenceStepUp_Click"
+                                            ToolTipService.ToolTip="Move step up" />
+                                    <Button Grid.Column="7"
+                                            Content="Dn"
+                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="MoveCommandSequenceStepDown_Click"
+                                            ToolTipService.ToolTip="Move step down" />
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Row="2"
+                                    MinHeight="0"
+                                    Style="{StaticResource InspectorSectionBorderStyle}">
+                                <Grid RowSpacing="2"
+                                      MinHeight="0"
+                                      RowDefinitions="Auto,*">
+                                    <Grid ColumnSpacing="5"
+                                          MinHeight="20"
+                                          ColumnDefinitions="28,*,54,58,70">
+                                        <TextBlock Text="#"
+                                                   Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="Command"
+                                                   Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Text="Ending"
+                                                   Style="{StaticResource InspectorTableHeaderTextStyle}"
+                                                   ToolTipService.ToolTip="Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n" />
+                                        <TextBlock Grid.Column="3"
+                                                   Text="Delay"
+                                                   HorizontalAlignment="Right"
+                                                   Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                        <TextBlock Grid.Column="4"
+                                                   Text="Actions"
+                                                   Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                    </Grid>
+
+                                    <ListView x:Name="CommandSequenceStepListView"
+                                              Grid.Row="1"
+                                              MinHeight="0"
+                                              ItemsSource="{Binding SelectedCommandSequence.Steps}"
+                                              SelectedItem="{Binding SelectedCommandSequenceStep, Mode=TwoWay}"
+                                              SelectionMode="Single"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                              ScrollViewer.VerticalScrollMode="Enabled"
+                                              ScrollViewer.IsVerticalRailEnabled="True">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem"
+                                                   BasedOn="{StaticResource CompactListViewItemStyle}" />
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid ColumnSpacing="5"
+                                                      MinHeight="24"
+                                                      ColumnDefinitions="28,*,54,58,70"
+                                                      ToolTipService.ToolTip="{Binding RowToolTip}">
+                                                    <TextBlock Text="{Binding StepNumberText}"
+                                                               FontFamily="Consolas"
+                                                               Style="{StaticResource CompactCellTextStyle}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding CommandText}"
+                                                               FontFamily="Consolas"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Style="{StaticResource CompactCellTextStyle}" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding LineEndingText}"
+                                                               Style="{StaticResource CompactCellTextStyle}"
+                                                               ToolTipService.ToolTip="{Binding LineEndingHelpText}" />
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding DelayText}"
+                                                               HorizontalAlignment="Right"
+                                                               Style="{StaticResource CompactCellTextStyle}" />
+                                                    <StackPanel Grid.Column="4"
+                                                                Orientation="Horizontal"
+                                                                Spacing="2"
+                                                                VerticalAlignment="Center">
+                                                        <Button Content="Edit"
+                                                                Style="{StaticResource RuleActionButtonStyle}"
+                                                                Click="EditCommandSequenceStepRow_Click"
+                                                                ToolTipService.ToolTip="Edit step" />
+                                                        <Button Content="Del"
+                                                                Style="{StaticResource RuleActionButtonStyle}"
+                                                                Click="DeleteCommandSequenceStepRow_Click"
+                                                                ToolTipService.ToolTip="Delete step" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Rules"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Rules">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              RowDefinitions="Auto,*">
+                            <Border Grid.Row="0"
+                                    Style="{StaticResource InspectorSectionBorderStyle}"
+                                    BorderThickness="0"
+                                    Padding="2,0"
+                                    MinHeight="24">
+                                <Grid ColumnSpacing="4"
+                                      ColumnDefinitions="*,Auto">
+                                    <TextBlock Text="Log Rules"
+                                               Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                    <Button Grid.Column="1"
+                                            Content="+"
+                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            Click="AddLogRule_Click"
+                                            ToolTipService.ToolTip="Add log rule" />
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Row="1"
+                                    Style="{StaticResource InspectorSectionBorderStyle}"
+                                    Padding="0"
+                                    MinHeight="0">
+                                <ScrollViewer x:Name="RulesTableScrollViewer"
+                                              HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollBarVisibility="Disabled"
+                                              HorizontalScrollMode="Enabled"
+                                              VerticalScrollMode="Disabled"
+                                              IsHorizontalRailEnabled="True"
+                                              MinHeight="0">
+                                    <Grid MinWidth="728"
+                                          Height="{Binding ActualHeight, ElementName=RulesTableScrollViewer}"
+                                          RowDefinitions="Auto,*"
+                                          MinHeight="0">
+                                        <Border Grid.Row="0"
+                                                BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="2,0,0,1"
+                                                MinHeight="22">
+                                            <Grid ColumnSpacing="2"
+                                                  MinWidth="708"
+                                                  MinHeight="22"
+                                                  ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,76">
+                                                <TextBlock Text="En"
+                                                           Style="{StaticResource RuleHeaderTextStyle}"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="Event"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="Highlight"
+                                                           Style="{StaticResource RuleHeaderTextStyle}"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Grid.Column="3"
+                                                           Text="Filter"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="4"
+                                                           Text="Name"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="5"
+                                                           Text="Keyword"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="6"
+                                                           Text="Match"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="7"
+                                                           Text="Direction"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="8"
+                                                           Text="Case"
+                                                           Style="{StaticResource RuleHeaderTextStyle}"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Grid.Column="9"
+                                                           Text="Color"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="10"
+                                                           Text="Actions"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                            </Grid>
+                                        </Border>
+
+                                        <ListView x:Name="LogRuleListView"
+                                                  Grid.Row="1"
+                                                  ItemsSource="{Binding LogRules}"
+                                                  SelectedItem="{Binding SelectedLogRule, Mode=TwoWay}"
+                                                  SelectionMode="Single"
+                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                  ScrollViewer.VerticalScrollMode="Enabled"
+                                                  MinHeight="0">
+                                            <ListView.ItemContainerStyle>
+                                                <Style TargetType="ListViewItem"
+                                                       BasedOn="{StaticResource CompactListViewItemStyle}">
+                                                    <Setter Property="Padding"
+                                                            Value="2,0" />
+                                                </Style>
+                                            </ListView.ItemContainerStyle>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnSpacing="2"
+                                                          HorizontalAlignment="Stretch"
+                                                          MinWidth="708"
+                                                          MinHeight="22"
+                                                          ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,76">
+                                                        <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                                  Style="{StaticResource RuleCheckBoxStyle}"
+                                                                  Tag="Enabled"
+                                                                  Checked="LogRuleInlineChanged"
+                                                                  Unchecked="LogRuleInlineChanged" />
+                                                        <CheckBox Grid.Column="1"
+                                                                  IsChecked="{Binding UseForEvent, Mode=TwoWay}"
+                                                                  Style="{StaticResource RuleCheckBoxStyle}"
+                                                                  Tag="Event"
+                                                                  Checked="LogRuleInlineChanged"
+                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  ToolTipService.ToolTip="Event: add matching lines to Events" />
+                                                        <CheckBox Grid.Column="2"
+                                                                  IsChecked="{Binding UseForHighlight, Mode=TwoWay}"
+                                                                  Style="{StaticResource RuleCheckBoxStyle}"
+                                                                  Tag="Highlight"
+                                                                  Checked="LogRuleInlineChanged"
+                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  ToolTipService.ToolTip="Highlight: color matching lines in the log view" />
+                                                        <CheckBox Grid.Column="3"
+                                                                  IsChecked="{Binding UseAsViewFilter, Mode=TwoWay}"
+                                                                  Style="{StaticResource RuleCheckBoxStyle}"
+                                                                  Tag="Filter"
+                                                                  Checked="LogRuleInlineChanged"
+                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  ToolTipService.ToolTip="Filter: make this rule available in the Filter dropdown" />
+                                                        <TextBlock Grid.Column="4"
+                                                                   Text="{Binding Name}"
+                                                                   Style="{StaticResource RuleCellTextStyle}" />
+                                                        <TextBlock Grid.Column="5"
+                                                                   Text="{Binding Keyword}"
+                                                                   FontFamily="Consolas"
+                                                                   Style="{StaticResource RuleCellTextStyle}" />
+                                                        <TextBlock Grid.Column="6"
+                                                                   Text="{Binding MatchMode, Converter={StaticResource DisplayModeNameConverter}}"
+                                                                   Style="{StaticResource RuleCellTextStyle}"
+                                                                   ToolTipService.ToolTip="Text matches decoded text. HEX matches raw bytes." />
+                                                        <TextBlock Grid.Column="7"
+                                                                   Text="{Binding MatchDirection}"
+                                                                   Style="{StaticResource RuleCellTextStyle}" />
+                                                        <CheckBox Grid.Column="8"
+                                                                  IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
+                                                                  Style="{StaticResource RuleCheckBoxStyle}"
+                                                                  Tag="Case"
+                                                                  Checked="LogRuleInlineChanged"
+                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  ToolTipService.ToolTip="Case-sensitive text matching. Ignored for HEX rules." />
+                                                        <Button Grid.Column="9"
+                                                                Width="56"
+                                                                Height="22"
+                                                                MinHeight="22"
+                                                                Padding="3,0"
+                                                                HorizontalAlignment="Left"
+                                                                Click="LogRuleColorButton_Click"
+                                                                ToolTipService.ToolTip="Color used when Highlight is enabled.">
+                                                            <Grid ColumnSpacing="3"
+                                                                  VerticalAlignment="Center">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="10" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Width="10"
+                                                                        Height="10"
+                                                                        CornerRadius="2"
+                                                                        BorderThickness="1"
+                                                                        BorderBrush="#FF767676"
+                                                                        Background="{Binding ForegroundColor, Converter={StaticResource HighlightColorBrushConverter}}"
+                                                                        VerticalAlignment="Center" />
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{Binding ForegroundColor}"
+                                                                           FontSize="10"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           VerticalAlignment="Center" />
+                                                            </Grid>
+                                                        </Button>
+                                                        <StackPanel Grid.Column="10"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="2"
+                                                                    VerticalAlignment="Center">
+                                                            <Button Content="Edit"
+                                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                                    Click="EditLogRuleRow_Click"
+                                                                    ToolTipService.ToolTip="Edit log rule" />
+                                                            <Button Content="Del"
+                                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                                    Click="DeleteLogRuleRow_Click"
+                                                                    ToolTipService.ToolTip="Delete log rule" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </Grid>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Settings"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Settings">
+                        <ScrollViewer Padding="0,2,0,0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="3">
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Serial"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Serial changes apply on reconnect except TX ending."
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       ToolTipService.ToolTip="Port, baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. TX ending applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Baud"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding BaudRates}"
+                                                      SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="104"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Data bits"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding DataBitOptions}"
+                                                      SelectedItem="{Binding SelectedDataBits, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="72"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Parity"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding ParityModes}"
+                                                      SelectedItem="{Binding SelectedParity, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="120"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Stop bits"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding StopBitsModes}"
+                                                      SelectedItem="{Binding SelectedStopBits, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="120"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Handshake"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding HandshakeModes}"
+                                                      SelectedItem="{Binding SelectedHandshake, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="142"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Lines"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8">
+                                                <CheckBox Content="DTR"
+                                                          IsChecked="{Binding DtrEnable, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanEditConnectionSettings}" />
+                                                <CheckBox Content="RTS"
+                                                          IsChecked="{Binding RtsEnable, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanEditConnectionSettings}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="RX ending"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding RxLineEndingModes}"
+                                                      SelectedItem="{Binding SelectedRxLineEnding, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="104"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="TX ending"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding TxLineEndingModes}"
+                                                      SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
+                                                      Width="104"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Encoding"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding RxEncodingModes}"
+                                                      SelectedItem="{Binding SelectedRxEncoding, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      Width="120"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Disconnect"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Confirm before disconnect"
+                                                      IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to manual Disconnect clicks." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Log"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Actions and current paths"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Actions"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ScrollViewer Grid.Column="1"
+                                                          HorizontalScrollBarVisibility="Auto"
+                                                          VerticalScrollBarVisibility="Disabled">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Spacing="4">
+                                                    <Button Content="Serial"
+                                                            Command="{Binding OpenCurrentSerialLogCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open current serial log" />
+                                                    <Button Content="Event"
+                                                            Command="{Binding OpenCurrentEventLogCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open current event log" />
+                                                    <Button Content="Folder"
+                                                            Command="{Binding OpenLogFolderCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open logs folder" />
+                                                    <Button Content="Copy S"
+                                                            Command="{Binding CopySerialLogPathCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Copy serial log path" />
+                                                    <Button Content="Copy E"
+                                                            Command="{Binding CopyEventLogPathCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Copy event log path" />
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Log save"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="{Binding FileLoggingMainStatusText}"
+                                                      IsChecked="{Binding FileLoggingEnabled, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal live but does not save new serial/event logs." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Save dir"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="4">
+                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditConnectionSettings}"
+                                                         HorizontalAlignment="Stretch"
+                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
+                                                <Button Grid.Column="1"
+                                                        Content="Browse"
+                                                        Click="BrowseLogFolder_Click"
+                                                        IsEnabled="{Binding CanEditConnectionSettings}"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        ToolTipService.ToolTip="Browse log folder" />
+                                            </Grid>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Session"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                <TextBox Text="{Binding SessionName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         Width="150"
+                                                         PlaceholderText="optional session"
+                                                         ToolTipService.ToolTip="Session label. Used for MARK lines and profile restore." />
+                                                <Button Content="Set"
+                                                        Command="{Binding SetSessionCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        ToolTipService.ToolTip="Set session and insert session start marker" />
+                                                <Button Content="End"
+                                                        Command="{Binding EndSessionCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        ToolTipService.ToolTip="End session and insert session end marker" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately by writing MARK lines when connected." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Current"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentSessionDisplayText}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastSessionAction}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Session file"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Use session name in log file name"
+                                                      IsChecked="{Binding UseSessionNameInFileName, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Use session name in new serial/event log filenames when a session is active." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies to the next log file immediately. If connected, a new file is requested on the next write." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Daily"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Daily rotation"
+                                                      IsChecked="{Binding DailyRotationEnabled, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Profile"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Saved to profile but not live-applied." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Size"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="6">
+                                                <CheckBox Content="Size rotation"
+                                                          IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanEditConnectionSettings}" />
+                                                <TextBox Text="{Binding SizeRotationBytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         PlaceholderText="bytes"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditSizeRotationBytes}"
+                                                         Width="82" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Raw binary"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Raw binary logging"
+                                                      IsChecked="{Binding RawBinaryLoggingEnabled, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      ToolTipService.ToolTip="Profile-only skeleton setting. It is saved but not live-applied yet." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Profile"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Saved to profile but not live-applied." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Serial log"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentSerialLogPath}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding CurrentSerialLogPath}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Event log"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentEventLogPath}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding CurrentEventLogPath}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Last action"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastLogFileActionStatus}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="UI / xterm"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Visual preferences"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Visible lines"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding VisibleLogLineCapOptions}"
+                                                      SelectedItem="{Binding MaxVisibleLogLines, Mode=TwoWay}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="102"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Controls in-app xterm scrollback, Search, Copy all visible, Copy since MARK, and Copy since TX capacity. 200,000 and 500,000 keep more logs but use more memory and can make re-render/search slower. Saved log files still keep all lines." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Scrollback"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBox Grid.Column="1"
+                                                     Text="{Binding XtermScrollbackSizeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     Style="{StaticResource CompactTextBoxStyle}"
+                                                     Width="92"
+                                                     HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to xterm scrollback. Effective scrollback is at least the visible line cap." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Auto-scroll"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="xterm auto-scroll"
+                                                      IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Applies immediately to xterm visual scrolling." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Timestamp"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Show timestamp in log view"
+                                                      IsChecked="{Binding ShowTimestampInLogView, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to newly displayed lines." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="RX view"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding RxDisplayModes}"
+                                                      SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                                                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="96"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Terminal shows RTOS shell text; HEX shows raw RX bytes." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately by re-rendering the retained visible buffer." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="TX mode"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding TxSendModes}"
+                                                      SelectedItem="{Binding SelectedTxSendMode, Mode=TwoWay}"
+                                                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="96"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Terminal sends text with the selected ending; HEX sends exact bytes and ignores TX ending." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies to the next TX send." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Fun"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Cute background mode"
+                                                      IsChecked="{Binding CuteBackgroundMode, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. Visual only." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,44,44,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Custom bg"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBox Grid.Column="1"
+                                                     Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     TextWrapping="NoWrap"
+                                                     ToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default." />
+                                            <Button Grid.Column="2"
+                                                    Content="..."
+                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Click="BrowseCuteBackgroundImage_Click"
+                                                    ToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
+                                            <Button Grid.Column="3"
+                                                    Content="Def"
+                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Command="{Binding ResetCuteBackgroundCommand}"
+                                                    ToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background." />
+                                            <TextBlock Grid.Column="4"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Bg opacity"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding CuteBackgroundOpacityOptions}"
+                                                      SelectedItem="{Binding CuteBackgroundOpacityText, Mode=TwoWay}"
+                                                      Width="72"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Higher values make the background more visible but may reduce readability." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Rules"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Live rule changes"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Apply"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Apply rules to new logs only"
+                                                      IsChecked="{Binding ApplyRulesToNewLogsOnly, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="When enabled, rule changes affect only new incoming logs. Existing visible logs are not reprocessed." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Default ON. If OFF, rule/filter changes may reprocess large visible buffers and can be slow." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Event context"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Future captures"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Before"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBox Grid.Column="1"
+                                                     Text="{Binding BeforeContextLinesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     Style="{StaticResource CompactTextBoxStyle}"
+                                                     Width="72"
+                                                     HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to future event captures." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="After"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBox Grid.Column="1"
+                                                     Text="{Binding AfterContextLinesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     Style="{StaticResource CompactTextBoxStyle}"
+                                                     Width="72"
+                                                     HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to future event captures." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Max events"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding VisibleEventCountOptions}"
+                                                      SelectedItem="{Binding MaxVisibleEventCount, Mode=TwoWay}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="92"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Limits retained visible Events rows. Lower values reduce UI memory and improve event-list performance." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. Options: 500, 1,000, 2,000, 5,000." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Mock/Test"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Mock generator"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       ToolTipService.ToolTip="Mock stress settings apply to the mock generator without touching real serial settings." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Test port"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Show MOCK test port"
+                                                      IsChecked="{Binding ShowMockTestPort, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Show the built-in MOCK port for testing without hardware." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Updates the port selector immediately. An active MOCK connection stays connected until disconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Pattern"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding MockGeneratorPatternOptions}"
+                                                      SelectedItem="{Binding SelectedMockGeneratorPatternOption, Mode=TwoWay}"
+                                                      Width="150"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Choose normal MOCK lines or a no-newline zzz stream for partial RX testing." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to the MOCK generator." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Lines/sec"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding MockStressLineRatePresets}"
+                                                      SelectedItem="{Binding SelectedMockStressLinesPerSecond, Mode=TwoWay}"
+                                                      Width="82"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Burst"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding MockStressBurstSizePresets}"
+                                                      SelectedItem="{Binding SelectedMockStressBurstSize, Mode=TwoWay}"
+                                                      Width="72"
+                                                      HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Inject"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8">
+                                                <CheckBox Content="Events"
+                                                          IsChecked="{Binding IsMockStressEventInjectionEnabled, Mode=TwoWay}" />
+                                                <CheckBox Content="Bad bytes"
+                                                          IsChecked="{Binding IsMockStressInvalidByteInjectionEnabled, Mode=TwoWay}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Stress"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                <Button Content="Start"
+                                                        Command="{Binding StartMockStressCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Stop"
+                                                        Command="{Binding StopMockStressCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Reset"
+                                                        Command="{Binding ResetMockStressCountersCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="CRLF"
+                                                        Command="{Binding SendMockCrlfCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        ToolTipService.ToolTip="MOCK only: send CRLF to finish the current no-newline partial RX line." />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Runs immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Status"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding MockStressStatusText}"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Profile"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Load/reset disabled while connected"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Actions"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                <Button Content="Save"
+                                                        Command="{Binding SaveProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Load"
+                                                        Command="{Binding LoadProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Reset"
+                                                        Command="{Binding ResetProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Profile actions run immediately when enabled." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Path"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentProfilePath}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding CurrentProfilePath}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Profile"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding ProfileStatusText}"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Last change"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastSettingsChange}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastSettingsChange}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Apply"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastSettingsApplyStatus}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Pending"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding SettingsPendingSummaryText}"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Error"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastSettingsApplyError}"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Diag"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Diagnostics">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              RowDefinitions="Auto,Auto,*">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="4">
+                                    <Button Content="Copy"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Command="{Binding CopyDiagnosticsCommand}"
+                                            ToolTipService.ToolTip="Copy diagnostics" />
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <Border Grid.Row="1"
+                                     BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                                     BorderThickness="1"
+                                     CornerRadius="3"
+                                     Padding="3"
+                                     MaxHeight="74">
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollBarVisibility="Disabled">
+                                    <TextBlock Text="{Binding DiagnosticsSummaryText, Mode=OneWay}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               TextWrapping="NoWrap" />
+                                </ScrollViewer>
+                            </Border>
+
+                            <TextBox Grid.Row="2"
+                                     Text="{Binding DiagnosticsText, Mode=OneWay}"
+                                     FontFamily="Consolas"
+                                     FontSize="12"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     TextWrapping="NoWrap"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Help"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Help / Guide">
+                        <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              RowDefinitions="Auto,*">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <Button Content="Copy"
+                                        Style="{StaticResource RuleActionButtonStyle}"
+                                        Command="{Binding CopyHelpCommand}"
+                                        ToolTipService.ToolTip="Copy help text" />
+                            </StackPanel>
+
+                            <TextBox Grid.Row="1"
+                                     Text="{Binding HelpGuideText, Mode=OneWay}"
+                                     FontFamily="Segoe UI"
+                                     FontSize="12"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        </Grid>
+                    </TabViewItem>
+                </TabView>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="3">
+            <Grid ColumnSpacing="4"
+                  ColumnDefinitions="Auto,*,Auto,96,Auto,82,Auto,Auto">
+                <TextBlock Text="TX"
+                           FontWeight="SemiBold"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <TextBox x:Name="CommandTextBox"
+                         Grid.Column="1"
+                         Text="{Binding Commands.CurrentCommandText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         PlaceholderText="Command"
+                         Style="{StaticResource CompactTextBoxStyle}"
+                         AcceptsReturn="False"
+                         MinWidth="100"
+                         VerticalAlignment="Center"
+                         KeyDown="CommandTextBox_KeyDown" />
+                <TextBlock Grid.Column="2"
+                           Text="Mode"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="3"
+                          ItemsSource="{Binding TxSendModes}"
+                          SelectedItem="{Binding SelectedTxSendMode, Mode=TwoWay}"
+                          ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                          Width="96"
+                          ToolTipService.ToolTip="TX Mode: Terminal sends normal text, HEX sends exact bytes. In HEX mode enter bytes like 41 09 42 0D 0A." />
+                <TextBlock Grid.Column="4"
+                           Text="Ending"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="5"
+                          ItemsSource="{Binding TxLineEndingModes}"
+                          SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
+                          IsEnabled="{Binding IsTxLineEndingEffective}"
+                          ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
+                          MinWidth="78" />
+                <Button Grid.Column="6"
+                        Content="Send"
+                        Command="{Binding SendCommand}" />
+                <Button Grid.Column="7"
+                        Content="Hist"
+                        ToolTipService.ToolTip="Show recently sent TX commands">
+                    <Button.Flyout>
+                        <Flyout x:Name="CommandHistoryFlyout"
+                                Opening="CommandHistoryFlyout_Opening"
+                                Placement="TopEdgeAlignedRight">
+                            <StackPanel Spacing="5"
+                                        MinWidth="340"
+                                        MaxWidth="420">
+                                <Grid ColumnDefinitions="*,Auto,Auto"
+                                      ColumnSpacing="4">
+                                    <TextBlock Text="History"
+                                               Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                    <Button Grid.Column="1"
+                                            Content="Send"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="SendSelectedHistoryCommand_Click"
+                                            ToolTipService.ToolTip="Send selected history command" />
+                                    <Button Grid.Column="2"
+                                            Content="Clear"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="ClearCommandHistory_Click"
+                                            ToolTipService.ToolTip="Clear command history" />
+                                </Grid>
+                                <TextBlock x:Name="CommandHistoryEmptyText"
+                                           Text="No command history."
+                                           Style="{StaticResource CompactCellTextStyle}" />
+                                <ListView x:Name="CommandHistoryListView"
+                                          ItemsSource="{Binding Commands.CommandHistory}"
+                                          SelectionMode="Single"
+                                          IsItemClickEnabled="True"
+                                          ItemClick="CommandHistoryListView_ItemClick"
+                                          DoubleTapped="CommandHistoryListView_DoubleTapped"
+                                          KeyDown="CommandHistoryListView_KeyDown"
+                                          MaxHeight="240">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem"
+                                               BasedOn="{StaticResource CompactListViewItemStyle}" />
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="*,42,58"
+                                                  ColumnSpacing="6"
+                                                  MinHeight="24">
+                                                <TextBlock Text="{Binding CommandText}"
+                                                           FontFamily="Consolas"
+                                                           Style="{StaticResource CompactCellTextStyle}" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding CountText}"
+                                                           Style="{StaticResource CompactCellTextStyle}"
+                                                           HorizontalAlignment="Right" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding LastSentTimeText}"
+                                                           Style="{StaticResource CompactCellTextStyle}"
+                                                           HorizontalAlignment="Right" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="3"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="3">
+            <Grid ColumnSpacing="4"
+                  ColumnDefinitions="Auto,120,Auto,Auto,Auto,Auto,*">
+                <TextBlock Text="Saved"
+                           FontWeight="SemiBold"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding Commands.SavedCommands}"
+                          SelectedItem="{Binding SelectedSavedCommand, Mode=TwoWay}"
+                          DisplayMemberPath="Name"
+                          MinWidth="100"
+                          HorizontalAlignment="Stretch" />
+                <Button Grid.Column="2"
+                        Content="+"
+                        Style="{StaticResource ToolbarIconButtonStyle}"
+                        Click="AddSavedCommand_Click"
+                        ToolTipService.ToolTip="Add saved command" />
+                <Button Grid.Column="3"
+                        Content="Edit"
+                        IsEnabled="{Binding HasSelectedSavedCommand}"
+                        Click="EditSavedCommand_Click"
+                        ToolTipService.ToolTip="Edit selected saved command" />
+                <Button Grid.Column="4"
+                        Content="Del"
+                        IsEnabled="{Binding HasSelectedSavedCommand}"
+                        Click="DeleteSavedCommand_Click"
+                        ToolTipService.ToolTip="Delete selected saved command" />
+
+                <Border Grid.Column="5"
+                        Width="1"
+                        Margin="2,1"
+                        Background="{ThemeResource SystemControlForegroundBaseLowBrush}" />
+
+                <ScrollViewer Grid.Column="6"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="5">
+                        <TextBlock Text="Quick"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   VerticalAlignment="Center" />
+                        <ItemsControl ItemsSource="{Binding Commands.SavedCommands}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Name}"
+                                            Style="{StaticResource SavedCommandChipButtonStyle}"
+                                            Command="{Binding DataContext.SendSavedCommandCommand, ElementName=Root}"
+                                            CommandParameter="{Binding}"
+                                            ToolTipService.ToolTip="{Binding SendToolTip}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="4"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="2">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
+                <TextBlock Text="{Binding FooterStatusText}"
+                           FontSize="11"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>
