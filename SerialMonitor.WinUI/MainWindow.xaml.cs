@@ -120,6 +120,7 @@ public sealed partial class MainWindow : Window
             new LogPipeline(new EncodingDecoder(), new LineParser()),
             new FileLogWriter(),
             new EventDetector(),
+            new SerialBridgeService(),
             new ProfileService(),
             dispatcherQueue);
 

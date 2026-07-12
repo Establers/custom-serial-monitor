@@ -33,6 +33,25 @@ real hardware when available.
 - [ ] Disconnect and reconnect.
 - [ ] Confirm no app crash or stale connection state.
 
+## Bidirectional COM Bridge
+
+- [ ] Create a com0com pair such as `COM10 <-> COM11`.
+- [ ] Connect Serial Monitor to the real device COM port.
+- [ ] Open the Bridge tab and select `COM10` as the app-side virtual port.
+- [ ] Start the bridge and confirm `BRIDGE ON` appears in both the top and bottom status areas.
+- [ ] Open an external controller or analyzer on `COM11`, not `COM10`.
+- [ ] Confirm real-device RX bytes arrive unchanged at the external program.
+- [ ] Send binary/HEX data from the external program and confirm the exact bytes reach the device.
+- [ ] Confirm virtual-to-device traffic appears as `[BRIDGE]` TX in the app log.
+- [ ] Change RX encoding and Terminal/HEX display modes; confirm forwarded bytes remain unchanged.
+- [ ] Pause rendering and minimize the app while sending sustained virtual-to-device traffic; confirm the device continues receiving without bridge transport drops.
+- [ ] If the UI-only bridge log queue is forced to overflow, confirm only its UI drop counter increases while transport byte counts continue.
+- [ ] While Bridge is OFF, confirm Diagnostics reports raw bridge priority OFF and the normal awaited RX pipeline remains active.
+- [ ] While Bridge is ON, force parser/UI overload and confirm raw bridge traffic continues while only the bridge-priority parser/log drop counter increases.
+- [ ] Stop the external program temporarily and confirm bridge backlog/drop/error counters remain bounded and visible.
+- [ ] Stop the bridge and confirm the `BRIDGE ON` indicators disappear.
+- [ ] Disconnect the device and confirm the bridge stops before the device port closes.
+
 ## Xterm Log View
 
 - [ ] Confirm xterm log lines append smoothly.

@@ -18,6 +18,8 @@ public sealed class AppProfile
 
     public EventContextSettings EventContextSettings { get; set; } = new();
 
+    public BridgeSettings BridgeSettings { get; set; } = new();
+
     public List<LogRule> LogRules { get; set; } = new();
 
     public List<EventRule> EventRules { get; set; } = new();

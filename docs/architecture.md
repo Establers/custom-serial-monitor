@@ -16,6 +16,14 @@ SerialService
        -> bounded/batched UI renderer -> WebView2/xterm.js
        -> bounded FileLogWriter queue -> serial log files
        -> bounded EventDetector queue -> event/context channels and files
+
+SerialService raw RX notification
+  -> bounded SerialBridgeService queue
+  -> app-side virtual COM port
+
+app-side virtual COM RX
+  -> SerialBridgeService
+  -> SerialService raw TX
 ```
 
 TX commands and user markers join the flow after parsing as `LogLine` objects.
@@ -32,6 +40,10 @@ the xterm view only; persisted logs remain plain text.
   flush, and file-write counters behind a bounded queue.
 - `EventDetector` owns rule evaluation, before/after context capture, bounded
   pending captures, and asynchronous event-log persistence.
+- `SerialBridgeService` owns the optional second COM port and forwards raw byte
+  chunks in both directions through independent bounded queues. Neither receive
+  loop writes the opposite port directly; dedicated writers expose backlog,
+  drop, byte, chunk, and error counters.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
 - `MainViewModel` coordinates lifecycle and fans parsed lines out to downstream
   components. It currently also contains search, profile application, command,
@@ -46,6 +58,16 @@ the xterm view only; persisted logs remain plain text.
   disk work.
 - Cross-component queues and channels are bounded. Non-blocking handoffs expose
   drop counters so overload is diagnosable.
+- The optional bridge is a raw-byte side path. RX encoding, line framing,
+  display mode, filtering, and highlighting never transform bridged packets.
+- Raw bridge priority mode exists only while a bridge is active. In normal
+  operation, SerialService retains its original awaited/lossless handoff to the
+  parser. While bridging, raw bytes are offered to the bridge first and the
+  parser handoff becomes non-blocking; parser/log overload is counted and may
+  drop parser chunks rather than stall raw bridge transport.
+- Virtual-to-device completion never waits for UI rendering. Its optional TX
+  display record enters a separate bounded UI-only queue; saturation drops and
+  counts only that visual record while raw transport continues.
 - UI work is marshalled through the WinUI dispatcher and appended in batches.
 - Visible logs and events are bounded; complete history belongs on disk.
 - Long-running workers accept cancellation and catch/report non-cancellation

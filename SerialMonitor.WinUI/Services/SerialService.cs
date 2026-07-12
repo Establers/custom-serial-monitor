@@ -20,6 +20,9 @@ public sealed class SerialService : ISerialService
     private long _receivedChunkCount;
     private long _writtenByteCount;
     private long _connectionErrorCount;
+    private int _rawBridgePriorityEnabled;
+    private long _bridgePriorityDroppedPipelineByteCount;
+    private long _bridgePriorityDroppedPipelineChunkCount;
     private long _mockGeneratedLineCount;
     private long _mockLastGeneratedSequence;
     private long _mockNoNewlineEmittedBytes;
@@ -35,6 +38,8 @@ public sealed class SerialService : ISerialService
     public event EventHandler<string>? Error;
 
     public event EventHandler? StatusChanged;
+
+    public event Action<byte[]>? RawBytesReceived;
 
     public bool IsConnected => ConnectionState == SerialConnectionState.Connected;
 
@@ -67,6 +72,12 @@ public sealed class SerialService : ISerialService
     public long WrittenByteCount => Interlocked.Read(ref _writtenByteCount);
 
     public long ConnectionErrorCount => Interlocked.Read(ref _connectionErrorCount);
+
+    public bool IsRawBridgePriorityEnabled => Volatile.Read(ref _rawBridgePriorityEnabled) != 0;
+
+    public long BridgePriorityDroppedPipelineByteCount => Interlocked.Read(ref _bridgePriorityDroppedPipelineByteCount);
+
+    public long BridgePriorityDroppedPipelineChunkCount => Interlocked.Read(ref _bridgePriorityDroppedPipelineChunkCount);
 
     public ChannelReader<byte[]> ReceivedBytes => _receivedBytes.Reader;
 
@@ -167,6 +178,10 @@ public sealed class SerialService : ISerialService
 
             await StopCurrentConnectionAsync(CancellationToken.None, publishDisconnected: false);
 
+            Volatile.Write(ref _rawBridgePriorityEnabled, 0);
+            Interlocked.Exchange(ref _bridgePriorityDroppedPipelineByteCount, 0);
+            Interlocked.Exchange(ref _bridgePriorityDroppedPipelineChunkCount, 0);
+
             _receivedBytes = CreateChannel();
             _receiveCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             SetConnectionState(SerialConnectionState.Connecting, clearLastError: true);
@@ -263,7 +278,8 @@ public sealed class SerialService : ISerialService
             var serialPort = _serialPort;
             if (serialPort is null)
             {
-                await _receivedBytes.Writer.WriteAsync(Encoding.UTF8.GetBytes(mockResponse), cancellationToken);
+                var responseBytes = Encoding.UTF8.GetBytes(mockResponse);
+                await PublishReceivedBytesAsync(responseBytes, cancellationToken, countReceived: false);
                 AddWrittenBytes(payload.Length);
                 return;
             }
@@ -367,8 +383,7 @@ public sealed class SerialService : ISerialService
         }
 
         var bytes = Encoding.UTF8.GetBytes("\r\n");
-        await _receivedBytes.Writer.WriteAsync(bytes, cancellationToken);
-        AddReceivedChunk(bytes.Length);
+        await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
     }
 
     private async Task StopCurrentConnectionAsync(CancellationToken cancellationToken, bool publishDisconnected)
@@ -394,6 +409,7 @@ public sealed class SerialService : ISerialService
         _receiveTask = null;
         _serialPort = null;
         _isMockConnection = false;
+        Volatile.Write(ref _rawBridgePriorityEnabled, 0);
         StopMockStress();
 
         try
@@ -442,8 +458,7 @@ public sealed class SerialService : ISerialService
 
                 var chunk = new byte[bytesRead];
                 Buffer.BlockCopy(buffer, 0, chunk, 0, bytesRead);
-                await _receivedBytes.Writer.WriteAsync(chunk, cancellationToken);
-                AddReceivedChunk(bytesRead);
+                await PublishReceivedBytesAsync(chunk, cancellationToken, countReceived: true);
             }
         }
         catch (OperationCanceledException)
@@ -482,8 +497,7 @@ public sealed class SerialService : ISerialService
                 if (!IsMockStressRunning)
                 {
                     var bytes = Encoding.UTF8.GetBytes(CreateMockMessage(counter, settings));
-                    await _receivedBytes.Writer.WriteAsync(bytes, cancellationToken);
-                    AddReceivedChunk(bytes.Length);
+                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
                     counter++;
                     await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
                     continue;
@@ -493,8 +507,7 @@ public sealed class SerialService : ISerialService
                 if (pattern is MockGeneratorPattern.NoNewlineZzz or MockGeneratorPattern.NoNewlineZzzBurst)
                 {
                     var bytes = CreateMockNoNewlineChunk(pattern);
-                    await _receivedBytes.Writer.WriteAsync(bytes, cancellationToken);
-                    AddReceivedChunk(bytes.Length);
+                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
                     var delay = pattern == MockGeneratorPattern.NoNewlineZzzBurst
                         ? TimeSpan.FromMilliseconds(100)
                         : TimeSpan.FromMilliseconds(50);
@@ -503,8 +516,7 @@ public sealed class SerialService : ISerialService
                 }
 
                 var stressBytes = CreateMockStressChunk();
-                await _receivedBytes.Writer.WriteAsync(stressBytes, cancellationToken);
-                AddReceivedChunk(stressBytes.Length);
+                await PublishReceivedBytesAsync(stressBytes, cancellationToken, countReceived: true);
 
                 var linesPerSecond = Math.Max(1, MockStressLinesPerSecond);
                 var burstSize = Math.Max(1, MockStressBurstSize);
@@ -600,6 +612,50 @@ public sealed class SerialService : ISerialService
         if (chunks == 1 || chunks % 16 == 0)
         {
             RaiseStatusChanged();
+        }
+    }
+
+    public void SetRawBridgePriorityEnabled(bool enabled)
+    {
+        Volatile.Write(ref _rawBridgePriorityEnabled, enabled ? 1 : 0);
+        RaiseStatusChanged();
+    }
+
+    private async ValueTask PublishReceivedBytesAsync(
+        byte[] bytes,
+        CancellationToken cancellationToken,
+        bool countReceived)
+    {
+        if (IsRawBridgePriorityEnabled)
+        {
+            PublishRawBytesReceived(bytes);
+            if (!_receivedBytes.Writer.TryWrite(bytes))
+            {
+                Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
+                Interlocked.Increment(ref _bridgePriorityDroppedPipelineChunkCount);
+                RaiseStatusChanged();
+            }
+        }
+        else
+        {
+            await _receivedBytes.Writer.WriteAsync(bytes, cancellationToken);
+        }
+
+        if (countReceived)
+        {
+            AddReceivedChunk(bytes.Length);
+        }
+    }
+
+    private void PublishRawBytesReceived(byte[] bytes)
+    {
+        try
+        {
+            RawBytesReceived?.Invoke(bytes);
+        }
+        catch (Exception ex)
+        {
+            ReportError($"Raw RX observer failed: {ex.Message}", countConnectionError: false);
         }
     }
 

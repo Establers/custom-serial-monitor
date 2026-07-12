@@ -9,6 +9,8 @@ public interface ISerialService : IAsyncDisposable
 
     event EventHandler? StatusChanged;
 
+    event Action<byte[]>? RawBytesReceived;
+
     bool IsConnected { get; }
 
     SerialConnectionState ConnectionState { get; }
@@ -22,6 +24,12 @@ public interface ISerialService : IAsyncDisposable
     long WrittenByteCount { get; }
 
     long ConnectionErrorCount { get; }
+
+    bool IsRawBridgePriorityEnabled { get; }
+
+    long BridgePriorityDroppedPipelineByteCount { get; }
+
+    long BridgePriorityDroppedPipelineChunkCount { get; }
 
     ChannelReader<byte[]> ReceivedBytes { get; }
 
@@ -71,4 +79,6 @@ public interface ISerialService : IAsyncDisposable
     void ResetMockStressCounters();
 
     Task SendMockCrlfAsync(CancellationToken cancellationToken);
+
+    void SetRawBridgePriorityEnabled(bool enabled);
 }

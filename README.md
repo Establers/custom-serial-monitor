@@ -10,6 +10,8 @@ marketing-style UI.
 ## Key Features
 
 - Real serial I/O through `RJCP.SerialPortStream`.
+- Optional bidirectional raw-byte bridge between the connected device COM port
+  and an app-side virtual COM port such as one endpoint of a com0com pair.
 - Local WebView2/xterm.js main log view with selectable terminal-style text.
 - Manual TX command sending with configurable line endings.
 - Saved TX commands with add/edit/delete, quick-send buttons, and shortcuts.

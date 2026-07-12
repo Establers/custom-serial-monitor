@@ -113,6 +113,7 @@ public sealed class ProfileService : IProfileService
             LogSettings = logSettings,
             UiSettings = new UiSettings(),
             EventContextSettings = new EventContextSettings(),
+            BridgeSettings = new BridgeSettings(),
             LogRules = new List<LogRule>
             {
                 new()
@@ -437,6 +438,24 @@ public sealed class ProfileService : IProfileService
         }
 
         NormalizeEventContextSettings(profile.EventContextSettings, defaults.EventContextSettings, warnings);
+
+        if (profile.BridgeSettings is null)
+        {
+            profile.BridgeSettings = defaults.BridgeSettings.Clone();
+            warnings.Add("Bridge settings were missing.");
+        }
+        else
+        {
+            profile.BridgeSettings.VirtualPortName = profile.BridgeSettings.VirtualPortName?.Trim() ?? string.Empty;
+            if (string.Equals(
+                    profile.BridgeSettings.VirtualPortName,
+                    profile.SerialSettings.PortName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                profile.BridgeSettings.Enabled = false;
+                warnings.Add("Bridge was disabled because its virtual port matched the device port.");
+            }
+        }
 
         if (profile.EventRules is null)
         {

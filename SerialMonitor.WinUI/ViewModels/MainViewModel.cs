@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Threading.Channels;
 using Microsoft.UI.Dispatching;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
@@ -161,6 +162,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int EventUiMaxItemsPerTick = 250;
     private const int SmoothVisualAppendMaxLines = 40;
     private const int SmoothVisualAppendMaxChars = 32 * 1024;
+    private const int BridgeVisualLogQueueCapacity = 4_096;
     private const int DefaultVisibleLogLines = 50_000;
     private const int MinVisibleLogLines = 1_000;
     private const int MaxVisibleLogLinesLimit = 500_000;
@@ -193,6 +195,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly ILogPipeline _logPipeline;
     private readonly IFileLogWriter _fileLogWriter;
     private readonly IEventDetector _eventDetector;
+    private readonly ISerialBridgeService _bridgeService;
     private readonly IProfileService _profileService;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly UiBatchDispatcher<LogLine> _logBatchDispatcher;
@@ -202,6 +205,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly object _eventNotificationGate = new();
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
+    private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
+    private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _visualLogEnqueueGate = new(1, 1);
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
@@ -209,6 +214,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private CancellationTokenSource? _connectionCancellation;
     private Task? _observeLogsTask;
     private Task? _observeEventsTask;
+    private Task? _observeBridgeVisualLogsTask;
     private Task? _observeEventContextsTask;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
@@ -222,6 +228,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _isAutoScrollEnabled = true;
     private bool _isXtermReady;
     private SerialSettings _currentSerialSettings = new();
+    private BridgeSettings _currentBridgeSettings = new();
+    private string? _selectedBridgePort;
     private SerialSettings? _lastSuccessfulSerialSettings;
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
@@ -505,6 +513,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _resourceSnapshotError = string.Empty;
     private long _eventNotificationBatchCount;
     private long _eventNotificationEventCount;
+    private long _bridgeVisualLogDroppedCount;
+    private int _bridgeVisualLogPendingCount;
     private int _shutdownStarted;
     private string _lastShutdownStartTimeText = "(none)";
     private string _lastShutdownCompletedTimeText = "(none)";
@@ -592,6 +602,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ILogPipeline logPipeline,
         IFileLogWriter fileLogWriter,
         IEventDetector eventDetector,
+        ISerialBridgeService bridgeService,
         IProfileService profileService,
         DispatcherQueue dispatcherQueue)
     {
@@ -599,6 +610,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _logPipeline = logPipeline;
         _fileLogWriter = fileLogWriter;
         _eventDetector = eventDetector;
+        _bridgeService = bridgeService;
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
 
@@ -663,6 +675,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         StopCommandSequenceCommand = new AsyncRelayCommand(StopCommandSequenceAsync, () => IsSequenceRunning);
         SetSessionCommand = new AsyncRelayCommand(SetSessionAsync, () => IsConnected && !IsBusy);
         EndSessionCommand = new AsyncRelayCommand(EndSessionAsync, () => IsConnected && !IsBusy && !string.IsNullOrWhiteSpace(CurrentSessionName));
+        RefreshBridgePortsCommand = new AsyncRelayCommand(RefreshBridgePortsAsync);
+        StartBridgeCommand = new AsyncRelayCommand(StartBridgeAsync, () => CanStartBridge);
+        StopBridgeCommand = new AsyncRelayCommand(StopBridgeAsync, () => CanStopBridge);
 
         ApplyProfile(profile);
 
@@ -692,6 +707,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _fileLogWriter.StatusChanged += OnFileLogStatusChanged;
         _eventDetector.Error += OnBackgroundError;
         _eventDetector.StatusChanged += OnEventDetectorStatusChanged;
+        _serialService.RawBytesReceived += OnRawBytesReceived;
+        _bridgeService.Error += OnBackgroundError;
+        _bridgeService.StatusChanged += OnBridgeStatusChanged;
+        _observeBridgeVisualLogsTask = Task.Run(
+            () => ObserveBridgeVisualLogsAsync(_bridgeVisualLogCancellation.Token),
+            CancellationToken.None);
 
         _diagnosticsTimer = dispatcherQueue.CreateTimer();
         _diagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
@@ -710,6 +731,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public event EventHandler<EventNotificationRequest>? EventNotificationRequested;
 
     public ObservableCollection<string> PortNames { get; } = new();
+
+    public ObservableCollection<string> BridgePortNames { get; } = new();
 
     public ObservableCollection<int> BaudRates { get; } = new()
     {
@@ -1152,6 +1175,121 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public AsyncRelayCommand EndSessionCommand { get; }
 
+    public AsyncRelayCommand RefreshBridgePortsCommand { get; }
+
+    public AsyncRelayCommand StartBridgeCommand { get; }
+
+    public AsyncRelayCommand StopBridgeCommand { get; }
+
+    public string? SelectedBridgePort
+    {
+        get => _selectedBridgePort;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (SetProperty(ref _selectedBridgePort, normalized))
+            {
+                _currentBridgeSettings.VirtualPortName = normalized ?? string.Empty;
+                NotifyBridgePropertiesChanged();
+            }
+        }
+    }
+
+    public bool BridgeRequestedEnabled => _currentBridgeSettings.Enabled;
+
+    public bool IsBridgeActive => _bridgeService.IsRunning;
+
+    public bool CanEditBridgePort => !IsBridgeActive && !IsBusy;
+
+    public bool CanStartBridge =>
+        IsConnected &&
+        !IsBusy &&
+        !IsBridgeActive &&
+        !string.IsNullOrWhiteSpace(SelectedBridgePort) &&
+        !string.Equals(
+            GetActualPortName(SelectedPort),
+            SelectedBridgePort,
+            StringComparison.OrdinalIgnoreCase);
+
+    public bool CanStopBridge => IsBridgeActive;
+
+    public string BridgeStateText => IsBridgeActive
+        ? "BRIDGE ON"
+        : BridgeRequestedEnabled
+            ? "BRIDGE ARMED"
+            : "BRIDGE OFF";
+
+    public string BridgeIndicatorText => IsBridgeActive
+        ? $"BRIDGE ON {GetActualPortName(SelectedPort) ?? "?"} ↔ {_bridgeService.VirtualPortName}"
+        : string.Empty;
+
+    public string BridgeRouteText =>
+        $"{GetActualPortName(SelectedPort) ?? "(device not selected)"} ↔ {SelectedBridgePort ?? "(virtual port not selected)"}";
+
+    public string BridgeStatusText => IsBridgeActive
+        ? $"Bidirectional raw-byte bridge active: {BridgeRouteText}"
+        : BridgeRequestedEnabled
+            ? $"Bridge armed; it will start with the next device connection: {BridgeRouteText}"
+            : "Bridge is off.";
+
+    public long BridgeDeviceToVirtualByteCount => _bridgeService.DeviceToVirtualByteCount;
+
+    public long BridgeDeviceToVirtualChunkCount => _bridgeService.DeviceToVirtualChunkCount;
+
+    public long BridgeVirtualToDeviceByteCount => _bridgeService.VirtualToDeviceByteCount;
+
+    public long BridgeVirtualToDeviceChunkCount => _bridgeService.VirtualToDeviceChunkCount;
+
+    public long BridgeDroppedDeviceToVirtualByteCount => _bridgeService.DroppedDeviceToVirtualByteCount;
+
+    public long BridgeDroppedDeviceToVirtualChunkCount => _bridgeService.DroppedDeviceToVirtualChunkCount;
+
+    public long BridgeDroppedVirtualToDeviceByteCount => _bridgeService.DroppedVirtualToDeviceByteCount;
+
+    public long BridgeDroppedVirtualToDeviceChunkCount => _bridgeService.DroppedVirtualToDeviceChunkCount;
+
+    public long BridgeDroppedByteCount =>
+        BridgeDroppedDeviceToVirtualByteCount + BridgeDroppedVirtualToDeviceByteCount;
+
+    public long BridgeDroppedChunkCount =>
+        BridgeDroppedDeviceToVirtualChunkCount + BridgeDroppedVirtualToDeviceChunkCount;
+
+    public long BridgeErrorCount => _bridgeService.ErrorCount;
+
+    public int BridgePendingDeviceToVirtualChunkCount => _bridgeService.PendingDeviceToVirtualChunkCount;
+
+    public int BridgePendingVirtualToDeviceChunkCount => _bridgeService.PendingVirtualToDeviceChunkCount;
+
+    public int BridgePendingChunkCount =>
+        BridgePendingDeviceToVirtualChunkCount + BridgePendingVirtualToDeviceChunkCount;
+
+    public string BridgePendingText => $"Pending {BridgePendingChunkCount:N0}";
+
+    public string BridgeDroppedChunksText => $"Drop chunks {BridgeDroppedChunkCount:N0}";
+
+    public string BridgeDroppedBytesText => $"Drop bytes {BridgeDroppedByteCount:N0}";
+
+    public string BridgeErrorsText => $"Errors {BridgeErrorCount:N0}";
+
+    public int BridgeVisualLogPendingCount => Volatile.Read(ref _bridgeVisualLogPendingCount);
+
+    public long BridgeVisualLogDroppedCount => Interlocked.Read(ref _bridgeVisualLogDroppedCount);
+
+    public string BridgeVisualLogStatusText =>
+        $"UI log pending {BridgeVisualLogPendingCount:N0} / dropped {BridgeVisualLogDroppedCount:N0}";
+
+    public bool IsRawBridgePriorityEnabled => _serialService.IsRawBridgePriorityEnabled;
+
+    public long BridgePriorityDroppedPipelineByteCount => _serialService.BridgePriorityDroppedPipelineByteCount;
+
+    public long BridgePriorityDroppedPipelineChunkCount => _serialService.BridgePriorityDroppedPipelineChunkCount;
+
+    public string BridgePriorityPipelineStatusText => IsRawBridgePriorityEnabled
+        ? $"Raw bridge priority ON · parser/log drops {BridgePriorityDroppedPipelineChunkCount:N0} chunks / {BridgePriorityDroppedPipelineByteCount:N0} bytes"
+        : "Raw bridge priority OFF · normal lossless RX pipeline";
+
+    public string BridgeLastError => _bridgeService.LastError ?? string.Empty;
+
     public string? SelectedPort
     {
         get => _selectedPort;
@@ -1168,6 +1306,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
                 OnPropertyChanged(nameof(CurrentPortIsMock));
+                RefreshBridgePortOptionsFromCurrentPorts();
+                NotifyBridgePropertiesChanged();
                 NotifyConnectionSelectionCommandState();
             }
         }
@@ -2000,6 +2140,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
+                NotifyBridgePropertiesChanged();
             }
         }
     }
@@ -2016,6 +2157,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
+                NotifyBridgePropertiesChanged();
             }
         }
     }
@@ -3347,6 +3489,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * ERROR: 파일 드롭, 이벤트 드롭, xterm 오류, 시리얼 오류 같은 문제가 감지된 상태입니다.
         * 화면 로그가 최대 줄 수를 넘어 오래된 줄이 잘리는 것은 정상 동작이며 오류가 아닙니다.
 
+        COM Bridge
+
+        * Bridge는 실제 장비 COM과 선택한 가상 COM 사이에서 원본 바이트를 양방향 전달합니다.
+        * 외부 프로그램은 com0com 쌍의 반대편 포트를 열어야 합니다.
+        * RX 표시 형식, 인코딩, 필터, 줄바꿈 설정은 브리지 바이트를 변경하지 않습니다.
+        * Bridge ON은 상단과 하단 상태줄에 항상 표시됩니다.
+
         Settings
 
         * Now: 즉시 적용됩니다.
@@ -3600,6 +3749,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _eventNotificationCancellation.Cancel();
+        _bridgeVisualLogCancellation.Cancel();
+        _bridgeVisualLogQueue.Writer.TryComplete();
         _diagnosticsTimer.Stop();
         _diagnosticsTimer.Tick -= OnDiagnosticsTimerTick;
         await DisconnectAsync();
@@ -3612,6 +3763,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _fileLogWriter.StatusChanged -= OnFileLogStatusChanged;
         _eventDetector.Error -= OnBackgroundError;
         _eventDetector.StatusChanged -= OnEventDetectorStatusChanged;
+        _serialService.RawBytesReceived -= OnRawBytesReceived;
+        _bridgeService.Error -= OnBackgroundError;
+        _bridgeService.StatusChanged -= OnBridgeStatusChanged;
+        await _bridgeService.DisposeAsync();
+        if (_observeBridgeVisualLogsTask is not null)
+        {
+            try
+            {
+                await _observeBridgeVisualLogsTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
         await _serialService.DisposeAsync();
         await _fileLogWriter.DisposeAsync();
         await _eventDetector.DisposeAsync();
@@ -3619,6 +3784,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventBatchDispatcher.Dispose();
         _eventContextBatchDispatcher.Dispose();
         _eventNotificationCancellation.Dispose();
+        _bridgeVisualLogCancellation.Dispose();
         _connectionLifecycleGate.Dispose();
     }
 
@@ -3692,6 +3858,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 {
                     PortNames.Add(port);
                 }
+
+                RefreshBridgePortOptionsFromCurrentPorts();
+                NotifyBridgePropertiesChanged();
 
                 if (IsConnected)
                 {
@@ -4579,6 +4748,227 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await ConnectAsync();
     }
 
+    private async Task RefreshBridgePortsAsync()
+    {
+        try
+        {
+            var ports = await _serialService.GetAvailablePortsAsync(CancellationToken.None);
+            RunOnUiThread(() =>
+            {
+                var devicePort = GetActualPortName(SelectedPort);
+                var candidates = ports
+                    .Where(port => !string.IsNullOrWhiteSpace(port))
+                    .Select(port => port.Trim())
+                    .Where(port => !IsMockPortName(port))
+                    .Where(port => !string.Equals(port, devicePort, StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(port => port, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                BridgePortNames.Clear();
+                foreach (var port in candidates)
+                {
+                    BridgePortNames.Add(port);
+                }
+
+                if (!string.IsNullOrWhiteSpace(SelectedBridgePort) &&
+                    !BridgePortNames.Contains(SelectedBridgePort, StringComparer.OrdinalIgnoreCase))
+                {
+                    BridgePortNames.Add(SelectedBridgePort);
+                }
+
+                NotifyBridgePropertiesChanged();
+                SetStatus($"Bridge ports refreshed: {BridgePortNames.Count:N0} candidate(s).");
+            });
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Bridge port refresh failed: {ex.Message}");
+        }
+    }
+
+    private void RefreshBridgePortOptionsFromCurrentPorts()
+    {
+        var devicePort = GetActualPortName(SelectedPort);
+        var candidates = PortNames
+            .Select(GetActualPortName)
+            .Where(port => !string.IsNullOrWhiteSpace(port))
+            .Cast<string>()
+            .Where(port => !IsMockPortName(port))
+            .Where(port => !string.Equals(port, devicePort, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(port => port, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        BridgePortNames.Clear();
+        foreach (var port in candidates)
+        {
+            BridgePortNames.Add(port);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SelectedBridgePort) &&
+            !BridgePortNames.Contains(SelectedBridgePort, StringComparer.OrdinalIgnoreCase))
+        {
+            BridgePortNames.Add(SelectedBridgePort);
+        }
+    }
+
+    private async Task StartBridgeAsync()
+    {
+        _currentBridgeSettings.Enabled = true;
+        await StartBridgeCoreAsync();
+        NotifyBridgePropertiesChanged();
+    }
+
+    private async Task StartBridgeCoreAsync()
+    {
+        var devicePort = GetActualPortName(SelectedPort);
+        var virtualPort = SelectedBridgePort?.Trim();
+        if (!_serialService.IsConnected)
+        {
+            SetStatus("Connect the device COM port before starting the bridge.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(virtualPort))
+        {
+            SetStatus("Select the app-side virtual COM port.");
+            return;
+        }
+
+        if (string.Equals(devicePort, virtualPort, StringComparison.OrdinalIgnoreCase))
+        {
+            SetStatus("Bridge virtual port must be different from the device port.");
+            return;
+        }
+
+        try
+        {
+            await _bridgeService.StartAsync(
+                _currentBridgeSettings.Clone(),
+                CreateCurrentSettings(),
+                ForwardBridgeBytesToDeviceAsync,
+                _connectionCancellation?.Token ?? CancellationToken.None);
+            _serialService.SetRawBridgePriorityEnabled(true);
+            SetStatus($"Bidirectional raw bridge active: {devicePort} ↔ {virtualPort}");
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Bridge start canceled.");
+        }
+        catch (Exception ex)
+        {
+            _lastBackgroundError = $"Bridge start failed: {ex.Message}";
+            SetStatus(_lastBackgroundError);
+        }
+        finally
+        {
+            NotifyBridgePropertiesChanged();
+            RefreshDiagnostics();
+        }
+    }
+
+    private Task StopBridgeAsync()
+    {
+        return StopBridgeCoreAsync(disableRequested: true, CancellationToken.None);
+    }
+
+    private async Task StopBridgeCoreAsync(bool disableRequested, CancellationToken cancellationToken)
+    {
+        _serialService.SetRawBridgePriorityEnabled(false);
+        if (disableRequested)
+        {
+            _currentBridgeSettings.Enabled = false;
+        }
+
+        try
+        {
+            await _bridgeService.StopAsync(cancellationToken);
+            if (disableRequested)
+            {
+                SetStatus("Serial bridge stopped.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _lastBackgroundError = $"Bridge stop failed: {ex.Message}";
+            SetStatus(_lastBackgroundError);
+        }
+        finally
+        {
+            NotifyBridgePropertiesChanged();
+            RefreshDiagnostics();
+        }
+    }
+
+    private async Task ForwardBridgeBytesToDeviceAsync(byte[] bytes, CancellationToken cancellationToken)
+    {
+        await _serialService.SendBytesAsync(bytes, "[BRIDGE RAW]", cancellationToken);
+
+        var txLine = LogLine.Tx($"[BRIDGE] {FormatBridgeBytePreview(bytes)}", bytes);
+        if (FileLoggingEnabled)
+        {
+            _fileLogWriter.TryEnqueue(txLine);
+        }
+
+        _eventDetector.TryEnqueue(txLine);
+        TryEnqueueBridgeVisualLog(txLine);
+    }
+
+    private static string FormatBridgeBytePreview(byte[] bytes)
+    {
+        const int previewLength = 64;
+        var visibleBytes = bytes.AsSpan(0, Math.Min(bytes.Length, previewLength));
+        var preview = string.Join(
+            ' ',
+            visibleBytes.ToArray().Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
+        return bytes.Length > previewLength
+            ? $"[HEX] {preview} … (+{bytes.Length - previewLength:N0} bytes)"
+            : $"[HEX] {preview}";
+    }
+
+    private void NotifyBridgePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedBridgePort));
+        OnPropertyChanged(nameof(BridgeRequestedEnabled));
+        OnPropertyChanged(nameof(IsBridgeActive));
+        OnPropertyChanged(nameof(CanEditBridgePort));
+        OnPropertyChanged(nameof(CanStartBridge));
+        OnPropertyChanged(nameof(CanStopBridge));
+        OnPropertyChanged(nameof(BridgeStateText));
+        OnPropertyChanged(nameof(BridgeIndicatorText));
+        OnPropertyChanged(nameof(BridgeRouteText));
+        OnPropertyChanged(nameof(BridgeStatusText));
+        OnPropertyChanged(nameof(BridgeDeviceToVirtualByteCount));
+        OnPropertyChanged(nameof(BridgeDeviceToVirtualChunkCount));
+        OnPropertyChanged(nameof(BridgeVirtualToDeviceByteCount));
+        OnPropertyChanged(nameof(BridgeVirtualToDeviceChunkCount));
+        OnPropertyChanged(nameof(BridgeDroppedByteCount));
+        OnPropertyChanged(nameof(BridgeDroppedChunkCount));
+        OnPropertyChanged(nameof(BridgeDroppedDeviceToVirtualByteCount));
+        OnPropertyChanged(nameof(BridgeDroppedDeviceToVirtualChunkCount));
+        OnPropertyChanged(nameof(BridgeDroppedVirtualToDeviceByteCount));
+        OnPropertyChanged(nameof(BridgeDroppedVirtualToDeviceChunkCount));
+        OnPropertyChanged(nameof(BridgeErrorCount));
+        OnPropertyChanged(nameof(BridgePendingChunkCount));
+        OnPropertyChanged(nameof(BridgePendingDeviceToVirtualChunkCount));
+        OnPropertyChanged(nameof(BridgePendingVirtualToDeviceChunkCount));
+        OnPropertyChanged(nameof(BridgePendingText));
+        OnPropertyChanged(nameof(BridgeDroppedChunksText));
+        OnPropertyChanged(nameof(BridgeDroppedBytesText));
+        OnPropertyChanged(nameof(BridgeErrorsText));
+        OnPropertyChanged(nameof(BridgeVisualLogPendingCount));
+        OnPropertyChanged(nameof(BridgeVisualLogDroppedCount));
+        OnPropertyChanged(nameof(BridgeVisualLogStatusText));
+        OnPropertyChanged(nameof(IsRawBridgePriorityEnabled));
+        OnPropertyChanged(nameof(BridgePriorityDroppedPipelineByteCount));
+        OnPropertyChanged(nameof(BridgePriorityDroppedPipelineChunkCount));
+        OnPropertyChanged(nameof(BridgePriorityPipelineStatusText));
+        OnPropertyChanged(nameof(BridgeLastError));
+        StartBridgeCommand.NotifyCanExecuteChanged();
+        StopBridgeCommand.NotifyCanExecuteChanged();
+    }
+
     private async Task ConnectAsync()
     {
         await _connectionLifecycleGate.WaitAsync();
@@ -4651,6 +5041,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
             IsConnected = true;
+            if (_currentBridgeSettings.Enabled && !string.IsNullOrWhiteSpace(SelectedBridgePort))
+            {
+                await StartBridgeCoreAsync();
+            }
             ClearPendingReconnectSettings();
             RecordConnectSucceeded(settings);
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
@@ -4944,6 +5338,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 await RunDisconnectCleanupAsync("Command sequence stop", () => WaitForSequenceStopAsync(cancellationToken), cleanupErrors);
             }
+
+            await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: false, cancellationToken), cleanupErrors);
 
             _connectionCancellation?.Cancel();
             await RunDisconnectCleanupAsync("Log pipeline stop", () => _logPipeline.StopAsync(cancellationToken), cleanupErrors);
@@ -9112,6 +9508,50 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private void TryEnqueueBridgeVisualLog(LogLine line)
+    {
+        Interlocked.Increment(ref _bridgeVisualLogPendingCount);
+        if (_bridgeVisualLogQueue.Writer.TryWrite(line))
+        {
+            return;
+        }
+
+        Interlocked.Decrement(ref _bridgeVisualLogPendingCount);
+        Interlocked.Increment(ref _bridgeVisualLogDroppedCount);
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private async Task ObserveBridgeVisualLogsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var line in _bridgeVisualLogQueue.Reader.ReadAllAsync(cancellationToken))
+            {
+                Interlocked.Decrement(ref _bridgeVisualLogPendingCount);
+                await QueueLogForRenderingAsync(line, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.ObserveBridgeVisualLogsAsync", ex);
+            Interlocked.Increment(ref _bridgeVisualLogDroppedCount);
+            Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+        }
+    }
+
+    private static Channel<LogLine> CreateBridgeVisualLogQueue()
+    {
+        return Channel.CreateBounded<LogLine>(new BoundedChannelOptions(BridgeVisualLogQueueCapacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false
+        });
+    }
+
     private void ApplyLogRenderBatch(IReadOnlyList<LogLine> batch)
     {
         var pendingDrops = Interlocked.Exchange(ref _pendingLogDropCount, 0);
@@ -9468,6 +9908,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             LogSettings = logSettings,
             UiSettings = uiSettings,
             EventContextSettings = _currentEventContextSettings.Clone(),
+            BridgeSettings = _currentBridgeSettings.Clone(),
             LogRules = LogRules.Select(CloneLogRule).ToList(),
             EventRules = EventRules.Select(CloneEventRule).ToList(),
             HighlightRules = HighlightRules.Select(CloneHighlightRule).ToList(),
@@ -9492,6 +9933,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentLogSettings = profile.LogSettings.Clone();
             _currentUiSettings = profile.UiSettings.Clone();
             _currentEventContextSettings = profile.EventContextSettings.Clone();
+            _currentBridgeSettings = profile.BridgeSettings.Clone();
             _sessionName = NormalizeSessionName(profile.CurrentSessionName);
             _currentSessionName = string.Empty;
             _sessionStartedTime = null;
@@ -9504,6 +9946,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentSerialSettings.SaveDirectory = _currentLogSettings.SaveDirectory;
 
             SelectedPort = _currentSerialSettings.PortName;
+            SelectedBridgePort = _currentBridgeSettings.VirtualPortName;
             SelectedBaudRate = _currentSerialSettings.BaudRate;
             SelectedTxLineEnding = _currentSerialSettings.TxLineEnding;
             IsAutoScrollEnabled = _currentUiSettings.AutoScrollEnabled;
@@ -9533,6 +9976,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
             SetVisibleLogRebuildReason("profile visible filter restore");
             RefreshVisibleLogFilterOptions(preserveSelection: false, applyFilter: true);
+            RefreshBridgePortOptionsFromCurrentPorts();
+            NotifyBridgePropertiesChanged();
 
             Commands.SavedCommands.Clear();
             foreach (var command in profile.SavedCommands.Select(CloneTxCommand))
@@ -9936,6 +10381,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
+    private void OnBridgeStatusChanged(object? sender, EventArgs args)
+    {
+        if (!_bridgeService.IsRunning)
+        {
+            _serialService.SetRawBridgePriorityEnabled(false);
+        }
+
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private void OnRawBytesReceived(byte[] bytes)
+    {
+        _bridgeService.TryEnqueueDeviceBytes(bytes);
+    }
+
     private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
     {
         StartResourceSnapshotRefreshIfDue();
@@ -9959,6 +10419,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(TotalPendingUiCount));
         OnPropertyChanged(nameof(RecordedRxDropCount));
         OnPropertyChanged(nameof(RecordedUiDropCount));
+        NotifyBridgePropertiesChanged();
         OnPropertyChanged(nameof(EventContextUiDroppedCount));
         OnPropertyChanged(nameof(EventUiFlushCount));
         OnPropertyChanged(nameof(MaxEventUiBatchSize));
@@ -10005,6 +10466,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         var lastErrorSummary = string.IsNullOrWhiteSpace(lastErrorText)
             ? string.Empty
             : $" | Last {lastErrorText}";
+        var bridgeText = IsBridgeActive
+            ? $" | BRIDGE ON {_bridgeService.VirtualPortName}"
+            : string.Empty;
 
         return
             $"{HealthStateText} | " +
@@ -10012,6 +10476,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"RX {_logPipeline.ParsedLineCount:N0} lines / {_serialService.ReceivedByteCount:N0} bytes | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
             CreateLogFileStatusText() +
+            bridgeText +
             missingSequenceText +
             viewBacklogText +
             lastErrorSummary;
@@ -10066,6 +10531,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AddErrorIf(errors, FileLoggingEnabled && fileWriterErrorsSinceBaseline > 0, $"File writer errors: {fileWriterErrorsSinceBaseline:N0}");
         AddErrorIf(errors, _serialService.ConnectionErrorCount > 0, $"Serial connection errors: {_serialService.ConnectionErrorCount:N0}");
         AddErrorIf(errors, !string.IsNullOrWhiteSpace(lastRuntimeError), "Unhandled runtime error captured");
+        AddErrorIf(errors, BridgeDroppedChunkCount > 0, $"Bridge dropped device-to-virtual chunks: {BridgeDroppedChunkCount:N0}");
         AddErrorIf(
             errors,
             _hasResourceSnapshot && DiskTotalBytes > 0 &&
@@ -10106,6 +10572,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             warnings,
             FileLoggingEnabled && _hasResourceSnapshot && !string.IsNullOrWhiteSpace(_resourceSnapshotError),
             $"Resource status unavailable: {_resourceSnapshotError}");
+        AddWarningIf(warnings, BridgeErrorCount > 0, $"Bridge errors: {BridgeErrorCount:N0}");
+        AddWarningIf(
+            warnings,
+            BridgeVisualLogDroppedCount > 0,
+            $"Bridge UI-only log entries dropped: {BridgeVisualLogDroppedCount:N0} (bridge transport unaffected)");
+        AddWarningIf(
+            warnings,
+            BridgePriorityDroppedPipelineChunkCount > 0,
+            $"Bridge-priority parser/log chunks dropped: {BridgePriorityDroppedPipelineChunkCount:N0} ({BridgePriorityDroppedPipelineByteCount:N0} bytes; raw bridge prioritized)");
 
         var decodeErrorCount = _logPipeline.DecodeErrorCount;
         if (!_hasHealthDecodeBaseline || decodeErrorCount > _lastHealthObservedDecodeErrorCount)
@@ -10362,6 +10837,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"Log Save: {(FileLoggingEnabled ? "ON" : "OFF")} | " +
             $"FileWriter: {(_fileLogWriter.IsRunning ? "running" : "stopped")} | " +
             $"EventDetector: {(_eventDetector.IsRunning ? "running" : "stopped")} | " +
+            $"Bridge: {(IsBridgeActive ? $"ON {_bridgeService.VirtualPortName}" : BridgeStateText)} | " +
             $"Mock missing seq: {MockMissingSequenceCount:N0}";
     }
 
@@ -10459,6 +10935,25 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             builder.AppendLine($"    {reason}");
         }
+
+        builder.AppendLine();
+        builder.AppendLine("Serial Bridge");
+        builder.AppendLine($"  Requested enabled: {BridgeRequestedEnabled}");
+        builder.AppendLine($"  Active: {IsBridgeActive}");
+        builder.AppendLine($"  Route: {BridgeRouteText}");
+        builder.AppendLine($"  Device to virtual bytes/chunks: {BridgeDeviceToVirtualByteCount:N0}/{BridgeDeviceToVirtualChunkCount:N0}");
+        builder.AppendLine($"  Virtual to device bytes/chunks: {BridgeVirtualToDeviceByteCount:N0}/{BridgeVirtualToDeviceChunkCount:N0}");
+        builder.AppendLine($"  Pending device-to-virtual chunks: {BridgePendingDeviceToVirtualChunkCount:N0}");
+        builder.AppendLine($"  Pending virtual-to-device chunks: {BridgePendingVirtualToDeviceChunkCount:N0}");
+        builder.AppendLine($"  Dropped device-to-virtual bytes/chunks: {BridgeDroppedDeviceToVirtualByteCount:N0}/{BridgeDroppedDeviceToVirtualChunkCount:N0}");
+        builder.AppendLine($"  Dropped virtual-to-device bytes/chunks: {BridgeDroppedVirtualToDeviceByteCount:N0}/{BridgeDroppedVirtualToDeviceChunkCount:N0}");
+        builder.AppendLine($"  Errors: {BridgeErrorCount:N0}");
+        builder.AppendLine($"  UI-only bridge log pending/dropped: {BridgeVisualLogPendingCount:N0}/{BridgeVisualLogDroppedCount:N0}");
+        builder.AppendLine("  UI-only bridge log drops do not affect raw bridge transport.");
+        builder.AppendLine($"  Raw bridge priority enabled: {IsRawBridgePriorityEnabled}");
+        builder.AppendLine($"  Bridge-priority parser/log dropped bytes/chunks: {BridgePriorityDroppedPipelineByteCount:N0}/{BridgePriorityDroppedPipelineChunkCount:N0}");
+        builder.AppendLine("  Bridge-priority parser/log drops do not affect raw bridge transport.");
+        builder.AppendLine($"  Last error: {(string.IsNullOrWhiteSpace(BridgeLastError) ? "(none)" : BridgeLastError)}");
 
         builder.AppendLine();
         builder.AppendLine("Log File Actions");
@@ -11042,6 +11537,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(_eventDetector.LastError))
         {
             return _eventDetector.LastError;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_bridgeService.LastError))
+        {
+            return _bridgeService.LastError;
         }
 
         if (!string.IsNullOrWhiteSpace(_profileService.LastError))

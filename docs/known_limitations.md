@@ -27,6 +27,20 @@ This file tracks current intentional limits and validation gaps.
 - Real-device disconnect/reconnect behavior still needs coverage across common
   USB-UART adapters and Windows driver states.
 
+## COM Bridge
+
+- The first bridge implementation supports one app-side virtual COM port and
+  one external application on the opposite side of its virtual pair.
+- Bridged data bytes are unchanged, but modem-control line forwarding
+  (DTR/RTS/CTS/DSR), BREAK propagation, and multiple virtual outputs are not
+  implemented yet.
+- During an active bridge, raw transport is prioritized over parsing. Under
+  extreme overload, parser/file/event/UI records may be incomplete and the
+  bridge-priority parser-drop counters must be checked. With Bridge OFF, the
+  original awaited RX pipeline is used unchanged.
+- com0com or another virtual-port driver must be installed and configured
+  separately. The application does not install or manage kernel drivers.
+
 ## Logging
 
 - Serial and event logs are plain text.

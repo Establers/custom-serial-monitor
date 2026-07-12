@@ -520,7 +520,7 @@
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnSpacing="4"
-                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,*">
+                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,Auto,*">
                 <TextBlock Grid.Column="0"
                            Text="Port"
                            Style="{StaticResource CompactLabelTextStyle}" />
@@ -556,6 +556,13 @@
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
 
                 <TextBlock Grid.Column="7"
+                           Text="{Binding BridgeIndicatorText}"
+                           Foreground="#FFFFC857"
+                           FontWeight="Bold"
+                           Style="{StaticResource CompactLabelTextStyle}"
+                           ToolTipService.ToolTip="{Binding BridgeStatusText}" />
+
+                <TextBlock Grid.Column="8"
                            Text="{Binding ConnectionStateText}"
                            Style="{StaticResource CompactLabelTextStyle}"
                            FontWeight="SemiBold"
@@ -1344,6 +1351,170 @@
                                 </ScrollViewer>
                             </Border>
                         </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="Bridge"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Bidirectional raw-byte COM bridge">
+                        <ScrollViewer Padding="0,2,0,0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="4">
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="6">
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="8">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="Bidirectional Raw COM Bridge"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Text="{Binding BridgeStatusText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding BridgeStateText}"
+                                                   Foreground="#FFFFC857"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="6">
+                                    <StackPanel Spacing="5">
+                                        <TextBlock Text="Connection"
+                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                        <Grid ColumnDefinitions="110,*,Auto"
+                                              RowDefinitions="Auto,Auto"
+                                              ColumnSpacing="5">
+                                            <TextBlock Text="Virtual app-side port"
+                                                       Grid.Column="0"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding BridgePortNames}"
+                                                      SelectedItem="{Binding SelectedBridgePort, Mode=TwoWay}"
+                                                      Text="{Binding SelectedBridgePort, Mode=TwoWay}"
+                                                      IsEditable="True"
+                                                      IsEnabled="{Binding CanEditBridgePort}"
+                                                      PlaceholderText="e.g. COM10 or CNCA0" />
+                                            <Button Grid.Column="2"
+                                                    Content="Refresh"
+                                                    Command="{Binding RefreshBridgePortsCommand}"
+                                                    Style="{StaticResource RuleActionButtonStyle}" />
+                                            <StackPanel Grid.Row="1"
+                                                        Grid.Column="1"
+                                                        Grid.ColumnSpan="2"
+                                                        Margin="0,4,0,0"
+                                                        Orientation="Horizontal"
+                                                        Spacing="5">
+                                                <Button Content="Start bridge"
+                                                        Command="{Binding StartBridgeCommand}" />
+                                                <Button Content="Stop bridge"
+                                                        Command="{Binding StopBridgeCommand}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
+                                                   TextWrapping="WrapWholeWords"
+                                                   Opacity="0.82"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="6">
+                                    <StackPanel Spacing="5">
+                                        <TextBlock Text="Transfer"
+                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                        <Grid ColumnDefinitions="140,*,*"
+                                              RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                              ColumnSpacing="8"
+                                              RowSpacing="3">
+                                            <TextBlock Text="Direction"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Bytes"
+                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Chunks"
+                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
+
+                                            <TextBlock Grid.Row="1"
+                                                       Text="Device → Virtual"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="1"
+                                                       Text="{Binding BridgeDeviceToVirtualByteCount}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="2"
+                                                       Text="{Binding BridgeDeviceToVirtualChunkCount}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+
+                                            <TextBlock Grid.Row="2"
+                                                       Text="Virtual → Device"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="1"
+                                                       Text="{Binding BridgeVirtualToDeviceByteCount}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="2"
+                                                       Text="{Binding BridgeVirtualToDeviceChunkCount}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+
+                                            <TextBlock Grid.Row="3"
+                                                       Text="Pending / Drops"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="3"
+                                                       Grid.Column="1"
+                                                       Text="{Binding BridgePendingText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="3"
+                                                       Grid.Column="2"
+                                                       Text="{Binding BridgeDroppedChunksText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="4"
+                                                       Text="Dropped bytes / Errors"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="4"
+                                                       Grid.Column="1"
+                                                       Text="{Binding BridgeDroppedBytesText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Row="4"
+                                                       Grid.Column="2"
+                                                       Text="{Binding BridgeErrorsText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding BridgeLastError}"
+                                                   Foreground="#FFFF8A80"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                        <TextBlock Text="{Binding BridgeVisualLogStatusText}"
+                                                   ToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                        <TextBlock Text="{Binding BridgePriorityPipelineStatusText}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   ToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="6">
+                                    <TextBlock Text="Raw bytes are forwarded unchanged in both directions. RX encoding, Terminal/HEX view, filters, highlighting, and line-ending settings do not modify bridge packets. Virtual-to-device packets are logged as [BRIDGE] TX with a bounded HEX preview."
+                                               TextWrapping="WrapWholeWords"
+                                               Style="{StaticResource CompactCellTextStyle}" />
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </TabViewItem>
 
                     <TabViewItem Header="Settings"
