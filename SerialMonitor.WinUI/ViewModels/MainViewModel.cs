@@ -48,6 +48,37 @@ public sealed class ConnectFailureDialogRequest
     public string Message { get; }
 }
 
+public sealed class EventNotificationRequest : EventArgs
+{
+    public EventNotificationRequest(
+        string title,
+        string message,
+        int eventCount,
+        bool showTray,
+        bool playSound,
+        bool showPopup)
+    {
+        Title = title;
+        Message = message;
+        EventCount = eventCount;
+        ShowTray = showTray;
+        PlaySound = playSound;
+        ShowPopup = showPopup;
+    }
+
+    public string Title { get; }
+
+    public string Message { get; }
+
+    public int EventCount { get; }
+
+    public bool ShowTray { get; }
+
+    public bool PlaySound { get; }
+
+    public bool ShowPopup { get; }
+}
+
 public sealed class VisibleSearchResult
 {
     public VisibleSearchResult(
@@ -148,9 +179,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const double MaxCuteBackgroundOpacity = 0.50;
     private const long MinSizeRotationBytes = 1_048_576;
     private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
+    private const long DiskWarningFreeBytes = 5L * 1024 * 1024 * 1024;
+    private const long DiskErrorFreeBytes = 1L * 1024 * 1024 * 1024;
     private const string MockPortName = "MOCK";
     private const string MockPortDisplayName = "[TEST] MOCK";
     private static readonly TimeSpan SearchResultAutoRefreshInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
     private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
         new[] { "0.10", "0.20", "0.25", "0.30", "0.40", "0.50" };
 
@@ -164,6 +199,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<DetectedEvent> _eventBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
     private readonly DispatcherQueueTimer _diagnosticsTimer;
+    private readonly object _eventNotificationGate = new();
+    private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _visualLogEnqueueGate = new(1, 1);
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
@@ -457,6 +495,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _healthErrorCount;
     private long _lastHealthObservedDecodeErrorCount;
     private bool _hasHealthDecodeBaseline;
+    private long _diskFreeBytes;
+    private long _diskTotalBytes;
+    private long _currentSessionLogSizeBytes;
+    private long _processWorkingSetBytes;
+    private long _lastResourceSnapshotUtcTicks;
+    private int _resourceSnapshotRefreshInProgress;
+    private bool _hasResourceSnapshot;
+    private string _resourceSnapshotError = string.Empty;
+    private long _eventNotificationBatchCount;
+    private long _eventNotificationEventCount;
     private int _shutdownStarted;
     private string _lastShutdownStartTimeText = "(none)";
     private string _lastShutdownCompletedTimeText = "(none)";
@@ -511,6 +559,32 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         PortNotFound,
         OpenFailed,
         Unknown
+    }
+
+    private readonly record struct ResourceSnapshot(
+        long DiskFreeBytes,
+        long DiskTotalBytes,
+        long CurrentSessionLogSizeBytes,
+        long ProcessWorkingSetBytes,
+        string Error);
+
+    private sealed class PendingEventNotification
+    {
+        public DetectedEvent? LatestEvent { get; set; }
+
+        public int EventCount { get; set; }
+
+        public bool IsScheduled { get; set; }
+
+        public DateTimeOffset LastNotificationTime { get; set; } = DateTimeOffset.MinValue;
+
+        public bool ShowTray { get; set; }
+
+        public bool PlaySound { get; set; }
+
+        public bool ShowPopup { get; set; }
+
+        public int CooldownSeconds { get; set; } = 30;
     }
 
     public MainViewModel(
@@ -632,6 +706,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public event EventHandler<XtermSearchRequest>? XtermSearchRequested;
 
     public event EventHandler<ConnectFailureDialogRequest>? ConnectFailureDialogRequested;
+
+    public event EventHandler<EventNotificationRequest>? EventNotificationRequested;
 
     public ObservableCollection<string> PortNames { get; } = new();
 
@@ -3251,6 +3327,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * 각 step마다 지연 시간과 line ending을 설정할 수 있습니다.
         * MOCK에서는 RX 로그가 계속 생성되므로 TX 응답 사이에 다른 RX가 섞여 보일 수 있습니다.
 
+        Event Notifications
+
+        * Tray, Sound, Popup은 이벤트 규칙마다 별도로 켤 수 있으며 기본값은 모두 OFF입니다.
+        * 같은 규칙의 이벤트는 1초 동안 묶고, 기본 30초 쿨다운 동안 추가 알림을 한 번으로 합칩니다.
+        * Popup은 앱 안에서 8초 동안 표시되며 이벤트 기록 자체에는 영향을 주지 않습니다.
+
         Markers
 
         * MARK는 테스트 구간을 나누기 위한 표시입니다.
@@ -3326,6 +3408,25 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _lastHealthUpdateTimeText;
         private set => SetProperty(ref _lastHealthUpdateTimeText, value);
     }
+
+    public long DiskFreeBytes => Interlocked.Read(ref _diskFreeBytes);
+
+    public long DiskTotalBytes => Interlocked.Read(ref _diskTotalBytes);
+
+    public double DiskFreePercent => DiskTotalBytes <= 0
+        ? 0
+        : DiskFreeBytes * 100.0 / DiskTotalBytes;
+
+    public long CurrentSessionLogSizeBytes => Interlocked.Read(ref _currentSessionLogSizeBytes);
+
+    public long ProcessWorkingSetBytes => Interlocked.Read(ref _processWorkingSetBytes);
+
+    public int TotalPendingUiCount =>
+        PendingVisualLineCount + PendingEventUiCount + PendingEventContextUiCount;
+
+    public long RecordedRxDropCount => CurrentPortIsMock ? MockMissingSequenceCount : 0;
+
+    public long RecordedUiDropCount => Log.DroppedPendingLineCount + EventContextUiDroppedCount;
 
     public string LastShutdownStartTimeText => _lastShutdownStartTimeText;
 
@@ -3498,6 +3599,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _eventNotificationCancellation.Cancel();
         _diagnosticsTimer.Stop();
         _diagnosticsTimer.Tick -= OnDiagnosticsTimerTick;
         await DisconnectAsync();
@@ -3516,6 +3618,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _logBatchDispatcher.Dispose();
         _eventBatchDispatcher.Dispose();
         _eventContextBatchDispatcher.Dispose();
+        _eventNotificationCancellation.Dispose();
         _connectionLifecycleGate.Dispose();
     }
 
@@ -3615,7 +3718,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     var fallbackPort = !string.IsNullOrWhiteSpace(lastSuccessfulActualPort) &&
                         ContainsActualPort(normalizedPorts, lastSuccessfulActualPort)
                             ? NormalizePortSelectorValue(lastSuccessfulActualPort, ShowMockTestPort)
-                            : PortNames.FirstOrDefault();
+                            : null;
                     var previousSuppress = _suppressSettingsApplyRecording;
                     _suppressSettingsApplyRecording = true;
                     try
@@ -3627,7 +3730,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                                 lastSuccessfulActualPort,
                                 StringComparison.OrdinalIgnoreCase)
                                 ? $"Ports refreshed; auto-selected last successful port {SelectedPort ?? "(none)"}."
-                                : $"Ports refreshed; auto-selected {SelectedPort ?? "(none)"} because no port was selected.";
+                                : "Ports refreshed; waiting for port selection.";
                     }
                     finally
                     {
@@ -4975,6 +5078,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await foreach (var detectedEvent in _eventDetector.DetectedEvents.ReadAllAsync(cancellationToken))
             {
                 _eventBatchDispatcher.Post(detectedEvent);
+                QueueEventNotification(detectedEvent);
             }
         }
         catch (OperationCanceledException)
@@ -4986,6 +5090,114 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveEventsAsync", ex);
             SetStatus(_lastBackgroundError);
             RefreshDiagnostics();
+        }
+    }
+
+    private void QueueEventNotification(DetectedEvent detectedEvent)
+    {
+        if (!detectedEvent.TrayNotificationEnabled &&
+            !detectedEvent.SoundNotificationEnabled &&
+            !detectedEvent.PopupNotificationEnabled)
+        {
+            return;
+        }
+
+        var key = $"{detectedEvent.RuleName}\u001F{detectedEvent.Keyword}";
+        TimeSpan delay;
+        PendingEventNotification scheduledState;
+        lock (_eventNotificationGate)
+        {
+            if (!_pendingEventNotifications.TryGetValue(key, out var pending))
+            {
+                pending = new PendingEventNotification();
+                _pendingEventNotifications.Add(key, pending);
+            }
+
+            pending.LatestEvent = detectedEvent;
+            pending.EventCount++;
+            pending.ShowTray = detectedEvent.TrayNotificationEnabled;
+            pending.PlaySound = detectedEvent.SoundNotificationEnabled;
+            pending.ShowPopup = detectedEvent.PopupNotificationEnabled;
+            pending.CooldownSeconds = Math.Clamp(detectedEvent.NotificationCooldownSeconds, 5, 3_600);
+            if (pending.IsScheduled)
+            {
+                return;
+            }
+
+            var cooldownRemaining = pending.LastNotificationTime == DateTimeOffset.MinValue
+                ? TimeSpan.Zero
+                : TimeSpan.FromSeconds(pending.CooldownSeconds) - (DateTimeOffset.UtcNow - pending.LastNotificationTime);
+            delay = cooldownRemaining > EventNotificationGroupingInterval
+                ? cooldownRemaining
+                : EventNotificationGroupingInterval;
+            pending.IsScheduled = true;
+            scheduledState = pending;
+        }
+
+        _ = DispatchPendingEventNotificationAsync(key, scheduledState, delay, _eventNotificationCancellation.Token);
+    }
+
+    private async Task DispatchPendingEventNotificationAsync(
+        string key,
+        PendingEventNotification scheduledState,
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delay, cancellationToken);
+
+            EventNotificationRequest? request = null;
+            lock (_eventNotificationGate)
+            {
+                if (!_pendingEventNotifications.TryGetValue(key, out var pending) ||
+                    !ReferenceEquals(pending, scheduledState) ||
+                    pending.LatestEvent is null ||
+                    pending.EventCount <= 0)
+                {
+                    return;
+                }
+
+                var latestEvent = pending.LatestEvent;
+                var count = pending.EventCount;
+                var title = count == 1
+                    ? $"Serial event: {latestEvent.RuleName}"
+                    : $"Serial event: {latestEvent.RuleName} ({count:N0})";
+                var message = count == 1
+                    ? $"{latestEvent.TimeText}  {TruncateStatusText(latestEvent.Message, 220)}"
+                    : $"{count:N0} events grouped. Latest: {latestEvent.TimeText}  {TruncateStatusText(latestEvent.Message, 180)}";
+                request = new EventNotificationRequest(
+                    title,
+                    message,
+                    count,
+                    pending.ShowTray,
+                    pending.PlaySound,
+                    pending.ShowPopup);
+
+                pending.LatestEvent = null;
+                pending.EventCount = 0;
+                pending.IsScheduled = false;
+                pending.LastNotificationTime = DateTimeOffset.UtcNow;
+            }
+
+            Interlocked.Increment(ref _eventNotificationBatchCount);
+            Interlocked.Add(ref _eventNotificationEventCount, request.EventCount);
+            RunOnUiThread(() => EventNotificationRequested?.Invoke(this, request));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.DispatchPendingEventNotificationAsync", ex);
+        }
+    }
+
+    private void ClearPendingEventNotifications()
+    {
+        lock (_eventNotificationGate)
+        {
+            _pendingEventNotifications.Clear();
         }
     }
 
@@ -6583,6 +6795,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyEventRuleChanges(string status)
     {
+        ClearPendingEventNotifications();
         _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
         RecordRuleEditStatus(status);
         NotifyRuleEditorStateChanged();
@@ -6599,6 +6812,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyLogRuleChanges(string status)
     {
+        ClearPendingEventNotifications();
         RebuildProjectedRulesFromLogRules();
         _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
         Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
@@ -7012,6 +7226,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             normalized.MatchDirection = HighlightMatchDirection.Both;
         }
 
+        normalized.NotificationCooldownSeconds = Math.Clamp(normalized.NotificationCooldownSeconds, 5, 3_600);
+
         if (foregroundFallback || backgroundFallback)
         {
             Interlocked.Increment(ref _invalidRuleColorFallbackCount);
@@ -7108,6 +7324,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             normalized.MatchDirection = EventMatchDirection.RxOnly;
         }
+
+        normalized.NotificationCooldownSeconds = Math.Clamp(normalized.NotificationCooldownSeconds, 5, 3_600);
 
         return true;
     }
@@ -9559,7 +9777,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             CaseSensitive = rule.CaseSensitive,
             MatchMode = rule.MatchMode,
             MatchDirection = rule.MatchDirection,
-            HighlightColor = rule.HighlightColor
+            HighlightColor = rule.HighlightColor,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 
@@ -9578,7 +9800,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             MatchDirection = rule.MatchDirection,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
-            Priority = rule.Priority
+            Priority = rule.Priority,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 
@@ -9592,7 +9818,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             CaseSensitive = rule.CaseSensitive,
             MatchMode = rule.MatchMode,
             MatchDirection = ConvertDirection(rule.MatchDirection),
-            HighlightColor = rule.ForegroundColor
+            HighlightColor = rule.ForegroundColor,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 
@@ -9708,6 +9938,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
     {
+        StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
         if (backgroundStatusChanged)
         {
@@ -9725,6 +9956,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MaxVisualBacklogLineCount));
         OnPropertyChanged(nameof(PendingEventUiCount));
         OnPropertyChanged(nameof(PendingEventContextUiCount));
+        OnPropertyChanged(nameof(TotalPendingUiCount));
+        OnPropertyChanged(nameof(RecordedRxDropCount));
+        OnPropertyChanged(nameof(RecordedUiDropCount));
         OnPropertyChanged(nameof(EventContextUiDroppedCount));
         OnPropertyChanged(nameof(EventUiFlushCount));
         OnPropertyChanged(nameof(MaxEventUiBatchSize));
@@ -9774,12 +10008,31 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         return
             $"{HealthStateText} | " +
+            CreateResourceStatusText() + " | " +
             $"RX {_logPipeline.ParsedLineCount:N0} lines / {_serialService.ReceivedByteCount:N0} bytes | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
             CreateLogFileStatusText() +
             missingSequenceText +
             viewBacklogText +
             lastErrorSummary;
+    }
+
+    private string CreateResourceStatusText()
+    {
+        var diskText = _hasResourceSnapshot && DiskTotalBytes > 0
+            ? $"Disk {FormatByteSize(DiskFreeBytes)} {DiskFreePercent:0.#}%"
+            : "Disk n/a";
+        var sessionText = _hasResourceSnapshot
+            ? FormatByteSize(CurrentSessionLogSizeBytes)
+            : "n/a";
+        var memoryText = _hasResourceSnapshot
+            ? FormatByteSize(ProcessWorkingSetBytes)
+            : "n/a";
+
+        return $"{diskText} | Session {sessionText} | Mem {memoryText} | " +
+               $"UI {Log.TotalRetainedLineCount:N0}/{Log.Capacity:N0} | " +
+               $"Q F/E/U {_fileLogWriter.PendingRequestCount:N0}/{_eventDetector.PendingInputLineCount:N0}/{TotalPendingUiCount:N0} | " +
+               $"Drop RX/F/UI {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0}";
     }
 
     private string CreateLogFileStatusText()
@@ -9813,6 +10066,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AddErrorIf(errors, FileLoggingEnabled && fileWriterErrorsSinceBaseline > 0, $"File writer errors: {fileWriterErrorsSinceBaseline:N0}");
         AddErrorIf(errors, _serialService.ConnectionErrorCount > 0, $"Serial connection errors: {_serialService.ConnectionErrorCount:N0}");
         AddErrorIf(errors, !string.IsNullOrWhiteSpace(lastRuntimeError), "Unhandled runtime error captured");
+        AddErrorIf(
+            errors,
+            _hasResourceSnapshot && DiskTotalBytes > 0 &&
+            (DiskFreeBytes < DiskErrorFreeBytes || DiskFreePercent < 2),
+            $"Log disk space critically low: {FormatByteSize(DiskFreeBytes)} free ({DiskFreePercent:0.#}%)");
 
         AddWarningIf(warnings, PendingVisualLineCount >= PendingVisualWarningThreshold, $"Pending visual lines high: {PendingVisualLineCount:N0}/{PendingVisualWarningThreshold:N0}");
         AddWarningIf(
@@ -9837,6 +10095,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AddWarningIf(warnings, _eventDetector.ContextCaptureFailedCount > 0, $"Event context captures failed: {_eventDetector.ContextCaptureFailedCount:N0}");
         AddWarningIf(warnings, Log.XtermFormattingErrorCount > 0, $"xterm formatting errors: {Log.XtermFormattingErrorCount:N0}");
         AddWarningIf(warnings, XtermLayoutErrorCount > 0, $"xterm layout errors: {XtermLayoutErrorCount:N0}");
+        AddWarningIf(
+            warnings,
+            _hasResourceSnapshot && DiskTotalBytes > 0 &&
+            DiskFreeBytes >= DiskErrorFreeBytes &&
+            DiskFreePercent >= 2 &&
+            (DiskFreeBytes < DiskWarningFreeBytes || DiskFreePercent < 10),
+            $"Log disk space low: {FormatByteSize(DiskFreeBytes)} free ({DiskFreePercent:0.#}%)");
+        AddWarningIf(
+            warnings,
+            FileLoggingEnabled && _hasResourceSnapshot && !string.IsNullOrWhiteSpace(_resourceSnapshotError),
+            $"Resource status unavailable: {_resourceSnapshotError}");
 
         var decodeErrorCount = _logPipeline.DecodeErrorCount;
         if (!_hasHealthDecodeBaseline || decodeErrorCount > _lastHealthObservedDecodeErrorCount)
@@ -9879,6 +10148,148 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             warnings.Add(reason);
         }
+    }
+
+    private void StartResourceSnapshotRefreshIfDue()
+    {
+        var lastRefreshTicks = Interlocked.Read(ref _lastResourceSnapshotUtcTicks);
+        var now = DateTimeOffset.UtcNow;
+        if (lastRefreshTicks > 0 &&
+            now - new DateTimeOffset(lastRefreshTicks, TimeSpan.Zero) < ResourceSnapshotRefreshInterval)
+        {
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _resourceSnapshotRefreshInProgress, 1, 0) != 0)
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref _lastResourceSnapshotUtcTicks, now.UtcTicks);
+        var saveDirectory = LogSaveDirectory;
+        var serialLogPath = CurrentSerialLogPath;
+        var eventLogPath = CurrentEventLogPath;
+        _ = RefreshResourceSnapshotAsync(saveDirectory, serialLogPath, eventLogPath);
+    }
+
+    private async Task RefreshResourceSnapshotAsync(
+        string saveDirectory,
+        string serialLogPath,
+        string eventLogPath)
+    {
+        ResourceSnapshot snapshot;
+        try
+        {
+            snapshot = await Task.Run(() => CaptureResourceSnapshot(saveDirectory, serialLogPath, eventLogPath));
+        }
+        catch (Exception ex)
+        {
+            snapshot = new ResourceSnapshot(0, 0, 0, 0, ex.Message);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _resourceSnapshotRefreshInProgress, 0);
+        }
+
+        RunOnUiThread(() => ApplyResourceSnapshot(snapshot));
+    }
+
+    private static ResourceSnapshot CaptureResourceSnapshot(
+        string saveDirectory,
+        string serialLogPath,
+        string eventLogPath)
+    {
+        long diskFreeBytes = 0;
+        long diskTotalBytes = 0;
+        var errors = new List<string>();
+
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(saveDirectory));
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                throw new InvalidOperationException("Log drive could not be resolved.");
+            }
+
+            var drive = new DriveInfo(root);
+            diskFreeBytes = drive.AvailableFreeSpace;
+            diskTotalBytes = drive.TotalSize;
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"disk: {ex.Message}");
+        }
+
+        long sessionLogSizeBytes = 0;
+        foreach (var path in new[] { serialLogPath, eventLogPath }
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var file = new FileInfo(path);
+                if (file.Exists)
+                {
+                    sessionLogSizeBytes += file.Length;
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"log size: {ex.Message}");
+            }
+        }
+
+        long processWorkingSetBytes = 0;
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            processWorkingSetBytes = process.WorkingSet64;
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"memory: {ex.Message}");
+        }
+
+        return new ResourceSnapshot(
+            diskFreeBytes,
+            diskTotalBytes,
+            sessionLogSizeBytes,
+            processWorkingSetBytes,
+            string.Join("; ", errors));
+    }
+
+    private void ApplyResourceSnapshot(ResourceSnapshot snapshot)
+    {
+        Interlocked.Exchange(ref _diskFreeBytes, Math.Max(0, snapshot.DiskFreeBytes));
+        Interlocked.Exchange(ref _diskTotalBytes, Math.Max(0, snapshot.DiskTotalBytes));
+        Interlocked.Exchange(ref _currentSessionLogSizeBytes, Math.Max(0, snapshot.CurrentSessionLogSizeBytes));
+        Interlocked.Exchange(ref _processWorkingSetBytes, Math.Max(0, snapshot.ProcessWorkingSetBytes));
+        _resourceSnapshotError = snapshot.Error;
+        _hasResourceSnapshot = true;
+
+        OnPropertyChanged(nameof(DiskFreeBytes));
+        OnPropertyChanged(nameof(DiskTotalBytes));
+        OnPropertyChanged(nameof(DiskFreePercent));
+        OnPropertyChanged(nameof(CurrentSessionLogSizeBytes));
+        OnPropertyChanged(nameof(ProcessWorkingSetBytes));
+        RefreshDiagnostics();
+    }
+
+    private static string FormatByteSize(long bytes)
+    {
+        var value = Math.Max(0, bytes);
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var unitIndex = 0;
+        var displayValue = (double)value;
+        while (displayValue >= 1024 && unitIndex < units.Length - 1)
+        {
+            displayValue /= 1024;
+            unitIndex++;
+        }
+
+        return unitIndex == 0
+            ? $"{value:N0} {units[unitIndex]}"
+            : $"{displayValue:0.#} {units[unitIndex]}";
     }
 
     private string CreateLastErrorSummaryText()
@@ -10036,6 +10447,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Health warning count: {HealthWarningCount:N0}");
         builder.AppendLine($"  Health error count: {HealthErrorCount:N0}");
         builder.AppendLine($"  Last health update time: {LastHealthUpdateTimeText}");
+        builder.AppendLine($"  Log disk free: {(_hasResourceSnapshot && DiskTotalBytes > 0 ? $"{FormatByteSize(DiskFreeBytes)} / {FormatByteSize(DiskTotalBytes)} ({DiskFreePercent:0.#}%)" : "(unavailable)")}");
+        builder.AppendLine($"  Current session log size: {(_hasResourceSnapshot ? FormatByteSize(CurrentSessionLogSizeBytes) : "(unavailable)")}");
+        builder.AppendLine($"  Process working set: {(_hasResourceSnapshot ? FormatByteSize(ProcessWorkingSetBytes) : "(unavailable)")}");
+        builder.AppendLine($"  UI retained logs: {Log.TotalRetainedLineCount:N0}/{Log.Capacity:N0}");
+        builder.AppendLine($"  Pending queues (file/event/UI): {_fileLogWriter.PendingRequestCount:N0}/{_eventDetector.PendingInputLineCount:N0}/{TotalPendingUiCount:N0}");
+        builder.AppendLine($"  Recorded drops (RX/file/UI): {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0}");
+        builder.AppendLine($"  Resource snapshot error: {(string.IsNullOrWhiteSpace(_resourceSnapshotError) ? "(none)" : _resourceSnapshotError)}");
         builder.AppendLine("  Health reasons:");
         foreach (var reason in HealthReasonsText.Split(Environment.NewLine, StringSplitOptions.None))
         {
@@ -10526,6 +10944,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Compiled event HEX rule count: {_eventDetector.CompiledHexRuleCount:N0}");
         builder.AppendLine($"  Invalid compiled event rule count: {_eventDetector.InvalidCompiledRuleCount:N0}");
         builder.AppendLine($"  Enabled rule count: {EventRules.Count(rule => rule.Enabled):N0}");
+        builder.AppendLine($"  Tray notification rules: {EventRules.Count(rule => rule.Enabled && rule.TrayNotificationEnabled):N0}");
+        builder.AppendLine($"  Sound notification rules: {EventRules.Count(rule => rule.Enabled && rule.SoundNotificationEnabled):N0}");
+        builder.AppendLine($"  Popup notification rules: {EventRules.Count(rule => rule.Enabled && rule.PopupNotificationEnabled):N0}");
+        builder.AppendLine($"  Notification batches delivered: {Interlocked.Read(ref _eventNotificationBatchCount):N0}");
+        builder.AppendLine($"  Events included in notifications: {Interlocked.Read(ref _eventNotificationEventCount):N0}");
         builder.AppendLine($"  Detected event count: {_eventDetector.DetectedEventCount:N0}");
         builder.AppendLine($"  Detected event UI item count: {DetectedEventUiItemCount:N0}");
         builder.AppendLine($"  Visible event cap: {Events.Capacity:N0}");

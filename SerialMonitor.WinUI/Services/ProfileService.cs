@@ -983,6 +983,7 @@ public sealed class ProfileService : IProfileService
             }
 
             rule.HighlightColor = string.IsNullOrWhiteSpace(rule.HighlightColor) ? null : rule.HighlightColor.Trim();
+            rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
         }
     }
 
@@ -1052,6 +1053,8 @@ public sealed class ProfileService : IProfileService
                 rule.MatchMode = LogRuleMatchMode.Text;
                 warnings.Add("A log rule match mode was invalid.");
             }
+
+            rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
         }
     }
 
@@ -1155,6 +1158,10 @@ public sealed class ProfileService : IProfileService
                 MatchMode = eventRule.MatchMode,
                 MatchDirection = ConvertDirection(eventRule.MatchDirection),
                 ForegroundColor = string.IsNullOrWhiteSpace(eventRule.HighlightColor) ? "Default" : eventRule.HighlightColor.Trim(),
+                TrayNotificationEnabled = eventRule.TrayNotificationEnabled,
+                SoundNotificationEnabled = eventRule.SoundNotificationEnabled,
+                PopupNotificationEnabled = eventRule.PopupNotificationEnabled,
+                NotificationCooldownSeconds = eventRule.NotificationCooldownSeconds,
                 Priority = 0
             });
         }
@@ -1223,7 +1230,11 @@ public sealed class ProfileService : IProfileService
                 CaseSensitive = rule.CaseSensitive,
                 MatchMode = rule.MatchMode,
                 MatchDirection = ConvertDirection(rule.MatchDirection),
-                HighlightColor = rule.ForegroundColor
+                HighlightColor = rule.ForegroundColor,
+                TrayNotificationEnabled = rule.TrayNotificationEnabled,
+                SoundNotificationEnabled = rule.SoundNotificationEnabled,
+                PopupNotificationEnabled = rule.PopupNotificationEnabled,
+                NotificationCooldownSeconds = rule.NotificationCooldownSeconds
             })
             .ToList();
     }

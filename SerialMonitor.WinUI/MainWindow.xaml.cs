@@ -40,6 +40,9 @@ public sealed partial class MainWindow : Window
         Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
 
     private readonly MainViewModel _viewModel;
+    private readonly WindowsTrayNotifier _trayNotifier = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _eventPopupTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _trayIconTimer;
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
     private readonly object _xtermLiveAppendQueueGate = new();
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
@@ -95,6 +98,10 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MessageBeep(uint type);
+
     private bool IsClosingOrClosed => _closeCleanupStarted || _closeAllowed;
 
     public MainWindow()
@@ -102,6 +109,12 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _eventPopupTimer = dispatcherQueue.CreateTimer();
+        _eventPopupTimer.Interval = TimeSpan.FromSeconds(8);
+        _eventPopupTimer.Tick += OnEventPopupTimerTick;
+        _trayIconTimer = dispatcherQueue.CreateTimer();
+        _trayIconTimer.Interval = TimeSpan.FromSeconds(12);
+        _trayIconTimer.Tick += OnTrayIconTimerTick;
         _viewModel = new MainViewModel(
             new SerialService(),
             new LogPipeline(new EncodingDecoder(), new LineParser()),
@@ -118,6 +131,7 @@ public sealed partial class MainWindow : Window
         _viewModel.Log.TextRebuilt += OnLogTextRebuilt;
         _viewModel.XtermSearchRequested += OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested += OnConnectFailureDialogRequested;
+        _viewModel.EventNotificationRequested += OnEventNotificationRequested;
         AppWindow.Closing += OnAppWindowClosing;
         AppWindow.Changed += OnAppWindowChanged;
         Activated += OnWindowActivated;
@@ -226,6 +240,7 @@ public sealed partial class MainWindow : Window
         _viewModel.Log.TextRebuilt -= OnLogTextRebuilt;
         _viewModel.XtermSearchRequested -= OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested -= OnConnectFailureDialogRequested;
+        _viewModel.EventNotificationRequested -= OnEventNotificationRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Events.Events.CollectionChanged -= OnDetectedEventsCollectionChanged;
         XtermLogWebView.NavigationCompleted -= OnXtermNavigationCompleted;
@@ -240,6 +255,12 @@ public sealed partial class MainWindow : Window
             ContextWebView.CoreWebView2.WebMessageReceived -= OnContextWebMessageReceived;
         }
 
+        _eventPopupTimer.Stop();
+        _eventPopupTimer.Tick -= OnEventPopupTimerTick;
+        _trayIconTimer.Stop();
+        _trayIconTimer.Tick -= OnTrayIconTimerTick;
+        _trayNotifier.Dispose();
+
         try
         {
             await _viewModel.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
@@ -248,6 +269,54 @@ public sealed partial class MainWindow : Window
         {
             RuntimeDiagnostics.RecordError("MainWindow.OnClosed.Dispose", ex);
         }
+    }
+
+    private void OnEventNotificationRequested(object? sender, EventNotificationRequest request)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        if (request.PlaySound)
+        {
+            MessageBeep(0x00000030);
+        }
+
+        if (request.ShowTray)
+        {
+            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            if (_trayNotifier.Show(windowHandle, request.Title, request.Message))
+            {
+                _trayIconTimer.Stop();
+                _trayIconTimer.Start();
+            }
+        }
+
+        if (request.ShowPopup)
+        {
+            EventNotificationInfoBar.Title = request.Title;
+            EventNotificationInfoBar.Message = request.Message;
+            EventNotificationInfoBar.IsOpen = true;
+            _eventPopupTimer.Stop();
+            _eventPopupTimer.Start();
+        }
+    }
+
+    private void OnEventPopupTimerTick(
+        Microsoft.UI.Dispatching.DispatcherQueueTimer sender,
+        object args)
+    {
+        sender.Stop();
+        EventNotificationInfoBar.IsOpen = false;
+    }
+
+    private void OnTrayIconTimerTick(
+        Microsoft.UI.Dispatching.DispatcherQueueTimer sender,
+        object args)
+    {
+        sender.Stop();
+        _trayNotifier.Hide();
     }
 
     private void CancelPendingXtermAppendAcknowledgements()
@@ -3717,6 +3786,12 @@ public sealed partial class MainWindow : Window
         var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
         var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
         var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
+        var trayNotificationBox = new CheckBox { Content = "Tray", IsChecked = source.TrayNotificationEnabled };
+        var soundNotificationBox = new CheckBox { Content = "Sound", IsChecked = source.SoundNotificationEnabled };
+        var popupNotificationBox = new CheckBox { Content = "Popup", IsChecked = source.PopupNotificationEnabled };
+        var notificationCooldownBox = CreateDialogTextBox(
+            Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
+            "30");
         var errorText = CreateDialogErrorText();
 
         ToolTipService.SetToolTip(eventBox, "Event: add matching lines to Events.");
@@ -3724,24 +3799,78 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(filterBox, "Filter: make this rule available in the Filter dropdown.");
         ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
         ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        ToolTipService.SetToolTip(trayNotificationBox, "Windows tray balloon. OFF by default. Events are grouped per rule.");
+        ToolTipService.SetToolTip(soundNotificationBox, "Play one Windows alert sound per grouped notification. OFF by default.");
+        ToolTipService.SetToolTip(popupNotificationBox, "Show a non-blocking in-app popup for 8 seconds. OFF by default.");
+        ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
 
-        var panel = CreateDialogPanel();
-        panel.Children.Add(CreateDialogField("Name", nameBox));
-        panel.Children.Add(CreateDialogField("Keyword", keywordBox));
-        panel.Children.Add(CreateInlineDialogRow(enabledBox, eventBox, highlightBox, filterBox));
-        panel.Children.Add(CreateDialogField("Match", matchModeBox));
-        panel.Children.Add(CreateInlineDialogRow(caseBox));
-        panel.Children.Add(CreateDialogField("Direction", directionBox));
-        panel.Children.Add(CreateDialogField("Color", foregroundBox));
-        panel.Children.Add(CreateDialogField("Background", backgroundBox));
-        panel.Children.Add(CreateDialogField("Priority", priorityBox));
-        panel.Children.Add(errorText);
+        foreach (var input in new FrameworkElement[]
+                 {
+                     nameBox, keywordBox, matchModeBox, directionBox, foregroundBox,
+                     backgroundBox, priorityBox, notificationCooldownBox
+                 })
+        {
+            input.MinWidth = 0;
+            input.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+
+        var panel = new Grid
+        {
+            MinWidth = 430,
+            ColumnSpacing = 8,
+            RowSpacing = 5
+        };
+        for (var column = 0; column < 4; column++)
+        {
+            panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var row = 0; row < 6; row++)
+        {
+            panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        AddDialogGridChild(panel, CreateDialogField("Name", nameBox), row: 0, column: 0, columnSpan: 2);
+        AddDialogGridChild(panel, CreateDialogField("Keyword", keywordBox), row: 0, column: 2, columnSpan: 2);
+        AddDialogGridChild(
+            panel,
+            CreateInlineDialogRow(enabledBox, eventBox, highlightBox, filterBox, caseBox),
+            row: 1,
+            column: 0,
+            columnSpan: 4);
+        AddDialogGridChild(panel, CreateDialogField("Match", matchModeBox), row: 2, column: 0);
+        AddDialogGridChild(panel, CreateDialogField("Direction", directionBox), row: 2, column: 1);
+        AddDialogGridChild(panel, CreateDialogField("Color", foregroundBox), row: 2, column: 2);
+        AddDialogGridChild(panel, CreateDialogField("Background", backgroundBox), row: 2, column: 3);
+        AddDialogGridChild(panel, CreateDialogField("Priority", priorityBox), row: 3, column: 0, columnSpan: 2);
+        AddDialogGridChild(
+            panel,
+            CreateDialogField("Notify cooldown (sec)", notificationCooldownBox),
+            row: 3,
+            column: 2,
+            columnSpan: 2);
+        AddDialogGridChild(
+            panel,
+            CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox),
+            row: 4,
+            column: 0,
+            columnSpan: 4);
+        AddDialogGridChild(panel, errorText, row: 5, column: 0, columnSpan: 4);
 
         var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
         {
             if (string.IsNullOrWhiteSpace(keywordBox.Text))
             {
                 errorText.Text = "Keyword is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
+                cooldown is < 5 or > 3_600)
+            {
+                errorText.Text = "Notify cooldown must be between 5 and 3600 seconds.";
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -3769,7 +3898,11 @@ public sealed partial class MainWindow : Window
             MatchDirection = directionBox.SelectedItem is HighlightMatchDirection direction ? direction : HighlightMatchDirection.Both,
             ForegroundColor = GetSelectedString(foregroundBox, "Default"),
             BackgroundColor = background == "(none)" ? null : background,
-            Priority = priority
+            Priority = priority,
+            TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
+            SoundNotificationEnabled = soundNotificationBox.IsChecked == true,
+            PopupNotificationEnabled = popupNotificationBox.IsChecked == true,
+            NotificationCooldownSeconds = int.Parse(notificationCooldownBox.Text, CultureInfo.InvariantCulture)
         };
     }
 
@@ -3781,9 +3914,16 @@ public sealed partial class MainWindow : Window
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
         var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
         var directionBox = CreateEnumComboBox(source.MatchDirection);
+        var trayNotificationBox = new CheckBox { Content = "Tray", IsChecked = source.TrayNotificationEnabled };
+        var soundNotificationBox = new CheckBox { Content = "Sound", IsChecked = source.SoundNotificationEnabled };
+        var popupNotificationBox = new CheckBox { Content = "Popup", IsChecked = source.PopupNotificationEnabled };
+        var notificationCooldownBox = CreateDialogTextBox(
+            Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
+            "30");
         var errorText = CreateDialogErrorText();
         ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
         ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
 
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
@@ -3791,6 +3931,8 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(CreateDialogField("Match", matchModeBox));
         panel.Children.Add(CreateDialogField("Direction", directionBox));
         panel.Children.Add(CreateInlineDialogRow(enabledBox, caseBox));
+        panel.Children.Add(CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox));
+        panel.Children.Add(CreateDialogField("Notify cooldown (sec)", notificationCooldownBox));
         panel.Children.Add(errorText);
 
         var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
@@ -3798,6 +3940,15 @@ public sealed partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(keywordBox.Text))
             {
                 errorText.Text = "Keyword is required.";
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
+                cooldown is < 5 or > 3_600)
+            {
+                errorText.Text = "Notify cooldown must be between 5 and 3600 seconds.";
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -3815,7 +3966,11 @@ public sealed partial class MainWindow : Window
             CaseSensitive = caseBox.IsChecked == true,
             MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
             MatchDirection = directionBox.SelectedItem is EventMatchDirection direction ? direction : EventMatchDirection.RxOnly,
-            HighlightColor = source.HighlightColor
+            HighlightColor = source.HighlightColor,
+            TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
+            SoundNotificationEnabled = soundNotificationBox.IsChecked == true,
+            PopupNotificationEnabled = popupNotificationBox.IsChecked == true,
+            NotificationCooldownSeconds = int.Parse(notificationCooldownBox.Text, CultureInfo.InvariantCulture)
         };
     }
 
@@ -4249,6 +4404,19 @@ public sealed partial class MainWindow : Window
         return panel;
     }
 
+    private static void AddDialogGridChild(
+        Grid grid,
+        FrameworkElement child,
+        int row,
+        int column,
+        int columnSpan = 1)
+    {
+        Grid.SetRow(child, row);
+        Grid.SetColumn(child, column);
+        Grid.SetColumnSpan(child, columnSpan);
+        grid.Children.Add(child);
+    }
+
     private static string GetSelectedString(ComboBox comboBox, string fallback)
     {
         return comboBox.SelectedItem as string ?? fallback;
@@ -4403,7 +4571,11 @@ public sealed partial class MainWindow : Window
             CaseSensitive = rule.CaseSensitive,
             MatchMode = rule.MatchMode,
             MatchDirection = rule.MatchDirection,
-            HighlightColor = rule.HighlightColor
+            HighlightColor = rule.HighlightColor,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 
@@ -4422,7 +4594,11 @@ public sealed partial class MainWindow : Window
             MatchDirection = rule.MatchDirection,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
-            Priority = rule.Priority
+            Priority = rule.Priority,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 

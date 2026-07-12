@@ -46,6 +46,7 @@ public sealed class EventDetector : IEventDetector
     private long _eventLogWrittenCount;
     private long _errorCount;
     private long _droppedInputLineCount;
+    private int _pendingInputLineCount;
     private long _droppedOutputEventCount;
     private long _contextCapturesStartedCount;
     private long _contextCapturesCompletedCount;
@@ -111,6 +112,8 @@ public sealed class EventDetector : IEventDetector
     public long ErrorCount => Interlocked.Read(ref _errorCount);
 
     public long DroppedInputLineCount => Interlocked.Read(ref _droppedInputLineCount);
+
+    public int PendingInputLineCount => Volatile.Read(ref _pendingInputLineCount);
 
     public long DroppedOutputEventCount => Interlocked.Read(ref _droppedOutputEventCount);
 
@@ -249,6 +252,7 @@ public sealed class EventDetector : IEventDetector
             Volatile.Write(ref _isContextCaptureOverloadActive, 0);
             SetActivePendingContextCount();
             _input = CreateInputQueue();
+            Volatile.Write(ref _pendingInputLineCount, 0);
             _events = CreateEventQueue();
             _completedContexts = CreateEventContextQueue();
             _eventLogQueue = CreateEventLogQueue();
@@ -275,11 +279,13 @@ public sealed class EventDetector : IEventDetector
             return false;
         }
 
+        Interlocked.Increment(ref _pendingInputLineCount);
         if (_input.Writer.TryWrite(line))
         {
             return true;
         }
 
+        Interlocked.Decrement(ref _pendingInputLineCount);
         Interlocked.Increment(ref _droppedInputLineCount);
         RaiseStatusChanged();
         return false;
@@ -461,6 +467,7 @@ public sealed class EventDetector : IEventDetector
         {
             await foreach (var line in _input.Reader.ReadAllAsync(cancellationToken))
             {
+                Interlocked.Decrement(ref _pendingInputLineCount);
                 CaptureAfterContext(line);
 
                 var captureContextForNewEvents = !IsContextCaptureOverloadActive;
@@ -541,7 +548,11 @@ public sealed class EventDetector : IEventDetector
                     line.Direction,
                     line.Text,
                     line,
-                    beforeContext);
+                    beforeContext,
+                    trayNotificationEnabled: sourceRule.TrayNotificationEnabled,
+                    soundNotificationEnabled: sourceRule.SoundNotificationEnabled,
+                    popupNotificationEnabled: sourceRule.PopupNotificationEnabled,
+                    notificationCooldownSeconds: sourceRule.NotificationCooldownSeconds);
             }
         }
     }
@@ -1019,7 +1030,11 @@ public sealed class EventDetector : IEventDetector
             CaseSensitive = rule.CaseSensitive,
             MatchMode = rule.MatchMode,
             MatchDirection = rule.MatchDirection,
-            HighlightColor = rule.HighlightColor
+            HighlightColor = rule.HighlightColor,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 

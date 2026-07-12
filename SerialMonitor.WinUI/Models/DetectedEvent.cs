@@ -13,6 +13,10 @@ public sealed class DetectedEvent
         LogLine? sourceLogLine = null,
         IReadOnlyList<LogLine>? beforeContextLines = null,
         IReadOnlyList<LogLine>? afterContextLines = null,
+        bool trayNotificationEnabled = false,
+        bool soundNotificationEnabled = false,
+        bool popupNotificationEnabled = false,
+        int notificationCooldownSeconds = 30,
         Guid? id = null)
     {
         Id = id ?? Guid.NewGuid();
@@ -24,6 +28,10 @@ public sealed class DetectedEvent
         SourceLogLine = sourceLogLine;
         BeforeContextLines = beforeContextLines ?? Array.Empty<LogLine>();
         AfterContextLines = afterContextLines ?? Array.Empty<LogLine>();
+        TrayNotificationEnabled = trayNotificationEnabled;
+        SoundNotificationEnabled = soundNotificationEnabled;
+        PopupNotificationEnabled = popupNotificationEnabled;
+        NotificationCooldownSeconds = Math.Clamp(notificationCooldownSeconds, 5, 3_600);
     }
 
     public Guid Id { get; }
@@ -53,6 +61,14 @@ public sealed class DetectedEvent
     public IReadOnlyList<LogLine> BeforeContextLines { get; }
 
     public IReadOnlyList<LogLine> AfterContextLines { get; }
+
+    public bool TrayNotificationEnabled { get; }
+
+    public bool SoundNotificationEnabled { get; }
+
+    public bool PopupNotificationEnabled { get; }
+
+    public int NotificationCooldownSeconds { get; }
 
     public string DirectionText => Direction switch
     {

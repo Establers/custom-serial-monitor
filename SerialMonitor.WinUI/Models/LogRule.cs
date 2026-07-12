@@ -31,4 +31,12 @@ public sealed class LogRule
     public string? BackgroundColor { get; set; }
 
     public int Priority { get; set; }
+
+    public bool TrayNotificationEnabled { get; set; }
+
+    public bool SoundNotificationEnabled { get; set; }
+
+    public bool PopupNotificationEnabled { get; set; }
+
+    public int NotificationCooldownSeconds { get; set; } = 30;
 }

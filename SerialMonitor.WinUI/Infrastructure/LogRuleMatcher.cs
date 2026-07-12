@@ -410,7 +410,11 @@ public static class LogRuleMatcher
             CaseSensitive = rule.CaseSensitive,
             MatchMode = rule.MatchMode,
             MatchDirection = rule.MatchDirection,
-            HighlightColor = rule.HighlightColor
+            HighlightColor = rule.HighlightColor,
+            TrayNotificationEnabled = rule.TrayNotificationEnabled,
+            SoundNotificationEnabled = rule.SoundNotificationEnabled,
+            PopupNotificationEnabled = rule.PopupNotificationEnabled,
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
         };
     }
 }

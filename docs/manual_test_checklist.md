@@ -137,6 +137,17 @@ real hardware when available.
 - [ ] Click Latest.
 - [ ] Confirm the newest event is selected and scrolled into view.
 
+## Event Notifications
+
+- [ ] Confirm Tray, Sound, and Popup are all OFF for existing/default rules.
+- [ ] Enable Popup for one MOCK event rule and keep cooldown at 30 seconds.
+- [ ] Confirm a matching MOCK event shows one non-blocking popup after about 1 second.
+- [ ] Confirm the popup closes automatically after about 8 seconds.
+- [ ] Generate repeated matches and confirm they are grouped into at most one notification per 30 seconds.
+- [ ] Enable Sound and confirm one sound plays per grouped notification, not once per event.
+- [ ] Enable Tray and confirm a Windows tray balloon appears.
+- [ ] Disable all three options and confirm events continue to populate without any notification.
+
 ## Highlight Rules
 
 - [ ] Open Rules tab.

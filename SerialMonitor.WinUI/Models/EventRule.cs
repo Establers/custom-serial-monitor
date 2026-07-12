@@ -23,6 +23,14 @@ public sealed class EventRule
 
     public string? HighlightColor { get; set; }
 
+    public bool TrayNotificationEnabled { get; set; }
+
+    public bool SoundNotificationEnabled { get; set; }
+
+    public bool PopupNotificationEnabled { get; set; }
+
+    public int NotificationCooldownSeconds { get; set; } = 30;
+
     public bool IsEnabled
     {
         get => Enabled;

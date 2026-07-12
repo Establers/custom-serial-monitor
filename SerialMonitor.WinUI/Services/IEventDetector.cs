@@ -33,6 +33,8 @@ public interface IEventDetector : IAsyncDisposable
 
     long DroppedInputLineCount { get; }
 
+    int PendingInputLineCount { get; }
+
     long DroppedOutputEventCount { get; }
 
     long ContextCapturesStartedCount { get; }
