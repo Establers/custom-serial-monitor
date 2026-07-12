@@ -2410,16 +2410,76 @@
 
                             <Border Grid.Row="1"
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
-                                <TextBox Text="{Binding HelpGuideText, Mode=OneWay}"
-                                         FontFamily="Segoe UI"
-                                         FontSize="12"
-                                         IsReadOnly="True"
-                                         AcceptsReturn="True"
-                                         TextWrapping="Wrap"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <TextBlock Text="{Binding HelpGuideText, Mode=OneWay}"
+                                               Padding="8"
+                                               FontFamily="Segoe UI"
+                                               FontSize="12"
+                                               IsTextSelectionEnabled="True"
+                                               TextWrapping="WrapWholeWords" />
+                                </ScrollViewer>
                             </Border>
                         </Grid>
+                    </TabViewItem>
+
+                    <TabViewItem Header="About"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="About / License">
+                        <ScrollViewer Padding="4"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="8">
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="10">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Serial Monitor"
+                                                   FontSize="20"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Text="Windows serial monitor for embedded-device debugging"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                        <TextBlock Text="{Binding AboutVersionText}"
+                                                   FontFamily="Consolas"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="10">
+                                    <Grid ColumnDefinitions="80,*"
+                                          RowDefinitions="Auto,Auto"
+                                          ColumnSpacing="8"
+                                          RowSpacing="4">
+                                        <TextBlock Text="제작자"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="박재환" />
+                                        <TextBlock Grid.Row="1"
+                                                   Text="GitHub"
+                                                   FontWeight="SemiBold" />
+                                        <HyperlinkButton Grid.Row="1"
+                                                         Grid.Column="1"
+                                                         Padding="0"
+                                                         HorizontalAlignment="Left"
+                                                         Content="Establers/custom-serial-monitor"
+                                                         NavigateUri="https://github.com/Establers/custom-serial-monitor" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="10">
+                                    <StackPanel Spacing="5">
+                                        <TextBlock Text="License Information"
+                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                        <TextBlock Text="{Binding AboutLicenseText}"
+                                                   IsTextSelectionEnabled="True"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </TabViewItem>
                 </TabView>
             </Grid>

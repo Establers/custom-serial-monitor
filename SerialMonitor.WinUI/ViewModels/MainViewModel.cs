@@ -3365,6 +3365,65 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string HelpGuideText => """
         빠른 시작
 
+        1. Port와 Baud를 선택하고 Connect를 누릅니다.
+        2. 일반 명령은 TX Mode를 Terminal로 두고 전송합니다.
+        3. 바이너리 패킷은 TX Mode를 HEX로 바꾸고 AA 55 01처럼 입력합니다.
+        4. 장시간 기록이 필요하면 Log ON을 확인합니다.
+        5. 설정을 유지하려면 Save Profile을 누릅니다.
+
+        이벤트 만들기
+
+        1. Rules 탭에서 +를 누릅니다.
+        2. Name과 Keyword를 입력합니다.
+        3. Enabled와 Event를 켭니다.
+        4. 문자열은 Match = Text, 원본 바이트는 Match = HEX를 선택합니다.
+        5. 일반적인 장비 이벤트는 Direction = RxOnly를 권장합니다.
+        6. Save 후 새로 들어오는 로그에서 동작을 확인합니다.
+
+        이벤트 확인
+
+        Events에서 발생 시간과 메시지를 확인합니다.
+        이벤트를 더블클릭하면 Context에서 전후 로그를 볼 수 있습니다.
+        Tray, Sound, Popup 알림은 규칙 편집창에서 필요한 것만 켭니다.
+        알림 기본값은 모두 OFF이며 기본 쿨다운은 30초입니다.
+
+        명령 시퀀스
+
+        1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.
+        2. 아래쪽 +로 명령 Step을 추가합니다.
+        3. Command, Line ending, Delay after ms를 설정합니다.
+        4. Up과 Dn으로 순서를 조정합니다.
+        5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.
+
+        현재 시퀀스는 명령과 지연 시간만 순서대로 실행합니다.
+        장비 응답 판정, 조건 분기, HEX Step은 아직 지원하지 않습니다.
+
+        COM Bridge
+
+        실제 장비에 먼저 Connect합니다.
+        Bridge 탭에서 com0com 쌍 중 앱이 사용할 포트를 선택하고 Start bridge를 누릅니다.
+        외부 프로그램은 반드시 가상 포트 쌍의 반대편을 엽니다.
+        BRIDGE ON 표시가 보이면 원본 바이트가 양방향으로 전달됩니다.
+
+        화면과 로그
+
+        Pause Rendering은 화면 갱신만 멈춥니다.
+        Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
+        RX View = HEX는 수신 원본 바이트 확인용입니다.
+        Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
+
+        단축키
+
+        Ctrl+F  검색
+        F3 / Shift+F3  다음 / 이전 결과
+        Ctrl+C  선택 로그 복사
+        Ctrl+M  MARK 삽입
+        TX 입력창 ↑ / ↓  전송 기록 이동
+        """;
+
+    private string LegacyHelpGuideText => """
+        빠른 시작
+
         * Port와 Baud를 선택한 뒤 Connect를 누릅니다.
         * TX 입력창에 명령어를 입력하고 Send를 누르면 전송됩니다.
         * 일반 RTOS 쉘 명령은 TX Mode = Terminal, RX View = Terminal을 사용합니다.
@@ -3432,29 +3491,45 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * 값이 클수록 더 오래된 로그를 앱에서 볼 수 있지만 메모리를 더 사용합니다.
         * 장기 기록은 Log Save ON으로 파일에 저장하는 것이 좋습니다.
 
-        Rules
+        이벤트 규칙 만드는 방법
 
-        * Rules는 로그를 감지하고 색칠하고 필터링하는 규칙입니다.
-        * 기본적으로 Rules는 새로 들어오는 로그부터 적용됩니다.
-        * 기존 화면 로그는 자동으로 다시 평가하거나 다시 그리지 않습니다.
-        * 그래서 Rule을 추가/수정해도 화면이 refresh되지 않습니다.
-        * 새 필터를 깨끗하게 보고 싶으면 Clear를 누른 뒤 로그를 받으면 됩니다.
-        * 새 Rule에서 Event는 기본 OFF입니다.
-        * Event: 매칭된 줄을 이벤트로 기록합니다.
-        * Highlight: 매칭된 줄에 색상을 적용합니다.
-        * Filter: 상단 필터 목록에서 선택할 수 있게 합니다.
-        * Match = Text: ERROR, WARN, TASK 같은 문자열을 기준으로 찾습니다.
-        * Match = HEX: 49 4E, AA 55 같은 raw byte 패턴을 기준으로 찾습니다.
-        * RX View가 Terminal이든 HEX든 Rule 매칭 결과는 바뀌지 않습니다.
-        * HEX Rule 예시: Keyword = 49 4E, Match = HEX
-        * Case 옵션은 Text Rule에만 의미가 있습니다. HEX Rule에서는 무시됩니다.
+        1. Rules 탭을 열고 상단의 + 버튼을 누릅니다.
+        2. Name에는 사람이 알아보기 쉬운 이름을 입력합니다. 예: Boot Error
+        3. Keyword에는 실제로 찾을 값을 입력합니다. 예: ERROR 또는 AA 55
+        4. Enabled와 Event를 켭니다. Event를 끄면 Events 탭에 기록되지 않습니다.
+        5. 필요하면 Highlight를 켜서 로그에 색상을 적용합니다.
+        6. 필요하면 Filter를 켜서 로그 상단 Filter 목록에서 이 규칙만 볼 수 있게 합니다.
+        7. Save를 누른 뒤 새로 수신되는 로그부터 규칙이 적용되는지 확인합니다.
+        8. 규칙을 계속 사용할 경우 Save Profile을 눌러 저장합니다.
 
-        Events / Context
+        이벤트 규칙 옵션
 
-        * 이벤트가 발생하면 Events 탭에 기록됩니다.
-        * 이벤트를 더블클릭하면 Context 탭에서 전후 로그를 확인할 수 있습니다.
-        * BEFORE / MATCHED / AFTER 구조로 이벤트 주변 상황을 보여줍니다.
-        * Event Context 기본값은 전후 10줄입니다.
+        * Match = Text: 디코딩된 문자열에서 찾습니다. 예: ERROR, WARN, boot complete
+        * Match = HEX: 수신 원본 바이트에서 찾습니다. 예: AA 55 01, 49 4E
+        * Direction = RxOnly: 장비에서 받은 로그만 검사합니다. 일반적인 이벤트 규칙은 이 값을 권장합니다.
+        * Direction = TxOnly: 앱에서 보낸 TX만 검사합니다.
+        * Direction = Both: RX와 TX를 모두 검사합니다.
+        * Case sensitive: Text 규칙의 대소문자를 구분합니다. HEX 규칙에서는 무시됩니다.
+        * Priority: 여러 Highlight 규칙이 동시에 일치할 때 높은 값의 색상을 우선 적용합니다.
+        * Background는 필요할 때만 사용합니다. 너무 많은 배경색은 로그 가독성을 떨어뜨릴 수 있습니다.
+        * RX View가 Terminal/HEX 중 무엇이든 실제 규칙 매칭 결과는 동일합니다.
+
+        이벤트 확인과 Context 사용
+
+        * 규칙이 일치하면 Events 탭에 시간, 규칙 이름, 방향, 원본 메시지가 추가됩니다.
+        * 이벤트를 한 번 선택하면 관련 정보가 갱신되고, 더블클릭하면 Context 탭으로 이동합니다.
+        * Context는 BEFORE / MATCHED / AFTER 순서로 이벤트 전후 로그를 보여줍니다.
+        * 전후 줄 수는 Settings의 Event Context에서 조정합니다. 기본값은 앞 10줄, 뒤 10줄입니다.
+        * 뒤쪽 로그가 아직 도착하지 않았다면 Context pending으로 표시될 수 있습니다.
+        * Copy Event Context로 전후 로그 전체를 복사할 수 있습니다.
+
+        이벤트 알림 설정
+
+        * 규칙 편집창에서 Tray, Sound, Popup을 필요한 항목만 켭니다. 기본값은 모두 OFF입니다.
+        * Tray는 Windows 알림 영역, Sound는 알림음, Popup은 앱 내부 알림입니다.
+        * Notify cooldown 기본값은 30초입니다. 같은 규칙이 반복되면 여러 건을 묶어서 한 번만 알립니다.
+        * 알림 옵션을 모두 꺼도 이벤트 기록과 파일 저장은 계속 동작합니다.
+        * MOCK에서도 ERROR/WARN 규칙과 알림을 시험할 수 있습니다.
 
         Saved Commands / History
 
@@ -3463,17 +3538,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * History와 Saved Command는 쉘 프롬프트 예: lupa:/> 를 자동으로 붙이지 않습니다.
         * 프롬프트는 장치가 보여주는 문자열이고, 사용자가 보낼 명령이 아닙니다.
 
-        Command Sequences
+        명령 시퀀스 만드는 방법
 
-        * 여러 TX 명령을 순서대로 실행합니다.
-        * 각 step마다 지연 시간과 line ending을 설정할 수 있습니다.
-        * MOCK에서는 RX 로그가 계속 생성되므로 TX 응답 사이에 다른 RX가 섞여 보일 수 있습니다.
+        1. Sequences 탭을 열고 위쪽 + 버튼으로 새 시퀀스를 만듭니다. 예: Boot Check
+        2. 시퀀스를 선택한 뒤 아래쪽 + 버튼으로 첫 번째 step을 추가합니다.
+        3. Command에 실제 장비로 보낼 명령을 입력합니다. 쉘 프롬프트 문자는 넣지 않습니다.
+        4. Line ending은 Global, None, CR, LF, CRLF 중 장비에 맞는 값을 선택합니다.
+        5. Delay after ms에는 이 명령을 보낸 뒤 다음 step까지 기다릴 시간을 입력합니다.
+        6. 필요한 명령 수만큼 step을 추가하고 Up/Dn으로 순서를 조정합니다.
+        7. 실제 장비 또는 MOCK에 Connect한 뒤 Run을 누릅니다.
+        8. 실행 중 중단하려면 Stop을 누릅니다.
+        9. 재사용할 시퀀스는 Save Profile로 저장합니다.
 
-        Event Notifications
+        명령 시퀀스 사용 예
 
-        * Tray, Sound, Popup은 이벤트 규칙마다 별도로 켤 수 있으며 기본값은 모두 OFF입니다.
-        * 같은 규칙의 이벤트는 1초 동안 묶고, 기본 30초 쿨다운 동안 추가 알림을 한 번으로 합칩니다.
-        * Popup은 앱 안에서 8초 동안 표시되며 이벤트 기록 자체에는 영향을 주지 않습니다.
+        * Step 1: version / Global / 300 ms
+        * Step 2: status / Global / 500 ms
+        * Step 3: help / CRLF / 300 ms
+        * Delay는 명령 전송 후 대기 시간입니다. 너무 짧으면 장비가 다음 명령을 처리하지 못할 수 있습니다.
+        * 현재 시퀀스는 지정된 시간만 기다리며 장비 응답 성공 여부를 판정하지 않습니다.
+        * 실행 중 연결이 끊기거나 TX가 실패하면 시퀀스 오류로 중단됩니다.
+        * MOCK에서는 RX 로그가 계속 생성되므로 각 TX 사이에 다른 RX 로그가 섞여 보이는 것이 정상입니다.
+        * HEX 패킷 시퀀스와 응답 대기/조건 분기는 현재 지원하지 않습니다.
 
         Markers
 
@@ -3520,6 +3606,35 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * Reset bg to default는 커스텀 경로를 지우고 기본 배경으로 되돌립니다.
         * 오래되었거나 없는 커스텀 경로는 기본 배경으로 대체됩니다.
         * 배경이 너무 진하면 로그 가독성이 떨어질 수 있습니다.
+        """;
+
+    public string AboutVersionText
+    {
+        get
+        {
+            var version = typeof(MainViewModel).Assembly.GetName().Version;
+            return version is null
+                ? "Version (unknown)"
+                : $"Version {version.Major}.{version.Minor}.{version.Build}";
+        }
+    }
+
+    public string AboutLicenseText => """
+        애플리케이션
+
+        Copyright © 2026 박재환. All rights reserved.
+        현재 저장소에는 애플리케이션 자체에 대한 별도 LICENSE 파일이 지정되어 있지 않습니다.
+
+        주요 서드파티 구성요소
+
+        * Microsoft Windows App SDK 1.8.260508005 — MIT License
+        * RJCP.SerialPortStream 3.0.5 — Microsoft Public License (MS-PL)
+        * xterm.js 및 xterm.js addons — MIT License
+        * .NET / System.Text.Encoding.CodePages — MIT License
+        * Microsoft Edge WebView2 Runtime — Microsoft의 해당 배포 및 사용 조건 적용
+
+        각 서드파티 구성요소의 저작권과 라이선스는 원 저작권자에게 있습니다.
+        정확한 전체 조건은 배포 패키지, NuGet 패키지 및 각 프로젝트 저장소의 라이선스 원문을 따릅니다.
         """;
 
     public string HealthStateText
