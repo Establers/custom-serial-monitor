@@ -108,3 +108,7 @@ profiles under `%LOCALAPPDATA%\SerialMonitor`. See
 - Requirements: `docs/requirements.md`
 - Historical UI/UX audit: `SerialMonitor.WinUI/docs/ui_ux_audit.md`
 - Draft release notes: `docs/release_notes_draft.md`
+
+## License
+
+Serial Monitor is licensed under the MIT License. See [LICENSE](LICENSE).

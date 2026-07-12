@@ -3622,8 +3622,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string AboutLicenseText => """
         애플리케이션
 
-        Copyright © 2026 박재환. All rights reserved.
-        현재 저장소에는 애플리케이션 자체에 대한 별도 LICENSE 파일이 지정되어 있지 않습니다.
+        Copyright © 2026 박재환.
+        이 애플리케이션은 MIT License로 배포됩니다.
+        누구나 라이선스 고지를 유지하는 조건으로 사용, 수정, 재배포 및 상업적으로 이용할 수 있습니다.
+        자세한 조건은 배포 패키지와 저장소의 LICENSE 파일을 확인하세요.
 
         주요 서드파티 구성요소
 

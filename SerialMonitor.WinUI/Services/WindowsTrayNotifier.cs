@@ -15,9 +15,15 @@ public sealed class WindowsTrayNotifier : IDisposable
     private const uint NiifNoSound = 0x00000010;
     private const uint NotifyIconVersion4 = 4;
     private const int IdiApplication = 32512;
+    private const uint ImageIcon = 1;
+    private const uint LrLoadFromFile = 0x00000010;
+    private const uint LrDefaultSize = 0x00000040;
     private const uint IconId = 1;
+    private static readonly string AppIconPath =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon", "SerialMonitor.ico");
 
     private IntPtr _windowHandle;
+    private IntPtr _iconHandle;
     private bool _isAdded;
     private bool _disposed;
 
@@ -34,7 +40,7 @@ public sealed class WindowsTrayNotifier : IDisposable
             _windowHandle = windowHandle;
             var addData = CreateData(windowHandle);
             addData.uFlags = NifIcon | NifTip;
-            addData.hIcon = LoadIcon(IntPtr.Zero, (IntPtr)IdiApplication);
+            addData.hIcon = GetAppIcon();
             addData.szTip = "Serial Monitor";
             if (!Shell_NotifyIcon(NimAdd, ref addData))
             {
@@ -64,6 +70,11 @@ public sealed class WindowsTrayNotifier : IDisposable
 
         _disposed = true;
         RemoveIcon();
+        if (_iconHandle != IntPtr.Zero)
+        {
+            DestroyIcon(_iconHandle);
+            _iconHandle = IntPtr.Zero;
+        }
     }
 
     public void Hide()
@@ -98,6 +109,29 @@ public sealed class WindowsTrayNotifier : IDisposable
             szInfo = string.Empty,
             szInfoTitle = string.Empty
         };
+    }
+
+    private IntPtr GetAppIcon()
+    {
+        if (_iconHandle != IntPtr.Zero)
+        {
+            return _iconHandle;
+        }
+
+        if (File.Exists(AppIconPath))
+        {
+            _iconHandle = LoadImage(
+                IntPtr.Zero,
+                AppIconPath,
+                ImageIcon,
+                0,
+                0,
+                LrLoadFromFile | LrDefaultSize);
+        }
+
+        return _iconHandle != IntPtr.Zero
+            ? _iconHandle
+            : LoadIcon(IntPtr.Zero, (IntPtr)IdiApplication);
     }
 
     private static string Truncate(string? value, int maxLength)
@@ -143,4 +177,17 @@ public sealed class WindowsTrayNotifier : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadIcon(IntPtr instance, IntPtr iconName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr LoadImage(
+        IntPtr instance,
+        string name,
+        uint type,
+        int desiredWidth,
+        int desiredHeight,
+        uint loadFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr icon);
 }

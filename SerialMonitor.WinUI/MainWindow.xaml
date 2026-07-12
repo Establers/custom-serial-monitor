@@ -2432,17 +2432,26 @@
                             <StackPanel Spacing="8">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
                                         Padding="10">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Serial Monitor"
-                                                   FontSize="20"
-                                                   FontWeight="SemiBold" />
-                                        <TextBlock Text="Windows serial monitor for embedded-device debugging"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Style="{StaticResource CompactCellTextStyle}" />
-                                        <TextBlock Text="{Binding AboutVersionText}"
-                                                   FontFamily="Consolas"
-                                                   Style="{StaticResource CompactCellTextStyle}" />
-                                    </StackPanel>
+                                    <Grid ColumnDefinitions="56,*"
+                                          ColumnSpacing="10">
+                                        <Image Width="48"
+                                               Height="48"
+                                               HorizontalAlignment="Left"
+                                               VerticalAlignment="Top"
+                                               Source="ms-appx:///Assets/AppIcon/SerialMonitor-64.png" />
+                                        <StackPanel Grid.Column="1"
+                                                    Spacing="4">
+                                            <TextBlock Text="Serial Monitor"
+                                                       FontSize="20"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="Windows serial monitor for embedded-device debugging"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Text="{Binding AboutVersionText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"

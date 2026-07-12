@@ -38,6 +38,8 @@ public sealed partial class MainWindow : Window
     private static readonly TimeSpan XtermLiveAppendAckTimeout = TimeSpan.FromSeconds(30);
     private static readonly string BundledCuteBackgroundPath =
         Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
+    private static readonly string AppIconPath =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon", "SerialMonitor.ico");
 
     private readonly MainViewModel _viewModel;
     private readonly WindowsTrayNotifier _trayNotifier = new();
@@ -107,6 +109,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyAppIcon();
 
         var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _eventPopupTimer = dispatcherQueue.CreateTimer();
@@ -142,6 +145,21 @@ public sealed partial class MainWindow : Window
         _ = InitializeContextWebViewAsync();
 
         AppWindow.Resize(new SizeInt32(1200, 800));
+    }
+
+    private void ApplyAppIcon()
+    {
+        try
+        {
+            if (File.Exists(AppIconPath))
+            {
+                AppWindow.SetIcon(AppIconPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.ApplyAppIcon", ex);
+        }
     }
 
     private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)

@@ -46,6 +46,16 @@ function Find-InnoSetupCompiler {
     return $null
 }
 
+function Write-Sha256File {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $file = Get-Item -LiteralPath $FilePath
+    $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    $checksumPath = "$($file.FullName).sha256"
+    Set-Content -LiteralPath $checksumPath -Value "$hash *$($file.Name)" -Encoding ASCII
+    return $checksumPath
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-FullPath (Join-Path $scriptRoot "..")
 $publishScript = Join-Path $repoRoot "scripts\publish_portable.ps1"
@@ -119,6 +129,8 @@ if (-not $installer) {
         Select-Object -First 1
 }
 
+$installerChecksumPath = Write-Sha256File -FilePath $installer.FullName
+
 if (-not $installer) {
     throw "Installer output was not produced in: $installerOutputDir"
 }
@@ -135,4 +147,5 @@ Write-Host ""
 Write-Host "Installer build complete."
 Write-Host "Portable folder: $portableDir"
 Write-Host "Installer: $($installer.FullName)"
+Write-Host "SHA-256: $installerChecksumPath"
 Write-Host "MSIX/AppX output: none"

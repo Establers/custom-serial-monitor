@@ -54,6 +54,16 @@ function Invoke-DotnetPublish {
     return [int]$LASTEXITCODE
 }
 
+function Write-Sha256File {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $file = Get-Item -LiteralPath $FilePath
+    $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    $checksumPath = "$($file.FullName).sha256"
+    Set-Content -LiteralPath $checksumPath -Value "$hash *$($file.Name)" -Encoding ASCII
+    return $checksumPath
+}
+
 function Copy-WinUIResourceArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$RepoPath,
@@ -91,6 +101,7 @@ function Copy-WinUIResourceArtifacts {
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-FullPath (Join-Path $scriptRoot "..")
 $projectPath = Join-Path $repoRoot "SerialMonitor.WinUI\SerialMonitor.WinUI.csproj"
+$licensePath = Join-Path $repoRoot "LICENSE"
 $releaseRoot = Join-Path $repoRoot "release"
 $portableDir = Join-Path $releaseRoot "SerialMonitorPortable"
 $appProcessName = "SerialMonitor.WinUI"
@@ -98,6 +109,10 @@ $exeName = "SerialMonitor.WinUI.exe"
 
 if (-not (Test-Path -LiteralPath $projectPath)) {
     throw "Project file not found: $projectPath"
+}
+
+if (-not (Test-Path -LiteralPath $licensePath -PathType Leaf)) {
+    throw "License file not found: $licensePath"
 }
 
 $releaseRootFull = Resolve-FullPath $releaseRoot
@@ -167,6 +182,7 @@ if (-not (Test-Path -LiteralPath $exePath)) {
 }
 
 Copy-WinUIResourceArtifacts -RepoPath $repoRoot -ConfigurationName $Configuration -DestinationPath $portableDirFull
+Copy-Item -LiteralPath $licensePath -Destination (Join-Path $portableDirFull "LICENSE") -Force
 
 $requiredAssets = @(
     "App.xbf",
@@ -175,7 +191,9 @@ $requiredAssets = @(
     "Assets\xterm\index.html",
     "Assets\xterm\xterm.js",
     "Assets\context\index.html",
-    "Assets\FunBackgrounds\default_cute_bg.jpg"
+    "Assets\FunBackgrounds\default_cute_bg.jpg",
+    "Assets\AppIcon\SerialMonitor.ico",
+    "LICENSE"
 )
 
 foreach ($relativeAsset in $requiredAssets) {
@@ -237,10 +255,12 @@ if ($sourceFiles.Count -gt 0) {
 }
 
 $zipPath = $null
+$zipChecksumPath = $null
 if (-not $NoZip) {
     $timestamp = Get-Date -Format "yyyyMMdd_HHmm"
     $zipPath = Join-Path $releaseRootFull "SerialMonitorPortable_$timestamp.zip"
     Compress-Archive -LiteralPath $portableDirFull -DestinationPath $zipPath -Force
+    $zipChecksumPath = Write-Sha256File -FilePath $zipPath
 }
 
 $fileCount = @(Get-ChildItem -LiteralPath $portableDirFull -Recurse -File).Count
@@ -251,5 +271,6 @@ Write-Host "Executable: $exePath"
 Write-Host "Files: $fileCount"
 if ($zipPath) {
     Write-Host "Zip: $zipPath"
+    Write-Host "SHA-256: $zipChecksumPath"
 }
 Write-Host "MSIX/AppX output: none"
