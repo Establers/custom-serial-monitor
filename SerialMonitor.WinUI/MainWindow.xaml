@@ -765,7 +765,7 @@
                          SelectionChanged="InspectorTabView_SelectionChanged">
                     <TabViewItem Header="Events"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Events">
+                                 ToolTipService.ToolTip="Review log events detected by enabled rules.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -838,7 +838,7 @@
                     <TabViewItem x:Name="ContextTabViewItem"
                                  Header="Context"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Context">
+                                 ToolTipService.ToolTip="Inspect the log lines before and after the selected event.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               Padding="0"
                               RowSpacing="2"
@@ -879,7 +879,7 @@
 
                     <TabViewItem Header="Search"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Search results">
+                                 ToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result to jump to it.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinWidth="0"
                               RowSpacing="2"
@@ -961,7 +961,7 @@
 
                     <TabViewItem Header="Sequences"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Command sequences">
+                                 ToolTipService.ToolTip="Create and run ordered command sequences with per-step delays.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               RowSpacing="3"
@@ -1155,7 +1155,7 @@
 
                     <TabViewItem Header="Rules"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Rules">
+                                 ToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,*">
                             <Border Grid.Row="0"
@@ -1355,7 +1355,7 @@
 
                     <TabViewItem Header="Bridge"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Bidirectional raw-byte COM bridge">
+                                 ToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
                         <ScrollViewer Padding="0,2,0,0"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -1519,7 +1519,7 @@
 
                     <TabViewItem Header="Settings"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Settings">
+                                 ToolTipService.ToolTip="Configure serial, logging, display, profile, and MOCK options.">
                         <ScrollViewer Padding="0,2,0,0"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -1958,6 +1958,27 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
+                                            <TextBlock Text="HEX timeout"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="5">
+                                                <TextBox Text="{Binding HexGroupTimeoutMsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         Width="72"
+                                                         IsEnabled="{Binding IsHexRxViewSelected}"
+                                                         HorizontalAlignment="Left"
+                                                         ToolTipService.ToolTip="Group all raw RX bytes received within this idle gap into one HEX line. The timer restarts after every received chunk; CR and LF remain visible data." />
+                                                <TextBlock Text="ms"
+                                                           Style="{StaticResource SettingLabelTextStyle}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to new and currently open HEX groups. Range: 1–5000 ms; default: 40 ms." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
                                             <TextBlock Text="TX mode"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
@@ -2347,7 +2368,7 @@
 
                     <TabViewItem Header="Diag"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Diagnostics">
+                                 ToolTipService.ToolTip="Inspect runtime counters, queue state, drops, and recent errors.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -2392,7 +2413,7 @@
 
                     <TabViewItem Header="Help"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Help / Guide">
+                                 ToolTipService.ToolTip="Read quick instructions for events, sequences, the COM bridge, and shortcuts.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -2425,7 +2446,7 @@
 
                     <TabViewItem Header="About"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="About / License">
+                                 ToolTipService.ToolTip="View the app version, author, GitHub repository, and license information.">
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -2669,6 +2690,7 @@
                            FontSize="11"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="Q F/E/U shows pending File, Event, and UI queue items. Drop RX/F/UI shows lost RX, file-log, and UI-log records; these should normally stay at zero."
                            MaxLines="1" />
             </ScrollViewer>
         </Border>

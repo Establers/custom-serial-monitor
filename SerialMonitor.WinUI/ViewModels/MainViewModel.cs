@@ -168,6 +168,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int MaxVisibleLogLinesLimit = 500_000;
     private const int MinXtermScrollbackSize = 1_000;
     private const int MaxXtermScrollbackSizeLimit = 500_000;
+    private const int MinHexGroupTimeoutMs = 1;
+    private const int MaxHexGroupTimeoutMs = 5_000;
     private const int DefaultVisibleEventCount = 1_000;
     private const int MinVisibleEventCount = 500;
     private const int MaxVisibleEventCountLimit = 5_000;
@@ -1375,12 +1377,63 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.RxDisplayMode = normalized;
+            _logPipeline.ConfigureRxDisplay(normalized, HexGroupTimeoutMs);
             SetVisibleLogRebuildReason("RX view change");
             Log.SetRxDisplayMode(normalized);
             RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
             RecordSettingsChange("RX view", SettingsApplyBehavior.Immediate, FormatRxDisplayModeName(normalized));
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsHexRxViewSelected));
             RefreshDiagnostics();
+        }
+    }
+
+    public bool IsHexRxViewSelected => SelectedRxDisplayMode == RxDisplayMode.Hex;
+
+    public int HexGroupTimeoutMs
+    {
+        get => _currentUiSettings.HexGroupTimeoutMs;
+        set
+        {
+            if (!ValidateIntRange("HEX group timeout (ms)", value, MinHexGroupTimeoutMs, MaxHexGroupTimeoutMs))
+            {
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HexGroupTimeoutMsText));
+                return;
+            }
+
+            if (_currentUiSettings.HexGroupTimeoutMs == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.HexGroupTimeoutMs = value;
+            _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, value);
+            RecordSettingsChange("HEX group timeout", SettingsApplyBehavior.Immediate, $"{value} ms");
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HexGroupTimeoutMsText));
+            RefreshDiagnostics();
+        }
+    }
+
+    public string HexGroupTimeoutMsText
+    {
+        get => HexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            if (TryParseIntSetting(
+                "HEX group timeout (ms)",
+                value,
+                MinHexGroupTimeoutMs,
+                MaxHexGroupTimeoutMs,
+                out var parsed))
+            {
+                HexGroupTimeoutMs = parsed;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -3410,6 +3463,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Pause Rendering은 화면 갱신만 멈춥니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
+        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 40ms입니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
 
         단축키
@@ -5152,6 +5206,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 CancellationToken.None);
             ApplySessionFileNaming(requestNewFile: false);
             await _serialService.ConnectAsync(settings, _connectionCancellation.Token);
+            _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, HexGroupTimeoutMs);
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
@@ -10075,6 +10130,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Log.SetShowTimestampInLogView(_currentUiSettings.ShowTimestampInLogView);
             SetVisibleLogRebuildReason("profile RX view restore");
             Log.SetRxDisplayMode(_currentUiSettings.RxDisplayMode);
+            _logPipeline.ConfigureRxDisplay(
+                _currentUiSettings.RxDisplayMode,
+                _currentUiSettings.HexGroupTimeoutMs);
             ApplyProfileUiRuntimeSettings(_currentUiSettings);
 
             LogRules.Clear();
@@ -10203,6 +10261,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedRxLineEnding));
         OnPropertyChanged(nameof(SelectedRxEncoding));
         OnPropertyChanged(nameof(SelectedRxDisplayMode));
+        OnPropertyChanged(nameof(IsHexRxViewSelected));
+        OnPropertyChanged(nameof(HexGroupTimeoutMs));
+        OnPropertyChanged(nameof(HexGroupTimeoutMsText));
         OnPropertyChanged(nameof(SelectedTxSendMode));
         OnPropertyChanged(nameof(IsTxLineEndingEffective));
         OnPropertyChanged(nameof(TxLineEndingToolTip));
@@ -11134,6 +11195,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
         builder.AppendLine($"  Profile apply rules to new logs only: {_currentUiSettings.ApplyRulesToNewLogsOnly}");
         builder.AppendLine($"  Profile RX display mode: {FormatRxDisplayModeName(_currentUiSettings.RxDisplayMode)}");
+        builder.AppendLine($"  Profile HEX group timeout: {_currentUiSettings.HexGroupTimeoutMs:N0} ms");
         builder.AppendLine($"  Profile TX send mode: {FormatTxSendModeName(_currentUiSettings.TxSendMode)}");
         builder.AppendLine($"  Profile cute background mode: {_currentUiSettings.CuteBackgroundMode}");
         builder.AppendLine($"  Profile custom cute background image path: {(string.IsNullOrWhiteSpace(_currentUiSettings.CuteBackgroundImagePath) ? "(none)" : _currentUiSettings.CuteBackgroundImagePath)}");
@@ -11338,6 +11400,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Visual drain max chars: {VisualDrainMaxChars:N0}");
         builder.AppendLine($"  Show timestamp in log view: {ShowTimestampInLogView}");
         builder.AppendLine($"  RX display mode: {FormatRxDisplayModeName(SelectedRxDisplayMode)}");
+        builder.AppendLine($"  HEX group timeout configured/applied: {HexGroupTimeoutMs:N0}/{_logPipeline.HexGroupTimeoutMs:N0} ms");
+        builder.AppendLine($"  HEX pending bytes: {_logPipeline.HexPendingByteCount:N0}");
+        builder.AppendLine($"  HEX group flush count: {_logPipeline.HexGroupFlushCount:N0}");
+        builder.AppendLine($"  Last HEX group flush: {_logPipeline.LastHexGroupFlushTimeText}");
         builder.AppendLine($"  Partial RX visual line active: {Log.PartialRxVisualLineActive}");
         builder.AppendLine($"  Partial RX visual length: {Log.PartialRxVisualLength:N0}");
         builder.AppendLine($"  Partial RX append-in-place count: {Log.PartialRxAppendInPlaceCount:N0}");

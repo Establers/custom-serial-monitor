@@ -28,6 +28,8 @@ public sealed class LogViewModel : ViewModelBase
 {
     private const string AnsiReset = "\u001b[0m";
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
+    private const int LiveBatchPreallocationMaxChars = 1024 * 1024;
+    private const int EstimatedFormattedLineOverheadChars = 64;
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
 
@@ -224,10 +226,11 @@ public sealed class LogViewModel : ViewModelBase
             return;
         }
 
-        var estimatedCapacity = (int)Math.Min(
-            SnapshotPreallocationMaxChars,
-            Math.Max(0, VisibleCharacterCount));
-        var builder = new StringBuilder(estimatedCapacity);
+        // This builder contains only the incoming batch. Preallocating it from
+        // VisibleCharacterCount made every append reserve the entire retained
+        // log size once the visible buffer reached its cap, causing large-object
+        // allocations and periodic GC pauses at 100k+ retained lines.
+        var builder = new StringBuilder(EstimateLiveBatchCharacterCount(lines));
         var highlightedLines = 0;
         var formattingErrors = 0;
         var appendedVisibleLineCount = 0;
@@ -333,7 +336,10 @@ public sealed class LogViewModel : ViewModelBase
 
         FlushActivePartialRxLineToNodes();
 
-        var builder = new StringBuilder();
+        var estimatedCapacity = (int)Math.Min(
+            SnapshotPreallocationMaxChars,
+            Math.Max(0, VisibleCharacterCount));
+        var builder = new StringBuilder(estimatedCapacity);
         foreach (var line in _visibleLines)
         {
             builder.Append(line);
@@ -542,6 +548,29 @@ public sealed class LogViewModel : ViewModelBase
         _visibleCharacterCount += displayLine.Length;
     }
 
+    private int EstimateLiveBatchCharacterCount(IReadOnlyList<LogLine> lines)
+    {
+        long estimated = 0;
+        foreach (var line in lines)
+        {
+            long displayTextLength = line.Text.Length;
+            if (_rxDisplayMode == RxDisplayMode.Hex &&
+                line.Direction == LogDirection.Rx &&
+                line.RawBytes is { Length: > 0 } rawBytes)
+            {
+                displayTextLength = (long)rawBytes.Length * 3;
+            }
+
+            estimated += displayTextLength + EstimatedFormattedLineOverheadChars;
+            if (estimated >= LiveBatchPreallocationMaxChars)
+            {
+                return LiveBatchPreallocationMaxChars;
+            }
+        }
+
+        return (int)Math.Max(0, estimated);
+    }
+
     private void BeginActivePartialRxVisualLine(string displayLine, string searchableLine)
     {
         _partialRxDisplayNode = _visibleLines.Last;
@@ -660,8 +689,7 @@ public sealed class LogViewModel : ViewModelBase
     private bool ShouldMergePartialRxVisually(LogLine line)
     {
         return line.IsPartialRxSegment &&
-            line.Direction == LogDirection.Rx &&
-            _rxDisplayMode == RxDisplayMode.Terminal;
+            line.Direction == LogDirection.Rx;
     }
 
     private (string DisplayLine, string SearchableLine, int RawTextLength, bool HasFormattingError) FormatPartialRxVisibleSegment(LogLine line)
@@ -671,6 +699,11 @@ public sealed class LogViewModel : ViewModelBase
             var text = FormatDisplayText(line, _rxDisplayMode);
             if (_partialRxVisualLineActive)
             {
+                if (_rxDisplayMode == RxDisplayMode.Hex && text.Length > 0)
+                {
+                    text = " " + text;
+                }
+
                 return (text, text, text.Length, false);
             }
 

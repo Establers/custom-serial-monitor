@@ -15,6 +15,8 @@ public sealed class ProfileService : IProfileService
     private const int MaxVisibleEventCount = 5_000;
     private const int MinXtermScrollbackSize = 1_000;
     private const int MaxXtermScrollbackSize = 500_000;
+    private const int MinHexGroupTimeoutMs = 1;
+    private const int MaxHexGroupTimeoutMs = 5_000;
     private const int MaxEventContextLines = 1_000;
     private const int MinMockStressLinesPerSecond = 1;
     private const int MaxMockStressLinesPerSecond = 50_000;
@@ -750,6 +752,12 @@ public sealed class ProfileService : IProfileService
         {
             settings.XtermScrollbackSize = settings.MaxVisibleLogLines;
             warnings.Add("xterm scrollback was raised to match visible log max lines.");
+        }
+
+        if (settings.HexGroupTimeoutMs is < MinHexGroupTimeoutMs or > MaxHexGroupTimeoutMs)
+        {
+            settings.HexGroupTimeoutMs = defaults.HexGroupTimeoutMs;
+            warnings.Add("HEX group timeout was invalid.");
         }
 
         settings.LastSearchText = settings.LastSearchText?.Trim() ?? string.Empty;
