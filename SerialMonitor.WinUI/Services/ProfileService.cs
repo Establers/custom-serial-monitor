@@ -216,10 +216,27 @@ public sealed class ProfileService : IProfileService
     {
         if (!File.Exists(path))
         {
-            LastError = $"Profile file missing: {path}. Using defaults.";
-            LastStatus = "Profile file missing; defaults are active.";
-            Interlocked.Increment(ref _loadErrorCount);
-            return CreateDefaultProfile();
+            var defaultProfile = CreateDefaultProfile();
+            try
+            {
+                await SaveCoreAsync(path, defaultProfile, cancellationToken);
+                LastError = null;
+                LastStatus = $"Default profile created: {path}";
+                RecordLoadSuccess(defaultProfile);
+                return defaultProfile;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LastError = $"Default profile could not be created: {ex.Message}. Defaults remain active for this session.";
+                LastStatus = "Default profile creation failed; in-memory defaults are active.";
+                Interlocked.Increment(ref _loadErrorCount);
+                RecordLoadSuccess(defaultProfile);
+                return defaultProfile;
+            }
         }
 
         try

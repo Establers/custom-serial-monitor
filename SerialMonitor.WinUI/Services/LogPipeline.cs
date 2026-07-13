@@ -41,7 +41,7 @@ public sealed class LogPipeline : ILogPipeline
     private string _lastPartialRxFlushTimeText = "(none)";
     private readonly List<byte> _hexPendingBytes = new();
     private int _configuredRxDisplayMode = (int)RxDisplayMode.Terminal;
-    private int _hexGroupTimeoutMs = 40;
+    private int _hexGroupTimeoutMs = 100;
     private int _hexPendingByteCount;
     private int _hexGroupOpen;
     private long _hexGroupFlushCount;

@@ -235,7 +235,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private SerialSettings? _lastSuccessfulSerialSettings;
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
-    private string _hexGroupTimeoutDraftText = "40";
+    private string _hexGroupTimeoutDraftText = "100";
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
     private long _txErrorCount;
@@ -1397,6 +1397,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(SelectedTxSendMode));
             OnPropertyChanged(nameof(IsHexRxViewSelected));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+            OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
             OnPropertyChanged(nameof(IsTxLineEndingEffective));
             OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshDiagnostics();
@@ -1463,6 +1464,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ? $"HEX {HexGroupTimeoutMs:N0} ms"
         : string.Empty;
 
+    public double HexGroupTimeoutHeaderMinWidth => IsHexRxViewSelected ? 68d : 0d;
+
     public bool ApplyHexGroupTimeoutDraft()
     {
         if (!TryParseIntSetting(
@@ -1481,6 +1484,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
         OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
         OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
         return true;
     }
 
@@ -3523,7 +3527,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Pause Rendering은 화면 갱신만 멈춥니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
-        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 40ms입니다.
+        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 100ms입니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
 
         단축키
@@ -10332,6 +10336,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
         OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
         OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
         OnPropertyChanged(nameof(HexGroupTimeoutMsText));
         OnPropertyChanged(nameof(SelectedTxSendMode));
         OnPropertyChanged(nameof(IsTxLineEndingEffective));

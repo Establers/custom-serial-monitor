@@ -524,7 +524,7 @@
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnSpacing="4"
-                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,Auto,Auto,*">
+                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,*">
                 <TextBlock Grid.Column="0"
                            Text="Port"
                            Style="{StaticResource CompactLabelTextStyle}" />
@@ -542,43 +542,54 @@
                           ItemsSource="{Binding BaudRates}"
                           SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
                           IsEnabled="{Binding CanEditConnectionSettings}"
-                           MinWidth="86"
-                           HorizontalAlignment="Stretch" />
+                          MinWidth="86"
+                          HorizontalAlignment="Stretch" />
 
-                <TextBlock Grid.Column="4"
-                           Text="{Binding HexGroupTimeoutHeaderText}"
-                           Foreground="#FF55D6BE"
-                           FontFamily="Consolas"
-                           FontWeight="SemiBold"
-                           Style="{StaticResource CompactLabelTextStyle}"
-                           ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
-
-                <Button Grid.Column="5"
+                <Button Grid.Column="4"
                         Content="Connect"
                         Command="{Binding ConnectCommand}" />
-                <Button Grid.Column="6"
+                <Button Grid.Column="5"
                         Content="Disconnect"
                         Click="DisconnectButton_Click"
                         IsEnabled="{Binding CanManualDisconnect}" />
 
-                <Button Grid.Column="7"
+                <Button Grid.Column="6"
                         Content="{Binding FileLoggingToggleText}"
                         Command="{Binding ToggleFileLoggingCommand}"
                         Style="{StaticResource RuleActionButtonStyle}"
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
 
-                <TextBlock Grid.Column="8"
-                           Text="{Binding BridgeIndicatorText}"
-                           Foreground="#FFFFC857"
-                           FontWeight="Bold"
-                           Style="{StaticResource CompactLabelTextStyle}"
-                           ToolTipService.ToolTip="{Binding BridgeStatusText}" />
-
-                <TextBlock Grid.Column="9"
-                           Text="{Binding ConnectionStateText}"
-                           Style="{StaticResource CompactLabelTextStyle}"
-                           FontWeight="SemiBold"
-                           ToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
+                <Grid Grid.Column="7"
+                      ColumnDefinitions="*,Auto,Auto"
+                      ColumnSpacing="8"
+                      MinWidth="0"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ConnectionStateText}"
+                               Style="{StaticResource CompactLabelTextStyle}"
+                               FontWeight="SemiBold"
+                               MinWidth="0"
+                               MaxLines="1"
+                               TextAlignment="Right"
+                               HorizontalAlignment="Stretch"
+                               ToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding BridgeIndicatorText}"
+                               Foreground="#FFFFC857"
+                               FontWeight="Bold"
+                               Style="{StaticResource CompactLabelTextStyle}"
+                               MaxWidth="170"
+                               MaxLines="1"
+                               ToolTipService.ToolTip="{Binding BridgeStatusText}" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding HexGroupTimeoutHeaderText}"
+                               Style="{StaticResource CompactLabelTextStyle}"
+                               MinWidth="{Binding HexGroupTimeoutHeaderMinWidth}"
+                               MaxLines="1"
+                               TextTrimming="None"
+                               ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
+                </Grid>
             </Grid>
         </Border>
 
@@ -1679,36 +1690,40 @@
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
+                                        <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
                                             <TextBlock Text="HEX timeout"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="5">
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="78,Auto,Auto,Auto,*"
+                                                  ColumnSpacing="4"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center">
                                                 <TextBox x:Name="HexGroupTimeoutTextBox"
                                                          Text="{Binding HexGroupTimeoutDraftText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
-                                                         Width="78"
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
-                                                         HorizontalAlignment="Left"
+                                                         HorizontalAlignment="Stretch"
+                                                         VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
                                                          ToolTipService.ToolTip="Enter a whole number from 1 to 5000. It is applied only with Enter or Set. At 9,600 bps, try 100 ms for long frames." />
-                                                <TextBlock Text="ms"
-                                                           Style="{StaticResource SettingLabelTextStyle}" />
-                                                <Button Content="Set"
+                                                <TextBlock Grid.Column="1"
+                                                           Text="ms"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           ToolTipService.ToolTip="Milliseconds" />
+                                                <Button Grid.Column="2"
+                                                        Content="Set"
                                                         Style="{StaticResource RuleActionButtonStyle}"
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
+                                                        VerticalAlignment="Center"
                                                         Click="ApplyHexGroupTimeout_Click"
                                                         ToolTipService.ToolTip="Apply the entered timeout. You can also press Enter." />
-                                                <TextBlock Text="{Binding HexGroupTimeoutAppliedText}"
+                                                <TextBlock Grid.Column="3"
+                                                           Text="{Binding HexGroupTimeoutAppliedText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            VerticalAlignment="Center" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Set"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="The typed number is not applied until you press Enter or Set. Range: 1–5000 ms; default: 40 ms. For a 270-byte frame at 9,600 bps, 100 ms is safer." />
+                                            </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
