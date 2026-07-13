@@ -1706,7 +1706,7 @@
                                                          HorizontalAlignment="Stretch"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="Enter a whole number from 1 to 5000. It is applied only with Enter or Set. At 9,600 bps, try 100 ms for long frames." />
+                                                         ToolTipService.ToolTip="Enter a whole number from 1 to 5000. Apply with Enter or Set. Keep the USB-serial driver latency shorter than this timeout." />
                                                 <TextBlock Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
@@ -1724,6 +1724,14 @@
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            VerticalAlignment="Center" />
                                             </Grid>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*"
+                                              ColumnSpacing="4">
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Keep USB-driver latency &lt; HEX timeout &lt; packet gap (for example, 2 / 10 / 20 ms). For 3 ms gaps, use driver 1 ms and HEX 2 ms. Driver changes apply after disconnecting and reconnecting the COM port."
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       TextWrapping="Wrap"
+                                                       ToolTipService.ToolTip="USB drivers can buffer RX. If driver latency is not shorter than the HEX timeout, one packet can split or several packets can merge. Very short gaps are best-effort on Windows." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">

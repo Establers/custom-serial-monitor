@@ -7,8 +7,6 @@ namespace SerialMonitor.WinUI.Services;
 
 public sealed class SerialService : ISerialService
 {
-    private const int NativeReadIntervalTimeoutMs = 10;
-    private const int NativeReadTotalTimeoutMs = 5_000;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly object _stateGate = new();
@@ -593,21 +591,16 @@ public sealed class SerialService : ISerialService
             Handshake = ToRjcpHandshake(settings.Handshake),
             ReadBufferSize = 1024 * 1024,
             WriteBufferSize = 128 * 1024,
-            ReadTimeout = 500,
+            // ReadAsync is canceled by the connection token. An infinite
+            // stream-buffer wait avoids an otherwise unnecessary 500 ms idle
+            // wake-up loop and does not participate in packet grouping.
+            ReadTimeout = Timeout.Infinite,
             WriteTimeout = 1000,
             DtrEnable = settings.DtrEnable,
             RtsEnable = settings.RtsEnable
         };
 
-        // RJCP's Windows defaults complete a native read every 100 ms even
-        // while bytes are arriving. At 9600 bps that artificially divides a
-        // continuous 300-byte frame into several application chunks. Prefer
-        // an inter-byte idle boundary and retain a five-second fallback only
-        // for a stream that never becomes idle. At 9600 bps, even a 300-byte
-        // frame with sub-10-ms pauses completes before this fallback.
-        serialPort.Settings.ReadIntervalTimeout = NativeReadIntervalTimeoutMs;
-        serialPort.Settings.ReadTotalTimeoutConstant = NativeReadTotalTimeoutMs;
-        serialPort.Settings.ReadTotalTimeoutMultiplier = 0;
+        WindowsSerialReadTiming.Apply(serialPort);
         return serialPort;
     }
 

@@ -19,6 +19,8 @@ public interface ILogPipeline
 
     int LastRxChunkBytes { get; }
 
+    long LastRxChunkGapTicks { get; }
+
     string LastRxRawBytesHexPreview { get; }
 
     bool LastRxContainedTabByte { get; }

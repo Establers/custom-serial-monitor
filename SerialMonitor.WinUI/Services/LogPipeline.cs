@@ -28,6 +28,8 @@ public sealed class LogPipeline : ILogPipeline
     private long _sequenceNumber;
     private int _partialLineBufferLength;
     private int _lastRxChunkBytes;
+    private long _lastRxChunkGapTicks = -1;
+    private long _lastRxChunkTimestamp;
     private string _lastRxRawBytesHexPreview = string.Empty;
     private int _lastRxContainedTabByte;
     private int _lastRxContainedLiteralBackslashT;
@@ -67,6 +69,8 @@ public sealed class LogPipeline : ILogPipeline
     public int PartialLineBufferLength => Volatile.Read(ref _partialLineBufferLength);
 
     public int LastRxChunkBytes => Volatile.Read(ref _lastRxChunkBytes);
+
+    public long LastRxChunkGapTicks => Volatile.Read(ref _lastRxChunkGapTicks);
 
     public string LastRxRawBytesHexPreview => _lastRxRawBytesHexPreview;
 
@@ -141,6 +145,8 @@ public sealed class LogPipeline : ILogPipeline
             _lastHexGroupFlushTimeText = "(none)";
             Volatile.Write(ref _partialLineBufferLength, 0);
             Volatile.Write(ref _maxPartialLineBufferLength, 0);
+            Volatile.Write(ref _lastRxChunkGapTicks, -1);
+            Volatile.Write(ref _lastRxChunkTimestamp, 0);
             Volatile.Write(ref _lastRxChunkHadNewline, 0);
             Volatile.Write(ref _noNewlineRxDetected, 0);
             Volatile.Write(ref _lastPartialFinalizedByNewline, 0);
@@ -477,7 +483,11 @@ public sealed class LogPipeline : ILogPipeline
             _hexPendingBytes.AddRange(bytes);
             Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
             Volatile.Write(ref _hexGroupOpen, 1);
-            RecordRxChunk(bytes, parsedLineCount: 0, ContainsLineEnding(bytes, settings.RxLineEnding));
+            RecordRxChunk(
+                bytes,
+                parsedLineCount: 0,
+                ContainsLineEnding(bytes, settings.RxLineEnding),
+                receivedTimestamp);
 
             // This is only a bounded-memory transport segment. No newline is
             // emitted here, so segments still appear as one HEX packet line.
@@ -546,7 +556,7 @@ public sealed class LogPipeline : ILogPipeline
     {
         while (source.TryRead(out var chunk))
         {
-            await ProcessRxChunkAsync(chunk.Bytes, settings, cancellationToken);
+            await ProcessRxChunkAsync(chunk.Bytes, chunk.ReceivedTimestamp, settings, cancellationToken);
             if (_lineParser.PartialBufferLength >= PartialFlushThresholdBytes)
             {
                 await FlushPartialRxAsync(settings, cancellationToken);
@@ -556,6 +566,7 @@ public sealed class LogPipeline : ILogPipeline
 
     private async Task ProcessRxChunkAsync(
         byte[] bytes,
+        long receivedTimestamp,
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
@@ -567,7 +578,7 @@ public sealed class LogPipeline : ILogPipeline
         }
 
         var hadNewline = ContainsLineEnding(bytes, settings.RxLineEnding);
-        RecordRxChunk(bytes, parsedLinesInChunk, hadNewline);
+        RecordRxChunk(bytes, parsedLinesInChunk, hadNewline, receivedTimestamp);
         RecordPartialBufferLength();
     }
 
@@ -666,10 +677,15 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
-    private void RecordRxChunk(byte[] bytes, int parsedLineCount, bool hadNewline)
+    private void RecordRxChunk(byte[] bytes, int parsedLineCount, bool hadNewline, long receivedTimestamp)
     {
         var byteCount = bytes?.Length ?? 0;
+        var previousTimestamp = Interlocked.Exchange(ref _lastRxChunkTimestamp, receivedTimestamp);
+        var gapTicks = previousTimestamp > 0 && receivedTimestamp >= previousTimestamp
+            ? Stopwatch.GetElapsedTime(previousTimestamp, receivedTimestamp).Ticks
+            : -1;
         Volatile.Write(ref _lastRxChunkBytes, Math.Max(0, byteCount));
+        Volatile.Write(ref _lastRxChunkGapTicks, gapTicks);
         Interlocked.Exchange(ref _lastRxRawBytesHexPreview, BuildHexPreview(bytes));
         Volatile.Write(ref _lastRxContainedTabByte, ContainsByte(bytes, 0x09) ? 1 : 0);
         Volatile.Write(ref _lastRxContainedLiteralBackslashT, ContainsSequence(bytes, 0x5C, 0x74) ? 1 : 0);

@@ -3528,6 +3528,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
         HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 10ms입니다.
+        USB 드라이버 응답 시간 < HEX timeout < 실제 패킷 간격으로 설정하고, 드라이버 변경 후 COM 포트를 재연결합니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
 
         단축키
@@ -11472,6 +11473,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last partial finalized by newline: {_logPipeline.LastPartialFinalizedByNewline}");
         builder.AppendLine($"  Partial duplicate suppression count: {_logPipeline.PartialDuplicateSuppressionCount:N0}");
         builder.AppendLine($"  Last RX chunk bytes: {_logPipeline.LastRxChunkBytes:N0}");
+        var lastRxChunkGapTicks = _logPipeline.LastRxChunkGapTicks;
+        builder.AppendLine($"  Last RX chunk gap: {(lastRxChunkGapTicks < 0 ? "(none)" : $"{TimeSpan.FromTicks(lastRxChunkGapTicks).TotalMilliseconds:0.###} ms")}");
         builder.AppendLine($"  Last RX raw bytes hex preview: {(string.IsNullOrWhiteSpace(_logPipeline.LastRxRawBytesHexPreview) ? "(none)" : _logPipeline.LastRxRawBytesHexPreview)}");
         builder.AppendLine($"  Last RX chunk had newline: {_logPipeline.LastRxChunkHadNewline}");
         builder.AppendLine($"  Last RX contained TAB byte: {_logPipeline.LastRxContainedTabByte}");
