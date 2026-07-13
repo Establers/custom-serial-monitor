@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
@@ -41,7 +42,7 @@ public sealed class LogPipeline : ILogPipeline
     private string _lastPartialRxFlushTimeText = "(none)";
     private readonly List<byte> _hexPendingBytes = new();
     private int _configuredRxDisplayMode = (int)RxDisplayMode.Terminal;
-    private int _hexGroupTimeoutMs = 100;
+    private int _hexGroupTimeoutMs = 10;
     private int _hexPendingByteCount;
     private int _hexGroupOpen;
     private long _hexGroupFlushCount;
@@ -126,7 +127,7 @@ public sealed class LogPipeline : ILogPipeline
         RaiseStatusChanged();
     }
 
-    public async Task StartAsync(ChannelReader<byte[]> source, SerialSettings settings, CancellationToken cancellationToken)
+    public async Task StartAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken)
     {
         await _lifecycleGate.WaitAsync(cancellationToken);
         try
@@ -170,14 +171,14 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
-    private async Task ProcessAsync(ChannelReader<byte[]> source, SerialSettings settings, CancellationToken cancellationToken)
+    private async Task ProcessAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken)
     {
         try
         {
             var activeDisplayMode = GetConfiguredRxDisplayMode();
             var observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
             DateTimeOffset? flushDueAt = null;
-            DateTimeOffset? lastHexReceiveAt = null;
+            long? lastHexReceiveTimestamp = null;
             while (!cancellationToken.IsCancellationRequested)
             {
                 var configuredDisplayMode = GetConfiguredRxDisplayMode();
@@ -189,7 +190,7 @@ public sealed class LogPipeline : ILogPipeline
                         activeDisplayMode == RxDisplayMode.Hex &&
                         Volatile.Read(ref _hexGroupOpen) != 0)
                     {
-                        flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
+                        flushDueAt = null;
                     }
                 }
 
@@ -206,7 +207,7 @@ public sealed class LogPipeline : ILogPipeline
 
                     activeDisplayMode = configuredDisplayMode;
                     flushDueAt = null;
-                    lastHexReceiveAt = null;
+                    lastHexReceiveTimestamp = null;
                     continue;
                 }
 
@@ -225,30 +226,32 @@ public sealed class LogPipeline : ILogPipeline
                             continue;
                         }
 
-                        await DrainAvailableHexChunksAsync(source, settings, cancellationToken);
-                        if (Volatile.Read(ref _hexGroupOpen) != 0)
-                        {
-                            lastHexReceiveAt = DateTimeOffset.UtcNow;
-                            flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
-                        }
+                        var initialDrain = await DrainAvailableHexChunksAsync(
+                            source,
+                            settings,
+                            lastHexReceiveTimestamp,
+                            cancellationToken);
+                        lastHexReceiveTimestamp = initialDrain.LastReceivedTimestamp;
 
                         continue;
                     }
 
-                    flushDueAt ??= DateTimeOffset.UtcNow + GetHexGroupTimeout();
-                    var hexDelay = flushDueAt.Value - DateTimeOffset.UtcNow;
+                    var hexDelay = GetHexRemainingDelay(lastHexReceiveTimestamp);
                     if (hexDelay <= TimeSpan.Zero)
                     {
-                        if (await DrainAvailableHexChunksAsync(source, settings, cancellationToken))
+                        var expiredDrain = await DrainAvailableHexChunksAsync(
+                            source,
+                            settings,
+                            lastHexReceiveTimestamp,
+                            cancellationToken);
+                        lastHexReceiveTimestamp = expiredDrain.LastReceivedTimestamp;
+                        if (expiredDrain.DrainedAny)
                         {
-                            lastHexReceiveAt = DateTimeOffset.UtcNow;
-                            flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
                             continue;
                         }
 
                         await FlushHexGroupAsync(settings, cancellationToken);
-                        flushDueAt = null;
-                        lastHexReceiveAt = null;
+                        lastHexReceiveTimestamp = null;
                         continue;
                     }
 
@@ -258,7 +261,6 @@ public sealed class LogPipeline : ILogPipeline
                         if (configurationSnapshot.Version != observedDisplayConfigurationVersion)
                         {
                             observedDisplayConfigurationVersion = configurationSnapshot.Version;
-                            flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
                             continue;
                         }
 
@@ -272,16 +274,19 @@ public sealed class LogPipeline : ILogPipeline
                         {
                             await hexFlushTask;
                             hexWaitCancellation.Cancel();
-                            if (await DrainAvailableHexChunksAsync(source, settings, cancellationToken))
+                            var timedDrain = await DrainAvailableHexChunksAsync(
+                                source,
+                                settings,
+                                lastHexReceiveTimestamp,
+                                cancellationToken);
+                            lastHexReceiveTimestamp = timedDrain.LastReceivedTimestamp;
+                            if (timedDrain.DrainedAny)
                             {
-                                lastHexReceiveAt = DateTimeOffset.UtcNow;
-                                flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
                                 continue;
                             }
 
                             await FlushHexGroupAsync(settings, cancellationToken);
-                            flushDueAt = null;
-                            lastHexReceiveAt = null;
+                            lastHexReceiveTimestamp = null;
                             continue;
                         }
 
@@ -298,7 +303,6 @@ public sealed class LogPipeline : ILogPipeline
                         // Recalculate from the last received byte so shortening
                         // can flush immediately and lengthening keeps the group.
                         observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
-                        flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
                         continue;
                     }
 
@@ -307,11 +311,12 @@ public sealed class LogPipeline : ILogPipeline
                         continue;
                     }
 
-                    await DrainAvailableHexChunksAsync(source, settings, cancellationToken);
-                    // HEX packet boundaries are based on silence after the last
-                    // received chunk, so every arrival restarts the timeout.
-                    lastHexReceiveAt = DateTimeOffset.UtcNow;
-                    flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
+                    var dataDrain = await DrainAvailableHexChunksAsync(
+                        source,
+                        settings,
+                        lastHexReceiveTimestamp,
+                        cancellationToken);
+                    lastHexReceiveTimestamp = dataDrain.LastReceivedTimestamp;
                     continue;
                 }
 
@@ -414,6 +419,16 @@ public sealed class LogPipeline : ILogPipeline
         return TimeSpan.FromMilliseconds(Math.Clamp(HexGroupTimeoutMs, 1, 5_000));
     }
 
+    private TimeSpan GetHexRemainingDelay(long? lastReceivedTimestamp)
+    {
+        if (!lastReceivedTimestamp.HasValue)
+        {
+            return GetHexGroupTimeout();
+        }
+
+        return GetHexGroupTimeout() - Stopwatch.GetElapsedTime(lastReceivedTimestamp.Value);
+    }
+
     private (CancellationToken Token, long Version) GetDisplayConfigurationSnapshot()
     {
         lock (_displayConfigurationGate)
@@ -430,20 +445,35 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
-    private async Task<bool> DrainAvailableHexChunksAsync(
-        ChannelReader<byte[]> source,
+    private async Task<(bool DrainedAny, long? LastReceivedTimestamp)> DrainAvailableHexChunksAsync(
+        ChannelReader<ReceivedByteChunk> source,
         SerialSettings settings,
+        long? lastReceivedTimestamp,
         CancellationToken cancellationToken)
     {
         var drainedAny = false;
-        while (source.TryRead(out var bytes))
+        while (source.TryRead(out var chunk))
         {
+            var bytes = chunk.Bytes;
             if (bytes.Length == 0)
             {
                 continue;
             }
 
             drainedAny = true;
+            // Preserve receive order even if multiple mock producers race to
+            // enqueue. Real serial RX has a single producer.
+            var receivedTimestamp = !lastReceivedTimestamp.HasValue ||
+                chunk.ReceivedTimestamp >= lastReceivedTimestamp.Value
+                    ? chunk.ReceivedTimestamp
+                    : lastReceivedTimestamp.Value;
+            if (Volatile.Read(ref _hexGroupOpen) != 0 &&
+                lastReceivedTimestamp.HasValue &&
+                Stopwatch.GetElapsedTime(lastReceivedTimestamp.Value, receivedTimestamp) >= GetHexGroupTimeout())
+            {
+                await FlushHexGroupAsync(settings, cancellationToken);
+            }
+
             _hexPendingBytes.AddRange(bytes);
             Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
             Volatile.Write(ref _hexGroupOpen, 1);
@@ -455,9 +485,11 @@ public sealed class LogPipeline : ILogPipeline
             {
                 await FlushHexSegmentAsync(settings, cancellationToken);
             }
+
+            lastReceivedTimestamp = receivedTimestamp;
         }
 
-        return drainedAny;
+        return (drainedAny, lastReceivedTimestamp);
     }
 
     private async Task FlushHexSegmentAsync(SerialSettings settings, CancellationToken cancellationToken)
@@ -508,13 +540,13 @@ public sealed class LogPipeline : ILogPipeline
     }
 
     private async Task DrainAvailableRxChunksAsync(
-        ChannelReader<byte[]> source,
+        ChannelReader<ReceivedByteChunk> source,
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
-        while (source.TryRead(out var bytes))
+        while (source.TryRead(out var chunk))
         {
-            await ProcessRxChunkAsync(bytes, settings, cancellationToken);
+            await ProcessRxChunkAsync(chunk.Bytes, settings, cancellationToken);
             if (_lineParser.PartialBufferLength >= PartialFlushThresholdBytes)
             {
                 await FlushPartialRxAsync(settings, cancellationToken);

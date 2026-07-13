@@ -235,7 +235,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private SerialSettings? _lastSuccessfulSerialSettings;
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
-    private string _hexGroupTimeoutDraftText = "100";
+    private string _hexGroupTimeoutDraftText = "10";
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
     private long _txErrorCount;
@@ -3527,7 +3527,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Pause Rendering은 화면 갱신만 멈춥니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
-        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 100ms입니다.
+        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 10ms입니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
 
         단축키
@@ -5795,9 +5795,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 var title = count == 1
                     ? $"Serial event: {latestEvent.RuleName}"
                     : $"Serial event: {latestEvent.RuleName} ({count:N0})";
+                var latestMessage = FormatEventNotificationMessage(latestEvent);
                 var message = count == 1
-                    ? $"{latestEvent.TimeText}  {TruncateStatusText(latestEvent.Message, 220)}"
-                    : $"{count:N0} events grouped. Latest: {latestEvent.TimeText}  {TruncateStatusText(latestEvent.Message, 180)}";
+                    ? $"{latestEvent.TimeText}  {TruncateStatusText(latestMessage, 220)}"
+                    : $"{count:N0} events grouped. Latest: {latestEvent.TimeText}  {TruncateStatusText(latestMessage, 180)}";
                 request = new EventNotificationRequest(
                     title,
                     message,
@@ -5823,6 +5824,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RuntimeDiagnostics.RecordError("MainViewModel.DispatchPendingEventNotificationAsync", ex);
         }
+    }
+
+    private string FormatEventNotificationMessage(DetectedEvent detectedEvent)
+    {
+        if (SelectedRxDisplayMode == RxDisplayMode.Hex &&
+            detectedEvent.Direction == LogDirection.Rx &&
+            detectedEvent.SourceLogLine?.RawBytes is { Length: > 0 } rawBytes)
+        {
+            return $"HEX: {LogRuleMatcher.FormatBytesPreview(rawBytes, 64)}";
+        }
+
+        return detectedEvent.Message;
     }
 
     private void ClearPendingEventNotifications()

@@ -31,7 +31,7 @@ public interface ISerialService : IAsyncDisposable
 
     long BridgePriorityDroppedPipelineChunkCount { get; }
 
-    ChannelReader<byte[]> ReceivedBytes { get; }
+    ChannelReader<ReceivedByteChunk> ReceivedBytes { get; }
 
     bool IsMockStressRunning { get; }
 

@@ -27,7 +27,7 @@ public sealed class UiSettings
 
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
-    public int HexGroupTimeoutMs { get; set; } = 100;
+    public int HexGroupTimeoutMs { get; set; } = 10;
 
     public TxSendMode TxSendMode { get; set; } = TxSendMode.Terminal;
 

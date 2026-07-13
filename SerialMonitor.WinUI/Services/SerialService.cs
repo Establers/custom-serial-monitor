@@ -7,10 +7,12 @@ namespace SerialMonitor.WinUI.Services;
 
 public sealed class SerialService : ISerialService
 {
+    private const int NativeReadIntervalTimeoutMs = 10;
+    private const int NativeReadTotalTimeoutMs = 5_000;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly object _stateGate = new();
-    private Channel<byte[]> _receivedBytes = CreateChannel();
+    private Channel<ReceivedByteChunk> _receivedBytes = CreateChannel();
     private CancellationTokenSource? _receiveCancellation;
     private SerialPortStream? _serialPort;
     private Task? _receiveTask;
@@ -79,7 +81,7 @@ public sealed class SerialService : ISerialService
 
     public long BridgePriorityDroppedPipelineChunkCount => Interlocked.Read(ref _bridgePriorityDroppedPipelineChunkCount);
 
-    public ChannelReader<byte[]> ReceivedBytes => _receivedBytes.Reader;
+    public ChannelReader<ReceivedByteChunk> ReceivedBytes => _receivedBytes.Reader;
 
     public bool IsMockStressRunning => Volatile.Read(ref _mockStressRunning);
 
@@ -581,7 +583,12 @@ public sealed class SerialService : ISerialService
 
     private static SerialPortStream CreateSerialPort(SerialSettings settings)
     {
-        return new SerialPortStream(settings.PortName, settings.BaudRate, settings.DataBits, ToRjcpParity(settings.Parity), ToRjcpStopBits(settings.StopBits))
+        var serialPort = new WinSerialPortStream(
+            settings.PortName,
+            settings.BaudRate,
+            settings.DataBits,
+            ToRjcpParity(settings.Parity),
+            ToRjcpStopBits(settings.StopBits))
         {
             Handshake = ToRjcpHandshake(settings.Handshake),
             ReadBufferSize = 1024 * 1024,
@@ -591,6 +598,17 @@ public sealed class SerialService : ISerialService
             DtrEnable = settings.DtrEnable,
             RtsEnable = settings.RtsEnable
         };
+
+        // RJCP's Windows defaults complete a native read every 100 ms even
+        // while bytes are arriving. At 9600 bps that artificially divides a
+        // continuous 300-byte frame into several application chunks. Prefer
+        // an inter-byte idle boundary and retain a five-second fallback only
+        // for a stream that never becomes idle. At 9600 bps, even a 300-byte
+        // frame with sub-10-ms pauses completes before this fallback.
+        serialPort.Settings.ReadIntervalTimeout = NativeReadIntervalTimeoutMs;
+        serialPort.Settings.ReadTotalTimeoutConstant = NativeReadTotalTimeoutMs;
+        serialPort.Settings.ReadTotalTimeoutMultiplier = 0;
+        return serialPort;
     }
 
     private void ClearCurrentPortReference(SerialPortStream serialPort)
@@ -626,10 +644,11 @@ public sealed class SerialService : ISerialService
         CancellationToken cancellationToken,
         bool countReceived)
     {
+        var receivedChunk = ReceivedByteChunk.Capture(bytes);
         if (IsRawBridgePriorityEnabled)
         {
             PublishRawBytesReceived(bytes);
-            if (!_receivedBytes.Writer.TryWrite(bytes))
+            if (!_receivedBytes.Writer.TryWrite(receivedChunk))
             {
                 Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
                 Interlocked.Increment(ref _bridgePriorityDroppedPipelineChunkCount);
@@ -638,7 +657,7 @@ public sealed class SerialService : ISerialService
         }
         else
         {
-            await _receivedBytes.Writer.WriteAsync(bytes, cancellationToken);
+            await _receivedBytes.Writer.WriteAsync(receivedChunk, cancellationToken);
         }
 
         if (countReceived)
@@ -841,9 +860,9 @@ public sealed class SerialService : ISerialService
         };
     }
 
-    private static Channel<byte[]> CreateChannel()
+    private static Channel<ReceivedByteChunk> CreateChannel()
     {
-        return Channel.CreateBounded<byte[]>(new BoundedChannelOptions(4096)
+        return Channel.CreateBounded<ReceivedByteChunk>(new BoundedChannelOptions(4096)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,

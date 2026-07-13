@@ -53,7 +53,7 @@ public interface ILogPipeline
 
     void ConfigureRxDisplay(RxDisplayMode mode, int hexGroupTimeoutMs);
 
-    Task StartAsync(ChannelReader<byte[]> source, SerialSettings settings, CancellationToken cancellationToken);
+    Task StartAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);
 }
