@@ -10,11 +10,15 @@ public sealed class LogPipeline : ILogPipeline
 {
     private const int RawBytePreviewLimit = 32;
     private const int PartialFlushThresholdBytes = 128;
+    private const int HexStreamingSegmentBytes = 64 * 1024;
     private static readonly TimeSpan PartialFlushInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly EncodingDecoder _decoder;
     private readonly LineParser _lineParser;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
+    private readonly object _displayConfigurationGate = new();
+    private CancellationTokenSource _displayConfigurationChanged = new();
+    private long _displayConfigurationVersion;
     private Channel<LogLine> _logs = CreateLogChannel();
     private CancellationTokenSource? _pipelineCancellation;
     private Task? _pipelineTask;
@@ -35,6 +39,13 @@ public sealed class LogPipeline : ILogPipeline
     private long _partialDuplicateSuppressionCount;
     private int _lastPartialFinalizedByNewline;
     private string _lastPartialRxFlushTimeText = "(none)";
+    private readonly List<byte> _hexPendingBytes = new();
+    private int _configuredRxDisplayMode = (int)RxDisplayMode.Terminal;
+    private int _hexGroupTimeoutMs = 40;
+    private int _hexPendingByteCount;
+    private int _hexGroupOpen;
+    private long _hexGroupFlushCount;
+    private string _lastHexGroupFlushTimeText = "(none)";
 
     public LogPipeline(EncodingDecoder decoder, LineParser lineParser)
     {
@@ -80,6 +91,41 @@ public sealed class LogPipeline : ILogPipeline
 
     public string LastPartialRxFlushTimeText => _lastPartialRxFlushTimeText;
 
+    public int HexGroupTimeoutMs => Volatile.Read(ref _hexGroupTimeoutMs);
+
+    public int HexPendingByteCount => Volatile.Read(ref _hexPendingByteCount);
+
+    public long HexGroupFlushCount => Interlocked.Read(ref _hexGroupFlushCount);
+
+    public string LastHexGroupFlushTimeText => _lastHexGroupFlushTimeText;
+
+    public void ConfigureRxDisplay(RxDisplayMode mode, int hexGroupTimeoutMs)
+    {
+        var normalizedMode = mode == RxDisplayMode.Hex
+            ? RxDisplayMode.Hex
+            : RxDisplayMode.Terminal;
+        Volatile.Write(ref _configuredRxDisplayMode, (int)normalizedMode);
+        Volatile.Write(ref _hexGroupTimeoutMs, Math.Clamp(hexGroupTimeoutMs, 1, 5_000));
+        CancellationTokenSource previousSignal;
+        lock (_displayConfigurationGate)
+        {
+            previousSignal = _displayConfigurationChanged;
+            _displayConfigurationChanged = new CancellationTokenSource();
+            _displayConfigurationVersion++;
+        }
+
+        try
+        {
+            previousSignal.Cancel();
+        }
+        finally
+        {
+            previousSignal.Dispose();
+        }
+
+        RaiseStatusChanged();
+    }
+
     public async Task StartAsync(ChannelReader<byte[]> source, SerialSettings settings, CancellationToken cancellationToken)
     {
         await _lifecycleGate.WaitAsync(cancellationToken);
@@ -87,6 +133,11 @@ public sealed class LogPipeline : ILogPipeline
         {
             await StopCurrentPipelineAsync(CancellationToken.None);
             _lineParser.Clear();
+            _hexPendingBytes.Clear();
+            Volatile.Write(ref _hexPendingByteCount, 0);
+            Volatile.Write(ref _hexGroupOpen, 0);
+            Interlocked.Exchange(ref _hexGroupFlushCount, 0);
+            _lastHexGroupFlushTimeText = "(none)";
             Volatile.Write(ref _partialLineBufferLength, 0);
             Volatile.Write(ref _maxPartialLineBufferLength, 0);
             Volatile.Write(ref _lastRxChunkHadNewline, 0);
@@ -123,32 +174,160 @@ public sealed class LogPipeline : ILogPipeline
     {
         try
         {
-            DateTimeOffset? partialFlushDueAt = null;
+            var activeDisplayMode = GetConfiguredRxDisplayMode();
+            var observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
+            DateTimeOffset? flushDueAt = null;
+            DateTimeOffset? lastHexReceiveAt = null;
             while (!cancellationToken.IsCancellationRequested)
             {
+                var configuredDisplayMode = GetConfiguredRxDisplayMode();
+                var currentDisplayConfigurationVersion = GetDisplayConfigurationVersion();
+                if (currentDisplayConfigurationVersion != observedDisplayConfigurationVersion)
+                {
+                    observedDisplayConfigurationVersion = currentDisplayConfigurationVersion;
+                    if (configuredDisplayMode == activeDisplayMode &&
+                        activeDisplayMode == RxDisplayMode.Hex &&
+                        Volatile.Read(ref _hexGroupOpen) != 0)
+                    {
+                        flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
+                    }
+                }
+
+                if (configuredDisplayMode != activeDisplayMode)
+                {
+                    if (activeDisplayMode == RxDisplayMode.Hex)
+                    {
+                        await FlushHexGroupAsync(settings, cancellationToken);
+                    }
+                    else
+                    {
+                        await FinalizeTerminalPartialForModeSwitchAsync(settings, cancellationToken);
+                    }
+
+                    activeDisplayMode = configuredDisplayMode;
+                    flushDueAt = null;
+                    lastHexReceiveAt = null;
+                    continue;
+                }
+
+                if (activeDisplayMode == RxDisplayMode.Hex)
+                {
+                    if (Volatile.Read(ref _hexGroupOpen) == 0)
+                    {
+                        flushDueAt = null;
+                        if (!await source.WaitToReadAsync(cancellationToken))
+                        {
+                            break;
+                        }
+
+                        if (GetConfiguredRxDisplayMode() != activeDisplayMode)
+                        {
+                            continue;
+                        }
+
+                        await DrainAvailableHexChunksAsync(source, settings, cancellationToken);
+                        if (Volatile.Read(ref _hexGroupOpen) != 0)
+                        {
+                            lastHexReceiveAt = DateTimeOffset.UtcNow;
+                            flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
+                        }
+
+                        continue;
+                    }
+
+                    flushDueAt ??= DateTimeOffset.UtcNow + GetHexGroupTimeout();
+                    var hexDelay = flushDueAt.Value - DateTimeOffset.UtcNow;
+                    if (hexDelay <= TimeSpan.Zero)
+                    {
+                        await FlushHexGroupAsync(settings, cancellationToken);
+                        flushDueAt = null;
+                        continue;
+                    }
+
+                    try
+                    {
+                        var configurationSnapshot = GetDisplayConfigurationSnapshot();
+                        if (configurationSnapshot.Version != observedDisplayConfigurationVersion)
+                        {
+                            observedDisplayConfigurationVersion = configurationSnapshot.Version;
+                            flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
+                            continue;
+                        }
+
+                        using var hexWaitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                            cancellationToken,
+                            configurationSnapshot.Token);
+                        var waitForHexDataTask = source.WaitToReadAsync(hexWaitCancellation.Token).AsTask();
+                        var hexFlushTask = Task.Delay(hexDelay, hexWaitCancellation.Token);
+                        var hexCompletedTask = await Task.WhenAny(waitForHexDataTask, hexFlushTask);
+                        if (hexCompletedTask == hexFlushTask)
+                        {
+                            await hexFlushTask;
+                            hexWaitCancellation.Cancel();
+                            await FlushHexGroupAsync(settings, cancellationToken);
+                            flushDueAt = null;
+                            lastHexReceiveAt = null;
+                            continue;
+                        }
+
+                        var hasHexData = await waitForHexDataTask;
+                        hexWaitCancellation.Cancel();
+                        if (!hasHexData)
+                        {
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        // A live mode/timeout change wakes the current wait.
+                        // Recalculate from the last received byte so shortening
+                        // can flush immediately and lengthening keeps the group.
+                        observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
+                        flushDueAt = (lastHexReceiveAt ?? DateTimeOffset.UtcNow) + GetHexGroupTimeout();
+                        continue;
+                    }
+
+                    if (GetConfiguredRxDisplayMode() != activeDisplayMode)
+                    {
+                        continue;
+                    }
+
+                    await DrainAvailableHexChunksAsync(source, settings, cancellationToken);
+                    // HEX packet boundaries are based on silence after the last
+                    // received chunk, so every arrival restarts the timeout.
+                    lastHexReceiveAt = DateTimeOffset.UtcNow;
+                    flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
+                    continue;
+                }
+
                 if (_lineParser.PartialBufferLength <= 0)
                 {
-                    partialFlushDueAt = null;
+                    flushDueAt = null;
                     if (!await source.WaitToReadAsync(cancellationToken))
                     {
                         break;
                     }
 
+                    if (GetConfiguredRxDisplayMode() != activeDisplayMode)
+                    {
+                        continue;
+                    }
+
                     await DrainAvailableRxChunksAsync(source, settings, cancellationToken);
                     if (_lineParser.PartialBufferLength > 0)
                     {
-                        partialFlushDueAt = DateTimeOffset.UtcNow + PartialFlushInterval;
+                        flushDueAt = DateTimeOffset.UtcNow + PartialFlushInterval;
                     }
 
                     continue;
                 }
 
-                partialFlushDueAt ??= DateTimeOffset.UtcNow + PartialFlushInterval;
-                var delay = partialFlushDueAt.Value - DateTimeOffset.UtcNow;
+                flushDueAt ??= DateTimeOffset.UtcNow + PartialFlushInterval;
+                var delay = flushDueAt.Value - DateTimeOffset.UtcNow;
                 if (delay <= TimeSpan.Zero)
                 {
                     await FlushPartialRxAsync(settings, cancellationToken);
-                    partialFlushDueAt = _lineParser.PartialBufferLength > 0
+                    flushDueAt = _lineParser.PartialBufferLength > 0
                         ? DateTimeOffset.UtcNow + PartialFlushInterval
                         : null;
                     continue;
@@ -160,7 +339,7 @@ public sealed class LogPipeline : ILogPipeline
                 if (completedTask == partialFlushTask)
                 {
                     await FlushPartialRxAsync(settings, cancellationToken);
-                    partialFlushDueAt = _lineParser.PartialBufferLength > 0
+                    flushDueAt = _lineParser.PartialBufferLength > 0
                         ? DateTimeOffset.UtcNow + PartialFlushInterval
                         : null;
                     continue;
@@ -171,14 +350,26 @@ public sealed class LogPipeline : ILogPipeline
                     break;
                 }
 
+                if (GetConfiguredRxDisplayMode() != activeDisplayMode)
+                {
+                    continue;
+                }
+
                 await DrainAvailableRxChunksAsync(source, settings, cancellationToken);
                 if (_lineParser.PartialBufferLength <= 0)
                 {
-                    partialFlushDueAt = null;
+                    flushDueAt = null;
                 }
             }
 
-            await FlushPartialRxAsync(settings, cancellationToken);
+            if (activeDisplayMode == RxDisplayMode.Hex)
+            {
+                await FlushHexGroupAsync(settings, cancellationToken);
+            }
+            else
+            {
+                await FlushPartialRxAsync(settings, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -194,6 +385,107 @@ public sealed class LogPipeline : ILogPipeline
             _logs.Writer.TryComplete();
             RaiseStatusChanged();
         }
+    }
+
+    private RxDisplayMode GetConfiguredRxDisplayMode()
+    {
+        return Volatile.Read(ref _configuredRxDisplayMode) == (int)RxDisplayMode.Hex
+            ? RxDisplayMode.Hex
+            : RxDisplayMode.Terminal;
+    }
+
+    private TimeSpan GetHexGroupTimeout()
+    {
+        return TimeSpan.FromMilliseconds(Math.Clamp(HexGroupTimeoutMs, 1, 5_000));
+    }
+
+    private (CancellationToken Token, long Version) GetDisplayConfigurationSnapshot()
+    {
+        lock (_displayConfigurationGate)
+        {
+            return (_displayConfigurationChanged.Token, _displayConfigurationVersion);
+        }
+    }
+
+    private long GetDisplayConfigurationVersion()
+    {
+        lock (_displayConfigurationGate)
+        {
+            return _displayConfigurationVersion;
+        }
+    }
+
+    private async Task DrainAvailableHexChunksAsync(
+        ChannelReader<byte[]> source,
+        SerialSettings settings,
+        CancellationToken cancellationToken)
+    {
+        while (source.TryRead(out var bytes))
+        {
+            if (bytes.Length == 0)
+            {
+                continue;
+            }
+
+            _hexPendingBytes.AddRange(bytes);
+            Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
+            Volatile.Write(ref _hexGroupOpen, 1);
+            RecordRxChunk(bytes, parsedLineCount: 0, ContainsLineEnding(bytes, settings.RxLineEnding));
+
+            // This is only a bounded-memory transport segment. No newline is
+            // emitted here, so segments still appear as one HEX packet line.
+            if (_hexPendingBytes.Count >= HexStreamingSegmentBytes)
+            {
+                await FlushHexSegmentAsync(settings, cancellationToken);
+            }
+        }
+    }
+
+    private async Task FlushHexSegmentAsync(SerialSettings settings, CancellationToken cancellationToken)
+    {
+        if (_hexPendingBytes.Count == 0)
+        {
+            return;
+        }
+
+        var bytes = _hexPendingBytes.ToArray();
+        _hexPendingBytes.Clear();
+        Volatile.Write(ref _hexPendingByteCount, 0);
+        var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
+        var decoded = DecodeSafely(bytes, settings.Encoding);
+        await _logs.Writer.WriteAsync(
+            LogLine.Rx(decoded.Text, bytes, sequenceNumber, isPartialRxSegment: true),
+            cancellationToken);
+        AddParsedLine();
+    }
+
+    private async Task FlushHexGroupAsync(SerialSettings settings, CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _hexGroupOpen) == 0)
+        {
+            return;
+        }
+
+        await FlushHexSegmentAsync(settings, cancellationToken);
+        var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
+        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+        Volatile.Write(ref _hexGroupOpen, 0);
+        Interlocked.Increment(ref _hexGroupFlushCount);
+        Interlocked.Exchange(
+            ref _lastHexGroupFlushTimeText,
+            DateTimeOffset.Now.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture));
+        RaiseStatusChanged();
+    }
+
+    private async Task FinalizeTerminalPartialForModeSwitchAsync(
+        SerialSettings settings,
+        CancellationToken cancellationToken)
+    {
+        await FlushPartialRxAsync(settings, cancellationToken);
+        _lineParser.Clear();
+        var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
+        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+        RecordPartialBufferLength();
     }
 
     private async Task DrainAvailableRxChunksAsync(

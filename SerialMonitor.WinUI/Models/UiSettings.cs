@@ -27,6 +27,8 @@ public sealed class UiSettings
 
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
+    public int HexGroupTimeoutMs { get; set; } = 40;
+
     public TxSendMode TxSendMode { get; set; } = TxSendMode.Terminal;
 
     public bool CuteBackgroundMode { get; set; }
@@ -68,6 +70,7 @@ public sealed class UiSettings
             ShowTimestampInLogView = ShowTimestampInLogView,
             ApplyRulesToNewLogsOnly = ApplyRulesToNewLogsOnly,
             RxDisplayMode = RxDisplayMode,
+            HexGroupTimeoutMs = HexGroupTimeoutMs,
             TxSendMode = TxSendMode,
             CuteBackgroundMode = CuteBackgroundMode,
             CuteBackgroundImagePath = CuteBackgroundImagePath,

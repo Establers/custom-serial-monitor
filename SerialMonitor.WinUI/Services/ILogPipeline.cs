@@ -43,6 +43,16 @@ public interface ILogPipeline
 
     string LastPartialRxFlushTimeText { get; }
 
+    int HexGroupTimeoutMs { get; }
+
+    int HexPendingByteCount { get; }
+
+    long HexGroupFlushCount { get; }
+
+    string LastHexGroupFlushTimeText { get; }
+
+    void ConfigureRxDisplay(RxDisplayMode mode, int hexGroupTimeoutMs);
+
     Task StartAsync(ChannelReader<byte[]> source, SerialSettings settings, CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);
