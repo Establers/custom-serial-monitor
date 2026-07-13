@@ -546,7 +546,7 @@ public sealed class EventDetector : IEventDetector
                     string.IsNullOrWhiteSpace(sourceRule.Name) ? sourceRule.Keyword : sourceRule.Name,
                     sourceRule.Keyword,
                     line.Direction,
-                    line.Text,
+                    line.DisplayText,
                     line,
                     beforeContext,
                     trayNotificationEnabled: sourceRule.TrayNotificationEnabled,

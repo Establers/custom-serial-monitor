@@ -19,11 +19,13 @@ public sealed class LogLine
         byte[]? rawBytes = null,
         long? sequenceNumber = null,
         bool isPartialRxSegment = false,
-        bool isPartialRxTerminator = false)
+        bool isPartialRxTerminator = false,
+        string? displayText = null)
     {
         Timestamp = timestamp;
         Direction = direction;
         Text = text;
+        DisplayText = displayText ?? text;
         RawBytes = rawBytes;
         SequenceNumber = sequenceNumber;
         IsPartialRxSegment = isPartialRxSegment;
@@ -35,6 +37,11 @@ public sealed class LogLine
     public LogDirection Direction { get; }
 
     public string Text { get; }
+
+    // Text remains the decoded payload used by text rules and searches.
+    // DisplayText is the presentation captured when the line was created
+    // (for example, byte-exact HEX while the RX view is in HEX mode).
+    public string DisplayText { get; }
 
     public string Message => Text;
 
@@ -55,14 +62,22 @@ public sealed class LogLine
     };
 
     public string Formatted =>
-        $"[{Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}] {DirectionText} {Text}";
+        $"[{Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}] {DirectionText} {DisplayText}";
 
     public static LogLine Rx(
         string text,
         byte[]? rawBytes = null,
         long? sequenceNumber = null,
-        bool isPartialRxSegment = false) =>
-        new(DateTimeOffset.Now, LogDirection.Rx, text, rawBytes, sequenceNumber, isPartialRxSegment: isPartialRxSegment);
+        bool isPartialRxSegment = false,
+        string? displayText = null) =>
+        new(
+            DateTimeOffset.Now,
+            LogDirection.Rx,
+            text,
+            rawBytes,
+            sequenceNumber,
+            isPartialRxSegment: isPartialRxSegment,
+            displayText: displayText);
 
     public static LogLine RxPartialTerminator(long? sequenceNumber = null) =>
         new(DateTimeOffset.Now, LogDirection.Rx, string.Empty, null, sequenceNumber, isPartialRxTerminator: true);

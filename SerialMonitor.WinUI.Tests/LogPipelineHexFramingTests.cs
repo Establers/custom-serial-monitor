@@ -192,6 +192,69 @@ public sealed class LogPipelineHexFramingTests
         }
     }
 
+    [Fact]
+    public async Task HexDisplay_WithUtf8TerminalEncoding_EmitsByteExactTextForEventAndFileConsumers()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var input = Channel.CreateUnbounded<ReceivedByteChunk>();
+        var pipeline = new LogPipeline(new EncodingDecoder(), new LineParser());
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Hex, hexGroupTimeoutMs: 10);
+        await pipeline.StartAsync(
+            input.Reader,
+            new SerialSettings { Encoding = RxEncodingMode.Utf8 },
+            cancellation.Token);
+
+        var bytes = new byte[] { 0x00, 0x80, 0xFF, 0xFE, 0x3F };
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk(bytes, Stopwatch.GetTimestamp(), endsAtNativeIdleBoundary: true),
+            cancellation.Token);
+
+        var line = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.Equal(bytes, line.RawBytes);
+        Assert.Equal("\0????", line.Text);
+        Assert.Equal("00 80 FF FE 3F", line.DisplayText);
+        Assert.Contains("00 80 FF FE 3F", line.Formatted);
+        Assert.DoesNotContain('\uFFFD', line.Formatted);
+
+        input.Writer.TryComplete();
+        await pipeline.StopAsync(cancellation.Token);
+    }
+
+    [Fact]
+    public async Task HexDisplay_TextRuleSourceRemainsDecodedWhileFormattedOutputRemainsHex()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var input = Channel.CreateUnbounded<ReceivedByteChunk>();
+        var pipeline = new LogPipeline(new EncodingDecoder(), new LineParser());
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Hex, hexGroupTimeoutMs: 10);
+        await pipeline.StartAsync(
+            input.Reader,
+            new SerialSettings { Encoding = RxEncodingMode.Utf8 },
+            cancellation.Token);
+
+        var bytes = "ERROR"u8.ToArray();
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk(bytes, Stopwatch.GetTimestamp(), endsAtNativeIdleBoundary: true),
+            cancellation.Token);
+
+        var line = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.Equal("ERROR", line.Text);
+        Assert.Equal("45 52 52 4F 52", line.DisplayText);
+        Assert.Contains("45 52 52 4F 52", line.Formatted);
+
+        var textRule = new EventRule
+        {
+            Enabled = true,
+            Keyword = "ERROR",
+            MatchMode = LogRuleMatchMode.Text
+        };
+        Assert.True(LogRuleMatcher.IsMatch(line, textRule, out var error));
+        Assert.Null(error);
+
+        input.Writer.TryComplete();
+        await pipeline.StopAsync(cancellation.Token);
+    }
+
     private static async Task<PipelineResult> RunPipelineAsync(
         IReadOnlyList<ReceivedByteChunk> chunks,
         int timeoutMs)

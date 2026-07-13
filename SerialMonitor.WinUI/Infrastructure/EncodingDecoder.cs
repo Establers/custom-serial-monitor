@@ -16,7 +16,9 @@ public sealed class EncodingDecoder
     {
         if (mode == RxEncodingMode.Hex)
         {
-            return new DecodeResult(Convert.ToHexString(bytes), HadError: false);
+            return new DecodeResult(
+                string.Join(' ', bytes.ToArray().Select(value => value.ToString("X2"))),
+                HadError: false);
         }
 
         try

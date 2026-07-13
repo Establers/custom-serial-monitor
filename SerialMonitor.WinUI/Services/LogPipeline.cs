@@ -551,9 +551,20 @@ public sealed class LogPipeline : ILogPipeline
         _hexPendingBytes.Clear();
         Volatile.Write(ref _hexPendingByteCount, 0);
         var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
-        var decoded = DecodeSafely(bytes, settings.Encoding);
+        // Keep decoded text for text event/highlight rules. Capture a separate
+        // byte-exact presentation for HEX UI, event context, and disk logs.
+        var matchingEncoding = settings.Encoding == RxEncodingMode.Hex
+            ? RxEncodingMode.Utf8
+            : settings.Encoding;
+        var decoded = DecodeSafely(bytes, matchingEncoding);
+        var hexDisplay = DecodeSafely(bytes, RxEncodingMode.Hex);
         await _logs.Writer.WriteAsync(
-            LogLine.Rx(decoded.Text, bytes, sequenceNumber, isPartialRxSegment: true),
+            LogLine.Rx(
+                decoded.Text,
+                bytes,
+                sequenceNumber,
+                isPartialRxSegment: true,
+                displayText: hexDisplay.Text),
             cancellationToken);
         Interlocked.Add(ref _hexEmittedByteCount, bytes.Length);
         AddParsedLine();
