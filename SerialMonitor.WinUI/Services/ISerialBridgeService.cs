@@ -44,5 +44,5 @@ public interface ISerialBridgeService : IAsyncDisposable
 
     Task StopAsync(CancellationToken cancellationToken);
 
-    bool TryEnqueueDeviceBytes(byte[] bytes);
+    ValueTask EnqueueDeviceBytesAsync(byte[] bytes, CancellationToken cancellationToken);
 }

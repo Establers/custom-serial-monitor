@@ -10751,9 +10751,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
-    private void OnRawBytesReceived(byte[] bytes)
+    private ValueTask OnRawBytesReceived(byte[] bytes, CancellationToken cancellationToken)
     {
-        _bridgeService.TryEnqueueDeviceBytes(bytes);
+        return _bridgeService.EnqueueDeviceBytesAsync(bytes, cancellationToken);
     }
 
     private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
@@ -10834,7 +10834,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"{HealthStateText} | " +
             CreateResourceStatusText() + " | " +
             $"RX {_logPipeline.ParsedLineCount:N0} lines / {_serialService.ReceivedByteCount:N0} bytes | " +
-            $"SER F/P/O/RX {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0} | " +
+            $"DRV F/P/O/RX {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0} | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
             CreateLogFileStatusText() +
             bridgeText +
@@ -11577,8 +11577,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last RX contained literal backslash-t: {_logPipeline.LastRxContainedLiteralBackslashT}");
         builder.AppendLine($"  Last RX chunk parsed lines: {_logPipeline.LastRxChunkParsedLines:N0}");
         builder.AppendLine($"  Max RX chunk parsed lines: {_logPipeline.MaxRxChunkParsedLines:N0}");
-        builder.AppendLine($"  Serial F/P/overrun/RX-buffer-warning signals: {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0}");
-        builder.AppendLine($"  Last serial line-status signal: {_serialService.LastSerialErrorSummary}");
+        builder.AppendLine($"  Driver-reported F/P/overrun/RX-buffer-warning signals: {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0}");
+        builder.AppendLine($"  Last driver-reported line-status signal: {_serialService.LastSerialErrorSummary}");
+        builder.AppendLine($"  Native idle boundaries suppressed by line-status errors: {_serialService.SerialLineErrorBoundarySuppressionCount:N0}");
         builder.AppendLine($"  Native RX idle timeout enabled: {_serialService.UsesNativeReceiveIdleTimeout}");
         builder.AppendLine($"  Native RX idle timeout applied: {(_serialService.UsesNativeReceiveIdleTimeout ? $"{_serialService.AppliedReceiveIdleTimeoutMs:N0} ms" : "immediate drain")}");
         builder.AppendLine();

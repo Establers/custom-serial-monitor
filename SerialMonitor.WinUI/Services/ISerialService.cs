@@ -9,7 +9,7 @@ public interface ISerialService : IAsyncDisposable
 
     event EventHandler? StatusChanged;
 
-    event Action<byte[]>? RawBytesReceived;
+    event Func<byte[], CancellationToken, ValueTask>? RawBytesReceived;
 
     bool IsConnected { get; }
 
@@ -32,6 +32,8 @@ public interface ISerialService : IAsyncDisposable
     long SerialOverrunErrorCount { get; }
 
     long SerialRxOverErrorCount { get; }
+
+    long SerialLineErrorBoundarySuppressionCount { get; }
 
     string LastSerialErrorSummary { get; }
 

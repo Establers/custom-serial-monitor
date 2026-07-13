@@ -12,21 +12,18 @@ public sealed class SerialService : ISerialService
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly object _stateGate = new();
+    private readonly SerialErrorAccumulator _serialErrors = new();
     private Channel<ReceivedByteChunk> _receivedBytes = CreateChannel();
     private CancellationTokenSource? _receiveCancellation;
     private SerialPortStream? _serialPort;
     private Task? _receiveTask;
     private SerialConnectionState _connectionState = SerialConnectionState.Disconnected;
     private string? _lastError;
-    private string _lastSerialErrorSummary = "(none)";
     private long _receivedByteCount;
     private long _receivedChunkCount;
     private long _writtenByteCount;
     private long _connectionErrorCount;
-    private long _serialFrameErrorCount;
-    private long _serialParityErrorCount;
-    private long _serialOverrunErrorCount;
-    private long _serialRxOverErrorCount;
+    private long _serialLineErrorBoundarySuppressionCount;
     private int _appliedReceiveIdleTimeoutMs;
     private int _usesNativeReceiveIdleTimeout;
     private int _rawBridgePriorityEnabled;
@@ -48,7 +45,7 @@ public sealed class SerialService : ISerialService
 
     public event EventHandler? StatusChanged;
 
-    public event Action<byte[]>? RawBytesReceived;
+    public event Func<byte[], CancellationToken, ValueTask>? RawBytesReceived;
 
     public bool IsConnected => ConnectionState == SerialConnectionState.Connected;
 
@@ -82,24 +79,18 @@ public sealed class SerialService : ISerialService
 
     public long ConnectionErrorCount => Interlocked.Read(ref _connectionErrorCount);
 
-    public long SerialFrameErrorCount => Interlocked.Read(ref _serialFrameErrorCount);
+    public long SerialFrameErrorCount => _serialErrors.FrameCount;
 
-    public long SerialParityErrorCount => Interlocked.Read(ref _serialParityErrorCount);
+    public long SerialParityErrorCount => _serialErrors.ParityCount;
 
-    public long SerialOverrunErrorCount => Interlocked.Read(ref _serialOverrunErrorCount);
+    public long SerialOverrunErrorCount => _serialErrors.OverrunCount;
 
-    public long SerialRxOverErrorCount => Interlocked.Read(ref _serialRxOverErrorCount);
+    public long SerialRxOverErrorCount => _serialErrors.RxOverCount;
 
-    public string LastSerialErrorSummary
-    {
-        get
-        {
-            lock (_stateGate)
-            {
-                return _lastSerialErrorSummary;
-            }
-        }
-    }
+    public long SerialLineErrorBoundarySuppressionCount =>
+        Interlocked.Read(ref _serialLineErrorBoundarySuppressionCount);
+
+    public string LastSerialErrorSummary => _serialErrors.LastSummary;
 
     public int AppliedReceiveIdleTimeoutMs => Volatile.Read(ref _appliedReceiveIdleTimeoutMs);
 
@@ -220,6 +211,7 @@ public sealed class SerialService : ISerialService
             Interlocked.Exchange(ref _bridgePriorityDroppedPipelineByteCount, 0);
             Interlocked.Exchange(ref _bridgePriorityDroppedPipelineChunkCount, 0);
             ResetSerialErrorCounters();
+            Interlocked.Exchange(ref _serialLineErrorBoundarySuppressionCount, 0);
             Volatile.Write(ref _appliedReceiveIdleTimeoutMs, 0);
             Volatile.Write(ref _usesNativeReceiveIdleTimeout, 0);
 
@@ -509,6 +501,11 @@ public sealed class SerialService : ISerialService
             while (!cancellationToken.IsCancellationRequested)
             {
                 var completion = serialPort.ReadNativeCompletion(cancellationToken);
+                if (completion.BoundarySuppressedByLineError)
+                {
+                    Interlocked.Increment(ref _serialLineErrorBoundarySuppressionCount);
+                }
+
                 PublishReceivedChunkAsync(
                         ReceivedByteChunk.CaptureAt(
                             completion.Bytes,
@@ -692,45 +689,17 @@ public sealed class SerialService : ISerialService
 
     private void OnSerialErrorReceived(object? sender, SerialErrorReceivedEventArgs args)
     {
-        var error = args.EventType;
-        if ((error & SerialError.Frame) != 0)
-        {
-            Interlocked.Increment(ref _serialFrameErrorCount);
-        }
-
-        if ((error & SerialError.RXParity) != 0)
-        {
-            Interlocked.Increment(ref _serialParityErrorCount);
-        }
-
-        if ((error & SerialError.Overrun) != 0)
-        {
-            Interlocked.Increment(ref _serialOverrunErrorCount);
-        }
-
-        if ((error & SerialError.RXOver) != 0)
-        {
-            Interlocked.Increment(ref _serialRxOverErrorCount);
-        }
-
-        lock (_stateGate)
-        {
-            _lastSerialErrorSummary = $"{error} at {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff}";
-        }
-
+        _serialErrors.Record(
+            args.EventType,
+            DateTimeOffset.Now,
+            ReceivedByteCount,
+            ReceivedChunkCount);
         RaiseStatusChanged();
     }
 
     private void ResetSerialErrorCounters()
     {
-        Interlocked.Exchange(ref _serialFrameErrorCount, 0);
-        Interlocked.Exchange(ref _serialParityErrorCount, 0);
-        Interlocked.Exchange(ref _serialOverrunErrorCount, 0);
-        Interlocked.Exchange(ref _serialRxOverErrorCount, 0);
-        lock (_stateGate)
-        {
-            _lastSerialErrorSummary = "(none)";
-        }
+        _serialErrors.Reset();
     }
 
     public void SetRawBridgePriorityEnabled(bool enabled)
@@ -758,7 +727,7 @@ public sealed class SerialService : ISerialService
         var bytes = receivedChunk.Bytes;
         if (IsRawBridgePriorityEnabled)
         {
-            PublishRawBytesReceived(bytes);
+            await PublishRawBytesReceivedAsync(bytes, cancellationToken);
             if (!_receivedBytes.Writer.TryWrite(receivedChunk))
             {
                 Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
@@ -777,15 +746,28 @@ public sealed class SerialService : ISerialService
         }
     }
 
-    private void PublishRawBytesReceived(byte[] bytes)
+    private async ValueTask PublishRawBytesReceivedAsync(byte[] bytes, CancellationToken cancellationToken)
     {
-        try
+        var handlers = RawBytesReceived;
+        if (handlers is null)
         {
-            RawBytesReceived?.Invoke(bytes);
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var handler in handlers.GetInvocationList().Cast<Func<byte[], CancellationToken, ValueTask>>())
         {
-            ReportError($"Raw RX observer failed: {ex.Message}", countConnectionError: false);
+            try
+            {
+                await handler(bytes, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ReportError($"Raw RX observer failed: {ex.Message}", countConnectionError: false);
+            }
         }
     }
 

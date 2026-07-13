@@ -2915,7 +2915,7 @@
                            FontSize="11"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="SER F/P/O/RX shows serial Frame, Parity, hardware Overrun, and driver RX-buffer warnings. Q F/E/U shows pending File, Event, and UI queues. Drop RX/F/UI should normally stay at zero."
+                           ToolTipService.ToolTip="DRV F/P/O/RX shows Windows driver-reported Frame, Parity, hardware Overrun, and RX-buffer warnings. These are adapter/driver signals, not packet-content guesses or independent analyzer proof. Q F/E/U shows pending File, Event, and UI queues. Drop RX/F/UI should normally stay at zero."
                            MaxLines="1" />
             </ScrollViewer>
         </Border>

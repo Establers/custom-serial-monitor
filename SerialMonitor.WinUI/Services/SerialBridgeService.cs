@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using RJCP.IO.Ports;
 using SerialMonitor.WinUI.Models;
 
@@ -10,8 +9,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateGate = new();
-    private Channel<byte[]> _deviceToVirtualQueue = CreateQueue();
-    private Channel<byte[]> _virtualToDeviceQueue = CreateQueue();
+    private LosslessByteChannel _deviceToVirtualQueue = CreateQueue();
+    private LosslessByteChannel _virtualToDeviceQueue = CreateQueue();
     private CancellationTokenSource? _cancellation;
     private SerialPortStream? _virtualPort;
     private Task? _readerTask;
@@ -28,8 +27,6 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private long _droppedVirtualToDeviceByteCount;
     private long _droppedVirtualToDeviceChunkCount;
     private long _errorCount;
-    private int _pendingDeviceToVirtualChunkCount;
-    private int _pendingVirtualToDeviceChunkCount;
     private bool _isRunning;
     private bool _disposed;
 
@@ -88,9 +85,9 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     public long ErrorCount => Interlocked.Read(ref _errorCount);
 
-    public int PendingDeviceToVirtualChunkCount => Volatile.Read(ref _pendingDeviceToVirtualChunkCount);
+    public int PendingDeviceToVirtualChunkCount => IsRunning ? _deviceToVirtualQueue.Count : 0;
 
-    public int PendingVirtualToDeviceChunkCount => Volatile.Read(ref _pendingVirtualToDeviceChunkCount);
+    public int PendingVirtualToDeviceChunkCount => IsRunning ? _virtualToDeviceQueue.Count : 0;
 
     public async Task StartAsync(
         BridgeSettings settings,
@@ -122,10 +119,16 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 Parity.None,
                 StopBits.One)
             {
+                // The bridge side is a byte-transparent virtual COM endpoint.
+                // Do not apply the physical port's flow control here: a
+                // virtual pair may not assert CTS/DSR and could otherwise
+                // stall an otherwise valid raw-byte bridge.
                 Handshake = Handshake.None,
                 ReadBufferSize = 1024 * 1024,
                 WriteBufferSize = 1024 * 1024,
-                ReadTimeout = 500,
+                // ReadAsync is canceled by the bridge token. Infinite avoids
+                // waking every 500 ms on an idle virtual COM port.
+                ReadTimeout = Timeout.Infinite,
                 WriteTimeout = 1000,
                 DtrEnable = false,
                 RtsEnable = false
@@ -143,25 +146,24 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
             _deviceToVirtualQueue = CreateQueue();
             _virtualToDeviceQueue = CreateQueue();
-            Volatile.Write(ref _pendingDeviceToVirtualChunkCount, 0);
-            Volatile.Write(ref _pendingVirtualToDeviceChunkCount, 0);
-            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _virtualPort = virtualPort;
+            var bridgeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             lock (_stateGate)
             {
+                _cancellation = bridgeCancellation;
+                _virtualPort = virtualPort;
                 _virtualPortName = virtualPortName;
                 _lastError = null;
                 _isRunning = true;
             }
 
             _readerTask = Task.Run(
-                () => RunVirtualReaderAsync(virtualPort, _cancellation.Token),
+                () => RunVirtualReaderAsync(virtualPort, bridgeCancellation.Token),
                 CancellationToken.None);
             _writerTask = Task.Run(
-                () => RunVirtualWriterAsync(virtualPort, _cancellation.Token),
+                () => RunVirtualWriterAsync(virtualPort, bridgeCancellation.Token),
                 CancellationToken.None);
             _deviceWriterTask = Task.Run(
-                () => RunDeviceWriterAsync(writeToDeviceAsync, _cancellation.Token),
+                () => RunDeviceWriterAsync(writeToDeviceAsync, bridgeCancellation.Token),
                 CancellationToken.None);
             RaiseStatusChanged();
         }
@@ -194,24 +196,51 @@ public sealed class SerialBridgeService : ISerialBridgeService
         }
     }
 
-    public bool TryEnqueueDeviceBytes(byte[] bytes)
+    public async ValueTask EnqueueDeviceBytesAsync(byte[] bytes, CancellationToken cancellationToken)
     {
-        if (!IsRunning || bytes is null || bytes.Length == 0)
+        ArgumentNullException.ThrowIfNull(bytes);
+        if (bytes.Length == 0)
         {
-            return false;
+            return;
         }
 
-        Interlocked.Increment(ref _pendingDeviceToVirtualChunkCount);
-        if (_deviceToVirtualQueue.Writer.TryWrite(bytes))
+        LosslessByteChannel queue;
+        CancellationToken bridgeToken;
+        lock (_stateGate)
         {
-            return true;
+            if (!_isRunning || _cancellation is null)
+            {
+                return;
+            }
+
+            queue = _deviceToVirtualQueue;
+            bridgeToken = _cancellation.Token;
         }
 
-        Interlocked.Decrement(ref _pendingDeviceToVirtualChunkCount);
-        Interlocked.Increment(ref _droppedDeviceToVirtualChunkCount);
-        Interlocked.Add(ref _droppedDeviceToVirtualByteCount, bytes.Length);
-        RaiseStatusChanged();
-        return false;
+        try
+        {
+            // The raw bridge is the priority consumer. Apply bounded
+            // backpressure instead of silently dropping a chunk when the
+            // virtual-port writer is briefly behind.
+            await queue.WriteAsync(bytes, cancellationToken, bridgeToken);
+        }
+        catch (OperationCanceledException) when (bridgeToken.IsCancellationRequested)
+        {
+            // Intentional bridge shutdown is not a transport failure or drop.
+        }
+        catch (System.Threading.Channels.ChannelClosedException) when (
+            bridgeToken.IsCancellationRequested || !IsRunning)
+        {
+            // The queue can close between the running-state snapshot and the
+            // asynchronous write. Shutdown owns this race.
+        }
+        catch
+        {
+            Interlocked.Increment(ref _droppedDeviceToVirtualChunkCount);
+            Interlocked.Add(ref _droppedDeviceToVirtualByteCount, bytes.Length);
+            RaiseStatusChanged();
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -243,13 +272,24 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
                 var chunk = new byte[bytesRead];
                 Buffer.BlockCopy(buffer, 0, chunk, 0, bytesRead);
-                Interlocked.Increment(ref _pendingVirtualToDeviceChunkCount);
-                if (!_virtualToDeviceQueue.Writer.TryWrite(chunk))
+                try
                 {
-                    Interlocked.Decrement(ref _pendingVirtualToDeviceChunkCount);
+                    await _virtualToDeviceQueue.WriteAsync(chunk, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (System.Threading.Channels.ChannelClosedException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch
+                {
                     Interlocked.Increment(ref _droppedVirtualToDeviceChunkCount);
                     Interlocked.Add(ref _droppedVirtualToDeviceByteCount, bytesRead);
                     RaiseStatusChanged();
+                    throw;
                 }
             }
         }
@@ -276,11 +316,23 @@ public sealed class SerialBridgeService : ISerialBridgeService
         {
             await foreach (var bytes in _virtualToDeviceQueue.Reader.ReadAllAsync(cancellationToken))
             {
-                Interlocked.Decrement(ref _pendingVirtualToDeviceChunkCount);
-                await writeToDeviceAsync(bytes, cancellationToken);
-                Interlocked.Add(ref _virtualToDeviceByteCount, bytes.Length);
-                Interlocked.Increment(ref _virtualToDeviceChunkCount);
-                RaiseStatusChangedPeriodically(VirtualToDeviceChunkCount);
+                try
+                {
+                    await writeToDeviceAsync(bytes, cancellationToken);
+                    Interlocked.Add(ref _virtualToDeviceByteCount, bytes.Length);
+                    Interlocked.Increment(ref _virtualToDeviceChunkCount);
+                    RaiseStatusChangedPeriodically(VirtualToDeviceChunkCount);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    Interlocked.Increment(ref _droppedVirtualToDeviceChunkCount);
+                    Interlocked.Add(ref _droppedVirtualToDeviceByteCount, bytes.Length);
+                    throw;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -301,11 +353,27 @@ public sealed class SerialBridgeService : ISerialBridgeService
         {
             await foreach (var bytes in _deviceToVirtualQueue.Reader.ReadAllAsync(cancellationToken))
             {
-                Interlocked.Decrement(ref _pendingDeviceToVirtualChunkCount);
-                await virtualPort.WriteAsync(bytes, cancellationToken);
-                Interlocked.Add(ref _deviceToVirtualByteCount, bytes.Length);
-                Interlocked.Increment(ref _deviceToVirtualChunkCount);
-                RaiseStatusChangedPeriodically(DeviceToVirtualChunkCount);
+                try
+                {
+                    await virtualPort.WriteAsync(bytes, cancellationToken);
+                    Interlocked.Add(ref _deviceToVirtualByteCount, bytes.Length);
+                    Interlocked.Increment(ref _deviceToVirtualChunkCount);
+                    RaiseStatusChangedPeriodically(DeviceToVirtualChunkCount);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    Interlocked.Increment(ref _droppedDeviceToVirtualChunkCount);
+                    Interlocked.Add(ref _droppedDeviceToVirtualByteCount, bytes.Length);
+                    throw;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -345,19 +413,23 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     private async Task StopCurrentAsync(CancellationToken cancellationToken)
     {
-        var cancellation = _cancellation;
-        var virtualPort = _virtualPort;
-        var readerTask = _readerTask;
-        var writerTask = _writerTask;
-        var deviceWriterTask = _deviceWriterTask;
-
-        _cancellation = null;
-        _virtualPort = null;
-        _readerTask = null;
-        _writerTask = null;
-        _deviceWriterTask = null;
+        CancellationTokenSource? cancellation;
+        SerialPortStream? virtualPort;
+        Task? readerTask;
+        Task? writerTask;
+        Task? deviceWriterTask;
         lock (_stateGate)
         {
+            cancellation = _cancellation;
+            virtualPort = _virtualPort;
+            readerTask = _readerTask;
+            writerTask = _writerTask;
+            deviceWriterTask = _deviceWriterTask;
+            _cancellation = null;
+            _virtualPort = null;
+            _readerTask = null;
+            _writerTask = null;
+            _deviceWriterTask = null;
             _isRunning = false;
         }
 
@@ -369,8 +441,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
         {
         }
 
-        _deviceToVirtualQueue.Writer.TryComplete();
-        _virtualToDeviceQueue.Writer.TryComplete();
+        _deviceToVirtualQueue.TryComplete();
+        _virtualToDeviceQueue.TryComplete();
         SafeCloseAndDispose(virtualPort);
 
         foreach (var task in new[] { readerTask, writerTask, deviceWriterTask })
@@ -390,8 +462,6 @@ public sealed class SerialBridgeService : ISerialBridgeService
         }
 
         cancellation?.Dispose();
-        Volatile.Write(ref _pendingDeviceToVirtualChunkCount, 0);
-        Volatile.Write(ref _pendingVirtualToDeviceChunkCount, 0);
         RaiseStatusChanged();
     }
 
@@ -420,15 +490,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         StatusChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private static Channel<byte[]> CreateQueue()
-    {
-        return Channel.CreateBounded<byte[]>(new BoundedChannelOptions(DeviceToVirtualQueueCapacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false
-        });
-    }
+    private static LosslessByteChannel CreateQueue() => new(DeviceToVirtualQueueCapacity);
 
     private static void SafeCloseAndDispose(SerialPortStream? serialPort)
     {
