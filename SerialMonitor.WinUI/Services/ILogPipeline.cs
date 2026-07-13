@@ -15,6 +15,12 @@ public interface ILogPipeline
 
     long DecodeErrorCount { get; }
 
+    long ProcessedRxByteCount { get; }
+
+    long HexAcceptedByteCount { get; }
+
+    long HexEmittedByteCount { get; }
+
     int PartialLineBufferLength { get; }
 
     int LastRxChunkBytes { get; }
@@ -48,6 +54,8 @@ public interface ILogPipeline
     int HexGroupTimeoutMs { get; }
 
     int HexPendingByteCount { get; }
+
+    int LastHexGroupByteCount { get; }
 
     long HexGroupFlushCount { get; }
 

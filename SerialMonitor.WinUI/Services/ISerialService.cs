@@ -25,6 +25,20 @@ public interface ISerialService : IAsyncDisposable
 
     long ConnectionErrorCount { get; }
 
+    long SerialFrameErrorCount { get; }
+
+    long SerialParityErrorCount { get; }
+
+    long SerialOverrunErrorCount { get; }
+
+    long SerialRxOverErrorCount { get; }
+
+    string LastSerialErrorSummary { get; }
+
+    int AppliedReceiveIdleTimeoutMs { get; }
+
+    bool UsesNativeReceiveIdleTimeout { get; }
+
     bool IsRawBridgePriorityEnabled { get; }
 
     long BridgePriorityDroppedPipelineByteCount { get; }
@@ -57,7 +71,10 @@ public interface ISerialService : IAsyncDisposable
 
     Task<IReadOnlyList<string>> GetAvailablePortsAsync(CancellationToken cancellationToken);
 
-    Task ConnectAsync(SerialSettings settings, CancellationToken cancellationToken);
+    Task ConnectAsync(
+        SerialSettings settings,
+        SerialReceiveOptions receiveOptions,
+        CancellationToken cancellationToken);
 
     Task DisconnectAsync(CancellationToken cancellationToken);
 

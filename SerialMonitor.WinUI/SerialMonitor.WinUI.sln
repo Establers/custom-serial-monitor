@@ -5,6 +5,12 @@ VisualStudioVersion = 18.6.11819.183 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.WinUI", "SerialMonitor.WinUI.csproj", "{766053B2-8164-261D-92B5-52D86DCEA331}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.Core", "..\SerialMonitor.Core\SerialMonitor.Core.csproj", "{7F6FCE5B-6137-491F-A3A6-3420D1AA184F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.Core.Tests", "..\SerialMonitor.Core.Tests\SerialMonitor.Core.Tests.csproj", "{FEAB082F-394C-449B-8670-EC2982FA312C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.WinUI.Tests", "..\SerialMonitor.WinUI.Tests\SerialMonitor.WinUI.Tests.csproj", "{5CB2E53B-7EC5-4250-80F4-834B1D0AF0E6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +21,18 @@ Global
 		{766053B2-8164-261D-92B5-52D86DCEA331}.Debug|x64.Build.0 = Debug|x64
 		{766053B2-8164-261D-92B5-52D86DCEA331}.Release|x64.ActiveCfg = Release|x64
 		{766053B2-8164-261D-92B5-52D86DCEA331}.Release|x64.Build.0 = Release|x64
+		{7F6FCE5B-6137-491F-A3A6-3420D1AA184F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7F6FCE5B-6137-491F-A3A6-3420D1AA184F}.Debug|x64.Build.0 = Debug|Any CPU
+		{7F6FCE5B-6137-491F-A3A6-3420D1AA184F}.Release|x64.ActiveCfg = Release|Any CPU
+		{7F6FCE5B-6137-491F-A3A6-3420D1AA184F}.Release|x64.Build.0 = Release|Any CPU
+		{FEAB082F-394C-449B-8670-EC2982FA312C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FEAB082F-394C-449B-8670-EC2982FA312C}.Debug|x64.Build.0 = Debug|Any CPU
+		{FEAB082F-394C-449B-8670-EC2982FA312C}.Release|x64.ActiveCfg = Release|Any CPU
+		{FEAB082F-394C-449B-8670-EC2982FA312C}.Release|x64.Build.0 = Release|Any CPU
+		{5CB2E53B-7EC5-4250-80F4-834B1D0AF0E6}.Debug|x64.ActiveCfg = Debug|x64
+		{5CB2E53B-7EC5-4250-80F4-834B1D0AF0E6}.Debug|x64.Build.0 = Debug|x64
+		{5CB2E53B-7EC5-4250-80F4-834B1D0AF0E6}.Release|x64.ActiveCfg = Release|x64
+		{5CB2E53B-7EC5-4250-80F4-834B1D0AF0E6}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

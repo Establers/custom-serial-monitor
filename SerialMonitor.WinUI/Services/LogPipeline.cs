@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
+using SerialMonitor.Core;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 
@@ -25,6 +26,9 @@ public sealed class LogPipeline : ILogPipeline
     private Task? _pipelineTask;
     private long _parsedLineCount;
     private long _decodeErrorCount;
+    private long _processedRxByteCount;
+    private long _hexAcceptedByteCount;
+    private long _hexEmittedByteCount;
     private long _sequenceNumber;
     private int _partialLineBufferLength;
     private int _lastRxChunkBytes;
@@ -46,6 +50,8 @@ public sealed class LogPipeline : ILogPipeline
     private int _configuredRxDisplayMode = (int)RxDisplayMode.Terminal;
     private int _hexGroupTimeoutMs = 10;
     private int _hexPendingByteCount;
+    private int _hexCurrentGroupByteCount;
+    private int _lastHexGroupByteCount;
     private int _hexGroupOpen;
     private long _hexGroupFlushCount;
     private string _lastHexGroupFlushTimeText = "(none)";
@@ -65,6 +71,12 @@ public sealed class LogPipeline : ILogPipeline
     public long ParsedLineCount => Interlocked.Read(ref _parsedLineCount);
 
     public long DecodeErrorCount => Interlocked.Read(ref _decodeErrorCount);
+
+    public long ProcessedRxByteCount => Interlocked.Read(ref _processedRxByteCount);
+
+    public long HexAcceptedByteCount => Interlocked.Read(ref _hexAcceptedByteCount);
+
+    public long HexEmittedByteCount => Interlocked.Read(ref _hexEmittedByteCount);
 
     public int PartialLineBufferLength => Volatile.Read(ref _partialLineBufferLength);
 
@@ -99,6 +111,8 @@ public sealed class LogPipeline : ILogPipeline
     public int HexGroupTimeoutMs => Volatile.Read(ref _hexGroupTimeoutMs);
 
     public int HexPendingByteCount => Volatile.Read(ref _hexPendingByteCount);
+
+    public int LastHexGroupByteCount => Volatile.Read(ref _lastHexGroupByteCount);
 
     public long HexGroupFlushCount => Interlocked.Read(ref _hexGroupFlushCount);
 
@@ -140,8 +154,13 @@ public sealed class LogPipeline : ILogPipeline
             _lineParser.Clear();
             _hexPendingBytes.Clear();
             Volatile.Write(ref _hexPendingByteCount, 0);
+            Volatile.Write(ref _hexCurrentGroupByteCount, 0);
+            Volatile.Write(ref _lastHexGroupByteCount, 0);
             Volatile.Write(ref _hexGroupOpen, 0);
             Interlocked.Exchange(ref _hexGroupFlushCount, 0);
+            Interlocked.Exchange(ref _processedRxByteCount, 0);
+            Interlocked.Exchange(ref _hexAcceptedByteCount, 0);
+            Interlocked.Exchange(ref _hexEmittedByteCount, 0);
             _lastHexGroupFlushTimeText = "(none)";
             Volatile.Write(ref _partialLineBufferLength, 0);
             Volatile.Write(ref _maxPartialLineBufferLength, 0);
@@ -432,7 +451,10 @@ public sealed class LogPipeline : ILogPipeline
             return GetHexGroupTimeout();
         }
 
-        return GetHexGroupTimeout() - Stopwatch.GetElapsedTime(lastReceivedTimestamp.Value);
+        return IdleGapBoundaryDetector.GetRemainingDelay(
+            lastReceivedTimestamp,
+            Stopwatch.GetTimestamp(),
+            GetHexGroupTimeout());
     }
 
     private (CancellationToken Token, long Version) GetDisplayConfigurationSnapshot()
@@ -469,19 +491,22 @@ public sealed class LogPipeline : ILogPipeline
             drainedAny = true;
             // Preserve receive order even if multiple mock producers race to
             // enqueue. Real serial RX has a single producer.
-            var receivedTimestamp = !lastReceivedTimestamp.HasValue ||
-                chunk.ReceivedTimestamp >= lastReceivedTimestamp.Value
-                    ? chunk.ReceivedTimestamp
-                    : lastReceivedTimestamp.Value;
+            var observation = IdleGapBoundaryDetector.Observe(
+                lastReceivedTimestamp,
+                chunk.ReceivedTimestamp,
+                GetHexGroupTimeout());
+            var receivedTimestamp = observation.NormalizedTimestamp;
             if (Volatile.Read(ref _hexGroupOpen) != 0 &&
-                lastReceivedTimestamp.HasValue &&
-                Stopwatch.GetElapsedTime(lastReceivedTimestamp.Value, receivedTimestamp) >= GetHexGroupTimeout())
+                observation.StartsNewGroup)
             {
                 await FlushHexGroupAsync(settings, cancellationToken);
             }
 
             _hexPendingBytes.AddRange(bytes);
+            Interlocked.Add(ref _processedRxByteCount, bytes.Length);
+            Interlocked.Add(ref _hexAcceptedByteCount, bytes.Length);
             Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
+            Interlocked.Add(ref _hexCurrentGroupByteCount, bytes.Length);
             Volatile.Write(ref _hexGroupOpen, 1);
             RecordRxChunk(
                 bytes,
@@ -496,7 +521,20 @@ public sealed class LogPipeline : ILogPipeline
                 await FlushHexSegmentAsync(settings, cancellationToken);
             }
 
-            lastReceivedTimestamp = receivedTimestamp;
+            if (chunk.EndsAtNativeIdleBoundary)
+            {
+                // Win32 already waited for this profile's inter-byte timeout
+                // before RJCP exposed the batch. Waiting from the public
+                // Read() timestamp again would double the configured latency.
+                await FlushHexGroupAsync(settings, cancellationToken);
+                lastReceivedTimestamp = null;
+            }
+            else
+            {
+                // Mock/immediate transports and conservative full-buffer
+                // batches still use the application-level timeout fallback.
+                lastReceivedTimestamp = receivedTimestamp;
+            }
         }
 
         return (drainedAny, lastReceivedTimestamp);
@@ -517,6 +555,7 @@ public sealed class LogPipeline : ILogPipeline
         await _logs.Writer.WriteAsync(
             LogLine.Rx(decoded.Text, bytes, sequenceNumber, isPartialRxSegment: true),
             cancellationToken);
+        Interlocked.Add(ref _hexEmittedByteCount, bytes.Length);
         AddParsedLine();
     }
 
@@ -530,6 +569,8 @@ public sealed class LogPipeline : ILogPipeline
         await FlushHexSegmentAsync(settings, cancellationToken);
         var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
         await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+        Volatile.Write(ref _lastHexGroupByteCount, Volatile.Read(ref _hexCurrentGroupByteCount));
+        Volatile.Write(ref _hexCurrentGroupByteCount, 0);
         Volatile.Write(ref _hexGroupOpen, 0);
         Interlocked.Increment(ref _hexGroupFlushCount);
         Interlocked.Exchange(
@@ -570,6 +611,7 @@ public sealed class LogPipeline : ILogPipeline
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
+        Interlocked.Add(ref _processedRxByteCount, bytes.Length);
         var parsedLinesInChunk = 0;
         foreach (var rawLine in _lineParser.Append(bytes, settings.RxLineEnding))
         {

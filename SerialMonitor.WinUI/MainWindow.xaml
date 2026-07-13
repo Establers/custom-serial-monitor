@@ -1706,7 +1706,7 @@
                                                          HorizontalAlignment="Stretch"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="Enter a whole number from 1 to 5000. Apply with Enter or Set. Keep the USB-serial driver latency shorter than this timeout." />
+                                                         ToolTipService.ToolTip="Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
                                                 <TextBlock Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
@@ -1718,20 +1718,27 @@
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
                                                         VerticalAlignment="Center"
                                                         Click="ApplyHexGroupTimeout_Click"
-                                                        ToolTipService.ToolTip="Apply the entered timeout. You can also press Enter." />
+                                                        ToolTipService.ToolTip="Save the entered timeout. When connected in HEX mode, reconnect so the same value is applied to native RX timing." />
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding HexGroupTimeoutAppliedText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4"
+                                                           Margin="8,0,0,0"
+                                                           Text="{Binding HexGroupTimeoutRecommendationText}"
+                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"
+                                                           ToolTipService.ToolTip="Calculated only from baud rate and serial frame format. It is a starting point, never applied automatically; the profile timeout remains authoritative." />
                                             </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
                                             <TextBlock Grid.Column="1"
-                                                       Text="Keep USB-driver latency &lt; HEX timeout &lt; packet gap (for example, 2 / 10 / 20 ms). For 3 ms gaps, use driver 1 ms and HEX 2 ms. Driver changes apply after disconnecting and reconnecting the COM port."
+                                                       Text="Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. Example: inside ≤ 1 ms and between ≥ 3 ms → use 2 ms. If these ranges overlap, timing alone cannot separate packets reliably. Keep driver latency below the timeout; reconnect after driver changes."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
-                                                       ToolTipService.ToolTip="USB drivers can buffer RX. If driver latency is not shorter than the HEX timeout, one packet can split or several packets can merge. Very short gaps are best-effort on Windows." />
+                                                       ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -2730,7 +2737,7 @@
                            FontSize="11"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="Q F/E/U shows pending File, Event, and UI queue items. Drop RX/F/UI shows lost RX, file-log, and UI-log records; these should normally stay at zero."
+                           ToolTipService.ToolTip="SER F/P/O/RX shows serial Frame, Parity, hardware Overrun, and driver RX-buffer warnings. Q F/E/U shows pending File, Event, and UI queues. Drop RX/F/UI should normally stay at zero."
                            MaxLines="1" />
             </ScrollViewer>
         </Border>

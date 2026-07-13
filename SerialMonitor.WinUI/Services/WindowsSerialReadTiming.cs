@@ -1,25 +1,28 @@
+using SerialMonitor.Core;
 using RJCP.IO.Ports;
+using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
 
 internal static class WindowsSerialReadTiming
 {
-    internal const int ImmediateReadInterval = Timeout.Infinite;
-    internal const int NoTotalReadTimeout = 0;
-
-    internal static void Apply(WinSerialPortStream serialPort)
+    internal static void Apply(WinSerialPortStream serialPort, SerialReceiveOptions options)
     {
         ArgumentNullException.ThrowIfNull(serialPort);
+        ArgumentNullException.ThrowIfNull(options);
 
-        // Keep Win32 ReadFile as a transport drain, not a packet-boundary
-        // detector. RJCP maps Timeout.Infinite (-1) to DWORD MAXDWORD. With
-        // both total timeouts set to zero, COMMTIMEOUTS returns the bytes that
-        // are already in the driver buffer immediately. RJCP starts the read
-        // only after RXCHAR and drains until zero, so this does not busy-poll.
-        // Packet grouping remains exclusively in LogPipeline, where the user
-        // configured HEX idle timeout is applied to observed chunk arrivals.
-        serialPort.Settings.ReadIntervalTimeout = ImmediateReadInterval;
-        serialPort.Settings.ReadTotalTimeoutConstant = NoTotalReadTimeout;
-        serialPort.Settings.ReadTotalTimeoutMultiplier = NoTotalReadTimeout;
+        var normalized = options.Normalize();
+        var timing = SerialReadTimingPolicy.Create(
+            normalized.UseNativeIdleTimeout,
+            normalized.IdleTimeoutMs);
+
+        // HEX mode uses the exact profile timeout as the Win32 inter-byte
+        // timeout. This lets a pending ReadFile complete at the earliest layer
+        // that still observes byte arrival gaps. Terminal mode retains RJCP's
+        // immediate drain behavior so a large HEX timeout cannot stall a
+        // continuous terminal stream.
+        serialPort.Settings.ReadIntervalTimeout = timing.ReadIntervalTimeout;
+        serialPort.Settings.ReadTotalTimeoutConstant = timing.ReadTotalTimeoutConstant;
+        serialPort.Settings.ReadTotalTimeoutMultiplier = timing.ReadTotalTimeoutMultiplier;
     }
 }

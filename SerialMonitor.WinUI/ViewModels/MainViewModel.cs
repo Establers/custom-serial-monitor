@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.UI.Dispatching;
+using SerialMonitor.Core;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
@@ -1332,6 +1333,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 _currentSerialSettings.BaudRate = value;
                 RecordSettingsChange("Baudrate", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
+                OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
                 NotifyConnectionSelectionCommandState();
@@ -1392,12 +1394,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
             }
 
-            RecordSettingsChange("Terminal / HEX mode", SettingsApplyBehavior.Immediate, FormatRxDisplayModeName(normalized));
+            RecordSettingsChange(
+                "Terminal / HEX mode",
+                IsConnected && !CurrentPortIsMock
+                    ? SettingsApplyBehavior.ReconnectRequired
+                    : SettingsApplyBehavior.Immediate,
+                FormatRxDisplayModeName(normalized));
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedTxSendMode));
             OnPropertyChanged(nameof(IsHexRxViewSelected));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
+            OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(IsTxLineEndingEffective));
             OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshDiagnostics();
@@ -1424,8 +1432,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.HexGroupTimeoutMs = value;
-            _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, value);
-            RecordSettingsChange("HEX group timeout", SettingsApplyBehavior.Immediate, $"{value} ms");
+            var reconnectRequired = IsConnected && IsHexRxViewSelected && !CurrentPortIsMock;
+            if (!reconnectRequired)
+            {
+                _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, value);
+            }
+
+            RecordSettingsChange(
+                "HEX group timeout",
+                reconnectRequired ? SettingsApplyBehavior.ReconnectRequired : SettingsApplyBehavior.Immediate,
+                $"{value} ms");
             OnPropertyChanged();
             _hexGroupTimeoutDraftText = value.ToString(CultureInfo.InvariantCulture);
             OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
@@ -1458,11 +1474,64 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         !int.TryParse(HexGroupTimeoutDraftText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ||
         parsed != HexGroupTimeoutMs;
 
-    public string HexGroupTimeoutAppliedText => $"Applied: {HexGroupTimeoutMs:N0} ms";
+    public string HexGroupTimeoutAppliedText
+    {
+        get
+        {
+            if (!IsConnected)
+            {
+                return $"Next: {HexGroupTimeoutMs:N0} ms";
+            }
 
-    public string HexGroupTimeoutHeaderText => IsHexRxViewSelected
-        ? $"HEX {HexGroupTimeoutMs:N0} ms"
-        : string.Empty;
+            if (!IsHexRxViewSelected)
+            {
+                return $"Saved: {HexGroupTimeoutMs:N0} ms";
+            }
+
+            var nativeTimeout = _serialService.AppliedReceiveIdleTimeoutMs;
+            var fullyApplied = _logPipeline.HexGroupTimeoutMs == HexGroupTimeoutMs &&
+                (CurrentPortIsMock ||
+                 (_serialService.UsesNativeReceiveIdleTimeout && nativeTimeout == HexGroupTimeoutMs));
+            return fullyApplied
+                ? $"Applied: {HexGroupTimeoutMs:N0} ms"
+                : $"Active: {_logPipeline.HexGroupTimeoutMs:N0} ms · reconnect";
+        }
+    }
+
+    public string HexGroupTimeoutRecommendationText
+    {
+        get
+        {
+            var recommendation = SerialTimingAdvisor.Calculate(
+                Math.Max(1, SelectedBaudRate),
+                Math.Max(1, SelectedDataBits),
+                SelectedParity != SerialParityMode.None,
+                SelectedStopBits switch
+                {
+                    SerialStopBitsMode.OnePointFive => 1.5,
+                    SerialStopBitsMode.Two => 2.0,
+                    _ => 1.0
+                });
+            return $"Start ≥ {recommendation.SuggestedStartingTimeoutMilliseconds:N0} ms " +
+                   $"({recommendation.CharacterTimeMilliseconds:0.###} ms/char); tune to actual gaps";
+        }
+    }
+
+    public string HexGroupTimeoutHeaderText
+    {
+        get
+        {
+            if (!IsHexRxViewSelected)
+            {
+                return string.Empty;
+            }
+
+            var activeTimeout = IsConnected && _serialService.UsesNativeReceiveIdleTimeout
+                ? _serialService.AppliedReceiveIdleTimeoutMs
+                : HexGroupTimeoutMs;
+            return $"HEX {activeTimeout:N0} ms";
+        }
+    }
 
     public double HexGroupTimeoutHeaderMinWidth => IsHexRxViewSelected ? 68d : 0d;
 
@@ -1592,6 +1661,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentSerialSettings.DataBits = value;
             RecordSettingsChange("Data bits", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
             OnPropertyChanged();
+            OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
     }
 
@@ -1615,6 +1685,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentSerialSettings.Parity = value;
             RecordSettingsChange("Parity", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             OnPropertyChanged();
+            OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
     }
 
@@ -1638,6 +1709,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentSerialSettings.StopBits = value;
             RecordSettingsChange("Stop bits", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             OnPropertyChanged();
+            OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
     }
 
@@ -3527,8 +3599,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Pause Rendering은 화면 갱신만 멈춥니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
-        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 기본값은 10ms입니다.
-        USB 드라이버 응답 시간 < HEX timeout < 실제 패킷 간격으로 설정하고, 드라이버 변경 후 COM 포트를 재연결합니다.
+        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 프로필 값이 그대로 사용됩니다.
+        한 패킷 내부에서 관측되는 가장 긴 공백 < HEX timeout < 서로 다른 패킷 사이의 가장 짧은 공백으로 설정합니다.
+        예: 내부 공백 최대 1ms, 패킷 사이 최소 3ms이면 2ms를 사용합니다. 두 범위가 겹치면 시간만으로 안정적인 구분이 불가능합니다.
+        표시되는 권장값은 baud와 프레임 형식만 반영한 시작점이며 자동 적용되지 않습니다.
+        연결 중 HEX timeout 또는 Terminal/HEX 모드를 바꾸면 네이티브 RX 적용을 위해 COM 포트를 재연결합니다.
+        Diag의 Last RX chunk gap과 Last HEX group bytes를 기대 패킷 크기와 비교해 확인합니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
 
         단축키
@@ -5270,7 +5346,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 FileLoggingEnabled,
                 CancellationToken.None);
             ApplySessionFileNaming(requestNewFile: false);
-            await _serialService.ConnectAsync(settings, _connectionCancellation.Token);
+            await _serialService.ConnectAsync(
+                settings,
+                new SerialReceiveOptions
+                {
+                    UseNativeIdleTimeout = SelectedRxDisplayMode == RxDisplayMode.Hex,
+                    IdleTimeoutMs = HexGroupTimeoutMs
+                },
+                _connectionCancellation.Token);
             _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, HexGroupTimeoutMs);
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
@@ -5278,6 +5361,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
             IsConnected = true;
+            OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+            OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             if (_currentBridgeSettings.Enabled && !string.IsNullOrWhiteSpace(SelectedBridgePort))
             {
                 await StartBridgeCoreAsync();
@@ -5605,6 +5690,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = null;
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
             IsConnected = _serialService.IsConnected;
+            OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+            OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             RecordDisconnectPortPreservation(selectedPortBeforeDisconnect, settingsBeforeDisconnect);
             if (cleanupErrors.Count == 0)
             {
@@ -10352,6 +10439,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
         OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
         OnPropertyChanged(nameof(HexGroupTimeoutMsText));
+        OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         OnPropertyChanged(nameof(SelectedTxSendMode));
         OnPropertyChanged(nameof(IsTxLineEndingEffective));
         OnPropertyChanged(nameof(TxLineEndingToolTip));
@@ -10740,6 +10828,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"{HealthStateText} | " +
             CreateResourceStatusText() + " | " +
             $"RX {_logPipeline.ParsedLineCount:N0} lines / {_serialService.ReceivedByteCount:N0} bytes | " +
+            $"SER F/P/O/RX {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0} | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
             CreateLogFileStatusText() +
             bridgeText +
@@ -11407,6 +11496,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last sequence error: {(string.IsNullOrWhiteSpace(LastMockSequenceError) ? "(none)" : LastMockSequenceError)}");
         builder.AppendLine($"  RX bytes: {_serialService.ReceivedByteCount:N0}");
         builder.AppendLine($"  RX chunks: {_serialService.ReceivedChunkCount:N0}");
+        builder.AppendLine($"  Pipeline processed RX bytes: {_logPipeline.ProcessedRxByteCount:N0}");
         builder.AppendLine($"  Parsed lines: {_logPipeline.ParsedLineCount:N0}");
         builder.AppendLine($"  Displayed lines: {Log.DisplayedLineCount:N0}");
         builder.AppendLine($"  File written lines: {_fileLogWriter.WrittenLineCount:N0}");
@@ -11481,6 +11571,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last RX contained literal backslash-t: {_logPipeline.LastRxContainedLiteralBackslashT}");
         builder.AppendLine($"  Last RX chunk parsed lines: {_logPipeline.LastRxChunkParsedLines:N0}");
         builder.AppendLine($"  Max RX chunk parsed lines: {_logPipeline.MaxRxChunkParsedLines:N0}");
+        builder.AppendLine($"  Serial F/P/overrun/RX-buffer-warning signals: {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0}");
+        builder.AppendLine($"  Last serial line-status signal: {_serialService.LastSerialErrorSummary}");
+        builder.AppendLine($"  Native RX idle timeout enabled: {_serialService.UsesNativeReceiveIdleTimeout}");
+        builder.AppendLine($"  Native RX idle timeout applied: {(_serialService.UsesNativeReceiveIdleTimeout ? $"{_serialService.AppliedReceiveIdleTimeoutMs:N0} ms" : "immediate drain")}");
         builder.AppendLine();
         builder.AppendLine("UI Log");
         builder.AppendLine($"  Active log view mode: {ActiveLogViewModeText}");
@@ -11490,8 +11584,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Visual drain max chars: {VisualDrainMaxChars:N0}");
         builder.AppendLine($"  Show timestamp in log view: {ShowTimestampInLogView}");
         builder.AppendLine($"  RX display mode: {FormatRxDisplayModeName(SelectedRxDisplayMode)}");
-        builder.AppendLine($"  HEX group timeout configured/applied: {HexGroupTimeoutMs:N0}/{_logPipeline.HexGroupTimeoutMs:N0} ms");
+        builder.AppendLine($"  HEX group timeout profile/app/native: {HexGroupTimeoutMs:N0}/{_logPipeline.HexGroupTimeoutMs:N0}/{(_serialService.UsesNativeReceiveIdleTimeout ? _serialService.AppliedReceiveIdleTimeoutMs : 0):N0} ms");
+        builder.AppendLine($"  HEX timeout recommendation: {HexGroupTimeoutRecommendationText}");
         builder.AppendLine($"  HEX pending bytes: {_logPipeline.HexPendingByteCount:N0}");
+        builder.AppendLine($"  HEX accepted/emitted bytes: {_logPipeline.HexAcceptedByteCount:N0}/{_logPipeline.HexEmittedByteCount:N0}");
+        builder.AppendLine($"  HEX byte conservation delta: {_logPipeline.HexAcceptedByteCount - _logPipeline.HexEmittedByteCount - _logPipeline.HexPendingByteCount:N0}");
+        builder.AppendLine($"  Last HEX group bytes: {_logPipeline.LastHexGroupByteCount:N0}");
         builder.AppendLine($"  HEX group flush count: {_logPipeline.HexGroupFlushCount:N0}");
         builder.AppendLine($"  Last HEX group flush: {_logPipeline.LastHexGroupFlushTimeText}");
         builder.AppendLine($"  Partial RX visual line active: {Log.PartialRxVisualLineActive}");
