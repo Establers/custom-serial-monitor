@@ -90,4 +90,20 @@ public sealed class NativeReadBoundaryTrackerTests
 
         Assert.False(completion.EndsAtNativeIdleBoundary);
     }
+
+    [Fact]
+    public void CompletionWithDriverLineError_DoesNotClaimIdleBoundary()
+    {
+        var tracker = new NativeReadBoundaryTracker(bufferCapacity: 1024);
+
+        var completion = tracker.ObserveCompletion(
+            availableByteCount: 11,
+            completedTimestamp: 100,
+            usesNativeIdleTimeout: true,
+            lineErrorObserved: true);
+
+        Assert.Equal(11, completion.ByteCount);
+        Assert.False(completion.EndsAtNativeIdleBoundary);
+        Assert.True(completion.BoundarySuppressedByLineError);
+    }
 }

@@ -3,7 +3,8 @@ namespace SerialMonitor.WinUI.Services;
 internal readonly record struct NativeReadBoundary(
     int ByteCount,
     long CompletedTimestamp,
-    bool EndsAtNativeIdleBoundary);
+    bool EndsAtNativeIdleBoundary,
+    bool BoundarySuppressedByLineError);
 
 internal sealed class NativeReadBoundaryTracker
 {
@@ -20,7 +21,8 @@ internal sealed class NativeReadBoundaryTracker
     public NativeReadBoundary ObserveCompletion(
         int availableByteCount,
         long completedTimestamp,
-        bool usesNativeIdleTimeout)
+        bool usesNativeIdleTimeout,
+        bool lineErrorObserved = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(availableByteCount);
         if (availableByteCount > _bufferCapacity)
@@ -66,12 +68,18 @@ internal sealed class NativeReadBoundaryTracker
         // without proving that an idle interval occurred. This covers both
         // the physical array end and a wrapped buffer filling up to its read
         // start. Shorter completions are the ones ended by the native timeout.
+        // A driver line-status error can complete or disturb an in-flight
+        // read. Such a short completion is not positive proof of an idle gap;
+        // let the application timeout handle it conservatively.
         var endsAtNativeIdleBoundary = usesNativeIdleTimeout &&
+            !lineErrorObserved &&
             completedByteCount < contiguousWriteCapacity;
         return new NativeReadBoundary(
             (int)completedByteCount,
             completedTimestamp,
-            endsAtNativeIdleBoundary);
+            endsAtNativeIdleBoundary,
+            BoundarySuppressedByLineError:
+                lineErrorObserved && usesNativeIdleTimeout && completedByteCount < contiguousWriteCapacity);
     }
 
     public void RecordConsumed(int byteCount)

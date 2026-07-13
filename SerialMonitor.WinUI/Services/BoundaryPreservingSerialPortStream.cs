@@ -7,7 +7,8 @@ namespace SerialMonitor.WinUI.Services;
 internal readonly record struct NativeReadCompletion(
     byte[] Bytes,
     long CompletedTimestamp,
-    bool EndsAtNativeIdleBoundary);
+    bool EndsAtNativeIdleBoundary,
+    bool BoundarySuppressedByLineError);
 
 // RJCP's public Read()/BytesToRead API exposes only the accumulated managed
 // buffer. NativeSerial.DataReceived is the protected, synchronous event that
@@ -23,6 +24,7 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
     private readonly NativeReadBoundaryTracker _tracker;
     private readonly bool _usesNativeIdleTimeout;
     private Exception? _trackingError;
+    private int _lineErrorSinceLastCompletion;
     private bool _disposed;
 
     public BoundaryPreservingSerialPortStream(
@@ -38,6 +40,7 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
         _tracker = new NativeReadBoundaryTracker(readBufferSize);
         _usesNativeIdleTimeout = usesNativeIdleTimeout;
         NativeSerial.DataReceived += OnNativeDataReceived;
+        NativeSerial.ErrorReceived += OnNativeErrorReceived;
     }
 
     public NativeReadCompletion ReadNativeCompletion(CancellationToken cancellationToken)
@@ -83,7 +86,8 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
             return new NativeReadCompletion(
                 bytes,
                 boundary.CompletedTimestamp,
-                boundary.EndsAtNativeIdleBoundary);
+                boundary.EndsAtNativeIdleBoundary,
+                boundary.BoundarySuppressedByLineError);
         }
     }
 
@@ -98,6 +102,7 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
         if (disposing)
         {
             NativeSerial.DataReceived -= OnNativeDataReceived;
+            NativeSerial.ErrorReceived -= OnNativeErrorReceived;
         }
 
         base.Dispose(disposing);
@@ -122,7 +127,8 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
                 var boundary = _tracker.ObserveCompletion(
                     NativeSerial.Buffer.ReadStream.BytesToRead,
                     Stopwatch.GetTimestamp(),
-                    _usesNativeIdleTimeout);
+                    _usesNativeIdleTimeout,
+                    lineErrorObserved: Interlocked.Exchange(ref _lineErrorSinceLastCompletion, 0) != 0);
                 _boundaries.Enqueue(boundary);
             }
 
@@ -138,6 +144,15 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
             // Wake the dedicated receiver so the tracking failure is surfaced
             // through the existing serial-service error path.
             SignalBoundaryAvailable();
+        }
+    }
+
+    private void OnNativeErrorReceived(object? sender, SerialErrorReceivedEventArgs args)
+    {
+        var lineErrors = SerialError.Frame | SerialError.RXParity | SerialError.Overrun;
+        if ((args.EventType & lineErrors) != 0)
+        {
+            Volatile.Write(ref _lineErrorSinceLastCompletion, 1);
         }
     }
 
