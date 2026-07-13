@@ -235,6 +235,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private SerialSettings? _lastSuccessfulSerialSettings;
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
+    private string _hexGroupTimeoutDraftText = "40";
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
     private long _txErrorCount;
@@ -1395,6 +1396,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedTxSendMode));
             OnPropertyChanged(nameof(IsHexRxViewSelected));
+            OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(IsTxLineEndingEffective));
             OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshDiagnostics();
@@ -1424,9 +1426,62 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, value);
             RecordSettingsChange("HEX group timeout", SettingsApplyBehavior.Immediate, $"{value} ms");
             OnPropertyChanged();
+            _hexGroupTimeoutDraftText = value.ToString(CultureInfo.InvariantCulture);
+            OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
+            OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
+            OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+            OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(HexGroupTimeoutMsText));
             RefreshDiagnostics();
         }
+    }
+
+    public string HexGroupTimeoutDraftText
+    {
+        get => _hexGroupTimeoutDraftText;
+        set
+        {
+            value ??= string.Empty;
+            if (string.Equals(_hexGroupTimeoutDraftText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _hexGroupTimeoutDraftText = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
+        }
+    }
+
+    public bool HasPendingHexGroupTimeout =>
+        !int.TryParse(HexGroupTimeoutDraftText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ||
+        parsed != HexGroupTimeoutMs;
+
+    public string HexGroupTimeoutAppliedText => $"Applied: {HexGroupTimeoutMs:N0} ms";
+
+    public string HexGroupTimeoutHeaderText => IsHexRxViewSelected
+        ? $"HEX {HexGroupTimeoutMs:N0} ms"
+        : string.Empty;
+
+    public bool ApplyHexGroupTimeoutDraft()
+    {
+        if (!TryParseIntSetting(
+                "HEX group timeout (ms)",
+                HexGroupTimeoutDraftText,
+                MinHexGroupTimeoutMs,
+                MaxHexGroupTimeoutMs,
+                out var normalized))
+        {
+            return false;
+        }
+
+        HexGroupTimeoutMs = normalized;
+        _hexGroupTimeoutDraftText = normalized.ToString(CultureInfo.InvariantCulture);
+        OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
+        OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
+        OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+        return true;
     }
 
     public string HexGroupTimeoutMsText
@@ -10109,6 +10164,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastSuccessfulBaudRate = _lastSuccessfulSerialSettings?.BaudRate ?? 0;
             _currentLogSettings = profile.LogSettings.Clone();
             _currentUiSettings = profile.UiSettings.Clone();
+            _hexGroupTimeoutDraftText = _currentUiSettings.HexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
             _currentUiSettings.RxDisplayMode = NormalizeRxDisplayMode(_currentUiSettings.RxDisplayMode);
             _currentUiSettings.TxSendMode = _currentUiSettings.RxDisplayMode == RxDisplayMode.Hex
                 ? TxSendMode.Hex
@@ -10272,6 +10328,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedRxDisplayMode));
         OnPropertyChanged(nameof(IsHexRxViewSelected));
         OnPropertyChanged(nameof(HexGroupTimeoutMs));
+        OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
+        OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
+        OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
         OnPropertyChanged(nameof(HexGroupTimeoutMsText));
         OnPropertyChanged(nameof(SelectedTxSendMode));
         OnPropertyChanged(nameof(IsTxLineEndingEffective));

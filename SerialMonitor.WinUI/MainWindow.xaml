@@ -524,7 +524,7 @@
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnSpacing="4"
-                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,Auto,*">
+                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,Auto,Auto,*">
                 <TextBlock Grid.Column="0"
                            Text="Port"
                            Style="{StaticResource CompactLabelTextStyle}" />
@@ -542,31 +542,39 @@
                           ItemsSource="{Binding BaudRates}"
                           SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
                           IsEnabled="{Binding CanEditConnectionSettings}"
-                          MinWidth="86"
-                          HorizontalAlignment="Stretch" />
+                           MinWidth="86"
+                           HorizontalAlignment="Stretch" />
 
-                <Button Grid.Column="4"
+                <TextBlock Grid.Column="4"
+                           Text="{Binding HexGroupTimeoutHeaderText}"
+                           Foreground="#FF55D6BE"
+                           FontFamily="Consolas"
+                           FontWeight="SemiBold"
+                           Style="{StaticResource CompactLabelTextStyle}"
+                           ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
+
+                <Button Grid.Column="5"
                         Content="Connect"
                         Command="{Binding ConnectCommand}" />
-                <Button Grid.Column="5"
+                <Button Grid.Column="6"
                         Content="Disconnect"
                         Click="DisconnectButton_Click"
                         IsEnabled="{Binding CanManualDisconnect}" />
 
-                <Button Grid.Column="6"
+                <Button Grid.Column="7"
                         Content="{Binding FileLoggingToggleText}"
                         Command="{Binding ToggleFileLoggingCommand}"
                         Style="{StaticResource RuleActionButtonStyle}"
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
 
-                <TextBlock Grid.Column="7"
+                <TextBlock Grid.Column="8"
                            Text="{Binding BridgeIndicatorText}"
                            Foreground="#FFFFC857"
                            FontWeight="Bold"
                            Style="{StaticResource CompactLabelTextStyle}"
                            ToolTipService.ToolTip="{Binding BridgeStatusText}" />
 
-                <TextBlock Grid.Column="8"
+                <TextBlock Grid.Column="9"
                            Text="{Binding ConnectionStateText}"
                            Style="{StaticResource CompactLabelTextStyle}"
                            FontWeight="SemiBold"
@@ -1182,9 +1190,11 @@
                                 </Grid>
                             </Border>
 
-                            <Border Grid.Row="1"
+                            <Border x:Name="RulesTableBodyBorder"
+                                    Grid.Row="1"
                                     MinHeight="0"
-                                    Style="{StaticResource InspectorTabBodyBorderStyle}">
+                                    Style="{StaticResource InspectorTabBodyBorderStyle}"
+                                    SizeChanged="RulesTableBodyBorder_SizeChanged">
                                 <ScrollViewer x:Name="RulesTableScrollViewer"
                                               HorizontalScrollBarVisibility="Auto"
                                               VerticalScrollBarVisibility="Disabled"
@@ -1192,9 +1202,11 @@
                                               VerticalScrollMode="Disabled"
                                               IsHorizontalRailEnabled="True"
                                               MinHeight="0"
-                                              VerticalAlignment="Stretch">
-                                    <Grid MinWidth="728"
-                                          Height="{Binding ViewportHeight, ElementName=RulesTableScrollViewer}"
+                                              VerticalAlignment="Stretch"
+                                              Loaded="RulesTableScrollViewer_Loaded"
+                                              SizeChanged="RulesTableScrollViewer_SizeChanged">
+                                    <Grid x:Name="RulesTableViewportGrid"
+                                          MinWidth="728"
                                           RowDefinitions="Auto,*"
                                           MinHeight="0">
                                         <Border Grid.Row="0"
@@ -1674,19 +1686,29 @@
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
                                                         Spacing="5">
-                                                <TextBox Text="{Binding HexGroupTimeoutMsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                <TextBox x:Name="HexGroupTimeoutTextBox"
+                                                         Text="{Binding HexGroupTimeoutDraftText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
-                                                         Width="72"
+                                                         Width="78"
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
                                                          HorizontalAlignment="Left"
-                                                         ToolTipService.ToolTip="Group raw RX bytes received within this idle gap into one HEX line. The timer restarts after every received chunk." />
+                                                         KeyDown="HexGroupTimeoutTextBox_KeyDown"
+                                                         ToolTipService.ToolTip="Enter a whole number from 1 to 5000. It is applied only with Enter or Set. At 9,600 bps, try 100 ms for long frames." />
                                                 <TextBlock Text="ms"
                                                            Style="{StaticResource SettingLabelTextStyle}" />
+                                                <Button Content="Set"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        IsEnabled="{Binding IsHexRxViewSelected}"
+                                                        Click="ApplyHexGroupTimeout_Click"
+                                                        ToolTipService.ToolTip="Apply the entered timeout. You can also press Enter." />
+                                                <TextBlock Text="{Binding HexGroupTimeoutAppliedText}"
+                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           VerticalAlignment="Center" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="2"
-                                                       Text="Now"
+                                                       Text="Set"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. Range: 1–5000 ms; default: 40 ms." />
+                                                       ToolTipService.ToolTip="The typed number is not applied until you press Enter or Set. Range: 1–5000 ms; default: 40 ms. For a 270-byte frame at 9,600 bps, 100 ms is safer." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">

@@ -2898,6 +2898,63 @@ public sealed partial class MainWindow : Window
         QueueXtermFit();
     }
 
+    private void RulesTableScrollViewer_Loaded(object sender, RoutedEventArgs args)
+    {
+        QueueRulesTableViewportResize();
+    }
+
+    private void RulesTableScrollViewer_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        QueueRulesTableViewportResize();
+    }
+
+    private void RulesTableBodyBorder_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (double.IsFinite(args.NewSize.Height) && args.NewSize.Height > 0)
+        {
+            RulesTableViewportGrid.Height = args.NewSize.Height;
+        }
+
+        QueueRulesTableViewportResize();
+    }
+
+    private void QueueRulesTableViewportResize()
+    {
+        DispatcherQueue.TryEnqueue(UpdateRulesTableViewportHeight);
+    }
+
+    private void UpdateRulesTableViewportHeight()
+    {
+        var viewportHeight = RulesTableScrollViewer.ViewportHeight;
+        if (!double.IsFinite(viewportHeight) || viewportHeight <= 0)
+        {
+            viewportHeight = RulesTableScrollViewer.ActualHeight;
+        }
+
+        viewportHeight = Math.Max(0, viewportHeight);
+        if (Math.Abs(RulesTableViewportGrid.Height - viewportHeight) > 0.5 ||
+            double.IsNaN(RulesTableViewportGrid.Height))
+        {
+            RulesTableViewportGrid.Height = viewportHeight;
+        }
+    }
+
+    private void ApplyHexGroupTimeout_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.ApplyHexGroupTimeoutDraft();
+    }
+
+    private void HexGroupTimeoutTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.Key != VirtualKey.Enter)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        _viewModel.ApplyHexGroupTimeoutDraft();
+    }
+
     private void SelectLatestEvent_Click(object sender, RoutedEventArgs args)
     {
         try

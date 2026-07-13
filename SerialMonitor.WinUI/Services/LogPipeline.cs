@@ -239,8 +239,16 @@ public sealed class LogPipeline : ILogPipeline
                     var hexDelay = flushDueAt.Value - DateTimeOffset.UtcNow;
                     if (hexDelay <= TimeSpan.Zero)
                     {
+                        if (await DrainAvailableHexChunksAsync(source, settings, cancellationToken))
+                        {
+                            lastHexReceiveAt = DateTimeOffset.UtcNow;
+                            flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
+                            continue;
+                        }
+
                         await FlushHexGroupAsync(settings, cancellationToken);
                         flushDueAt = null;
+                        lastHexReceiveAt = null;
                         continue;
                     }
 
@@ -264,6 +272,13 @@ public sealed class LogPipeline : ILogPipeline
                         {
                             await hexFlushTask;
                             hexWaitCancellation.Cancel();
+                            if (await DrainAvailableHexChunksAsync(source, settings, cancellationToken))
+                            {
+                                lastHexReceiveAt = DateTimeOffset.UtcNow;
+                                flushDueAt = lastHexReceiveAt.Value + GetHexGroupTimeout();
+                                continue;
+                            }
+
                             await FlushHexGroupAsync(settings, cancellationToken);
                             flushDueAt = null;
                             lastHexReceiveAt = null;
@@ -415,11 +430,12 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
-    private async Task DrainAvailableHexChunksAsync(
+    private async Task<bool> DrainAvailableHexChunksAsync(
         ChannelReader<byte[]> source,
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
+        var drainedAny = false;
         while (source.TryRead(out var bytes))
         {
             if (bytes.Length == 0)
@@ -427,6 +443,7 @@ public sealed class LogPipeline : ILogPipeline
                 continue;
             }
 
+            drainedAny = true;
             _hexPendingBytes.AddRange(bytes);
             Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
             Volatile.Write(ref _hexGroupOpen, 1);
@@ -439,6 +456,8 @@ public sealed class LogPipeline : ILogPipeline
                 await FlushHexSegmentAsync(settings, cancellationToken);
             }
         }
+
+        return drainedAny;
     }
 
     private async Task FlushHexSegmentAsync(SerialSettings settings, CancellationToken cancellationToken)
