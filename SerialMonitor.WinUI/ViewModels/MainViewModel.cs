@@ -2357,6 +2357,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanManualDisconnect => IsConnected && !IsBusy;
 
+    public bool CanToggleConnection => IsConnected ? CanManualDisconnect : CanConnect;
+
     public bool CanConnect =>
         !IsConnected &&
         !IsBusy &&
@@ -2698,6 +2700,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string PauseRenderingButtonText => IsLogRenderingPaused ? "Resume Rendering" : "Pause Rendering";
 
     public string CompactPauseRenderingButtonText => IsLogRenderingPaused ? ">" : "||";
+
+    public string CompactPauseRenderingButtonGlyph => IsLogRenderingPaused ? "\uE768" : "\uE769";
 
     public string PauseRenderingToolTip => IsLogRenderingPaused ? "Resume rendering" : "Pause rendering";
 
@@ -4287,6 +4291,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void NotifyConnectionSelectionCommandState()
     {
         OnPropertyChanged(nameof(CanConnect));
+        OnPropertyChanged(nameof(CanToggleConnection));
         ConnectCommand.NotifyCanExecuteChanged();
         ToggleConnectionCommand.NotifyCanExecuteChanged();
     }
@@ -10191,6 +10196,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(RenderingStateText));
         OnPropertyChanged(nameof(PauseRenderingButtonText));
         OnPropertyChanged(nameof(CompactPauseRenderingButtonText));
+        OnPropertyChanged(nameof(CompactPauseRenderingButtonGlyph));
         OnPropertyChanged(nameof(PauseRenderingToolTip));
         OnPropertyChanged(nameof(PendingVisualLineCount));
         SetStatus(statusMessage);
@@ -12137,6 +12143,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void NotifyCommandStates()
     {
         OnPropertyChanged(nameof(CanManualDisconnect));
+        OnPropertyChanged(nameof(CanToggleConnection));
         ConnectCommand.NotifyCanExecuteChanged();
         ToggleConnectionCommand.NotifyCanExecuteChanged();
         DisconnectCommand.NotifyCanExecuteChanged();

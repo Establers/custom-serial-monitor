@@ -9,6 +9,8 @@
           Background="#0C0D0E"
           Padding="4"
           RowSpacing="3"
+          Loaded="Root_Loaded"
+          SizeChanged="Root_SizeChanged"
           KeyDown="Root_KeyDown">
         <Grid.Resources>
             <infra:HighlightColorBrushConverter x:Key="HighlightColorBrushConverter" />
@@ -193,6 +195,75 @@
                         Value="2,0" />
                 <Setter Property="FontSize"
                         Value="11" />
+            </Style>
+            <ControlTemplate x:Key="NavigationIconButtonTemplate"
+                             TargetType="Button">
+                <Grid x:Name="ButtonRoot"
+                      Background="{TemplateBinding Background}"
+                      CornerRadius="{TemplateBinding CornerRadius}">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonRoot.Background"
+                                            Value="#3DFFFFFF" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonRoot.Background"
+                                            Value="#52FFFFFF" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonRoot.Background"
+                                            Value="#12FFFFFF" />
+                                    <Setter Target="ButtonRoot.Opacity"
+                                            Value="0.45" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
+            </ControlTemplate>
+            <Style x:Key="NavigationIconButtonStyle"
+                   TargetType="Button"
+                   BasedOn="{StaticResource ToolbarIconButtonStyle}">
+                <Setter Property="Width"
+                        Value="24" />
+                <Setter Property="Height"
+                        Value="24" />
+                <Setter Property="MinWidth"
+                        Value="24" />
+                <Setter Property="MinHeight"
+                        Value="24" />
+                <Setter Property="Padding"
+                        Value="0" />
+                <Setter Property="UseLayoutRounding"
+                        Value="True" />
+                <Setter Property="CornerRadius"
+                        Value="12" />
+                <Setter Property="Background"
+                        Value="#26FFFFFF" />
+                <Setter Property="BorderBrush"
+                        Value="Transparent" />
+                <Setter Property="BorderThickness"
+                        Value="0" />
+                <Setter Property="Template"
+                        Value="{StaticResource NavigationIconButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
             </Style>
             <Style x:Key="CompactTextBoxStyle"
                    TargetType="TextBox">
@@ -473,35 +544,6 @@
                         Value="Left" />
             </Style>
         </Grid.Resources>
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="LayoutStates">
-                <VisualState x:Name="NarrowLayout" />
-                <VisualState x:Name="WideLayout">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="1120" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="MainContentGrid.ColumnSpacing"
-                                Value="8" />
-                        <Setter Target="MainContentGrid.RowSpacing"
-                                Value="0" />
-                        <Setter Target="ContentLogRow.Height"
-                                Value="*" />
-                        <Setter Target="ContentInspectorRow.Height"
-                                Value="0" />
-                        <Setter Target="LogColumn.Width"
-                                Value="3*" />
-                        <Setter Target="InspectorColumn.Width"
-                                Value="390" />
-                        <Setter Target="InspectorPanel.(Grid.Row)"
-                                Value="0" />
-                        <Setter Target="InspectorPanel.(Grid.Column)"
-                                Value="1" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
-
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -523,8 +565,30 @@
         </Grid>
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
-            <Grid ColumnSpacing="4"
-                  ColumnDefinitions="Auto,130,Auto,98,Auto,Auto,Auto,*">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Button x:Name="ConnectionToolbarScrollBackButton"
+                    Grid.Column="0"
+                    Style="{StaticResource NavigationIconButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ToolbarScrollBackButton_Click"
+                    ToolTipService.ToolTip="Scroll connection controls left">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          FontSize="12"
+                          UseLayoutRounding="False"
+                          Glyph="&#xE76B;" />
+            </Button>
+            <ScrollViewer x:Name="ConnectionToolbarScrollViewer"
+                          Grid.Column="1"
+                          HorizontalScrollMode="Enabled"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollMode="Disabled"
+                          VerticalScrollBarVisibility="Disabled"
+                          ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
+                          SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
+            <Grid Width="{Binding ViewportWidth, ElementName=ConnectionToolbarScrollViewer}"
+                  MinWidth="850"
+                  ColumnSpacing="4"
+                  ColumnDefinitions="Auto,130,Auto,98,82,Auto,*">
                 <TextBlock Grid.Column="0"
                            Text="Port"
                            Style="{StaticResource CompactLabelTextStyle}" />
@@ -546,24 +610,24 @@
                           HorizontalAlignment="Stretch" />
 
                 <Button Grid.Column="4"
-                        Content="Connect"
-                        Command="{Binding ConnectCommand}" />
-                <Button Grid.Column="5"
-                        Content="Disconnect"
-                        Click="DisconnectButton_Click"
-                        IsEnabled="{Binding CanManualDisconnect}" />
+                        Width="82"
+                        Content="{Binding ConnectionButtonText}"
+                        Click="ConnectionButton_Click"
+                        IsEnabled="{Binding CanToggleConnection}" />
 
-                <Button Grid.Column="6"
+                <Button Grid.Column="5"
+                        Height="24"
+                        MinHeight="24"
                         Content="{Binding FileLoggingToggleText}"
                         Command="{Binding ToggleFileLoggingCommand}"
                         Style="{StaticResource RuleActionButtonStyle}"
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}" />
 
-                <Grid Grid.Column="7"
-                      ColumnDefinitions="*,Auto,Auto"
+                <Grid Grid.Column="6"
+                      ColumnDefinitions="Auto,Auto,Auto"
                       ColumnSpacing="8"
                       MinWidth="0"
-                      HorizontalAlignment="Stretch"
+                      HorizontalAlignment="Left"
                       VerticalAlignment="Center">
                     <TextBlock Grid.Column="0"
                                Text="{Binding ConnectionStateText}"
@@ -571,8 +635,8 @@
                                FontWeight="SemiBold"
                                MinWidth="0"
                                MaxLines="1"
-                               TextAlignment="Right"
-                               HorizontalAlignment="Stretch"
+                               TextAlignment="Left"
+                               HorizontalAlignment="Left"
                                ToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
                     <TextBlock Grid.Column="1"
                                Text="{Binding BridgeIndicatorText}"
@@ -590,6 +654,19 @@
                                TextTrimming="None"
                                ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
                 </Grid>
+            </Grid>
+            </ScrollViewer>
+            <Button x:Name="ConnectionToolbarScrollForwardButton"
+                    Grid.Column="2"
+                    Style="{StaticResource NavigationIconButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ToolbarScrollForwardButton_Click"
+                    ToolTipService.ToolTip="Scroll connection controls right">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          FontSize="12"
+                          UseLayoutRounding="False"
+                          Glyph="&#xE76C;" />
+            </Button>
             </Grid>
         </Border>
 
@@ -617,8 +694,30 @@
                   RowDefinitions="Auto,*">
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
-                    <Grid ColumnSpacing="5"
-                          ColumnDefinitions="270,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Button x:Name="LogToolbarScrollBackButton"
+                            Grid.Column="0"
+                            Style="{StaticResource NavigationIconButtonStyle}"
+                            Visibility="Collapsed"
+                            Click="ToolbarScrollBackButton_Click"
+                            ToolTipService.ToolTip="Scroll log controls left">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  UseLayoutRounding="False"
+                                  Glyph="&#xE76B;" />
+                    </Button>
+                    <ScrollViewer x:Name="LogToolbarScrollViewer"
+                                  Grid.Column="1"
+                                  HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
+                                  SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
+                    <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
+                          MinWidth="960"
+                          ColumnSpacing="5"
+                          ColumnDefinitions="270,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
                         <TextBox x:Name="SearchTextBox"
                                  Grid.Column="0"
                                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -630,13 +729,23 @@
                                  KeyDown="SearchTextBox_KeyDown"
                                  ToolTipService.ToolTip="Search visible log (Ctrl+F, Up/Down history)" />
                         <Button Grid.Column="1"
-                                Content="Next"
-                                Command="{Binding FindNextCommand}"
-                                ToolTipService.ToolTip="Next (Enter, F3)" />
-                        <Button Grid.Column="2"
-                                Content="Prev"
+                                Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
-                                ToolTipService.ToolTip="Previous (Shift+Enter, Shift+F3)" />
+                                ToolTipService.ToolTip="Previous (Shift+Enter, Shift+F3)">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="&#xE76B;" />
+                        </Button>
+                        <Button Grid.Column="2"
+                                Style="{StaticResource NavigationIconButtonStyle}"
+                                Command="{Binding FindNextCommand}"
+                                ToolTipService.ToolTip="Next (Enter, F3)">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="&#xE76C;" />
+                        </Button>
                         <CheckBox Grid.Column="3"
                                   Content="Case"
                                   IsChecked="{Binding IsSearchCaseSensitive, Mode=TwoWay}"
@@ -677,54 +786,41 @@
                                   IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                   VerticalAlignment="Center"
                                   ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Turn off to inspect older logs without being pulled to the bottom." />
-                        <TextBlock Grid.Column="11"
-                                   Text="{Binding RenderingStateText}"
-                                   FontSize="11"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
-                        <Button Grid.Column="12"
-                                Content="{Binding CompactPauseRenderingButtonText}"
+                        <Button Grid.Column="11"
+                                Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ToggleLogRenderingPauseCommand}"
-                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}" />
-                        <Button Grid.Column="13"
-                                Content="Clr"
+                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
+                        </Button>
+                        <Button Grid.Column="12"
+                                Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ClearScreenCommand}"
-                                ToolTipService.ToolTip="Clear visible log" />
-                        <Button Grid.Column="14"
+                                ToolTipService.ToolTip="Clear visible log">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="&#xE711;" />
+                        </Button>
+                        <Button Grid.Column="13"
                                 Content="Mark"
                                 Command="{Binding AddDefaultMarkerCommand}"
                                 ToolTipService.ToolTip="Quick marker inserts current MARK TIME" />
-                        <Button x:Name="CustomMarkerButton"
-                                Grid.Column="15"
-                                Content="Custom"
-                                IsEnabled="{Binding IsConnected}"
-                                ToolTipService.ToolTip="Custom marker inserts MARK TIME with memo">
-                            <Button.Flyout>
-                                <Flyout x:Name="MarkerFlyout"
-                                        Placement="BottomEdgeAlignedRight">
-                                    <StackPanel Spacing="6"
-                                                MinWidth="220">
-                                        <TextBlock Text="Marker"
-                                                   FontWeight="SemiBold"
-                                                   FontSize="12" />
-                                        <TextBox x:Name="MarkerFlyoutTextBox"
-                                                 Text="{Binding MarkerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 PlaceholderText="Optional marker memo"
-                                                 Style="{StaticResource CompactTextBoxStyle}"
-                                                 MinWidth="210"
-                                                 ToolTipService.ToolTip="Optional marker memo appended after MARK TIME" />
-                                        <StackPanel Orientation="Horizontal"
-                                                    Spacing="4"
-                                                    HorizontalAlignment="Right">
-                                            <Button Content="Insert"
-                                                    Style="{StaticResource RuleActionButtonStyle}"
-                                                    Click="InsertCustomMarker_Click"
-                                                    ToolTipService.ToolTip="Insert custom marker" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
+                    </Grid>
+                    </ScrollViewer>
+                    <Button x:Name="LogToolbarScrollForwardButton"
+                            Grid.Column="2"
+                            Style="{StaticResource NavigationIconButtonStyle}"
+                            Visibility="Collapsed"
+                            Click="ToolbarScrollForwardButton_Click"
+                            ToolTipService.ToolTip="Scroll log controls right">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  UseLayoutRounding="False"
+                                  Glyph="&#xE76C;" />
+                    </Button>
                     </Grid>
                 </Border>
 
@@ -781,6 +877,7 @@
                   MinHeight="160">
                 <TabView x:Name="InspectorTabView"
                          Grid.Row="0"
+                         Margin="0,0,28,0"
                          IsAddTabButtonVisible="False"
                          CanDragTabs="False"
                          TabWidthMode="SizeToContent"
@@ -896,9 +993,18 @@
 
                             <Border Grid.Row="1"
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
-                                <WebView2 x:Name="ContextWebView"
-                                          MinHeight="0"
-                                          VerticalAlignment="Stretch" />
+                                <ScrollViewer HorizontalScrollMode="Enabled"
+                                              HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollMode="Enabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              ZoomMode="Disabled">
+                                    <TextBlock Text="{Binding SelectedEventContextText, Mode=OneWay}"
+                                               Padding="2,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12"
+                                               IsTextSelectionEnabled="True"
+                                               TextWrapping="NoWrap" />
+                                </ScrollViewer>
                             </Border>
                         </Grid>
                     </TabViewItem>
@@ -1419,23 +1525,19 @@
                                     <StackPanel Spacing="5">
                                         <TextBlock Text="Connection"
                                                    Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                        <Grid ColumnDefinitions="110,*,Auto"
+                                        <Grid ColumnDefinitions="Auto,130,*"
                                               RowDefinitions="Auto,Auto"
                                               ColumnSpacing="5">
-                                            <TextBlock Text="Virtual app-side port"
+                                            <TextBlock Text="Port"
                                                        Grid.Column="0"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                                       Style="{StaticResource CompactLabelTextStyle}"
+                                                       ToolTipService.ToolTip="Virtual app-side COM port opened by Serial Monitor" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding BridgePortNames}"
                                                       SelectedItem="{Binding SelectedBridgePort, Mode=TwoWay}"
-                                                      Text="{Binding SelectedBridgePort, Mode=TwoWay}"
-                                                      IsEditable="True"
                                                       IsEnabled="{Binding CanEditBridgePort}"
-                                                      PlaceholderText="e.g. COM10 or CNCA0" />
-                                            <Button Grid.Column="2"
-                                                    Content="Refresh"
-                                                    Command="{Binding RefreshBridgePortsCommand}"
-                                                    Style="{StaticResource RuleActionButtonStyle}" />
+                                                      MinWidth="110"
+                                                      HorizontalAlignment="Stretch" />
                                             <StackPanel Grid.Row="1"
                                                         Grid.Column="1"
                                                         Grid.ColumnSpan="2"
@@ -2560,12 +2662,52 @@
                     </TabViewItem>
                 </TabView>
             </Grid>
+            <Button x:Name="InspectorCollapseButton"
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Margin="0,3,2,0"
+                    Padding="0"
+                    Style="{StaticResource NavigationIconButtonStyle}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Canvas.ZIndex="20"
+                    Click="InspectorCollapseButton_Click"
+                    AutomationProperties.Name="Collapse inspector menu"
+                    ToolTipService.ToolTip="Collapse inspector menu">
+                <FontIcon x:Name="InspectorCollapseGlyph"
+                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          FontSize="12"
+                          UseLayoutRounding="False"
+                          Glyph="&#xE70D;" />
+            </Button>
         </Grid>
 
         <Border Grid.Row="2"
                 Style="{StaticResource CompactSurfaceBorderStyle}">
-            <Grid ColumnSpacing="4"
-                  ColumnDefinitions="Auto,*,Auto,96,Auto,82,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Button x:Name="TxToolbarScrollBackButton"
+                    Grid.Column="0"
+                    Style="{StaticResource NavigationIconButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ToolbarScrollBackButton_Click"
+                    ToolTipService.ToolTip="Scroll TX controls left">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          FontSize="12"
+                          UseLayoutRounding="False"
+                          Glyph="&#xE76B;" />
+            </Button>
+            <ScrollViewer x:Name="TxToolbarScrollViewer"
+                          Grid.Column="1"
+                          HorizontalScrollMode="Enabled"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollMode="Disabled"
+                          VerticalScrollBarVisibility="Disabled"
+                          ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
+                          SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
+            <Grid Width="{Binding ViewportWidth, ElementName=TxToolbarScrollViewer}"
+                  MinWidth="500"
+                  ColumnSpacing="4"
+                  ColumnDefinitions="Auto,*,Auto,82,Auto,Auto">
                 <TextBlock Text="TX"
                            Style="{StaticResource CompactSectionTitleTextStyle}" />
                 <TextBox x:Name="CommandTextBox"
@@ -2578,27 +2720,18 @@
                          VerticalAlignment="Center"
                          KeyDown="CommandTextBox_KeyDown" />
                 <TextBlock Grid.Column="2"
-                           Text="Mode"
-                           Style="{StaticResource CompactLabelTextStyle}" />
-                <ComboBox Grid.Column="3"
-                          ItemsSource="{Binding RxDisplayModes}"
-                          SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
-                          ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                          Width="96"
-                          ToolTipService.ToolTip="Changes RX display and TX input together. In HEX mode enter exact bytes like 41 09 42 0D 0A." />
-                <TextBlock Grid.Column="4"
                            Text="Ending"
                            Style="{StaticResource CompactLabelTextStyle}" />
-                <ComboBox Grid.Column="5"
+                <ComboBox Grid.Column="3"
                           ItemsSource="{Binding TxLineEndingModes}"
                           SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
                           IsEnabled="{Binding IsTxLineEndingEffective}"
                           ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
                           MinWidth="78" />
-                <Button Grid.Column="6"
+                <Button Grid.Column="4"
                         Content="Send"
                         Command="{Binding SendCommand}" />
-                <Button Grid.Column="7"
+                <Button Grid.Column="5"
                         Content="Hist"
                         ToolTipService.ToolTip="Show recently sent TX commands">
                     <Button.Flyout>
@@ -2663,6 +2796,19 @@
                     </Button.Flyout>
                 </Button>
             </Grid>
+            </ScrollViewer>
+            <Button x:Name="TxToolbarScrollForwardButton"
+                    Grid.Column="2"
+                    Style="{StaticResource NavigationIconButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ToolbarScrollForwardButton_Click"
+                    ToolTipService.ToolTip="Scroll TX controls right">
+                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                          FontSize="12"
+                          UseLayoutRounding="False"
+                          Glyph="&#xE76C;" />
+            </Button>
+            </Grid>
         </Border>
 
         <Border Grid.Row="3"
@@ -2699,32 +2845,64 @@
                         Margin="2,1"
                         Background="{ThemeResource SystemControlForegroundBaseLowBrush}" />
 
-                <ScrollViewer Grid.Column="6"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="5">
-                        <TextBlock Text="Quick"
-                                   Style="{StaticResource CompactLabelTextStyle}" />
-                        <ItemsControl ItemsSource="{Binding Commands.SavedCommands}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="4" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Content="{Binding Name}"
-                                            Style="{StaticResource SavedCommandChipButtonStyle}"
-                                            Command="{Binding DataContext.SendSavedCommandCommand, ElementName=Root}"
-                                            CommandParameter="{Binding}"
-                                            ToolTipService.ToolTip="{Binding SendToolTip}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                <Grid Grid.Column="6"
+                      ColumnDefinitions="Auto,*,Auto">
+                    <Button x:Name="QuickToolbarScrollBackButton"
+                            Grid.Column="0"
+                            Style="{StaticResource NavigationIconButtonStyle}"
+                            Visibility="Collapsed"
+                            Click="ToolbarScrollBackButton_Click"
+                            ToolTipService.ToolTip="Scroll quick commands left">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  UseLayoutRounding="False"
+                                  Glyph="&#xE76B;" />
+                    </Button>
+                    <ScrollViewer x:Name="QuickToolbarScrollViewer"
+                                  Grid.Column="1"
+                                  HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
+                                  SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
+                        <StackPanel x:Name="QuickCommandPanel"
+                                    Orientation="Horizontal"
+                                    Spacing="5"
+                                    SizeChanged="QuickCommandPanel_SizeChanged">
+                            <TextBlock Text="Quick"
+                                       Style="{StaticResource CompactLabelTextStyle}" />
+                            <ItemsControl ItemsSource="{Binding Commands.SavedCommands}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Name}"
+                                                Style="{StaticResource SavedCommandChipButtonStyle}"
+                                                Command="{Binding DataContext.SendSavedCommandCommand, ElementName=Root}"
+                                                CommandParameter="{Binding}"
+                                                ToolTipService.ToolTip="{Binding SendToolTip}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Button x:Name="QuickToolbarScrollForwardButton"
+                            Grid.Column="2"
+                            Style="{StaticResource NavigationIconButtonStyle}"
+                            Visibility="Collapsed"
+                            Click="ToolbarScrollForwardButton_Click"
+                            ToolTipService.ToolTip="Scroll quick commands right">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  UseLayoutRounding="False"
+                                  Glyph="&#xE76C;" />
+                    </Button>
+                </Grid>
             </Grid>
         </Border>
 

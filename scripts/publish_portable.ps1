@@ -226,7 +226,7 @@ Notes
 - Default logs: %LOCALAPPDATA%\SerialMonitor\logs
 - Default profile: %LOCALAPPDATA%\SerialMonitor\profiles\default.json
 - Runtime diagnostics: %LOCALAPPDATA%\SerialMonitor\diagnostics\last_runtime_error.txt
-- WebView2 Runtime may still be required on the target PC for the xterm and context views.
+- WebView2 Runtime may still be required on the target PC for the xterm log view.
 
 If the app does not start
 -------------------------

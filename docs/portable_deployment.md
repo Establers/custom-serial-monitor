@@ -72,8 +72,8 @@ Logs and profiles remain user-local:
 
 ## Target PC Notes
 
-WebView2 Runtime may still be required on the target PC for the xterm log view
-and event context viewer. Many Windows 10/11 systems already have it through
+WebView2 Runtime may still be required on the target PC for the xterm log view.
+Many Windows 10/11 systems already have it through
 Microsoft Edge, but company images vary.
 
 If the app does not start, check:

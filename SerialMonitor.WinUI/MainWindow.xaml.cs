@@ -56,10 +56,8 @@ public sealed partial class MainWindow : Window
     private long _nextXtermAppendRequestId;
     private int _pendingLiveXtermLines;
     private bool _isXtermReady;
-    private bool _isContextWebViewReady;
     private bool _eventAutoScrollQueued;
     private bool _isPointerOverEventList;
-    private bool _contextWebViewUpdateQueued;
     private bool _xtermFitQueued;
     private bool _closeAllowed;
     private bool _closeCleanupStarted;
@@ -93,6 +91,7 @@ public sealed partial class MainWindow : Window
     private double? _lastAppliedCuteBackgroundOpacity;
     private string? _cachedCuteBackgroundPath;
     private BitmapImage? _cachedCuteBackgroundImage;
+    private bool _isInspectorCollapsed;
 
     private readonly record struct XtermAppendChunk(string Text, int LineCount);
     private sealed record XtermScrollState(bool Ok, int ViewportY, int BaseY, int Rows, bool AtBottom);
@@ -142,7 +141,6 @@ public sealed partial class MainWindow : Window
         Closed += OnClosed;
         UpdateCuteBackgroundImage();
         _ = InitializeXtermWebViewAsync();
-        _ = InitializeContextWebViewAsync();
 
         AppWindow.Resize(new SizeInt32(1200, 800));
     }
@@ -268,12 +266,6 @@ public sealed partial class MainWindow : Window
             XtermLogWebView.CoreWebView2.WebMessageReceived -= OnXtermWebMessageReceived;
         }
 
-        ContextWebView.NavigationCompleted -= OnContextNavigationCompleted;
-        if (ContextWebView.CoreWebView2 is not null)
-        {
-            ContextWebView.CoreWebView2.WebMessageReceived -= OnContextWebMessageReceived;
-        }
-
         _eventPopupTimer.Stop();
         _eventPopupTimer.Tick -= OnEventPopupTimerTick;
         _trayIconTimer.Stop();
@@ -353,11 +345,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void DisconnectButton_Click(object sender, RoutedEventArgs args)
+    private async void ConnectionButton_Click(object sender, RoutedEventArgs args)
     {
         if (!_viewModel.IsConnected)
         {
-            _viewModel.RecordDisconnectConfirmationResult("skipped");
+            if (_viewModel.ConnectCommand.CanExecute(null))
+            {
+                _viewModel.ConnectCommand.Execute(null);
+            }
+
             return;
         }
 
@@ -385,6 +381,161 @@ public sealed partial class MainWindow : Window
         }
 
         ExecuteDisconnectCommand();
+    }
+
+    private void Root_Loaded(object sender, RoutedEventArgs args)
+    {
+        ApplyInspectorLayout();
+        UpdateToolbarScrollButtons(ConnectionToolbarScrollViewer);
+        UpdateToolbarScrollButtons(LogToolbarScrollViewer);
+        UpdateToolbarScrollButtons(TxToolbarScrollViewer);
+        UpdateToolbarScrollButtons(QuickToolbarScrollViewer);
+    }
+
+    private void Root_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        ApplyInspectorLayout();
+    }
+
+    private void InspectorCollapseButton_Click(object sender, RoutedEventArgs args)
+    {
+        _isInspectorCollapsed = !_isInspectorCollapsed;
+        ApplyInspectorLayout();
+        QueueXtermFit();
+    }
+
+    private void ToolbarScrollBackButton_Click(object sender, RoutedEventArgs args)
+    {
+        ScrollToolbar(sender as Button, -1);
+    }
+
+    private void ToolbarScrollForwardButton_Click(object sender, RoutedEventArgs args)
+    {
+        ScrollToolbar(sender as Button, 1);
+    }
+
+    private void HorizontalToolbarScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs args)
+    {
+        if (sender is ScrollViewer scrollViewer)
+        {
+            UpdateToolbarScrollButtons(scrollViewer);
+        }
+    }
+
+    private void HorizontalToolbarScrollViewer_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (sender is ScrollViewer scrollViewer)
+        {
+            UpdateToolbarScrollButtons(scrollViewer);
+        }
+    }
+
+    private void QuickCommandPanel_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        UpdateToolbarScrollButtons(QuickToolbarScrollViewer);
+    }
+
+    private void ScrollToolbar(Button? sourceButton, int direction)
+    {
+        var scrollViewer = sourceButton switch
+        {
+            _ when ReferenceEquals(sourceButton, ConnectionToolbarScrollBackButton) ||
+                   ReferenceEquals(sourceButton, ConnectionToolbarScrollForwardButton) => ConnectionToolbarScrollViewer,
+            _ when ReferenceEquals(sourceButton, LogToolbarScrollBackButton) ||
+                   ReferenceEquals(sourceButton, LogToolbarScrollForwardButton) => LogToolbarScrollViewer,
+            _ when ReferenceEquals(sourceButton, TxToolbarScrollBackButton) ||
+                   ReferenceEquals(sourceButton, TxToolbarScrollForwardButton) => TxToolbarScrollViewer,
+            _ when ReferenceEquals(sourceButton, QuickToolbarScrollBackButton) ||
+                   ReferenceEquals(sourceButton, QuickToolbarScrollForwardButton) => QuickToolbarScrollViewer,
+            _ => null
+        };
+
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        var step = Math.Max(120, scrollViewer.ViewportWidth * 0.65);
+        var targetOffset = Math.Clamp(
+            scrollViewer.HorizontalOffset + (direction * step),
+            0,
+            scrollViewer.ScrollableWidth);
+        scrollViewer.ChangeView(targetOffset, null, null, disableAnimation: false);
+    }
+
+    private void UpdateToolbarScrollButtons(ScrollViewer scrollViewer)
+    {
+        Button backButton;
+        Button forwardButton;
+        if (ReferenceEquals(scrollViewer, ConnectionToolbarScrollViewer))
+        {
+            backButton = ConnectionToolbarScrollBackButton;
+            forwardButton = ConnectionToolbarScrollForwardButton;
+        }
+        else if (ReferenceEquals(scrollViewer, LogToolbarScrollViewer))
+        {
+            backButton = LogToolbarScrollBackButton;
+            forwardButton = LogToolbarScrollForwardButton;
+        }
+        else if (ReferenceEquals(scrollViewer, TxToolbarScrollViewer))
+        {
+            backButton = TxToolbarScrollBackButton;
+            forwardButton = TxToolbarScrollForwardButton;
+        }
+        else if (ReferenceEquals(scrollViewer, QuickToolbarScrollViewer))
+        {
+            backButton = QuickToolbarScrollBackButton;
+            forwardButton = QuickToolbarScrollForwardButton;
+        }
+        else
+        {
+            return;
+        }
+
+        var reservedButtonWidth = backButton.Visibility == Visibility.Visible
+            ? backButton.ActualWidth + forwardButton.ActualWidth
+            : 0;
+        var hasOverflow = scrollViewer.ScrollableWidth > reservedButtonWidth + 0.5;
+        var visibility = hasOverflow ? Visibility.Visible : Visibility.Collapsed;
+        backButton.Visibility = visibility;
+        forwardButton.Visibility = visibility;
+        if (!hasOverflow && scrollViewer.HorizontalOffset > 0.5)
+        {
+            scrollViewer.ChangeView(0, null, null, disableAnimation: true);
+        }
+
+        backButton.IsEnabled = hasOverflow && scrollViewer.HorizontalOffset > 0.5;
+        forwardButton.IsEnabled = hasOverflow &&
+                                  scrollViewer.HorizontalOffset < scrollViewer.ScrollableWidth - 0.5;
+    }
+
+    private void ApplyInspectorLayout()
+    {
+        InspectorTabView.Visibility = _isInspectorCollapsed
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        InspectorPanel.MinHeight = _isInspectorCollapsed ? 0 : 160;
+        InspectorCollapseGlyph.Glyph = _isInspectorCollapsed ? "\uE70E" : "\uE70D";
+        ToolTipService.SetToolTip(
+            InspectorCollapseButton,
+            _isInspectorCollapsed ? "Expand inspector menu" : "Collapse inspector menu");
+
+        ContentLogRow.Height = new GridLength(_isInspectorCollapsed ? 1 : 2, GridUnitType.Star);
+        ContentInspectorRow.Height = _isInspectorCollapsed
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        LogColumn.Width = new GridLength(1, GridUnitType.Star);
+        InspectorColumn.Width = new GridLength(0);
+        Grid.SetRow(InspectorPanel, 1);
+        Grid.SetColumn(InspectorPanel, 0);
+        Grid.SetRow(InspectorCollapseButton, _isInspectorCollapsed ? 0 : 1);
+        Grid.SetColumn(InspectorCollapseButton, 0);
+        InspectorCollapseButton.VerticalAlignment = _isInspectorCollapsed
+            ? VerticalAlignment.Bottom
+            : VerticalAlignment.Top;
+        InspectorCollapseButton.Margin = _isInspectorCollapsed
+            ? new Thickness(0, 0, 2, 2)
+            : new Thickness(0, 3, 2, 0);
     }
 
     private void ExecuteDisconnectCommand()
@@ -1507,33 +1658,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task InitializeContextWebViewAsync()
-    {
-        try
-        {
-            var assetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "context");
-            var indexPath = Path.Combine(assetDirectory, "index.html");
-            if (!File.Exists(indexPath))
-            {
-                _viewModel.RecordContextWebViewUpdateError($"Context viewer asset missing: {indexPath}");
-                return;
-            }
-
-            await ContextWebView.EnsureCoreWebView2Async();
-            ContextWebView.CoreWebView2.WebMessageReceived += OnContextWebMessageReceived;
-            ContextWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                "serialmonitor-context.local",
-                assetDirectory,
-                CoreWebView2HostResourceAccessKind.Allow);
-            ContextWebView.NavigationCompleted += OnContextNavigationCompleted;
-            ContextWebView.Source = new Uri("https://serialmonitor-context.local/index.html");
-        }
-        catch (Exception ex)
-        {
-            _viewModel.RecordContextWebViewUpdateError($"Context WebView2 init failed: {ex.Message}");
-        }
-    }
-
     private async void OnXtermNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         FailPendingXtermAppendAcknowledgements();
@@ -1557,28 +1681,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnContextNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
-    {
-        if (!args.IsSuccess)
-        {
-            _viewModel.RecordContextWebViewUpdateError($"Context viewer navigation failed: {args.WebErrorStatus}");
-            return;
-        }
-
-        _isContextWebViewReady = true;
-        _viewModel.SetContextWebViewReady(true);
-        QueueContextWebViewUpdate();
-    }
-
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(MainViewModel.SelectedEventContextText) ||
-            args.PropertyName == nameof(MainViewModel.SelectedEvent))
-        {
-            QueueContextWebViewUpdate();
-            return;
-        }
-
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
         {
             _ = SyncXtermScrollbackSizeAsync();
@@ -2003,50 +2107,6 @@ public sealed partial class MainWindow : Window
         Clipboard.SetContent(package);
         Clipboard.Flush();
         return true;
-    }
-
-    private void OnContextWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
-    {
-        if (IsClosingOrClosed)
-        {
-            return;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(args.WebMessageAsJson);
-            var root = document.RootElement;
-            if (!root.TryGetProperty("type", out var typeElement))
-            {
-                return;
-            }
-
-            var messageType = typeElement.GetString();
-            if (!string.Equals(messageType, "copySelection", StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            if (!root.TryGetProperty("text", out var textElement))
-            {
-                return;
-            }
-
-            var selectedText = textElement.GetString();
-            if (string.IsNullOrEmpty(selectedText))
-            {
-                return;
-            }
-
-            var package = new DataPackage();
-            package.SetText(selectedText);
-            Clipboard.SetContent(package);
-            Clipboard.Flush();
-        }
-        catch (Exception ex)
-        {
-            _viewModel.RecordContextWebViewUpdateError($"Context viewer message failed: {ex.Message}");
-        }
     }
 
     private async Task SyncXtermFromVisibleLogAsync(
@@ -2962,7 +3022,6 @@ public sealed partial class MainWindow : Window
             if (_viewModel.SelectLatestEventFromUi())
             {
                 ScrollSelectedEventIntoView();
-                QueueContextWebViewUpdate();
             }
         }
         catch (Exception ex)
@@ -2978,7 +3037,6 @@ public sealed partial class MainWindow : Window
             if (sender is ListView listView)
             {
                 _viewModel.SelectEventFromUi(listView.SelectedItem);
-                QueueContextWebViewUpdate();
             }
         }
         catch (Exception ex)
@@ -2994,7 +3052,6 @@ public sealed partial class MainWindow : Window
             if (args.ClickedItem is DetectedEvent)
             {
                 _viewModel.SelectEventFromUi(args.ClickedItem);
-                QueueContextWebViewUpdate();
             }
         }
         catch (Exception ex)
@@ -3066,7 +3123,6 @@ public sealed partial class MainWindow : Window
                 _viewModel.RefreshSelectedEventContextForUi();
                 InspectorTabView.UpdateLayout();
                 ContextTabViewItem.UpdateLayout();
-                QueueContextWebViewUpdate();
             }
 
             QueueXtermFit();
@@ -3091,11 +3147,9 @@ public sealed partial class MainWindow : Window
         InspectorTabView.SelectedItem = ContextTabViewItem;
         InspectorTabView.UpdateLayout();
         ContextTabViewItem.UpdateLayout();
-        QueueContextWebViewUpdate();
         DispatcherQueue.TryEnqueue(() =>
         {
             _viewModel.RefreshSelectedEventContextForUi();
-            QueueContextWebViewUpdate();
         });
     }
 
@@ -3175,84 +3229,6 @@ public sealed partial class MainWindow : Window
         {
             _viewModel.RecordEventListScrollError($"Event latest scroll failed: {ex.Message}");
         }
-    }
-
-    private void QueueContextWebViewUpdate()
-    {
-        if (_contextWebViewUpdateQueued || IsClosingOrClosed)
-        {
-            return;
-        }
-
-        _contextWebViewUpdateQueued = true;
-        DispatcherQueue.TryEnqueue(async () =>
-        {
-            _contextWebViewUpdateQueued = false;
-            await UpdateContextWebViewAsync();
-        });
-    }
-
-    private async Task UpdateContextWebViewAsync()
-    {
-        if (!_isContextWebViewReady || IsClosingOrClosed)
-        {
-            return;
-        }
-
-        try
-        {
-            ContextWebView.UpdateLayout();
-
-            var contextText = _viewModel.SelectedEventContextText;
-            if (string.IsNullOrEmpty(contextText))
-            {
-                contextText = "Select an event.";
-            }
-
-            var encodedText = JsonSerializer.Serialize(contextText);
-            var resultJson = await ContextWebView.ExecuteScriptAsync(
-                $"window.setContextText ? window.setContextText({encodedText}) : {{ ok: false, error: 'context viewer bridge is not available' }};");
-
-            if (string.IsNullOrWhiteSpace(resultJson))
-            {
-                _viewModel.RecordContextWebViewUpdateError("Context WebView update failed: empty bridge response.");
-                return;
-            }
-
-            using var document = JsonDocument.Parse(resultJson);
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object ||
-                !root.TryGetProperty("ok", out var okElement) ||
-                !okElement.GetBoolean())
-            {
-                var error = root.ValueKind == JsonValueKind.Object &&
-                    root.TryGetProperty("error", out var errorElement)
-                        ? errorElement.GetString()
-                        : "invalid bridge response";
-                _viewModel.RecordContextWebViewUpdateError($"Context WebView update failed: {error}");
-                return;
-            }
-
-            _viewModel.RecordContextRenderRefresh();
-            _viewModel.RecordContextVisualRefresh(
-                contextText.Length,
-                _viewModel.SelectedEvent?.Id.ToString("N", CultureInfo.InvariantCulture) ?? "(none)",
-                CreateSelectedEventContextRefreshSummary());
-            _viewModel.RecordContextWebViewUpdate(contextText.Length, CreateSelectedEventContextRefreshSummary());
-        }
-        catch (Exception ex)
-        {
-            _viewModel.RecordContextRenderRefreshError($"Context render refresh failed: {ex.Message}");
-            _viewModel.RecordContextWebViewUpdateError($"Context WebView update failed: {ex.Message}");
-        }
-    }
-
-    private string CreateSelectedEventContextRefreshSummary()
-    {
-        var selectedEvent = _viewModel.SelectedEvent;
-        return selectedEvent is null
-            ? "(none)"
-            : $"{selectedEvent.RuleName} | {selectedEvent.CompactDirectionText} | {selectedEvent.TimeText}";
     }
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs args)
@@ -3400,19 +3376,6 @@ public sealed partial class MainWindow : Window
         _viewModel.RecordSearchFocusShortcut(source);
     }
 
-    private async void InsertDefaultMarker_Click(object sender, RoutedEventArgs args)
-    {
-        try
-        {
-            await _viewModel.AddDefaultMarkerAsync();
-            MarkerFlyout.Hide();
-        }
-        catch (Exception ex)
-        {
-            _viewModel.RecordMarkerError($"Marker flyout failed: {ex.Message}");
-        }
-    }
-
     private async void BrowseLogFolder_Click(object sender, RoutedEventArgs args)
     {
         try
@@ -3457,24 +3420,6 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             _viewModel.RecordCuteBackgroundLoadResult(fileExists: false, loaded: false, $"Browse background image failed: {ex.Message}");
-        }
-    }
-
-    private void InsertCustomMarker_Click(object sender, RoutedEventArgs args)
-    {
-        try
-        {
-            _viewModel.MarkerText = MarkerFlyoutTextBox.Text;
-            if (_viewModel.AddMarkerCommand.CanExecute(null))
-            {
-                _viewModel.AddMarkerCommand.Execute(null);
-            }
-
-            MarkerFlyout.Hide();
-        }
-        catch (Exception ex)
-        {
-            _viewModel.RecordMarkerError($"Marker flyout failed: {ex.Message}");
         }
     }
 

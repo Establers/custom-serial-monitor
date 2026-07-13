@@ -20,7 +20,7 @@ marketing-style UI.
 - Optional session names in new serial/event log filenames.
 - Configurable event detection rules.
 - Event context capture with before/matched/after lines.
-- WebView2 event context viewer with terminal-like styling.
+- Native selectable event context viewer with horizontal and vertical scrolling.
 - Configurable xterm highlight rules.
 - Visible-buffer search with Next/Prev and xterm jump/selection.
 - Search Results inspector tab with manual refresh by default.
@@ -81,7 +81,7 @@ profiles under `%LOCALAPPDATA%\SerialMonitor`. See
 ## Runtime Notes
 
 - Target platform: Windows desktop.
-- WebView2 Runtime is required for the xterm.js log view and event context view.
+- WebView2 Runtime is required for the xterm.js log view.
 - Real serial ports use `RJCP.SerialPortStream`.
 - The `MOCK` port can be used without hardware for UI, logging, event, search,
   sequence, and stress testing.
