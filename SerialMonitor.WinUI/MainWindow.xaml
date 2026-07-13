@@ -176,6 +176,10 @@
                         Value="86" />
                 <Setter Property="Padding"
                         Value="8,0" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Stretch" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Stretch" />
             </Style>
             <Style x:Key="ToolbarIconButtonStyle"
                    TargetType="Button">
@@ -624,7 +628,7 @@
                                    FontSize="12"
                                    VerticalAlignment="Center" />
                         <TextBlock Grid.Column="5"
-                                   Text="RX"
+                                   Text="Mode"
                                    Style="{StaticResource CompactLabelTextStyle}" />
                         <ComboBox Grid.Column="6"
                                   ItemsSource="{Binding RxDisplayModes}"
@@ -632,7 +636,7 @@
                                   ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
-                                  ToolTipService.ToolTip="RX View: Terminal for RTOS shell logs, HEX for raw byte display." />
+                                  ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
                         <TextBlock Grid.Column="7"
                                    Text="Filter"
                                    Style="{StaticResource CompactLabelTextStyle}" />
@@ -840,6 +844,8 @@
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Inspect the log lines before and after the selected event.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              MinHeight="0"
+                              VerticalAlignment="Stretch"
                               Padding="0"
                               RowSpacing="2"
                               RowDefinitions="Auto,*">
@@ -872,7 +878,8 @@
                             <Border Grid.Row="1"
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <WebView2 x:Name="ContextWebView"
-                                          MinHeight="120" />
+                                          MinHeight="0"
+                                          VerticalAlignment="Stretch" />
                             </Border>
                         </Grid>
                     </TabViewItem>
@@ -964,6 +971,7 @@
                                  ToolTipService.ToolTip="Create and run ordered command sequences with per-step delays.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
+                              VerticalAlignment="Stretch"
                               RowSpacing="3"
                               RowDefinitions="Auto,Auto,*">
                             <Border Grid.Row="0"
@@ -1157,6 +1165,8 @@
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
+                              MinHeight="0"
+                              VerticalAlignment="Stretch"
                               RowDefinitions="Auto,*">
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -1173,6 +1183,7 @@
                             </Border>
 
                             <Border Grid.Row="1"
+                                    MinHeight="0"
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <ScrollViewer x:Name="RulesTableScrollViewer"
                                               HorizontalScrollBarVisibility="Auto"
@@ -1180,9 +1191,10 @@
                                               HorizontalScrollMode="Enabled"
                                               VerticalScrollMode="Disabled"
                                               IsHorizontalRailEnabled="True"
-                                              MinHeight="0">
+                                              MinHeight="0"
+                                              VerticalAlignment="Stretch">
                                     <Grid MinWidth="728"
-                                          Height="{Binding ActualHeight, ElementName=RulesTableScrollViewer}"
+                                          Height="{Binding ViewportHeight, ElementName=RulesTableScrollViewer}"
                                           RowDefinitions="Auto,*"
                                           MinHeight="0">
                                         <Border Grid.Row="0"
@@ -1531,10 +1543,10 @@
                                             <TextBlock Text="Serial"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="Serial changes apply on reconnect. TX ending and confirmation apply now."
+                                                       Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Port, baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. TX ending and disconnect confirmation apply immediately." />
+                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -1637,6 +1649,44 @@
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
                                                       Width="120"
                                                       HorizontalAlignment="Left" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Mode"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding RxDisplayModes}"
+                                                      SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                                                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="96"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="HEX timeout"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="5">
+                                                <TextBox Text="{Binding HexGroupTimeoutMsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         Width="72"
+                                                         IsEnabled="{Binding IsHexRxViewSelected}"
+                                                         HorizontalAlignment="Left"
+                                                         ToolTipService.ToolTip="Group raw RX bytes received within this idle gap into one HEX line. The timer restarts after every received chunk." />
+                                                <TextBlock Text="ms"
+                                                           Style="{StaticResource SettingLabelTextStyle}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. Range: 1–5000 ms; default: 40 ms." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -1938,61 +1988,6 @@
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to newly displayed lines." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="RX view"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
-                                                      ItemsSource="{Binding RxDisplayModes}"
-                                                      SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
-                                                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                                                      Style="{StaticResource CompactComboBoxStyle}"
-                                                      Width="96"
-                                                      HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Terminal shows RTOS shell text; HEX shows raw RX bytes." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately by re-rendering the retained visible buffer." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="HEX timeout"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="5">
-                                                <TextBox Text="{Binding HexGroupTimeoutMsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         Width="72"
-                                                         IsEnabled="{Binding IsHexRxViewSelected}"
-                                                         HorizontalAlignment="Left"
-                                                         ToolTipService.ToolTip="Group all raw RX bytes received within this idle gap into one HEX line. The timer restarts after every received chunk; CR and LF remain visible data." />
-                                                <TextBlock Text="ms"
-                                                           Style="{StaticResource SettingLabelTextStyle}" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to new and currently open HEX groups. Range: 1–5000 ms; default: 40 ms." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="TX mode"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
-                                                      ItemsSource="{Binding TxSendModes}"
-                                                      SelectedItem="{Binding SelectedTxSendMode, Mode=TwoWay}"
-                                                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                                                      Style="{StaticResource CompactComboBoxStyle}"
-                                                      Width="96"
-                                                      HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Terminal sends text with the selected ending; HEX sends exact bytes and ignores TX ending." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies to the next TX send." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
@@ -2534,11 +2529,11 @@
                            Text="Mode"
                            Style="{StaticResource CompactLabelTextStyle}" />
                 <ComboBox Grid.Column="3"
-                          ItemsSource="{Binding TxSendModes}"
-                          SelectedItem="{Binding SelectedTxSendMode, Mode=TwoWay}"
+                          ItemsSource="{Binding RxDisplayModes}"
+                          SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
                           ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                           Width="96"
-                          ToolTipService.ToolTip="TX Mode: Terminal sends normal text, HEX sends exact bytes. In HEX mode enter bytes like 41 09 42 0D 0A." />
+                          ToolTipService.ToolTip="Changes RX display and TX input together. In HEX mode enter exact bytes like 41 09 42 0D 0A." />
                 <TextBlock Grid.Column="4"
                            Text="Ending"
                            Style="{StaticResource CompactLabelTextStyle}" />

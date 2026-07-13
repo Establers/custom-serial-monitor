@@ -1366,24 +1366,37 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var normalized = NormalizeRxDisplayMode(value);
             if (!Enum.IsDefined(value))
             {
-                RecordSettingsValidationError("RX view selection is invalid.");
+                RecordSettingsValidationError("Terminal / HEX mode selection is invalid.");
                 OnPropertyChanged();
                 return;
             }
 
-            if (_currentUiSettings.RxDisplayMode == normalized)
+            var txMode = normalized == RxDisplayMode.Hex
+                ? TxSendMode.Hex
+                : TxSendMode.Terminal;
+            var rxChanged = _currentUiSettings.RxDisplayMode != normalized;
+            var txChanged = _currentUiSettings.TxSendMode != txMode;
+            if (!rxChanged && !txChanged)
             {
                 return;
             }
 
             _currentUiSettings.RxDisplayMode = normalized;
-            _logPipeline.ConfigureRxDisplay(normalized, HexGroupTimeoutMs);
-            SetVisibleLogRebuildReason("RX view change");
-            Log.SetRxDisplayMode(normalized);
-            RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
-            RecordSettingsChange("RX view", SettingsApplyBehavior.Immediate, FormatRxDisplayModeName(normalized));
+            _currentUiSettings.TxSendMode = txMode;
+            if (rxChanged)
+            {
+                _logPipeline.ConfigureRxDisplay(normalized, HexGroupTimeoutMs);
+                SetVisibleLogRebuildReason("Terminal / HEX mode change");
+                Log.SetRxDisplayMode(normalized);
+                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+            }
+
+            RecordSettingsChange("Terminal / HEX mode", SettingsApplyBehavior.Immediate, FormatRxDisplayModeName(normalized));
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedTxSendMode));
             OnPropertyChanged(nameof(IsHexRxViewSelected));
+            OnPropertyChanged(nameof(IsTxLineEndingEffective));
+            OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshDiagnostics();
         }
     }
@@ -1445,22 +1458,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var normalized = NormalizeTxSendMode(value);
             if (!Enum.IsDefined(value))
             {
-                RecordSettingsValidationError("TX mode selection is invalid.");
+                RecordSettingsValidationError("Terminal / HEX mode selection is invalid.");
                 OnPropertyChanged();
                 return;
             }
 
-            if (_currentUiSettings.TxSendMode == normalized)
-            {
-                return;
-            }
-
-            _currentUiSettings.TxSendMode = normalized;
-            RecordSettingsChange("TX mode", SettingsApplyBehavior.Immediate, FormatTxSendModeName(normalized));
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsTxLineEndingEffective));
-            OnPropertyChanged(nameof(TxLineEndingToolTip));
-            RefreshDiagnostics();
+            SelectedRxDisplayMode = normalized == TxSendMode.Hex
+                ? RxDisplayMode.Hex
+                : RxDisplayMode.Terminal;
         }
     }
 
@@ -10104,6 +10109,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastSuccessfulBaudRate = _lastSuccessfulSerialSettings?.BaudRate ?? 0;
             _currentLogSettings = profile.LogSettings.Clone();
             _currentUiSettings = profile.UiSettings.Clone();
+            _currentUiSettings.RxDisplayMode = NormalizeRxDisplayMode(_currentUiSettings.RxDisplayMode);
+            _currentUiSettings.TxSendMode = _currentUiSettings.RxDisplayMode == RxDisplayMode.Hex
+                ? TxSendMode.Hex
+                : TxSendMode.Terminal;
             _currentEventContextSettings = profile.EventContextSettings.Clone();
             _currentBridgeSettings = profile.BridgeSettings.Clone();
             _sessionName = NormalizeSessionName(profile.CurrentSessionName);
