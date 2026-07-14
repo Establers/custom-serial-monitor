@@ -1115,12 +1115,11 @@
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
                                     <CheckBox Grid.Column="2"
                                               Content="En"
-                                              IsEnabled="{Binding HasSelectedCommandSequence}"
-                                              IsChecked="{Binding SelectedCommandSequence.Enabled, Mode=TwoWay}"
-                                              Style="{StaticResource RuleCheckBoxStyle}"
-                                              Checked="CommandSequenceInlineChanged"
-                                              Unchecked="CommandSequenceInlineChanged"
-                                              ToolTipService.ToolTip="Enable selected sequence" />
+                                               IsEnabled="{Binding HasSelectedCommandSequence}"
+                                               IsChecked="{Binding SelectedCommandSequence.Enabled, Mode=TwoWay}"
+                                               Style="{StaticResource RuleCheckBoxStyle}"
+                                               Click="CommandSequenceInlineClicked"
+                                               ToolTipService.ToolTip="Enable selected sequence" />
                                     <Button Grid.Column="3"
                                             Content="+"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
@@ -1286,7 +1285,8 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="Rules"
+                    <TabViewItem x:Name="RulesTabViewItem"
+                                 Header="Rules"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -1399,28 +1399,24 @@
                                                         <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Enabled"
-                                                                  Checked="LogRuleInlineChanged"
-                                                                  Unchecked="LogRuleInlineChanged" />
+                                                                  Click="LogRuleInlineClicked" />
                                                         <CheckBox Grid.Column="1"
                                                                   IsChecked="{Binding UseForEvent, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Event"
-                                                                  Checked="LogRuleInlineChanged"
-                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Event: add matching lines to Events" />
                                                         <CheckBox Grid.Column="2"
                                                                   IsChecked="{Binding UseForHighlight, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Highlight"
-                                                                  Checked="LogRuleInlineChanged"
-                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Highlight: color matching lines in the log view" />
                                                         <CheckBox Grid.Column="3"
                                                                   IsChecked="{Binding UseAsViewFilter, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Filter"
-                                                                  Checked="LogRuleInlineChanged"
-                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Filter: make this rule available in the Filter dropdown" />
                                                         <TextBlock Grid.Column="4"
                                                                    Text="{Binding Name}"
@@ -1432,7 +1428,7 @@
                                                         <TextBlock Grid.Column="6"
                                                                    Text="{Binding MatchMode, Converter={StaticResource DisplayModeNameConverter}}"
                                                                    Style="{StaticResource RuleCellTextStyle}"
-                                                                   ToolTipService.ToolTip="Rules are mode-exclusive: Text rules apply only to Terminal logs, while HEX rules apply only to HEX logs and match raw bytes." />
+                                                                   ToolTipService.ToolTip="For retained RX display, Text/HEX highlight and filter rules follow the current RX view. Event detection uses the mode active when the line arrived. HEX rules match raw bytes." />
                                                         <TextBlock Grid.Column="7"
                                                                    Text="{Binding MatchDirection}"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
@@ -1440,8 +1436,7 @@
                                                                   IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Case"
-                                                                  Checked="LogRuleInlineChanged"
-                                                                  Unchecked="LogRuleInlineChanged"
+                                                                  Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Case-sensitive text matching. Ignored for HEX rules." />
                                                         <Button Grid.Column="9"
                                                                 Width="56"
@@ -1671,7 +1666,7 @@
                                                        Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately." />
+                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode and an active HEX timeout change automatically reconnect a real COM port; MOCK/disconnected changes apply immediately. TX ending and disconnect confirmation apply immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">

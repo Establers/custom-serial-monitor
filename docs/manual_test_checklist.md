@@ -29,6 +29,10 @@ real hardware when available.
 - [ ] Connect a known serial device.
 - [ ] Select its COM port and baud rate.
 - [ ] Connect and confirm RX logs arrive.
+- [ ] While connected, switch Terminal/HEX mode and confirm the app briefly
+  reconnects to the same port with the new mode active.
+- [ ] In HEX mode, change the HEX group timeout and confirm the same automatic
+  reconnect applies the new native timeout.
 - [ ] Send a harmless command.
 - [ ] Disconnect and reconnect.
 - [ ] Confirm no app crash or stale connection state.
@@ -108,6 +112,8 @@ real hardware when available.
 - [ ] Connect to `MOCK`.
 - [ ] Run the sequence.
 - [ ] Confirm TX lines appear in order.
+- [ ] Switch to HEX mode, add a sequence step such as `AA 55`, run it, and
+  confirm the device receives bytes `0xAA 0x55` rather than ASCII text.
 - [ ] Stop during execution and confirm it stops safely.
 - [ ] Save Profile, restart, and confirm the sequence is restored.
 
@@ -176,6 +182,8 @@ real hardware when available.
 - [ ] Confirm future ERROR lines use the new color.
 - [ ] Add a highlight rule for `RESET`.
 - [ ] Confirm the rule persists after Save Profile and restart.
+- [ ] Receive a Terminal line, switch the retained RX view to HEX, and confirm
+  HEX highlight/filter rules match its raw bytes in the rebuilt view.
 
 ## Search
 

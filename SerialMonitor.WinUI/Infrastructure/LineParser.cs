@@ -29,6 +29,8 @@ public sealed class LineParser
 
     public int PartialBufferLength => _pending.Count;
 
+    public bool HasPendingPartialTerminator => _suppressNextEmptyTerminatorLine;
+
     public IReadOnlyList<RawLogLine> Append(ReadOnlyMemory<byte> bytes, RxLineEndingMode mode)
     {
         if (bytes.IsEmpty)

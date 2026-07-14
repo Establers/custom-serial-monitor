@@ -59,6 +59,7 @@ public sealed partial class MainWindow : Window
     private bool _eventAutoScrollQueued;
     private bool _isPointerOverEventList;
     private bool _xtermFitQueued;
+    private bool _rulesTableViewportResizeQueued;
     private bool _closeAllowed;
     private bool _closeCleanupStarted;
     private bool _isWindowMinimized;
@@ -395,6 +396,7 @@ public sealed partial class MainWindow : Window
     private void Root_SizeChanged(object sender, SizeChangedEventArgs args)
     {
         ApplyInspectorLayout();
+        QueueRulesTableViewportResize();
     }
 
     private void InspectorCollapseButton_Click(object sender, RoutedEventArgs args)
@@ -2970,17 +2972,27 @@ public sealed partial class MainWindow : Window
 
     private void RulesTableBodyBorder_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        if (double.IsFinite(args.NewSize.Height) && args.NewSize.Height > 0)
-        {
-            RulesTableViewportGrid.Height = args.NewSize.Height;
-        }
-
         QueueRulesTableViewportResize();
     }
 
     private void QueueRulesTableViewportResize()
     {
-        DispatcherQueue.TryEnqueue(UpdateRulesTableViewportHeight);
+        if (_rulesTableViewportResizeQueued || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _rulesTableViewportResizeQueued = true;
+        if (!DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () =>
+                {
+                    _rulesTableViewportResizeQueued = false;
+                    UpdateRulesTableViewportHeight();
+                }))
+        {
+            _rulesTableViewportResizeQueued = false;
+        }
     }
 
     private void UpdateRulesTableViewportHeight()
@@ -2991,7 +3003,11 @@ public sealed partial class MainWindow : Window
             viewportHeight = RulesTableScrollViewer.ActualHeight;
         }
 
-        viewportHeight = Math.Max(0, viewportHeight);
+        if (!double.IsFinite(viewportHeight) || viewportHeight <= 0)
+        {
+            return;
+        }
+
         if (Math.Abs(RulesTableViewportGrid.Height - viewportHeight) > 0.5 ||
             double.IsNaN(RulesTableViewportGrid.Height))
         {
@@ -3123,6 +3139,13 @@ public sealed partial class MainWindow : Window
                 _viewModel.RefreshSelectedEventContextForUi();
                 InspectorTabView.UpdateLayout();
                 ContextTabViewItem.UpdateLayout();
+            }
+
+            if (ReferenceEquals(InspectorTabView.SelectedItem, RulesTabViewItem))
+            {
+                InspectorTabView.UpdateLayout();
+                RulesTabViewItem.UpdateLayout();
+                QueueRulesTableViewportResize();
             }
 
             QueueXtermFit();
@@ -3556,7 +3579,7 @@ public sealed partial class MainWindow : Window
         await DeleteSelectedLogRuleAsync();
     }
 
-    private void LogRuleInlineChanged(object sender, RoutedEventArgs args)
+    private void LogRuleInlineClicked(object sender, RoutedEventArgs args)
     {
         if (sender is FrameworkElement { DataContext: LogRule rule })
         {
@@ -3777,7 +3800,7 @@ public sealed partial class MainWindow : Window
         _viewModel.MoveSelectedCommandSequenceStep(1);
     }
 
-    private void CommandSequenceInlineChanged(object sender, RoutedEventArgs args)
+    private void CommandSequenceInlineClicked(object sender, RoutedEventArgs args)
     {
         if (sender is FrameworkElement { DataContext: CommandSequence sequence })
         {

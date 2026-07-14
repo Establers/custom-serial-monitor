@@ -708,7 +708,11 @@ public sealed class LogViewModel : ViewModelBase
             }
 
             var searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _rxDisplayMode);
-            (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(line, _highlightRules, searchableLine);
+            (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(
+                line,
+                _highlightRules,
+                searchableLine,
+                _rxDisplayMode);
             return (displayLine, searchableLine, text.Length, hasFormattingError);
         }
         catch
@@ -731,7 +735,11 @@ public sealed class LogViewModel : ViewModelBase
         try
         {
             searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _rxDisplayMode);
-            (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(line, _highlightRules, searchableLine);
+            (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(
+                line,
+                _highlightRules,
+                searchableLine,
+                _rxDisplayMode);
         }
         catch
         {
@@ -755,7 +763,7 @@ public sealed class LogViewModel : ViewModelBase
 
         try
         {
-            var matched = IsRuleMatch(line, _viewFilter, out var matchError);
+            var matched = IsRuleMatch(line, _viewFilter, _rxDisplayMode, out var matchError);
             if (!string.IsNullOrWhiteSpace(matchError))
             {
                 ViewFilterMatchErrorCount++;
@@ -774,14 +782,15 @@ public sealed class LogViewModel : ViewModelBase
     private static (string Text, bool IsHighlighted, bool HasFormattingError) FormatXtermDisplayLine(
         LogLine line,
         IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules,
-        string plainLine)
+        string plainLine,
+        RxDisplayMode rxDisplayMode)
     {
         if (line.Direction == LogDirection.Mark)
         {
             return ($"{AnsiGreen}{plainLine}{AnsiReset}", true, false);
         }
 
-        var matchedRule = ResolveHighlightRule(line, highlightRules);
+        var matchedRule = ResolveHighlightRule(line, highlightRules, rxDisplayMode);
         if (matchedRule is not null)
         {
             if (TryBuildAnsiColor(matchedRule.Rule, out var ruleColor))
@@ -858,12 +867,13 @@ public sealed class LogViewModel : ViewModelBase
 
     private static LogRuleMatcher.CompiledHighlightRule? ResolveHighlightRule(
         LogLine line,
-        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules)
+        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules,
+        RxDisplayMode rxDisplayMode)
     {
         LogRuleMatcher.CompiledHighlightRule? bestMatch = null;
         foreach (var rule in highlightRules)
         {
-            if (!IsRuleMatch(line, rule, out _))
+            if (!IsRuleMatch(line, rule, rxDisplayMode, out _))
             {
                 continue;
             }
@@ -877,9 +887,18 @@ public sealed class LogViewModel : ViewModelBase
         return bestMatch;
     }
 
-    private static bool IsRuleMatch(LogLine line, LogRuleMatcher.CompiledHighlightRule rule, out string? error)
+    private static bool IsRuleMatch(
+        LogLine line,
+        LogRuleMatcher.CompiledHighlightRule rule,
+        RxDisplayMode rxDisplayMode,
+        out string? error)
     {
-        return LogRuleMatcher.IsMatch(line, rule, out error);
+        var effectiveContentMode = line.Direction == LogDirection.Rx
+            ? NormalizeRxDisplayMode(rxDisplayMode) == RxDisplayMode.Hex
+                ? LogRuleMatchMode.Hex
+                : LogRuleMatchMode.Text
+            : line.ContentMode;
+        return LogRuleMatcher.IsMatch(line, rule, effectiveContentMode, out error);
     }
 
     private static HighlightRule CloneHighlightRule(HighlightRule rule)

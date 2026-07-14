@@ -132,6 +132,15 @@ public static class LogRuleMatcher
 
     public static bool IsMatch(LogLine line, CompiledHighlightRule rule, out string? error)
     {
+        return IsMatch(line, rule, line.ContentMode, out error);
+    }
+
+    public static bool IsMatch(
+        LogLine line,
+        CompiledHighlightRule rule,
+        LogRuleMatchMode effectiveContentMode,
+        out string? error)
+    {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(rule);
 
@@ -139,7 +148,7 @@ public static class LogRuleMatcher
         var source = rule.Rule;
         if (!source.Enabled ||
             string.IsNullOrWhiteSpace(source.Keyword) ||
-            line.ContentMode != source.MatchMode ||
+            effectiveContentMode != source.MatchMode ||
             !IsDirectionMatch(line.Direction, source.MatchDirection))
         {
             return false;

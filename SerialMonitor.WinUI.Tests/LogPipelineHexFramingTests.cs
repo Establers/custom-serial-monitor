@@ -265,6 +265,41 @@ public sealed class LogPipelineHexFramingTests
         await pipeline.StopAsync(cancellation.Token);
     }
 
+    [Fact]
+    public async Task SwitchingEmptyTerminalParserToHex_DoesNotEmitPhantomTerminator()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var input = Channel.CreateUnbounded<ReceivedByteChunk>();
+        var pipeline = new LogPipeline(new EncodingDecoder(), new LineParser());
+        var settings = new SerialSettings
+        {
+            Encoding = RxEncodingMode.Utf8,
+            RxLineEnding = RxLineEndingMode.Lf
+        };
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Terminal, hexGroupTimeoutMs: 10);
+        await pipeline.StartAsync(input.Reader, settings, cancellation.Token);
+
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk("READY\n"u8.ToArray(), Stopwatch.GetTimestamp()),
+            cancellation.Token);
+        var terminalLine = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.Equal("READY", terminalLine.Text);
+
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Hex, hexGroupTimeoutMs: 10);
+        var packet = new byte[] { 0xAA, 0x55 };
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk(packet, Stopwatch.GetTimestamp(), endsAtNativeIdleBoundary: true),
+            cancellation.Token);
+
+        var firstHexLine = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.False(firstHexLine.IsPartialRxTerminator);
+        Assert.Equal(packet, firstHexLine.RawBytes);
+        Assert.Equal(LogRuleMatchMode.Hex, firstHexLine.ContentMode);
+
+        input.Writer.TryComplete();
+        await pipeline.StopAsync(cancellation.Token);
+    }
+
     private static async Task<PipelineResult> RunPipelineAsync(
         IReadOnlyList<ReceivedByteChunk> chunks,
         int timeoutMs)

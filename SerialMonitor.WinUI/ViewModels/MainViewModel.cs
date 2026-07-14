@@ -191,6 +191,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static readonly TimeSpan SearchResultAutoRefreshInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan AutomaticReceiveReconnectDebounce = TimeSpan.FromMilliseconds(150);
     private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
         new[] { "0.10", "0.20", "0.25", "0.30", "0.40", "0.50" };
 
@@ -209,6 +210,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
+    private readonly CancellationTokenSource _automaticReceiveReconnectCancellation = new();
     private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _visualLogEnqueueGate = new(1, 1);
@@ -219,6 +221,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task? _observeEventsTask;
     private Task? _observeBridgeVisualLogsTask;
     private Task? _observeEventContextsTask;
+    private Task? _automaticReceiveReconnectTask;
+    private int _automaticReceiveReconnectWorkerRunning;
+    private int _automaticReceiveReconnectRequestVersion;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
     private string? _selectedPort;
@@ -236,6 +241,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private SerialSettings? _lastSuccessfulSerialSettings;
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
+    private RxDisplayMode _appliedRxDisplayMode = RxDisplayMode.Terminal;
+    private int _appliedHexGroupTimeoutMs = 10;
     private string _hexGroupTimeoutDraftText = "10";
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
@@ -562,6 +569,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private enum SettingsApplyBehavior
     {
         Immediate,
+        AutomaticReconnect,
         ReconnectRequired,
         NextSession,
         ProfileOnly
@@ -1386,20 +1394,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentUiSettings.RxDisplayMode = normalized;
             _currentUiSettings.TxSendMode = txMode;
+            var reconnectRequired = RequiresAutomaticReceiveReconnect(normalized, HexGroupTimeoutMs);
             if (rxChanged)
             {
-                _logPipeline.ConfigureRxDisplay(normalized, HexGroupTimeoutMs);
-                SetVisibleLogRebuildReason("Terminal / HEX mode change");
-                Log.SetRxDisplayMode(normalized);
-                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+                if (!reconnectRequired)
+                {
+                    ApplyRxDisplayRuntime(normalized, HexGroupTimeoutMs, "Terminal / HEX mode change");
+                }
             }
 
             RecordSettingsChange(
                 "Terminal / HEX mode",
-                IsConnected && !CurrentPortIsMock
-                    ? SettingsApplyBehavior.ReconnectRequired
+                reconnectRequired
+                    ? SettingsApplyBehavior.AutomaticReconnect
                     : SettingsApplyBehavior.Immediate,
                 FormatRxDisplayModeName(normalized));
+            if (reconnectRequired || Volatile.Read(ref _automaticReceiveReconnectWorkerRunning) != 0)
+            {
+                QueueAutomaticReceiveReconnect();
+            }
+
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedTxSendMode));
             OnPropertyChanged(nameof(IsHexRxViewSelected));
@@ -1432,16 +1446,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.HexGroupTimeoutMs = value;
-            var reconnectRequired = IsConnected && IsHexRxViewSelected && !CurrentPortIsMock;
+            var reconnectRequired = RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, value);
             if (!reconnectRequired)
             {
-                _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, value);
+                _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, value);
+                _appliedHexGroupTimeoutMs = value;
             }
 
             RecordSettingsChange(
                 "HEX group timeout",
-                reconnectRequired ? SettingsApplyBehavior.ReconnectRequired : SettingsApplyBehavior.Immediate,
+                reconnectRequired ? SettingsApplyBehavior.AutomaticReconnect : SettingsApplyBehavior.Immediate,
                 $"{value} ms");
+            if (reconnectRequired || Volatile.Read(ref _automaticReceiveReconnectWorkerRunning) != 0)
+            {
+                QueueAutomaticReceiveReconnect();
+            }
+
             OnPropertyChanged();
             _hexGroupTimeoutDraftText = value.ToString(CultureInfo.InvariantCulture);
             OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
@@ -1629,6 +1649,35 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return NormalizeTxSendMode(mode) == TxSendMode.Hex
             ? "HEX"
             : "Terminal";
+    }
+
+    private bool RequiresAutomaticReceiveReconnect(RxDisplayMode mode, int hexGroupTimeoutMs)
+    {
+        var serialLifecycleActive = _serialService.ConnectionState is
+            SerialConnectionState.Connecting or
+            SerialConnectionState.Connected or
+            SerialConnectionState.Disconnecting;
+        var hasActiveRealConnection = !CurrentPortIsMock &&
+            (serialLifecycleActive || (IsBusy && _connectionCancellation is not null));
+        if (!hasActiveRealConnection)
+        {
+            return false;
+        }
+
+        var normalizedMode = NormalizeRxDisplayMode(mode);
+        return normalizedMode != _appliedRxDisplayMode ||
+            (normalizedMode == RxDisplayMode.Hex && hexGroupTimeoutMs != _appliedHexGroupTimeoutMs);
+    }
+
+    private void ApplyRxDisplayRuntime(RxDisplayMode mode, int hexGroupTimeoutMs, string rebuildReason)
+    {
+        var normalizedMode = NormalizeRxDisplayMode(mode);
+        _logPipeline.ConfigureRxDisplay(normalizedMode, hexGroupTimeoutMs);
+        SetVisibleLogRebuildReason(rebuildReason);
+        Log.SetRxDisplayMode(normalizedMode);
+        RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+        _appliedRxDisplayMode = normalizedMode;
+        _appliedHexGroupTimeoutMs = hexGroupTimeoutMs;
     }
 
     private static string FormatMockGeneratorPatternName(MockGeneratorPattern pattern)
@@ -3962,6 +4011,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        _automaticReceiveReconnectCancellation.Cancel();
+
         var startedAt = DateTimeOffset.Now;
         _lastShutdownStartTimeText = FormatDiagnosticTime(startedAt);
         _lastShutdownCompletedTimeText = "(pending)";
@@ -4066,9 +4117,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         _eventNotificationCancellation.Cancel();
         _bridgeVisualLogCancellation.Cancel();
+        _automaticReceiveReconnectCancellation.Cancel();
         _bridgeVisualLogQueue.Writer.TryComplete();
         _diagnosticsTimer.Stop();
         _diagnosticsTimer.Tick -= OnDiagnosticsTimerTick;
+        if (_automaticReceiveReconnectTask is not null)
+        {
+            await _automaticReceiveReconnectTask;
+        }
+
         await DisconnectAsync();
         await _fileLogWriter.StopAsync(CancellationToken.None);
         _serialService.Error -= OnBackgroundError;
@@ -4101,6 +4158,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventContextBatchDispatcher.Dispose();
         _eventNotificationCancellation.Dispose();
         _bridgeVisualLogCancellation.Dispose();
+        _automaticReceiveReconnectCancellation.Dispose();
         _connectionLifecycleGate.Dispose();
     }
 
@@ -5302,10 +5360,107 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private void QueueAutomaticReceiveReconnect()
+    {
+        Interlocked.Increment(ref _automaticReceiveReconnectRequestVersion);
+        if (_automaticReceiveReconnectCancellation.IsCancellationRequested ||
+            Volatile.Read(ref _shutdownStarted) != 0 ||
+            Interlocked.CompareExchange(ref _automaticReceiveReconnectWorkerRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _automaticReceiveReconnectTask = RunAutomaticReceiveReconnectAsync(
+            _automaticReceiveReconnectCancellation.Token);
+    }
+
+    private async Task RunAutomaticReceiveReconnectAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(AutomaticReceiveReconnectDebounce, cancellationToken);
+            while (!cancellationToken.IsCancellationRequested && Volatile.Read(ref _shutdownStarted) == 0)
+            {
+                if (!RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
+                {
+                    return;
+                }
+
+                var requestedVersion = Volatile.Read(ref _automaticReceiveReconnectRequestVersion);
+                await _connectionLifecycleGate.WaitAsync(cancellationToken);
+                try
+                {
+                    if (cancellationToken.IsCancellationRequested || Volatile.Read(ref _shutdownStarted) != 0)
+                    {
+                        return;
+                    }
+
+                    if (!RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
+                    {
+                        return;
+                    }
+
+                    SetStatus($"Applying {FormatRxDisplayModeName(SelectedRxDisplayMode)} mode; reconnecting...");
+                    await DisconnectCoreAsync(CancellationToken.None, updateBusy: true);
+                    if (IsConnected || _serialService.IsConnected)
+                    {
+                        SetStatus("Automatic mode reconnect stopped because the serial port did not disconnect cleanly.");
+                        return;
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await ConnectCoreAsync();
+                }
+                finally
+                {
+                    _connectionLifecycleGate.Release();
+                }
+
+                if (!IsConnected)
+                {
+                    return;
+                }
+
+                if (!RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
+                {
+                    SetStatus($"Reconnected in {FormatRxDisplayModeName(_appliedRxDisplayMode)} mode.");
+                    return;
+                }
+
+                if (requestedVersion == Volatile.Read(ref _automaticReceiveReconnectRequestVersion))
+                {
+                    SetStatus("Receive mode still differs after reconnect; retrying once settings settle.");
+                }
+
+                await Task.Delay(AutomaticReceiveReconnectDebounce, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.RunAutomaticReceiveReconnectAsync", ex);
+            RecordSettingsApplyError($"Automatic mode reconnect failed: {ex.Message}");
+        }
+        finally
+        {
+            Volatile.Write(ref _automaticReceiveReconnectWorkerRunning, 0);
+            if (!cancellationToken.IsCancellationRequested &&
+                Volatile.Read(ref _shutdownStarted) == 0 &&
+                RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
+            {
+                QueueAutomaticReceiveReconnect();
+            }
+        }
+    }
+
     private async Task ConnectCoreAsync()
     {
         var requestedSelectedPort = SelectedPort;
         var settings = CreateCurrentSettings();
+        var requestedRxDisplayMode = NormalizeRxDisplayMode(SelectedRxDisplayMode);
+        var requestedHexGroupTimeoutMs = HexGroupTimeoutMs;
         if (string.IsNullOrWhiteSpace(settings.PortName))
         {
             SetStatus("Select a COM port.");
@@ -5358,11 +5513,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 settings,
                 new SerialReceiveOptions
                 {
-                    UseNativeIdleTimeout = SelectedRxDisplayMode == RxDisplayMode.Hex,
-                    IdleTimeoutMs = HexGroupTimeoutMs
+                    UseNativeIdleTimeout = requestedRxDisplayMode == RxDisplayMode.Hex,
+                    IdleTimeoutMs = requestedHexGroupTimeoutMs
                 },
                 _connectionCancellation.Token);
-            _logPipeline.ConfigureRxDisplay(SelectedRxDisplayMode, HexGroupTimeoutMs);
+            ApplyRxDisplayRuntime(
+                requestedRxDisplayMode,
+                requestedHexGroupTimeoutMs,
+                "serial connection mode applied");
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
@@ -5375,7 +5533,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 await StartBridgeCoreAsync();
             }
-            ClearPendingReconnectSettings();
+            if (!RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
+            {
+                ClearPendingReconnectSettings();
+            }
             RecordConnectSucceeded(settings);
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
             SetFooter(CreateFooterStatus());
@@ -5698,6 +5859,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = null;
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
             IsConnected = _serialService.IsConnected;
+            if (!IsConnected)
+            {
+                ApplyRxDisplayRuntime(
+                    SelectedRxDisplayMode,
+                    HexGroupTimeoutMs,
+                    "disconnected receive mode applied");
+                ClearPendingReconnectSettings();
+            }
+
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             RecordDisconnectPortPreservation(selectedPortBeforeDisconnect, settingsBeforeDisconnect);
@@ -5924,7 +6094,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string FormatEventNotificationMessage(DetectedEvent detectedEvent)
     {
-        if (SelectedRxDisplayMode == RxDisplayMode.Hex &&
+        if (detectedEvent.SourceLogLine?.ContentMode == LogRuleMatchMode.Hex &&
             detectedEvent.Direction == LogDirection.Rx &&
             detectedEvent.SourceLogLine?.RawBytes is { Length: > 0 } rawBytes)
         {
@@ -6434,6 +6604,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var sequence = CloneCommandSequence(SelectedCommandSequence);
+        var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
         _sequenceCancellation?.Dispose();
         _sequenceCancellation = new CancellationTokenSource();
         var cancellationToken = _sequenceCancellation.Token;
@@ -6467,7 +6638,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
                 {
                     LineEndingMode = step.LineEndingMode
-                }, addToHistory: false, modeOverride: TxSendMode.Terminal);
+                }, addToHistory: false, modeOverride: sequenceSendMode);
 
                 if (!sent)
                 {
@@ -9741,6 +9912,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _pendingRestartSettings.Remove(safeName);
                 _lastSettingsApplyStatus = $"{safeName}: saved. Reconnect required.";
                 break;
+            case SettingsApplyBehavior.AutomaticReconnect:
+                _pendingReconnectSettings.Add(safeName);
+                _pendingRestartSettings.Remove(safeName);
+                _lastSettingsApplyStatus = $"{safeName}: saved. Reconnecting automatically.";
+                break;
             case SettingsApplyBehavior.NextSession:
                 _pendingRestartSettings.Add(safeName);
                 _lastSettingsApplyStatus = $"{safeName}: saved. Applies on next start.";
@@ -10317,6 +10493,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _logPipeline.ConfigureRxDisplay(
                 _currentUiSettings.RxDisplayMode,
                 _currentUiSettings.HexGroupTimeoutMs);
+            _appliedRxDisplayMode = _currentUiSettings.RxDisplayMode;
+            _appliedHexGroupTimeoutMs = _currentUiSettings.HexGroupTimeoutMs;
             ApplyProfileUiRuntimeSettings(_currentUiSettings);
 
             LogRules.Clear();

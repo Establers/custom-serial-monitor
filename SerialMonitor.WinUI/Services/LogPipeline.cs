@@ -348,9 +348,27 @@ public sealed class LogPipeline : ILogPipeline
                 if (_lineParser.PartialBufferLength <= 0)
                 {
                     flushDueAt = null;
-                    if (!await source.WaitToReadAsync(cancellationToken))
+                    try
                     {
-                        break;
+                        var configurationSnapshot = GetDisplayConfigurationSnapshot();
+                        if (configurationSnapshot.Version != observedDisplayConfigurationVersion)
+                        {
+                            observedDisplayConfigurationVersion = configurationSnapshot.Version;
+                            continue;
+                        }
+
+                        using var terminalWaitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                            cancellationToken,
+                            configurationSnapshot.Token);
+                        if (!await source.WaitToReadAsync(terminalWaitCancellation.Token))
+                        {
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
+                        continue;
                     }
 
                     if (GetConfiguredRxDisplayMode() != activeDisplayMode)
@@ -378,21 +396,43 @@ public sealed class LogPipeline : ILogPipeline
                     continue;
                 }
 
-                var waitForDataTask = source.WaitToReadAsync(cancellationToken).AsTask();
-                var partialFlushTask = Task.Delay(delay, cancellationToken);
-                var completedTask = await Task.WhenAny(waitForDataTask, partialFlushTask);
-                if (completedTask == partialFlushTask)
+                try
                 {
-                    await FlushPartialRxAsync(settings, cancellationToken);
-                    flushDueAt = _lineParser.PartialBufferLength > 0
-                        ? DateTimeOffset.UtcNow + PartialFlushInterval
-                        : null;
-                    continue;
-                }
+                    var configurationSnapshot = GetDisplayConfigurationSnapshot();
+                    if (configurationSnapshot.Version != observedDisplayConfigurationVersion)
+                    {
+                        observedDisplayConfigurationVersion = configurationSnapshot.Version;
+                        continue;
+                    }
 
-                if (!await waitForDataTask)
+                    using var terminalWaitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken,
+                        configurationSnapshot.Token);
+                    var waitForDataTask = source.WaitToReadAsync(terminalWaitCancellation.Token).AsTask();
+                    var partialFlushTask = Task.Delay(delay, terminalWaitCancellation.Token);
+                    var completedTask = await Task.WhenAny(waitForDataTask, partialFlushTask);
+                    if (completedTask == partialFlushTask)
+                    {
+                        await partialFlushTask;
+                        terminalWaitCancellation.Cancel();
+                        await FlushPartialRxAsync(settings, cancellationToken);
+                        flushDueAt = _lineParser.PartialBufferLength > 0
+                            ? DateTimeOffset.UtcNow + PartialFlushInterval
+                            : null;
+                        continue;
+                    }
+
+                    var hasTerminalData = await waitForDataTask;
+                    terminalWaitCancellation.Cancel();
+                    if (!hasTerminalData)
+                    {
+                        break;
+                    }
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    break;
+                    observedDisplayConfigurationVersion = GetDisplayConfigurationVersion();
+                    continue;
                 }
 
                 if (GetConfiguredRxDisplayMode() != activeDisplayMode)
@@ -480,7 +520,7 @@ public sealed class LogPipeline : ILogPipeline
         CancellationToken cancellationToken)
     {
         var drainedAny = false;
-        while (source.TryRead(out var chunk))
+        while (GetConfiguredRxDisplayMode() == RxDisplayMode.Hex && source.TryRead(out var chunk))
         {
             var bytes = chunk.Bytes;
             if (bytes.Length == 0)
@@ -595,8 +635,15 @@ public sealed class LogPipeline : ILogPipeline
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
-        await FlushPartialRxAsync(settings, cancellationToken);
+        var hadPendingPartialTerminator = _lineParser.HasPendingPartialTerminator;
+        var flushedPartial = await FlushPartialRxAsync(settings, cancellationToken);
         _lineParser.Clear();
+        if (!flushedPartial && !hadPendingPartialTerminator)
+        {
+            RecordPartialBufferLength();
+            return;
+        }
+
         var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
         await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
         RecordPartialBufferLength();
@@ -607,7 +654,7 @@ public sealed class LogPipeline : ILogPipeline
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
-        while (source.TryRead(out var chunk))
+        while (GetConfiguredRxDisplayMode() == RxDisplayMode.Terminal && source.TryRead(out var chunk))
         {
             await ProcessRxChunkAsync(chunk.Bytes, chunk.ReceivedTimestamp, settings, cancellationToken);
             if (_lineParser.PartialBufferLength >= PartialFlushThresholdBytes)
@@ -636,13 +683,13 @@ public sealed class LogPipeline : ILogPipeline
         RecordPartialBufferLength();
     }
 
-    private async Task FlushPartialRxAsync(SerialSettings settings, CancellationToken cancellationToken)
+    private async Task<bool> FlushPartialRxAsync(SerialSettings settings, CancellationToken cancellationToken)
     {
         var rawLine = _lineParser.FlushPartial(settings.RxLineEnding);
         if (rawLine is null)
         {
             RecordPartialBufferLength();
-            return;
+            return false;
         }
 
         await WriteRawLineAsync(rawLine, settings, cancellationToken);
@@ -652,6 +699,7 @@ public sealed class LogPipeline : ILogPipeline
             DateTimeOffset.Now.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture));
         RecordPartialBufferLength();
         RaiseStatusChanged();
+        return true;
     }
 
     private async Task WriteRawLineAsync(

@@ -15,6 +15,9 @@ This file tracks current intentional limits and validation gaps.
 
 - Some settings apply immediately.
 - Serial settings that are unsafe during an active connection require reconnect.
+- Changing Terminal/HEX mode, or changing the active HEX timeout, automatically
+  disconnects and reconnects a real COM port. A short receive gap during that
+  transition is expected.
 - Some UI/log settings apply on the next app start or next new log file.
 - Apply hints in Settings should be treated as the source of truth for when a
   setting takes effect.

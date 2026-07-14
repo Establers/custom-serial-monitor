@@ -68,6 +68,24 @@ public sealed class LogRuleMatcherModeTests
         Assert.False(LogRuleMatcher.IsMatch(textLine, hexHighlight, out _));
     }
 
+    [Fact]
+    public void CompiledHighlightRule_CanUseCurrentRxViewModeForRetainedLines()
+    {
+        var retainedTerminalLine = LogLine.Rx(
+            "ERROR",
+            ErrorBytes,
+            contentMode: LogRuleMatchMode.Text);
+        var hexHighlight = LogRuleMatcher.Compile(HexHighlightRule());
+
+        Assert.False(LogRuleMatcher.IsMatch(retainedTerminalLine, hexHighlight, out _));
+        Assert.True(LogRuleMatcher.IsMatch(
+            retainedTerminalLine,
+            hexHighlight,
+            LogRuleMatchMode.Hex,
+            out var error));
+        Assert.Null(error);
+    }
+
     private static EventRule TextEventRule() => new()
     {
         Enabled = true,
