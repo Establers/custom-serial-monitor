@@ -42,6 +42,7 @@ public sealed class LogViewModel : ViewModelBase
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule? _viewFilter;
     private bool _showTimestampInLogView = true;
+    private TimestampDisplayFormat _timestampDisplayFormat = TimestampDisplayFormat.DateTimeMilliseconds;
     private RxDisplayMode _rxDisplayMode = RxDisplayMode.Terminal;
     private bool _partialRxVisualLineActive;
     private int _partialRxVisualLength;
@@ -183,6 +184,19 @@ public sealed class LogViewModel : ViewModelBase
     public void SetShowTimestampInLogView(bool showTimestamp)
     {
         _showTimestampInLogView = showTimestamp;
+    }
+
+    public void SetTimestampDisplayFormat(TimestampDisplayFormat timestampDisplayFormat)
+    {
+        timestampDisplayFormat = NormalizeTimestampDisplayFormat(timestampDisplayFormat);
+        if (_timestampDisplayFormat == timestampDisplayFormat)
+        {
+            return;
+        }
+
+        _timestampDisplayFormat = timestampDisplayFormat;
+        RebuildVisibleLinesFromRetained();
+        TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetRxDisplayMode(RxDisplayMode mode)
@@ -707,7 +721,7 @@ public sealed class LogViewModel : ViewModelBase
                 return (text, text, text.Length, false);
             }
 
-            var searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _rxDisplayMode);
+            var searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _timestampDisplayFormat, _rxDisplayMode);
             (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 _highlightRules,
@@ -720,7 +734,7 @@ public sealed class LogViewModel : ViewModelBase
             var fallback = _partialRxVisualLineActive
                 ? line.Text
                 : _showTimestampInLogView
-                    ? line.Formatted
+                    ? line.Format(_timestampDisplayFormat)
                     : $"{line.DirectionText} {line.Text}";
             return (fallback, fallback, line.Text.Length, true);
         }
@@ -734,7 +748,7 @@ public sealed class LogViewModel : ViewModelBase
         bool hasFormattingError;
         try
         {
-            searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _rxDisplayMode);
+            searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _timestampDisplayFormat, _rxDisplayMode);
             (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 _highlightRules,
@@ -744,7 +758,7 @@ public sealed class LogViewModel : ViewModelBase
         catch
         {
             searchableLine = _showTimestampInLogView
-                ? line.Formatted
+                ? line.Format(_timestampDisplayFormat)
                 : $"{line.DirectionText} {line.Text}";
             displayLine = searchableLine;
             isHighlighted = false;
@@ -811,7 +825,11 @@ public sealed class LogViewModel : ViewModelBase
             : (plainLine, false, false);
     }
 
-    private static string FormatPlainSafeDisplayLine(LogLine line, bool showTimestamp, RxDisplayMode rxDisplayMode)
+    private static string FormatPlainSafeDisplayLine(
+        LogLine line,
+        bool showTimestamp,
+        TimestampDisplayFormat timestampDisplayFormat,
+        RxDisplayMode rxDisplayMode)
     {
         var text = FormatDisplayText(line, rxDisplayMode);
         if (!showTimestamp)
@@ -819,9 +837,14 @@ public sealed class LogViewModel : ViewModelBase
             return $"{line.DirectionText} {text}";
         }
 
-        var timestamp = line.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        var timestamp = line.FormatTimestamp(timestampDisplayFormat);
         return $"[{timestamp}] {line.DirectionText} {text}";
     }
+
+    private static TimestampDisplayFormat NormalizeTimestampDisplayFormat(TimestampDisplayFormat timestampDisplayFormat) =>
+        Enum.IsDefined(timestampDisplayFormat)
+            ? timestampDisplayFormat
+            : TimestampDisplayFormat.DateTimeMilliseconds;
 
     private static string FormatDisplayText(LogLine line, RxDisplayMode rxDisplayMode)
     {

@@ -1,4 +1,3 @@
-using System.Text;
 using System.Threading.Channels;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
@@ -9,41 +8,26 @@ public sealed class EventDetector : IEventDetector
 {
     private const int InputQueueCapacity = 100_000;
     private const int OutputQueueCapacity = 20_000;
-    private const int EventLogQueueCapacity = 50_000;
     private const int MaxPendingContextCaptures = 1_000;
     private const int ContextCaptureOverloadHighWatermarkValue = 200;
     private const int ContextCaptureOverloadLowWatermarkValue = 100;
-    private const int FlushLineInterval = 50;
-    private static readonly TimeSpan FlushTimeInterval = TimeSpan.FromSeconds(2);
-
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateGate = new();
     private Channel<LogLine> _input = CreateInputQueue();
     private Channel<DetectedEvent> _events = CreateEventQueue();
     private Channel<DetectedEventContext> _completedContexts = CreateEventContextQueue();
-    private Channel<EventContextCapture> _eventLogQueue = CreateEventLogQueue();
     private CancellationTokenSource? _cancellation;
     private Task? _detectorTask;
-    private Task? _eventLogWriterTask;
     private LogRuleMatcher.CompiledEventRule[] _rules = Array.Empty<LogRuleMatcher.CompiledEventRule>();
     private EventContextSettings _contextSettings = new();
     private readonly Queue<LogLine> _beforeContextBuffer = new();
     private readonly List<EventContextCapture> _pendingContextCaptures = new();
-    private string _logDirectory = CreateDefaultLogDirectory();
-    private string? _currentEventLogFilePath;
     private string? _lastDetectedEventText;
     private string? _lastError;
     private string? _lastRuleEvaluationError;
     private string? _lastHexRuleMatchName;
     private string? _lastHexRuleMatchBytesPreview;
-    private string _sessionFileName = string.Empty;
-    private string _sessionFileTimeText = string.Empty;
-    private bool _useSessionNameInFileName;
-    private bool _rotationRequested;
-    private bool _eventLogWritingEnabled;
-    private int _eventLogCloseRequested;
     private long _detectedEventCount;
-    private long _eventLogWrittenCount;
     private long _errorCount;
     private long _droppedInputLineCount;
     private int _pendingInputLineCount;
@@ -87,17 +71,6 @@ public sealed class EventDetector : IEventDetector
         }
     }
 
-    public bool EventLogWritingEnabled
-    {
-        get
-        {
-            lock (_stateGate)
-            {
-                return _eventLogWritingEnabled;
-            }
-        }
-    }
-
     public int EventRuleCount => Volatile.Read(ref _rules).Length;
 
     public int CompiledTerminalRuleCount => Volatile.Read(ref _compiledTerminalRuleCount);
@@ -112,8 +85,6 @@ public sealed class EventDetector : IEventDetector
     public int InvalidCompiledRuleCount => Volatile.Read(ref _invalidCompiledRuleCount);
 
     public long DetectedEventCount => Interlocked.Read(ref _detectedEventCount);
-
-    public long EventLogWrittenCount => Interlocked.Read(ref _eventLogWrittenCount);
 
     public long ErrorCount => Interlocked.Read(ref _errorCount);
 
@@ -215,22 +186,9 @@ public sealed class EventDetector : IEventDetector
         }
     }
 
-    public string? CurrentEventLogFilePath
-    {
-        get
-        {
-            lock (_stateGate)
-            {
-                return _currentEventLogFilePath;
-            }
-        }
-    }
-
     public async Task StartAsync(
         IReadOnlyList<EventRule> rules,
         EventContextSettings contextSettings,
-        string logDirectory,
-        bool eventLogWritingEnabled,
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -245,14 +203,6 @@ public sealed class EventDetector : IEventDetector
 
             UpdateRules(rules);
             Volatile.Write(ref _contextSettings, NormalizeContextSettings(contextSettings));
-            _logDirectory = string.IsNullOrWhiteSpace(logDirectory) ? CreateDefaultLogDirectory() : logDirectory;
-            _eventLogWritingEnabled = eventLogWritingEnabled;
-            if (_eventLogWritingEnabled)
-            {
-                Directory.CreateDirectory(_logDirectory);
-            }
-
-            Interlocked.Exchange(ref _eventLogCloseRequested, 0);
             _beforeContextBuffer.Clear();
             _pendingContextCaptures.Clear();
             Volatile.Write(ref _isContextCaptureOverloadActive, 0);
@@ -261,11 +211,9 @@ public sealed class EventDetector : IEventDetector
             Volatile.Write(ref _pendingInputLineCount, 0);
             _events = CreateEventQueue();
             _completedContexts = CreateEventContextQueue();
-            _eventLogQueue = CreateEventLogQueue();
             _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             SetRunning(true, clearLastError: true);
             _detectorTask = Task.Run(() => ProcessEventsAsync(_cancellation.Token), CancellationToken.None);
-            _eventLogWriterTask = Task.Run(() => ProcessEventLogAsync(_cancellation.Token), CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -337,66 +285,9 @@ public sealed class EventDetector : IEventDetector
         RaiseStatusChanged();
     }
 
-    public void UpdateSessionFileNaming(
-        string? sanitizedSessionName,
-        bool useSessionNameInFileName,
-        DateTimeOffset? sessionStartedAt,
-        bool requestNewFile)
-    {
-        var normalizedSessionName = NormalizeSessionFileName(sanitizedSessionName);
-        var useSessionFileName = useSessionNameInFileName && !string.IsNullOrWhiteSpace(normalizedSessionName);
-        var sessionTimeText = useSessionFileName
-            ? (sessionStartedAt ?? DateTimeOffset.Now).LocalDateTime.ToString("HHmm")
-            : string.Empty;
-
-        lock (_stateGate)
-        {
-            _sessionFileName = normalizedSessionName;
-            _sessionFileTimeText = sessionTimeText;
-            _useSessionNameInFileName = useSessionFileName;
-            if (requestNewFile && _isRunning)
-            {
-                _rotationRequested = true;
-            }
-        }
-
-        RaiseStatusChanged();
-    }
-
-    public void SetEventLogWritingEnabled(bool enabled, string? logDirectory = null)
-    {
-        try
-        {
-            lock (_stateGate)
-            {
-                _eventLogWritingEnabled = enabled;
-                if (!string.IsNullOrWhiteSpace(logDirectory))
-                {
-                    _logDirectory = logDirectory;
-                }
-            }
-
-            if (enabled)
-            {
-                Directory.CreateDirectory(LogDirectorySnapshot());
-                Interlocked.Exchange(ref _eventLogCloseRequested, 0);
-            }
-            else
-            {
-                Interlocked.Exchange(ref _eventLogCloseRequested, 1);
-            }
-        }
-        catch (Exception ex)
-        {
-            ReportError($"Event log writing toggle failed: {ex.Message}");
-        }
-
-        RaiseStatusChanged();
-    }
-
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_disposed && _detectorTask is null && _eventLogWriterTask is null)
+        if (_disposed && _detectorTask is null)
         {
             return;
         }
@@ -435,9 +326,8 @@ public sealed class EventDetector : IEventDetector
     private async Task StopCurrentAsync(CancellationToken cancellationToken)
     {
         var detectorTask = _detectorTask;
-        var eventLogWriterTask = _eventLogWriterTask;
 
-        if (detectorTask is null && eventLogWriterTask is null)
+        if (detectorTask is null)
         {
             SetRunning(false);
             return;
@@ -456,25 +346,11 @@ public sealed class EventDetector : IEventDetector
             }
         }
 
-        _eventLogQueue.Writer.TryComplete();
-
-        if (eventLogWriterTask is not null)
-        {
-            try
-            {
-                await eventLogWriterTask.WaitAsync(cancellationToken);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-            }
-        }
-
         _events.Writer.TryComplete();
         _completedContexts.Writer.TryComplete();
         _cancellation?.Dispose();
         _cancellation = null;
         _detectorTask = null;
-        _eventLogWriterTask = null;
         SetRunning(false);
     }
 
@@ -513,7 +389,6 @@ public sealed class EventDetector : IEventDetector
         finally
         {
             CompletePendingContextCaptures();
-            _eventLogQueue.Writer.TryComplete();
             RaiseStatusChanged();
         }
     }
@@ -742,23 +617,8 @@ public sealed class EventDetector : IEventDetector
     private void QueueCompletedContextCapture(EventContextCapture capture)
     {
         QueueCompletedContextUpdate(capture);
-
-        if (!EventLogWritingEnabled)
-        {
-            Interlocked.Increment(ref _contextCapturesCompletedCount);
-            RaiseStatusChanged();
-            return;
-        }
-
-        if (_eventLogQueue.Writer.TryWrite(capture))
-        {
-            Interlocked.Increment(ref _contextCapturesCompletedCount);
-            RaiseStatusChanged();
-            return;
-        }
-
-        Interlocked.Increment(ref _contextCaptureFailedCount);
-        ReportError("Event context log queue is full. Dropped event context log entry.");
+        Interlocked.Increment(ref _contextCapturesCompletedCount);
+        RaiseStatusChanged();
     }
 
     private void QueueCompletedContextUpdate(EventContextCapture capture)
@@ -771,134 +631,6 @@ public sealed class EventDetector : IEventDetector
 
         Interlocked.Increment(ref _contextCaptureFailedCount);
         ReportError("Event context UI queue is full. Dropped event context UI update.");
-    }
-
-    private async Task ProcessEventLogAsync(CancellationToken cancellationToken)
-    {
-        StreamWriter? writer = null;
-        var currentDate = string.Empty;
-        var currentLogIdentity = string.Empty;
-        var writtenSinceFlush = 0;
-        var lastFlush = DateTimeOffset.UtcNow;
-
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                while (_eventLogQueue.Reader.TryRead(out var contextCapture))
-                {
-                    if (!EventLogWritingEnabled)
-                    {
-                        continue;
-                    }
-
-                    var dateText = contextCapture.Event.Timestamp.LocalDateTime.ToString("yyyy-MM-dd");
-                    var naming = GetLogFileNamingSnapshot();
-                    var lineLogIdentity = CreateEventLogFileIdentity(dateText, naming);
-                    var rotationRequested = ConsumeRotationRequest();
-                    if (writer is null ||
-                        rotationRequested ||
-                        !string.Equals(currentDate, dateText, StringComparison.Ordinal) ||
-                        !string.Equals(currentLogIdentity, lineLogIdentity, StringComparison.Ordinal))
-                    {
-                        await FlushAndDisposeAsync(writer);
-                        writer = null;
-
-                        currentDate = dateText;
-                        currentLogIdentity = lineLogIdentity;
-                        Directory.CreateDirectory(LogDirectorySnapshot());
-                        var path = CreateEventLogFilePath(dateText, naming);
-                        writer = CreateWriter(path);
-                        SetCurrentEventLogFilePath(path);
-                        writtenSinceFlush = 0;
-                        lastFlush = DateTimeOffset.UtcNow;
-                    }
-
-                    await WriteEventContextAsync(writer!, contextCapture);
-                    Interlocked.Increment(ref _eventLogWrittenCount);
-                    writtenSinceFlush++;
-
-                    if (writtenSinceFlush >= FlushLineInterval || DateTimeOffset.UtcNow - lastFlush >= FlushTimeInterval)
-                    {
-                        await writer.FlushAsync();
-                        writtenSinceFlush = 0;
-                        lastFlush = DateTimeOffset.UtcNow;
-                        RaiseStatusChanged();
-                    }
-                }
-
-                if (ConsumeEventLogCloseRequest())
-                {
-                    await FlushAndDisposeAsync(writer);
-                    writer = null;
-                    currentDate = string.Empty;
-                    currentLogIdentity = string.Empty;
-                    writtenSinceFlush = 0;
-                    lastFlush = DateTimeOffset.UtcNow;
-                    SetCurrentEventLogFilePath(null);
-                    RaiseStatusChanged();
-                }
-
-                using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                waitCancellation.CancelAfter(TimeSpan.FromMilliseconds(250));
-                try
-                {
-                    if (!await _eventLogQueue.Reader.WaitToReadAsync(waitCancellation.Token))
-                    {
-                        break;
-                    }
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            ReportError($"Event log writer failed: {ex.Message}");
-        }
-        finally
-        {
-            await FlushAndDisposeAsync(writer);
-            SetCurrentEventLogFilePath(null);
-            RaiseStatusChanged();
-        }
-    }
-
-    private static async Task WriteEventContextAsync(StreamWriter writer, EventContextCapture contextCapture)
-    {
-        var detectedEvent = contextCapture.Event;
-        await writer.WriteLineAsync("===== EVENT START =====");
-        await writer.WriteLineAsync($"Event Time: {FormatTimestamp(detectedEvent.Timestamp)}");
-        await writer.WriteLineAsync($"Rule: {detectedEvent.RuleName}");
-        await writer.WriteLineAsync($"Keyword: {detectedEvent.Keyword}");
-        await writer.WriteLineAsync($"Direction: {FormatDirection(detectedEvent.Direction)}");
-        await writer.WriteLineAsync($"Message: {detectedEvent.Message}");
-        await writer.WriteLineAsync();
-
-        await writer.WriteLineAsync($"--- BEFORE {contextCapture.BeforeContextLineLimit} LINES ---");
-        foreach (var line in contextCapture.BeforeContextLines)
-        {
-            await writer.WriteLineAsync(line.Formatted);
-        }
-
-        await writer.WriteLineAsync();
-        await writer.WriteLineAsync("--- MATCHED LINE ---");
-        await writer.WriteLineAsync(detectedEvent.SourceLogLine?.Formatted ?? detectedEvent.Formatted);
-
-        await writer.WriteLineAsync();
-        await writer.WriteLineAsync($"--- AFTER {contextCapture.AfterContextLineLimit} LINES ---");
-        foreach (var line in contextCapture.AfterContextLines)
-        {
-            await writer.WriteLineAsync(line.Formatted);
-        }
-
-        await writer.WriteLineAsync();
-        await writer.WriteLineAsync("===== EVENT END =====");
-        await writer.WriteLineAsync();
     }
 
     private void RecordDetectedEvent(DetectedEvent detectedEvent)
@@ -934,24 +666,6 @@ public sealed class EventDetector : IEventDetector
         }
 
         RaiseStatusChanged();
-    }
-
-    private void SetCurrentEventLogFilePath(string? path)
-    {
-        lock (_stateGate)
-        {
-            _currentEventLogFilePath = path;
-        }
-
-        RaiseStatusChanged();
-    }
-
-    private string LogDirectorySnapshot()
-    {
-        lock (_stateGate)
-        {
-            return _logDirectory;
-        }
     }
 
     private void RaiseStatusChanged()
@@ -1014,21 +728,6 @@ public sealed class EventDetector : IEventDetector
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
-    private static string FormatDirection(LogDirection direction)
-    {
-        return direction switch
-        {
-            LogDirection.Tx => "TX",
-            LogDirection.Rx => "RX",
-            _ => "SYS"
-        };
-    }
-
-    private static string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        return timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff");
-    }
-
     private static EventContextSettings NormalizeContextSettings(EventContextSettings settings)
     {
         return new EventContextSettings
@@ -1068,119 +767,6 @@ public sealed class EventDetector : IEventDetector
             : rule.Keyword.Trim();
     }
 
-    private static StreamWriter CreateWriter(string path)
-    {
-        var stream = new FileStream(
-            path,
-            FileMode.Append,
-            FileAccess.Write,
-            FileShare.Read,
-            bufferSize: 32 * 1024,
-            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-        return new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 32 * 1024);
-    }
-
-    private static async Task FlushAndDisposeAsync(StreamWriter? writer)
-    {
-        if (writer is null)
-        {
-            return;
-        }
-
-        await writer.FlushAsync();
-        await writer.DisposeAsync();
-    }
-
-    private static string CreateDefaultLogDirectory()
-    {
-        return Path.Combine(AppContext.BaseDirectory, "logs");
-    }
-
-    private string CreateEventLogFilePath(string dateText, LogFileNamingSnapshot naming)
-    {
-        var fileName = naming.UseSessionNameInFileName
-            ? $"{dateText}_{naming.SessionFileTimeText}_{naming.SessionFileName}_events.log"
-            : $"{dateText}_events.log";
-
-        return Path.Combine(LogDirectorySnapshot(), fileName);
-    }
-
-    private static string CreateEventLogFileIdentity(string dateText, LogFileNamingSnapshot naming)
-    {
-        return naming.UseSessionNameInFileName
-            ? $"{dateText}_{naming.SessionFileTimeText}_{naming.SessionFileName}"
-            : dateText;
-    }
-
-    private LogFileNamingSnapshot GetLogFileNamingSnapshot()
-    {
-        lock (_stateGate)
-        {
-            return new LogFileNamingSnapshot(
-                _useSessionNameInFileName,
-                _sessionFileName,
-                _sessionFileTimeText);
-        }
-    }
-
-    private bool ConsumeRotationRequest()
-    {
-        lock (_stateGate)
-        {
-            if (!_rotationRequested)
-            {
-                return false;
-            }
-
-            _rotationRequested = false;
-            return true;
-        }
-    }
-
-    private bool ConsumeEventLogCloseRequest()
-    {
-        return Interlocked.Exchange(ref _eventLogCloseRequested, 0) != 0;
-    }
-
-    private static string NormalizeSessionFileName(string? sessionName)
-    {
-        if (string.IsNullOrWhiteSpace(sessionName))
-        {
-            return string.Empty;
-        }
-
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(sessionName.Trim().Length);
-        var previousWasSpace = false;
-        foreach (var character in sessionName.Trim())
-        {
-            if (char.IsWhiteSpace(character))
-            {
-                if (!previousWasSpace)
-                {
-                    builder.Append(' ');
-                    previousWasSpace = true;
-                }
-
-                continue;
-            }
-
-            previousWasSpace = false;
-            if (char.IsLetterOrDigit(character) ||
-                character == '_' ||
-                character == '-')
-            {
-                builder.Append(character);
-                continue;
-            }
-
-            builder.Append(invalidFileNameChars.Contains(character) || char.IsControl(character) ? '_' : character);
-        }
-
-        return builder.ToString().Trim();
-    }
-
     private static Channel<LogLine> CreateInputQueue()
     {
         return Channel.CreateBounded<LogLine>(new BoundedChannelOptions(InputQueueCapacity)
@@ -1211,16 +797,6 @@ public sealed class EventDetector : IEventDetector
         });
     }
 
-    private static Channel<EventContextCapture> CreateEventLogQueue()
-    {
-        return Channel.CreateBounded<EventContextCapture>(new BoundedChannelOptions(EventLogQueueCapacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = true
-        });
-    }
-
     private static void UpdateMax(ref int target, int candidate)
     {
         var current = Volatile.Read(ref target);
@@ -1235,11 +811,6 @@ public sealed class EventDetector : IEventDetector
             current = previous;
         }
     }
-
-    private readonly record struct LogFileNamingSnapshot(
-        bool UseSessionNameInFileName,
-        string SessionFileName,
-        string SessionFileTimeText);
 
     private sealed class EventContextCapture
     {

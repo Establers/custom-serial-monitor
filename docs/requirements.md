@@ -33,7 +33,7 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
 - Example:
   - UI log view: latest 50,000 lines by default, configurable up to 500,000
   - Full text log: saved completely
-  - Event view: latest 5,000 events or daily event files
+  - Event view: latest 5,000 events in the bounded UI buffer
 
 ### Timestamp
 
@@ -56,7 +56,7 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
   - show matched keyword
   - show original message
   - display it in a separate event view
-  - save it to an event log file
+  - keep it in the bounded event/context UI without creating a separate event file
 
 ### Copy
 
@@ -86,8 +86,13 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
 
 - Text log files must support daily rotation and/or size-based rotation.
 - Example:
-  - `2026-05-23_serial.log`
-  - `2026-05-24_serial.log`
+  - `2026-05-23_091530_serial.log`
+  - `boot_test.log` (when entered explicitly)
+- Logging must start OFF on every app launch and profile load.
+- Every explicit LOG ON must create a new serial log rather than append to an
+  earlier run. A custom file name is used exactly and must not already exist.
+- The custom file name is editable only while LOG is OFF, and the configured
+  name must remain visible in Settings.
 
 ### Encoding / Raw Data
 
@@ -97,12 +102,13 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
   - CP949
   - HEX view
 - Invalid bytes must not crash the program.
-- In addition to text logs, the application should support raw binary log saving.
+- HEX mode must preserve received bytes as byte-exact hexadecimal text in the
+  serial log. A separate raw binary log file is out of scope.
 
 ## Priority: High
 
 - Multiple event detection conditions must be supported.
-- For keyword events, save context logs:
+- For keyword events, capture context for the bounded UI viewer and copy action:
   - N lines before the event
   - event line
   - N lines after the event

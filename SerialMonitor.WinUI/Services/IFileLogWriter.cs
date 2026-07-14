@@ -38,11 +38,7 @@ public interface IFileLogWriter : IAsyncDisposable
 
     Task StartAsync(string directory, CancellationToken cancellationToken);
 
-    void UpdateSessionFileNaming(
-        string? sanitizedSessionName,
-        bool useSessionNameInFileName,
-        DateTimeOffset? sessionStartedAt,
-        bool requestNewFile);
+    void UpdateLogFileName(string? exactLogFileName, bool requestNewFile);
 
     bool TryEnqueue(LogLine line);
 

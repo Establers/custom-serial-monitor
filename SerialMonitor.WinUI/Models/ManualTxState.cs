@@ -15,3 +15,16 @@ public enum ManualTransmitResult
     BridgeNotRunning,
     Failed
 }
+
+public sealed class ManualTxStateChangedEventArgs : EventArgs
+{
+    public ManualTxStateChangedEventArgs(ManualTxState previousState, ManualTxState currentState)
+    {
+        PreviousState = previousState;
+        CurrentState = currentState;
+    }
+
+    public ManualTxState PreviousState { get; }
+
+    public ManualTxState CurrentState { get; }
+}

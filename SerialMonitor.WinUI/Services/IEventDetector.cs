@@ -15,8 +15,6 @@ public interface IEventDetector : IAsyncDisposable
 
     bool IsRunning { get; }
 
-    bool EventLogWritingEnabled { get; }
-
     int EventRuleCount { get; }
 
     int CompiledTerminalRuleCount { get; }
@@ -28,8 +26,6 @@ public interface IEventDetector : IAsyncDisposable
     int InvalidCompiledRuleCount { get; }
 
     long DetectedEventCount { get; }
-
-    long EventLogWrittenCount { get; }
 
     long ErrorCount { get; }
 
@@ -79,13 +75,9 @@ public interface IEventDetector : IAsyncDisposable
 
     string? LastError { get; }
 
-    string? CurrentEventLogFilePath { get; }
-
     Task StartAsync(
         IReadOnlyList<EventRule> rules,
         EventContextSettings contextSettings,
-        string logDirectory,
-        bool eventLogWritingEnabled,
         CancellationToken cancellationToken);
 
     void UpdateRules(IReadOnlyList<EventRule> rules);
@@ -93,14 +85,6 @@ public interface IEventDetector : IAsyncDisposable
     void UpdateRuleMode(LogRuleMatchMode mode);
 
     void UpdateContextSettings(EventContextSettings contextSettings);
-
-    void UpdateSessionFileNaming(
-        string? sanitizedSessionName,
-        bool useSessionNameInFileName,
-        DateTimeOffset? sessionStartedAt,
-        bool requestNewFile);
-
-    void SetEventLogWritingEnabled(bool enabled, string? logDirectory = null);
 
     bool TryEnqueue(LogLine line);
 

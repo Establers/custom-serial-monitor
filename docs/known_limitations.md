@@ -50,16 +50,22 @@ This file tracks current intentional limits and validation gaps.
   sub-millisecond timing; Diagnostics reports delivery delay and lateness.
 - Queue overflow intentionally faults the bridge instead of continuing with a
   silently incomplete byte stream. It does not disconnect the physical device.
+- HEX bridge display records are capped at 256 bytes and 50 ms maximum latency.
+  Event, highlight, and view-filter matching is record-local, so a HEX pattern
+  split across two display records does not match. Physical byte forwarding
+  remains immediate and unchanged.
 - com0com or another virtual-port driver must be installed and configured
   separately. The application does not install or manage kernel drivers.
 
 ## Logging
 
-- Serial and event logs are plain text.
-- Raw binary logging may be a skeleton setting if it is not fully implemented in
-  the current build.
-- Session-based filenames are intended for newly created or rotated files; avoid
-  assuming all historical files will be renamed.
+- Serial logs are plain text; raw bytes received in HEX mode are written as
+  byte-exact hexadecimal text.
+- Raw binary `.bin` logging is not offered.
+- Event detection and bounded context capture do not create a separate event log
+  file.
+- Optional log file names apply on the next LOG ON; historical files are never
+  renamed.
 
 ## Command Workflows
 

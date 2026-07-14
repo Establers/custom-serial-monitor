@@ -30,7 +30,7 @@ Create a non-WinUI test project for logic that can run without a window:
 - `LogRuleMatcher` Terminal/HEX mode rules, direction, case, priority, and invalid input.
 - `BoundedLogBuffer` overflow, resize, and large-batch behavior.
 - `ProfileService` normalization, corrupt JSON recovery, and atomic-save fallback.
-- `FileLogWriter` rotation/session naming with a temporary directory.
+- `FileLogWriter` rotation/exact filename behavior with a temporary directory.
 - `EventDetector` overlapping contexts, queue pressure, and cancellation.
 
 ### P1: Split the two oversized UI classes

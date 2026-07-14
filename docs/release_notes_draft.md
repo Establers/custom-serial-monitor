@@ -14,7 +14,7 @@ Date: 2026-05-25
 - Saved TX commands with management UI and shortcuts.
 - Command sequences for repeatable multi-command test flows.
 - User markers and session start/end markers in the log timeline.
-- Optional session names in newly created serial/event log filenames.
+- Exact custom serial log file names configured while LOG is OFF.
 - Configurable event rules and highlight rules.
 - Event context capture with before/matched/after lines.
 - WebView2 event context viewer.
@@ -24,7 +24,7 @@ Date: 2026-05-25
 - Settings validation and apply-behavior hints.
 - Mock stress mode and sequence-loss diagnostics.
 - Compact health summary and detailed copyable diagnostics.
-- Log file quick actions for opening/copying active serial/event log paths.
+- Log file quick actions for opening/copying the active serial log path.
 - In-app Help/Guide tab.
 
 ## Stability Design Points
@@ -47,7 +47,7 @@ Date: 2026-05-25
 - Sustained high-volume real serial traffic at and above 115200 bps.
 - Event detection and file logging under real firmware burst traffic.
 - TX command and sequence behavior against real device shells.
-- Session filename rotation behavior during real test sessions.
+- Custom filename creation and collision behavior during real test runs.
 - Windows default-app behavior for opening active log files while writing.
 
 ## Suggested Next Validation Steps
@@ -61,5 +61,5 @@ Date: 2026-05-25
    - no file writer drops,
    - no event detector drops,
    - no xterm append errors,
-   - readable serial and event log files,
+   - readable serial log files and bounded event context in the UI,
    - responsive UI after the run.

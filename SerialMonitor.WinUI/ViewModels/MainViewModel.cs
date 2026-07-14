@@ -151,6 +151,21 @@ public sealed class MockGeneratorPatternOption
     public override string ToString() => DisplayName;
 }
 
+public sealed class TimestampDisplayFormatOption
+{
+    public TimestampDisplayFormatOption(TimestampDisplayFormat format, string displayName)
+    {
+        Format = format;
+        DisplayName = displayName;
+    }
+
+    public TimestampDisplayFormat Format { get; }
+
+    public string DisplayName { get; }
+
+    public override string ToString() => DisplayName;
+}
+
 public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private const int MaxRetainedEventContexts = 5_000;
@@ -482,8 +497,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastLogToggleAction = "Log saving is OFF.";
     private string _lastLogToggleTimeText = "(none)";
     private string _lastLogToggleError = string.Empty;
+    private int _fileLoggingTransitionCount;
     private long _logToggleErrorCount;
-    private string _lastSessionFileAction = "Session file naming idle.";
+    private string _lastSessionFileAction = "Log file naming idle.";
     private string _lastSessionFileNamingError = string.Empty;
     private long _sessionFileNamingErrorCount;
     private long _settingsApplyErrorCount;
@@ -672,9 +688,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CopyHelpCommand = new AsyncRelayCommand(CopyHelpAsync);
         OpenLogFolderCommand = new AsyncRelayCommand(OpenLogFolderAsync);
         OpenCurrentSerialLogCommand = new AsyncRelayCommand(OpenCurrentSerialLogAsync, CanOpenCurrentSerialLog);
-        OpenCurrentEventLogCommand = new AsyncRelayCommand(OpenCurrentEventLogAsync, CanOpenCurrentEventLog);
         CopySerialLogPathCommand = new AsyncRelayCommand(CopySerialLogPathAsync, CanUseCurrentSerialLogPath);
-        CopyEventLogPathCommand = new AsyncRelayCommand(CopyEventLogPathAsync, CanUseCurrentEventLogPath);
         ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync, () => !IsBusy);
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => !IsBusy);
         LoadProfileCommand = new AsyncRelayCommand(LoadProfileAsync, () => !IsBusy && !IsConnected);
@@ -684,7 +698,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanSearch);
         RefreshSearchResultsCommand = new AsyncRelayCommand(RefreshSearchResultsAsync, CanSearch);
         CopyEventContextCommand = new AsyncRelayCommand(CopyEventContextAsync, CanCopyEventContext);
-        OpenEventLogFolderCommand = new AsyncRelayCommand(OpenEventLogFolderAsync);
         SelectLatestEventCommand = new AsyncRelayCommand(SelectLatestEventAsync, CanSelectLatestEvent);
         StartMockStressCommand = new AsyncRelayCommand(StartMockStressAsync, () => !IsBusy);
         StopMockStressCommand = new AsyncRelayCommand(StopMockStressAsync);
@@ -692,8 +705,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SendMockCrlfCommand = new AsyncRelayCommand(SendMockCrlfAsync, () => IsConnected && CurrentPortIsMock);
         RunCommandSequenceCommand = new AsyncRelayCommand(RunSelectedCommandSequenceAsync, CanRunSelectedCommandSequence);
         StopCommandSequenceCommand = new AsyncRelayCommand(StopCommandSequenceAsync, () => IsSequenceRunning);
-        SetSessionCommand = new AsyncRelayCommand(SetSessionAsync, () => IsConnected && !IsBusy);
-        EndSessionCommand = new AsyncRelayCommand(EndSessionAsync, () => IsConnected && !IsBusy && !string.IsNullOrWhiteSpace(CurrentSessionName));
+        SetSessionCommand = new AsyncRelayCommand(SetSessionAsync, () => !IsBusy && !FileLoggingEnabled);
+        EndSessionCommand = new AsyncRelayCommand(EndSessionAsync, () => !IsBusy && !FileLoggingEnabled && !string.IsNullOrWhiteSpace(CurrentSessionName));
         RefreshBridgePortsCommand = new AsyncRelayCommand(RefreshBridgePortsAsync);
         StartBridgeCommand = new AsyncRelayCommand(StartBridgeAsync, () => CanStartBridge);
         StopBridgeCommand = new AsyncRelayCommand(StopBridgeAsync, () => CanStopBridge);
@@ -729,6 +742,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.RawBytesReceived += OnRawBytesReceived;
         _bridgeService.Error += OnBackgroundError;
         _bridgeService.StatusChanged += OnBridgeStatusChanged;
+        _bridgeService.ManualTxStateChanged += OnManualTxStateChanged;
         _bridgeLogProcessor.Error += OnBackgroundError;
         _observeBridgeProcessedLogsTask = Task.Run(
             () => ObserveBridgeProcessedLogsAsync(_bridgeVisualLogCancellation.Token),
@@ -1156,11 +1170,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public AsyncRelayCommand OpenCurrentSerialLogCommand { get; }
 
-    public AsyncRelayCommand OpenCurrentEventLogCommand { get; }
-
     public AsyncRelayCommand CopySerialLogPathCommand { get; }
-
-    public AsyncRelayCommand CopyEventLogPathCommand { get; }
 
     public AsyncRelayCommand ToggleFileLoggingCommand { get; }
 
@@ -1179,8 +1189,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public AsyncRelayCommand RefreshSearchResultsCommand { get; }
 
     public AsyncRelayCommand CopyEventContextCommand { get; }
-
-    public AsyncRelayCommand OpenEventLogFolderCommand { get; }
 
     public AsyncRelayCommand SelectLatestEventCommand { get; }
 
@@ -1241,9 +1249,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string BridgeStateText => IsBridgeActive
         ? "BRIDGE ON"
-        : BridgeRequestedEnabled
-            ? "BRIDGE ARMED"
-            : "BRIDGE OFF";
+        : "BRIDGE OFF";
 
     public string BridgeIndicatorText => IsBridgeActive
         ? $"BRIDGE ON {GetActualPortName(SelectedPort) ?? "?"} ↔ {_bridgeService.VirtualPortName}"
@@ -1254,9 +1260,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string BridgeStatusText => IsBridgeActive
         ? $"Bidirectional raw-byte bridge active: {BridgeRouteText}"
-        : BridgeRequestedEnabled
-            ? $"Bridge armed; it will start with the next device connection: {BridgeRouteText}"
-            : "Bridge is off.";
+        : "Bridge is off. It starts only when you press Start bridge.";
 
     public long BridgeDeviceToVirtualByteCount => _bridgeService.DeviceToVirtualByteCount;
 
@@ -1296,12 +1300,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsManualTxBusy => IsBridgeActive && ManualTxState != ManualTxState.Idle;
 
+    public bool CanSendManualTx => IsConnected && !IsBusy && !IsManualTxBusy;
+
     public string ManualTxStateText => ManualTxState switch
     {
         ManualTxState.WaitingForBridgeIdle =>
             $"TX waiting for bridge idle ({_bridgeService.ManualTxWaitMs:0} ms, guard {_bridgeService.ManualTxIdleGuardRemainingMs:0} ms)",
         ManualTxState.Sending => "TX sending",
         _ => "TX idle"
+    };
+
+    public ObservableCollection<TimestampDisplayFormatOption> TimestampDisplayFormatOptions { get; } = new()
+    {
+        new(TimestampDisplayFormat.DateTimeMilliseconds, "yyyy-MM-dd HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.DateTimeSeconds, "yyyy-MM-dd HH:mm:ss"),
+        new(TimestampDisplayFormat.TimeMilliseconds, "HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.TimeSeconds, "HH:mm:ss")
     };
 
     public int BridgePendingChunkCount =>
@@ -1430,6 +1444,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentUiSettings.RxDisplayMode = normalized;
             _currentUiSettings.TxSendMode = txMode;
+            if (rxChanged)
+            {
+                _bridgeLogProcessor.ResetStream();
+            }
             var activeRuleMode = ToLogRuleMode(normalized);
             _eventDetector.UpdateRuleMode(activeRuleMode);
             ClearPendingEventNotifications();
@@ -1906,6 +1924,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentSerialSettings.Encoding = value;
+            _bridgeLogProcessor.ResetStream();
             RecordSettingsChange("RX encoding", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             OnPropertyChanged();
         }
@@ -1927,13 +1946,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool FileLoggingActive => FileLoggingEnabled && _fileLogWriter.IsRunning;
 
-    public string FileLoggingToggleText => FileLoggingEnabled ? "Log ON" : "Log OFF";
+    public string FileLoggingToggleText => FileLoggingEnabled ? "LOG ON" : "LOG OFF";
 
     public string FileLoggingMainStatusText => FileLoggingEnabled ? "Log Save: ON" : "Log Save: OFF";
 
     public string FileLoggingToolTip => FileLoggingEnabled
-        ? "Log Save ON writes serial and event logs to files. Click to stop saving; existing files are not deleted."
-        : "Log Save OFF keeps the terminal live but does not write new serial/event logs to files. Click to start saving.";
+        ? "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted."
+        : "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
+
+    public bool CanEditLogFileName =>
+        !FileLoggingEnabled &&
+        !IsBusy &&
+        Volatile.Read(ref _fileLoggingTransitionCount) == 0;
 
     public string LogSaveDirectory
     {
@@ -1955,22 +1979,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentLogSettings.SaveDirectory = validatedDirectory;
             _currentSerialSettings.SaveDirectory = validatedDirectory;
             RecordSettingsChange("Log save directory", SettingsApplyBehavior.ReconnectRequired, validatedDirectory);
-            OnPropertyChanged();
-        }
-    }
-
-    public bool DailyRotationEnabled
-    {
-        get => _currentLogSettings.DailyRotationEnabled;
-        set
-        {
-            if (_currentLogSettings.DailyRotationEnabled == value)
-            {
-                return;
-            }
-
-            _currentLogSettings.DailyRotationEnabled = value;
-            RecordSettingsChange("Daily rotation", SettingsApplyBehavior.ProfileOnly, value ? "enabled" : "disabled");
             OnPropertyChanged();
         }
     }
@@ -2027,39 +2035,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             RecordSettingsValidationError($"Size rotation bytes must be a whole number between {FormatByteCount(MinSizeRotationBytes)} and {FormatByteCount(MaxSizeRotationBytes)}.");
-            OnPropertyChanged();
-        }
-    }
-
-    public bool RawBinaryLoggingEnabled
-    {
-        get => _currentLogSettings.RawBinaryLoggingEnabled;
-        set
-        {
-            if (_currentLogSettings.RawBinaryLoggingEnabled == value)
-            {
-                return;
-            }
-
-            _currentLogSettings.RawBinaryLoggingEnabled = value;
-            RecordSettingsChange("Raw binary logging", SettingsApplyBehavior.ProfileOnly, value ? "enabled" : "disabled");
-            OnPropertyChanged();
-        }
-    }
-
-    public bool UseSessionNameInFileName
-    {
-        get => _currentLogSettings.UseSessionNameInFileName;
-        set
-        {
-            if (_currentLogSettings.UseSessionNameInFileName == value)
-            {
-                return;
-            }
-
-            _currentLogSettings.UseSessionNameInFileName = value;
-            ApplySessionFileNaming(requestNewFile: true);
-            RecordSettingsChange("Use session name in log filename", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             OnPropertyChanged();
         }
     }
@@ -2440,6 +2415,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
                 OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+                OnPropertyChanged(nameof(CanEditLogFileName));
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
@@ -2450,7 +2426,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanEditConnectionSettings => !IsConnected && !IsBusy;
 
-    public bool CanEditSizeRotationBytes => CanEditConnectionSettings && SizeRotationEnabled;
+    public bool CanEditSizeRotationBytes => !IsBusy && SizeRotationEnabled;
 
     public bool CanManualDisconnect => IsConnected && !IsBusy;
 
@@ -3071,10 +3047,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             if (SetProperty(ref _sessionName, value))
             {
-                RecordSettingsChange("Session name", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(empty)" : value.Trim());
+                RecordSettingsChange("Log file name", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(automatic)" : value);
+                OnPropertyChanged(nameof(LogFileName));
+                OnPropertyChanged(nameof(ConfiguredLogFileNameDisplayText));
             }
         }
     }
+
+    public string LogFileName
+    {
+        get => SessionName;
+        set => SessionName = value;
+    }
+
+    public string ConfiguredLogFileNameDisplayText => string.IsNullOrWhiteSpace(LogFileName)
+        ? "(automatic timestamp name)"
+        : LogFileName;
 
     public string CurrentSessionName
     {
@@ -3084,7 +3072,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _currentSessionName, value))
             {
                 OnPropertyChanged(nameof(CurrentSessionDisplayText));
-                OnPropertyChanged(nameof(SanitizedSessionName));
+                OnPropertyChanged(nameof(ActiveLogFileName));
                 EndSessionCommand.NotifyCanExecuteChanged();
             }
         }
@@ -3102,7 +3090,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long SessionErrorCount => Interlocked.Read(ref _sessionErrorCount);
 
-    public string SanitizedSessionName => SanitizeSessionNameForFileUse(CurrentSessionName);
+    public string ActiveLogFileName => CurrentSessionName;
 
     public string LastTxError => _lastTxError;
 
@@ -3516,8 +3504,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long ProfileSaveErrorCount => _profileService.SaveErrorCount;
 
     public string CurrentSerialLogPath => FileLoggingEnabled ? _fileLogWriter.CurrentLogFilePath ?? string.Empty : string.Empty;
-
-    public string CurrentEventLogPath => FileLoggingEnabled ? _eventDetector.CurrentEventLogFilePath ?? string.Empty : string.Empty;
 
     public string LastLogToggleAction => _lastLogToggleAction;
 
@@ -4204,6 +4190,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.RawBytesReceived -= OnRawBytesReceived;
         _bridgeService.Error -= OnBackgroundError;
         _bridgeService.StatusChanged -= OnBridgeStatusChanged;
+        _bridgeService.ManualTxStateChanged -= OnManualTxStateChanged;
         _bridgeLogProcessor.Error -= OnBackgroundError;
         await _bridgeService.DisposeAsync();
         await _bridgeLogProcessor.DisposeAsync();
@@ -5267,8 +5254,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartBridgeAsync()
     {
-        _currentBridgeSettings.Enabled = true;
+        // A bridge start is a one-shot user action, never an armed state that can
+        // survive a failed start, disconnect, reconnect, or application restart.
+        _currentBridgeSettings.Enabled = false;
         await StartBridgeCoreAsync();
+        _currentBridgeSettings.Enabled = _bridgeService.IsRunning;
         NotifyBridgePropertiesChanged();
     }
 
@@ -5395,6 +5385,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(BridgeOldestPendingChunkAgeMs));
         OnPropertyChanged(nameof(ManualTxState));
         OnPropertyChanged(nameof(IsManualTxBusy));
+        OnPropertyChanged(nameof(CanSendManualTx));
         OnPropertyChanged(nameof(ManualTxStateText));
         OnPropertyChanged(nameof(BridgePendingText));
         OnPropertyChanged(nameof(BridgeDroppedChunksText));
@@ -5425,6 +5416,31 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         finally
         {
             _connectionLifecycleGate.Release();
+        }
+    }
+
+    public TimestampDisplayFormatOption SelectedTimestampDisplayFormatOption
+    {
+        get => TimestampDisplayFormatOptions.FirstOrDefault(option => option.Format == _currentUiSettings.TimestampDisplayFormat)
+            ?? TimestampDisplayFormatOptions[0];
+        set
+        {
+            if (value is null || _currentUiSettings.TimestampDisplayFormat == value.Format)
+            {
+                return;
+            }
+
+            _currentUiSettings.TimestampDisplayFormat = value.Format;
+            SetVisibleLogRebuildReason("timestamp format change");
+            Log.SetTimestampDisplayFormat(value.Format);
+            _lastTimestampDisplayModeChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
+            _lastTimestampDisplayModeError = string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LastTimestampDisplayModeChangeTimeText));
+            OnPropertyChanged(nameof(LastTimestampDisplayModeError));
+            RefreshSelectedEventContextText();
+            RefreshVisibleLogSearch(SearchMove.None, rebuildResults: false);
+            RecordSettingsChange("Timestamp format", SettingsApplyBehavior.Immediate, value.DisplayName);
         }
     }
 
@@ -5573,8 +5589,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _eventDetector.StartAsync(
                 EventRules,
                 _currentEventContextSettings,
-                settings.SaveDirectory,
-                FileLoggingEnabled,
                 CancellationToken.None);
             ApplySessionFileNaming(requestNewFile: false);
             await _serialService.ConnectAsync(
@@ -5597,10 +5611,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             IsConnected = true;
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
-            if (_currentBridgeSettings.Enabled && !string.IsNullOrWhiteSpace(SelectedBridgePort))
-            {
-                await StartBridgeCoreAsync();
-            }
             if (!RequiresAutomaticReceiveReconnect(SelectedRxDisplayMode, HexGroupTimeoutMs))
             {
                 ClearPendingReconnectSettings();
@@ -5898,7 +5908,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 await RunDisconnectCleanupAsync("Command sequence stop", () => WaitForSequenceStopAsync(cancellationToken), cleanupErrors);
             }
 
-            await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: false, cancellationToken), cleanupErrors);
+            await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: true, cancellationToken), cleanupErrors);
 
             _connectionCancellation?.Cancel();
             await RunDisconnectCleanupAsync("Log pipeline stop", () => _logPipeline.StopAsync(cancellationToken), cleanupErrors);
@@ -6524,25 +6534,37 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            if (!IsConnected)
+            if (FileLoggingEnabled)
             {
-                RecordSessionError("Set session failed: serial monitor is disconnected.");
+                RecordSessionError("Log file name can be changed only while LOG is OFF.");
                 return;
             }
 
-            var normalizedName = NormalizeSessionName(SessionName);
-            if (string.IsNullOrWhiteSpace(normalizedName))
+            if (!LogFileNamePolicy.TryValidate(SessionName, out var logFileName, out var validationError))
             {
-                RecordSessionError("Session name is empty.");
+                RecordSessionError(validationError);
                 return;
             }
 
-            CurrentSessionName = normalizedName;
+            if (string.IsNullOrWhiteSpace(logFileName))
+            {
+                RecordSessionError("Log file name is empty.");
+                return;
+            }
+
+            CurrentSessionName = logFileName;
             _sessionStartedTime = DateTimeOffset.Now;
             OnPropertyChanged(nameof(SessionStartedTimeText));
             ApplySessionFileNaming(requestNewFile: true);
-            await AddMarkerAsync($"Session start: {normalizedName}", "Session start marker");
-            RecordSessionAction($"Session started: {normalizedName}");
+            if (IsConnected)
+            {
+                await AddMarkerAsync($"Log file name: {logFileName}", "Log file name marker");
+                RecordSessionAction($"Log file name set: {logFileName}");
+            }
+            else
+            {
+                RecordSessionAction($"Log file name ready for next connection: {logFileName}");
+            }
         }
         catch (Exception ex)
         {
@@ -6555,12 +6577,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            if (!IsConnected)
-            {
-                RecordSessionError("End session failed: serial monitor is disconnected.");
-                return;
-            }
-
             if (string.IsNullOrWhiteSpace(CurrentSessionName))
             {
                 RecordSessionError("No active session to end.");
@@ -6568,7 +6584,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             var endedSessionName = CurrentSessionName;
-            await AddMarkerAsync($"Session end: {endedSessionName}", "Session end marker");
+            if (IsConnected)
+            {
+                await AddMarkerAsync($"Session end: {endedSessionName}", "Session end marker");
+            }
+
             CurrentSessionName = string.Empty;
             _sessionStartedTime = null;
             OnPropertyChanged(nameof(SessionStartedTimeText));
@@ -6623,6 +6643,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async Task<bool> SendSavedCommandShortcutAsync(string shortcutText)
     {
+        if (IsManualTxBusy)
+        {
+            SetStatus("TX waiting for bridge idle; saved command shortcut ignored.");
+            return true;
+        }
+
         if (!TryNormalizeSavedCommandShortcut(shortcutText, out var normalizedShortcut, out var error) ||
             string.IsNullOrWhiteSpace(normalizedShortcut))
         {
@@ -6862,7 +6888,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool CanSendCurrentCommand()
     {
-        return IsConnected && !IsBusy && !IsManualTxBusy && !string.IsNullOrWhiteSpace(Commands.CurrentCommandText);
+        return CanSendManualTx && !string.IsNullOrWhiteSpace(Commands.CurrentCommandText);
     }
 
     private static bool TryParseHexTxPayload(string input, out byte[] bytes, out string error)
@@ -6991,6 +7017,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         if (entry is null || string.IsNullOrWhiteSpace(entry.CommandText))
         {
+            return;
+        }
+
+        if (IsManualTxBusy)
+        {
+            SetStatus("TX waiting for bridge idle; history resend ignored.");
             return;
         }
 
@@ -7803,6 +7835,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyEventRuleChanges(string status)
     {
         ClearPendingEventNotifications();
+        _bridgeLogProcessor.ResetStream();
         _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
         RecordRuleEditStatus(status);
         NotifyRuleEditorStateChanged();
@@ -7810,6 +7843,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyHighlightRuleChanges(string status)
     {
+        _bridgeLogProcessor.ResetStream();
         SetVisibleLogRebuildReason("legacy highlight rule change");
         Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
         RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
@@ -7820,6 +7854,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyLogRuleChanges(string status)
     {
         ClearPendingEventNotifications();
+        _bridgeLogProcessor.ResetStream();
         RebuildProjectedRulesFromLogRules();
         _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
         Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
@@ -8460,52 +8495,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    private static string NormalizeSessionName(string? sessionName)
-    {
-        return string.IsNullOrWhiteSpace(sessionName)
-            ? string.Empty
-            : sessionName.Trim();
-    }
-
-    private static string SanitizeSessionNameForFileUse(string? sessionName)
-    {
-        var normalized = NormalizeSessionName(sessionName);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(normalized.Length);
-        var previousWasSpace = false;
-        foreach (var character in normalized)
-        {
-            if (char.IsWhiteSpace(character))
-            {
-                if (!previousWasSpace)
-                {
-                    builder.Append(' ');
-                    previousWasSpace = true;
-                }
-
-                continue;
-            }
-
-            previousWasSpace = false;
-            if (char.IsLetterOrDigit(character) ||
-                character == '_' ||
-                character == '-')
-            {
-                builder.Append(character);
-                continue;
-            }
-
-            builder.Append(invalidFileNameChars.Contains(character) || char.IsControl(character) ? '_' : character);
-        }
-
-        return builder.ToString().Trim();
-    }
-
     public static bool TryNormalizeSavedCommandShortcut(string? shortcutText, out string? normalizedShortcut, out string error)
     {
         normalizedShortcut = null;
@@ -9115,7 +9104,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SessionStartedTimeText));
         OnPropertyChanged(nameof(LastSessionAction));
         OnPropertyChanged(nameof(LastSessionError));
-        OnPropertyChanged(nameof(SanitizedSessionName));
+        OnPropertyChanged(nameof(ActiveLogFileName));
         SetStatus(message);
         RefreshDiagnostics();
     }
@@ -9372,12 +9361,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (!TryParseMockSequence(line.Text, out var sequence))
+        foreach (var mockLineText in MockStressLogLineSplitter.Split(line))
         {
-            if (_serialService.IsMockStressRunning && LooksLikeMalformedMockStressLine(line.Text))
+            VerifyMockSequenceLine(mockLineText);
+        }
+    }
+
+    private void VerifyMockSequenceLine(string mockLineText)
+    {
+        if (!TryParseMockSequence(mockLineText, out var sequence))
+        {
+            if (_serialService.IsMockStressRunning && LooksLikeMalformedMockStressLine(mockLineText))
             {
                 Interlocked.Increment(ref _mockMalformedSequenceCount);
-                _lastMockSequenceError = $"Malformed mock sequence line: {line.Text}";
+                _lastMockSequenceError = $"Malformed mock sequence line: {mockLineText}";
                 RunOnUiThread(() =>
                 {
                     SetStatus(_lastMockSequenceError);
@@ -9471,30 +9468,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return SelectedEvent is not null && !string.IsNullOrWhiteSpace(SelectedEventContextText);
     }
 
-    private Task OpenEventLogFolderAsync()
-    {
-        try
-        {
-            var folder = GetEventLogFolderPath();
-            Directory.CreateDirectory(folder);
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"\"{folder}\"",
-                UseShellExecute = true
-            });
-
-            SetStatus($"Opened event log folder: {folder}");
-        }
-        catch (Exception ex)
-        {
-            RecordEventContextUiError($"Open event log folder failed: {ex.Message}");
-        }
-
-        return Task.CompletedTask;
-    }
-
     private Task OpenLogFolderAsync()
     {
         try
@@ -9527,6 +9500,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task SetFileLoggingEnabledAsync(bool enabled, bool recordSettingChange)
     {
         var gateEntered = false;
+        Interlocked.Increment(ref _fileLoggingTransitionCount);
+        OnPropertyChanged(nameof(CanEditLogFileName));
         try
         {
             await _connectionLifecycleGate.WaitAsync();
@@ -9538,16 +9513,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            _currentLogSettings.FileLoggingEnabled = enabled;
-            if (recordSettingChange)
-            {
-                RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, enabled ? "ON" : "OFF");
-            }
-
-            NotifyFileLoggingStateChanged();
-
             if (enabled)
             {
+                if (!PrepareLogFileNameForNewRun())
+                {
+                    NotifyFileLoggingStateChanged();
+                    return;
+                }
+
                 var started = true;
                 if (IsConnected)
                 {
@@ -9556,15 +9529,25 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                 if (started)
                 {
-                    _eventDetector.SetEventLogWritingEnabled(IsConnected, LogSaveDirectory);
-                    ApplySessionFileNaming(requestNewFile: false);
+                    _currentLogSettings.FileLoggingEnabled = true;
+                    if (recordSettingChange)
+                    {
+                        RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, "ON");
+                    }
+
                     RecordLogToggleAction(IsConnected ? "Log saving ON." : "Log saving ON; files open when connected/log lines arrive.");
                     SetStatus("Log saving ON.");
                 }
             }
             else
             {
-                _eventDetector.SetEventLogWritingEnabled(false, LogSaveDirectory);
+                _currentLogSettings.FileLoggingEnabled = false;
+                if (recordSettingChange)
+                {
+                    RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, "OFF");
+                }
+
+                NotifyFileLoggingStateChanged();
                 await StopFileLoggingAsync(CancellationToken.None);
                 RecordLogToggleAction("Log saving OFF.");
                 SetStatus("Log saving OFF.");
@@ -9583,6 +9566,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 _connectionLifecycleGate.Release();
             }
+
+            Interlocked.Decrement(ref _fileLoggingTransitionCount);
+            OnPropertyChanged(nameof(CanEditLogFileName));
         }
     }
 
@@ -9665,21 +9651,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private Task OpenCurrentEventLogAsync()
-    {
-        OpenLogFile(CurrentEventLogPath, "event log");
-        return Task.CompletedTask;
-    }
-
     private Task CopySerialLogPathAsync()
     {
         CopyLogPath(CurrentSerialLogPath, "serial log");
-        return Task.CompletedTask;
-    }
-
-    private Task CopyEventLogPathAsync()
-    {
-        CopyLogPath(CurrentEventLogPath, "event log");
         return Task.CompletedTask;
     }
 
@@ -9724,19 +9698,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return File.Exists(CurrentSerialLogPath);
     }
 
-    private bool CanOpenCurrentEventLog()
-    {
-        return File.Exists(CurrentEventLogPath);
-    }
-
     private bool CanUseCurrentSerialLogPath()
     {
         return !string.IsNullOrWhiteSpace(CurrentSerialLogPath) && File.Exists(CurrentSerialLogPath);
-    }
-
-    private bool CanUseCurrentEventLogPath()
-    {
-        return !string.IsNullOrWhiteSpace(CurrentEventLogPath) && File.Exists(CurrentEventLogPath);
     }
 
     private void OpenLogFile(string path, string label)
@@ -9856,24 +9820,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            var sanitizedSessionName = SanitizedSessionName;
-            var isActive = _currentLogSettings.UseSessionNameInFileName && !string.IsNullOrWhiteSpace(sanitizedSessionName);
-            _fileLogWriter.UpdateSessionFileNaming(
-                sanitizedSessionName,
-                isActive,
-                _sessionStartedTime,
-                requestNewFile);
-            _eventDetector.UpdateSessionFileNaming(
-                sanitizedSessionName,
-                isActive,
-                _sessionStartedTime,
-                requestNewFile);
+            var logFileName = ActiveLogFileName;
+            var isActive = !string.IsNullOrWhiteSpace(logFileName);
+            _fileLogWriter.UpdateLogFileName(logFileName, requestNewFile);
 
             _lastSessionFileAction = isActive
-                ? $"Session log filename active: {sanitizedSessionName}"
-                : _currentLogSettings.UseSessionNameInFileName
-                    ? "Session log filename waiting for an active session."
-                    : "Session log filename disabled.";
+                ? $"Exact log file name active: {logFileName}"
+                : "Automatic timestamp log file name active.";
             _lastSessionFileNamingError = string.Empty;
             OnPropertyChanged(nameof(LastSessionFileAction));
             OnPropertyChanged(nameof(LastSessionFileNamingError));
@@ -9881,7 +9834,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            RecordSessionFileNamingError($"Session file naming failed: {ex.Message}");
+            RecordSessionFileNamingError($"Log file naming failed: {ex.Message}");
         }
     }
 
@@ -10429,7 +10382,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string FormatContextLogLine(LogLine line)
     {
         return ShowTimestampInLogView
-            ? line.Formatted
+            ? line.Format(_currentUiSettings.TimestampDisplayFormat)
             : $"{line.DirectionText} {line.Text}";
     }
 
@@ -10496,6 +10449,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         var serialSettings = CreateCurrentSettings();
         var logSettings = _currentLogSettings.Clone();
         logSettings.SaveDirectory = serialSettings.SaveDirectory;
+        logSettings.FileLoggingEnabled = false;
         var uiSettings = _currentUiSettings.Clone();
         uiSettings.AutoScrollEnabled = IsAutoScrollEnabled;
         uiSettings.EventAutoScrollEnabled = IsEventAutoScrollEnabled;
@@ -10520,13 +10474,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             ProfileSchemaVersion = ProfileSchemaVersion,
             Name = "Default",
-            CurrentSessionName = SessionName,
+            CurrentSessionName = LogFileName,
             SerialSettings = serialSettings,
             LastSuccessfulSerialSettings = _lastSuccessfulSerialSettings?.Clone(),
             LogSettings = logSettings,
             UiSettings = uiSettings,
             EventContextSettings = _currentEventContextSettings.Clone(),
-            BridgeSettings = _currentBridgeSettings.Clone(),
+            BridgeSettings = CreatePersistedBridgeSettings(),
             LogRules = LogRules.Select(CloneLogRule).ToList(),
             EventRules = EventRules.Select(CloneEventRule).ToList(),
             HighlightRules = HighlightRules.Select(CloneHighlightRule).ToList(),
@@ -10534,6 +10488,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             CommandHistory = Commands.GetHistorySnapshot().ToList(),
             CommandSequences = CommandSequences.Select(CloneCommandSequence).ToList()
         };
+    }
+
+    private BridgeSettings CreatePersistedBridgeSettings()
+    {
+        var settings = _currentBridgeSettings.Clone();
+        settings.Enabled = false;
+        return settings;
     }
 
     private void ApplyProfile(AppProfile profile)
@@ -10549,6 +10510,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 : _lastSuccessfulSerialSettings.PortName;
             _lastSuccessfulBaudRate = _lastSuccessfulSerialSettings?.BaudRate ?? 0;
             _currentLogSettings = profile.LogSettings.Clone();
+            _currentLogSettings.FileLoggingEnabled = false;
             _currentUiSettings = profile.UiSettings.Clone();
             _hexGroupTimeoutDraftText = _currentUiSettings.HexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
             _currentUiSettings.RxDisplayMode = NormalizeRxDisplayMode(_currentUiSettings.RxDisplayMode);
@@ -10559,7 +10521,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ClearPendingEventNotifications();
             _currentEventContextSettings = profile.EventContextSettings.Clone();
             _currentBridgeSettings = profile.BridgeSettings.Clone();
-            _sessionName = NormalizeSessionName(profile.CurrentSessionName);
+            _currentBridgeSettings.Enabled = false;
+            _sessionName = profile.CurrentSessionName ?? string.Empty;
             _currentSessionName = string.Empty;
             _sessionStartedTime = null;
 
@@ -10581,6 +10544,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             SetVisibleLogRebuildReason("profile timestamp display restore");
             Log.SetShowTimestampInLogView(_currentUiSettings.ShowTimestampInLogView);
+            Log.SetTimestampDisplayFormat(_currentUiSettings.TimestampDisplayFormat);
             SetVisibleLogRebuildReason("profile RX view restore");
             Log.SetRxDisplayMode(_currentUiSettings.RxDisplayMode);
             _logPipeline.ConfigureRxDisplay(
@@ -10634,10 +10598,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         OnPropertyChanged(nameof(ActiveHighlightRuleCount));
         OnPropertyChanged(nameof(SessionName));
+        OnPropertyChanged(nameof(LogFileName));
         OnPropertyChanged(nameof(CurrentSessionName));
         OnPropertyChanged(nameof(CurrentSessionDisplayText));
         OnPropertyChanged(nameof(SessionStartedTimeText));
-        OnPropertyChanged(nameof(SanitizedSessionName));
+        OnPropertyChanged(nameof(ActiveLogFileName));
         RefreshSettingsProperties();
         NotifyRuleEditorStateChanged();
         NotifyCommandEditorStateChanged();
@@ -10707,6 +10672,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(CanEditConnectionSettings));
         OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+        OnPropertyChanged(nameof(CanEditLogFileName));
         OnPropertyChanged(nameof(SelectedDataBits));
         OnPropertyChanged(nameof(SelectedParity));
         OnPropertyChanged(nameof(SelectedStopBits));
@@ -10734,18 +10700,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
         OnPropertyChanged(nameof(LogSaveDirectory));
-        OnPropertyChanged(nameof(DailyRotationEnabled));
         OnPropertyChanged(nameof(SizeRotationEnabled));
         OnPropertyChanged(nameof(SizeRotationBytesText));
-        OnPropertyChanged(nameof(RawBinaryLoggingEnabled));
-        OnPropertyChanged(nameof(UseSessionNameInFileName));
         OnPropertyChanged(nameof(SessionName));
+        OnPropertyChanged(nameof(LogFileName));
+        OnPropertyChanged(nameof(ConfiguredLogFileNameDisplayText));
         OnPropertyChanged(nameof(CurrentSessionDisplayText));
         OnPropertyChanged(nameof(SessionStartedTimeText));
         OnPropertyChanged(nameof(LastSessionAction));
         OnPropertyChanged(nameof(LastSessionError));
         OnPropertyChanged(nameof(SessionErrorCount));
-        OnPropertyChanged(nameof(SanitizedSessionName));
+        OnPropertyChanged(nameof(ActiveLogFileName));
         OnPropertyChanged(nameof(LastSessionFileAction));
         OnPropertyChanged(nameof(SessionFileNamingErrorCount));
         OnPropertyChanged(nameof(LastSessionFileNamingError));
@@ -10763,6 +10728,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ConfirmBeforeDisconnect));
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
         OnPropertyChanged(nameof(ShowTimestampInLogView));
+        OnPropertyChanged(nameof(SelectedTimestampDisplayFormatOption));
         if (includeBackgroundVisualSettings)
         {
             OnPropertyChanged(nameof(CuteBackgroundMode));
@@ -10817,7 +10783,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
-        OnPropertyChanged(nameof(CurrentEventLogPath));
         OnPropertyChanged(nameof(LastLogFileActionStatus));
         OnPropertyChanged(nameof(LogFileActionErrorCount));
         OnPropertyChanged(nameof(LastLogFileActionError));
@@ -11031,6 +10996,42 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private bool PrepareLogFileNameForNewRun()
+    {
+        if (!LogFileNamePolicy.TryValidate(LogFileName, out var logFileName, out var validationError))
+        {
+            RecordLogToggleError($"LOG ON failed: {validationError}");
+            SetStatus("LOG ON failed. Check the log file name.");
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(logFileName))
+        {
+            try
+            {
+                var path = Path.Combine(LogSaveDirectory, logFileName);
+                if (File.Exists(path))
+                {
+                    RecordLogToggleError($"LOG ON failed: log file already exists: {path}");
+                    SetStatus("LOG ON failed. Choose a new log file name.");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                RecordLogToggleError($"LOG ON failed: invalid log file path: {ex.Message}");
+                SetStatus("LOG ON failed. Check the log folder and file name.");
+                return false;
+            }
+        }
+
+        CurrentSessionName = logFileName;
+        _sessionStartedTime = DateTimeOffset.Now;
+        OnPropertyChanged(nameof(SessionStartedTimeText));
+        ApplySessionFileNaming(requestNewFile: false);
+        return true;
+    }
+
     private void OnPipelineStatusChanged(object? sender, EventArgs args)
     {
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
@@ -11051,9 +11052,29 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!_bridgeService.IsRunning)
         {
             _serialService.SetRawBridgePriorityEnabled(false);
+            RunOnUiThread(() =>
+            {
+                _currentBridgeSettings.Enabled = false;
+                NotifyBridgePropertiesChanged();
+            });
         }
 
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private void OnManualTxStateChanged(object? sender, ManualTxStateChangedEventArgs args)
+    {
+        RunOnUiThread(NotifyManualTxUiStateChanged);
+    }
+
+    private void NotifyManualTxUiStateChanged()
+    {
+        OnPropertyChanged(nameof(ManualTxState));
+        OnPropertyChanged(nameof(IsManualTxBusy));
+        OnPropertyChanged(nameof(CanSendManualTx));
+        OnPropertyChanged(nameof(ManualTxStateText));
+        SendCommand.NotifyCanExecuteChanged();
+        SendSavedCommandCommand.NotifyCanExecuteChanged();
     }
 
     private void OnRawBytesReceived(BridgeRxChunk chunk)
@@ -11343,19 +11364,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Interlocked.Exchange(ref _lastResourceSnapshotUtcTicks, now.UtcTicks);
         var saveDirectory = LogSaveDirectory;
         var serialLogPath = CurrentSerialLogPath;
-        var eventLogPath = CurrentEventLogPath;
-        _ = RefreshResourceSnapshotAsync(saveDirectory, serialLogPath, eventLogPath);
+        _ = RefreshResourceSnapshotAsync(saveDirectory, serialLogPath);
     }
 
     private async Task RefreshResourceSnapshotAsync(
         string saveDirectory,
-        string serialLogPath,
-        string eventLogPath)
+        string serialLogPath)
     {
         ResourceSnapshot snapshot;
         try
         {
-            snapshot = await Task.Run(() => CaptureResourceSnapshot(saveDirectory, serialLogPath, eventLogPath));
+            snapshot = await Task.Run(() => CaptureResourceSnapshot(saveDirectory, serialLogPath));
         }
         catch (Exception ex)
         {
@@ -11371,8 +11390,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private static ResourceSnapshot CaptureResourceSnapshot(
         string saveDirectory,
-        string serialLogPath,
-        string eventLogPath)
+        string serialLogPath)
     {
         long diskFreeBytes = 0;
         long diskTotalBytes = 0;
@@ -11396,16 +11414,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         long sessionLogSizeBytes = 0;
-        foreach (var path in new[] { serialLogPath, eventLogPath }
-                     .Where(path => !string.IsNullOrWhiteSpace(path))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(serialLogPath))
         {
             try
             {
-                var file = new FileInfo(path);
+                var file = new FileInfo(serialLogPath);
                 if (file.Exists)
                 {
-                    sessionLogSizeBytes += file.Length;
+                    sessionLogSizeBytes = file.Length;
                 }
             }
             catch (Exception ex)
@@ -11533,7 +11549,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return
             $"Health: {HealthStateText} | Last error: {lastErrorSummary}" + Environment.NewLine +
             $"Serial log: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}" + Environment.NewLine +
-            $"Event log: {(string.IsNullOrWhiteSpace(CurrentEventLogPath) ? "(not open)" : CurrentEventLogPath)}" + Environment.NewLine +
             $"Log Save: {(FileLoggingEnabled ? "ON" : "OFF")} | " +
             $"FileWriter: {(_fileLogWriter.IsRunning ? "running" : "stopped")} | " +
             $"EventDetector: {(_eventDetector.IsRunning ? "running" : "stopped")} | " +
@@ -11638,7 +11653,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         builder.AppendLine();
         builder.AppendLine("Serial Bridge");
-        builder.AppendLine($"  Requested enabled: {BridgeRequestedEnabled}");
+        builder.AppendLine($"  Explicit user-start active: {BridgeRequestedEnabled}");
         builder.AppendLine($"  Active: {IsBridgeActive}");
         builder.AppendLine($"  Route: {BridgeRouteText}");
         builder.AppendLine($"  Device to virtual bytes/chunks: {BridgeDeviceToVirtualByteCount:N0}/{BridgeDeviceToVirtualChunkCount:N0}");
@@ -11672,20 +11687,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine();
         builder.AppendLine("Log File Actions");
         builder.AppendLine($"  Current serial log path: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}");
-        builder.AppendLine($"  Current event log path: {(string.IsNullOrWhiteSpace(CurrentEventLogPath) ? "(not open)" : CurrentEventLogPath)}");
         builder.AppendLine($"  Last log file action status: {LastLogFileActionStatus}");
         builder.AppendLine($"  Log file action error count: {LogFileActionErrorCount:N0}");
         builder.AppendLine($"  Last log file action error: {(string.IsNullOrWhiteSpace(LastLogFileActionError) ? "(none)" : LastLogFileActionError)}");
-        builder.AppendLine($"  Current session name: {CurrentSessionDisplayText}");
-        builder.AppendLine($"  Session started time: {SessionStartedTimeText}");
-        builder.AppendLine($"  Sanitized session name: {(string.IsNullOrWhiteSpace(SanitizedSessionName) ? "(none)" : SanitizedSessionName)}");
-        builder.AppendLine($"  Use session in file name: {UseSessionNameInFileName}");
-        builder.AppendLine($"  Last session file action: {LastSessionFileAction}");
-        builder.AppendLine($"  Session file naming errors: {SessionFileNamingErrorCount:N0}");
-        builder.AppendLine($"  Last session file naming error: {(string.IsNullOrWhiteSpace(LastSessionFileNamingError) ? "(none)" : LastSessionFileNamingError)}");
-        builder.AppendLine($"  Last session action: {LastSessionAction}");
-        builder.AppendLine($"  Session errors: {SessionErrorCount:N0}");
-        builder.AppendLine($"  Last session error: {(string.IsNullOrWhiteSpace(LastSessionError) ? "(none)" : LastSessionError)}");
+        builder.AppendLine($"  Requested log file name: {(string.IsNullOrWhiteSpace(LogFileName) ? "(none)" : LogFileName)}");
+        builder.AppendLine($"  Active log file name: {CurrentSessionDisplayText}");
+        builder.AppendLine($"  Active exact log file name: {(string.IsNullOrWhiteSpace(ActiveLogFileName) ? "(none)" : ActiveLogFileName)}");
+        builder.AppendLine($"  Last log file naming action: {LastSessionFileAction}");
+        builder.AppendLine($"  Log file naming errors: {SessionFileNamingErrorCount:N0}");
+        builder.AppendLine($"  Last log file naming error: {(string.IsNullOrWhiteSpace(LastSessionFileNamingError) ? "(none)" : LastSessionFileNamingError)}");
         builder.AppendLine($"  Last save directory action: {LastSaveDirectoryAction}");
         builder.AppendLine($"  Save directory browse errors: {SaveDirectoryBrowseErrorCount:N0}");
         builder.AppendLine($"  Last save directory error: {(string.IsNullOrWhiteSpace(LastSaveDirectoryError) ? "(none)" : LastSaveDirectoryError)}");
@@ -11695,7 +11705,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  File logging enabled: {FileLoggingEnabled}");
         builder.AppendLine($"  File logging active: {FileLoggingActive}");
         builder.AppendLine($"  Current serial log path: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}");
-        builder.AppendLine($"  Current event log path: {(string.IsNullOrWhiteSpace(CurrentEventLogPath) ? "(not open)" : CurrentEventLogPath)}");
         builder.AppendLine($"  Last log toggle action: {LastLogToggleAction}");
         builder.AppendLine($"  Last log toggle time: {LastLogToggleTimeText}");
         builder.AppendLine($"  Log toggle errors: {LogToggleErrorCount:N0}");
@@ -11717,10 +11726,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile normalization count: {ProfileNormalizationCount:N0}");
         builder.AppendLine($"  Profile file logging enabled: {_currentLogSettings.FileLoggingEnabled}");
         builder.AppendLine($"  Profile log save directory: {_currentLogSettings.SaveDirectory}");
-        builder.AppendLine($"  Profile daily rotation enabled: {_currentLogSettings.DailyRotationEnabled}");
+        builder.AppendLine("  Daily serial log rotation: always enabled");
         builder.AppendLine($"  Profile size rotation enabled: {_currentLogSettings.SizeRotationEnabled}");
-        builder.AppendLine($"  Profile raw binary logging enabled: {_currentLogSettings.RawBinaryLoggingEnabled}");
-        builder.AppendLine($"  Profile use session name in file name: {_currentLogSettings.UseSessionNameInFileName}");
         builder.AppendLine($"  Profile last successful port: {LastSuccessfulPort}");
         builder.AppendLine($"  Profile last successful baud: {LastSuccessfulBaudRate:N0}");
         builder.AppendLine($"  Profile max visible log lines: {_currentUiSettings.MaxVisibleLogLines:N0}");
@@ -11729,6 +11736,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile auto-scroll enabled: {_currentUiSettings.AutoScrollEnabled}");
         builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
         builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
+        builder.AppendLine($"  Profile timestamp display format: {LogLine.GetTimestampFormatPattern(_currentUiSettings.TimestampDisplayFormat)}");
         builder.AppendLine($"  Profile apply rules to new logs only: {_currentUiSettings.ApplyRulesToNewLogsOnly}");
         builder.AppendLine($"  Profile RX display mode: {FormatRxDisplayModeName(_currentUiSettings.RxDisplayMode)}");
         builder.AppendLine($"  Profile HEX group timeout: {_currentUiSettings.HexGroupTimeoutMs:N0} ms");
@@ -12164,7 +12172,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine();
         builder.AppendLine("Event Detection");
         builder.AppendLine($"  Running: {_eventDetector.IsRunning}");
-        builder.AppendLine($"  Event log writing enabled: {_eventDetector.EventLogWritingEnabled}");
         builder.AppendLine($"  Event rule count: {_eventDetector.EventRuleCount:N0}");
         builder.AppendLine($"  Active event rule mode: {_eventDetector.ActiveRuleMode}");
         builder.AppendLine($"  Compiled event Terminal rule count: {_eventDetector.CompiledTerminalRuleCount:N0}");
@@ -12194,7 +12201,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Event selection lost count: {EventSelectionLostCount:N0}");
         builder.AppendLine($"  Event list scroll errors: {EventListScrollErrorCount:N0}");
         builder.AppendLine($"  Last event list scroll error: {(string.IsNullOrWhiteSpace(LastEventListScrollError) ? "(none)" : LastEventListScrollError)}");
-        builder.AppendLine($"  Event log written count: {_eventDetector.EventLogWrittenCount:N0}");
         builder.AppendLine($"  Event detector error count: {_eventDetector.ErrorCount:N0}");
         builder.AppendLine($"  Event context captures started: {_eventDetector.ContextCapturesStartedCount:N0}");
         builder.AppendLine($"  Event context captures completed: {_eventDetector.ContextCapturesCompletedCount:N0}");
@@ -12245,7 +12251,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
         builder.AppendLine($"  Last detected event: {_eventDetector.LastDetectedEventText ?? "(none)"}");
         builder.AppendLine($"  Last event detector error: {_eventDetector.LastError ?? "(none)"}");
-        builder.AppendLine($"  Current event log file path: {_eventDetector.CurrentEventLogFilePath ?? "(not open)"}");
         return builder.ToString();
     }
 
@@ -12433,32 +12438,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string GetLogFolderPath()
     {
-        var currentFilePath = _fileLogWriter.CurrentLogFilePath;
-        if (!string.IsNullOrWhiteSpace(currentFilePath))
-        {
-            var directory = Path.GetDirectoryName(currentFilePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                return directory;
-            }
-        }
-
-        return _fileLogWriter.LogDirectory;
-    }
-
-    private string GetEventLogFolderPath()
-    {
-        var currentEventFilePath = _eventDetector.CurrentEventLogFilePath;
-        if (!string.IsNullOrWhiteSpace(currentEventFilePath))
-        {
-            var directory = Path.GetDirectoryName(currentEventFilePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                return directory;
-            }
-        }
-
-        return GetLogFolderPath();
+        return LogSaveDirectory;
     }
 
     private void RunOnUiThread(Action action)
@@ -12524,9 +12504,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void NotifyLogFileActionCommandStates()
     {
         OpenCurrentSerialLogCommand.NotifyCanExecuteChanged();
-        OpenCurrentEventLogCommand.NotifyCanExecuteChanged();
         CopySerialLogPathCommand.NotifyCanExecuteChanged();
-        CopyEventLogPathCommand.NotifyCanExecuteChanged();
         ToggleFileLoggingCommand.NotifyCanExecuteChanged();
     }
 
@@ -12537,8 +12515,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(CanEditLogFileName));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
-        OnPropertyChanged(nameof(CurrentEventLogPath));
         SetFooter(CreateFooterStatus());
         RefreshLogFileActionProperties();
         NotifyLogFileActionCommandStates();

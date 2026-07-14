@@ -1964,6 +1964,12 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            if (string.Equals(messageType, "toggleAutoScroll", StringComparison.Ordinal))
+            {
+                _viewModel.IsAutoScrollEnabled = !_viewModel.IsAutoScrollEnabled;
+                return;
+            }
+
             if (string.Equals(messageType, "copySelection", StringComparison.Ordinal))
             {
                 if (!root.TryGetProperty("text", out var textElement))

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Threading.Channels;
@@ -34,6 +35,8 @@ public sealed class Com0ComBridgeIntegrationTests
         var blockedWriteEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseBlockedWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var bridge = new SerialBridgeService();
+        var manualStates = new ConcurrentQueue<ManualTxState>();
+        bridge.ManualTxStateChanged += (_, args) => manualStates.Enqueue(args.CurrentState);
         await bridge.StartAsync(
             new BridgeSettings
             {
@@ -88,6 +91,7 @@ public sealed class Com0ComBridgeIntegrationTests
                 return Task.CompletedTask;
             },
             timeout.Token);
+        Assert.Equal(ManualTxState.WaitingForBridgeIdle, manualStates.Last());
         await Task.Delay(10, timeout.Token);
         Assert.Equal(ManualTxState.WaitingForBridgeIdle, bridge.ManualTxState);
 
@@ -100,6 +104,14 @@ public sealed class Com0ComBridgeIntegrationTests
         Assert.Equal(ManualTransmitResult.Sent, await firstManual.WaitAsync(timeout.Token));
         Assert.Equal(1, Volatile.Read(ref manualSendCount));
         Assert.Equal(ManualTxState.Idle, bridge.ManualTxState);
+        Assert.Equal(
+            new[]
+            {
+                ManualTxState.WaitingForBridgeIdle,
+                ManualTxState.Sending,
+                ManualTxState.Idle
+            },
+            manualStates.ToArray());
         Assert.Equal(0, bridge.DroppedDeviceToVirtualByteCount);
         Assert.Equal(0, bridge.DroppedVirtualToDeviceByteCount);
 
@@ -116,9 +128,13 @@ public sealed class Com0ComBridgeIntegrationTests
                 return Task.CompletedTask;
             },
             timeout.Token);
+        await partner.WriteAsync(new byte[] { 0xF2 }, timeout.Token);
         await bridge.StopAsync(timeout.Token);
         Assert.Equal(ManualTransmitResult.Canceled, await canceledManual.WaitAsync(timeout.Token));
         Assert.Equal(0, Volatile.Read(ref canceledManualSendCount));
+        Assert.Equal(0, bridge.DroppedVirtualToDeviceChunkCount);
+        Assert.Equal(0, bridge.QueueOverflowCount);
+        Assert.Null(bridge.LastFaultReason);
     }
 
     [Fact]

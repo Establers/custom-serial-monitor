@@ -36,10 +36,17 @@ Released: 2026-07-14
   the same Busy state; command sequences are disabled while bridging.
 - Adds queue byte counts, oldest age, overflow reason, last activity, and manual
   arbitration diagnostics.
+- Publishes Manual TX state changes through a dedicated event so every command
+  entry point disables immediately during Waiting and Sending.
+- Separates normal bridge-stop read races from actual bounded-queue overflow;
+  only real capacity exhaustion changes drop/overflow/fault diagnostics.
+- Caps virtual-to-device HEX display records at 256 bytes and 50 ms. Event,
+  Highlight, and View filter rules now use the same record-local `RawBytes`
+  matching path, with no bridge-specific cross-record state.
 
 ## Validation
 
-- Passed 35 Core tests and 54 WinUI tests (89 total).
+- Passed 35 Core tests and 87 WinUI tests (122 total).
 - Passed COM4/COM5 com0com integration for bidirectional SHA-256 byte equality,
   manual TX arbitration/cancellation, and immediate bridge-only overflow fault.
 - Passed repeated HEX/Terminal rule-exclusivity and bridge lifecycle/timing tests.

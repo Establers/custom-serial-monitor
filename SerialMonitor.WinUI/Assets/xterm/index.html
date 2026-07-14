@@ -455,6 +455,27 @@
       return true;
     }
 
+    function postAutoScrollToggleShortcut(event, source) {
+      if (event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+          !window.chrome || !window.chrome.webview) {
+        return false;
+      }
+
+      const terminalElement = document.getElementById('terminal');
+      if (!terminalElement || !terminalElement.contains(event.target)) {
+        return false;
+      }
+
+      // Consume key-repeat events so holding Enter cannot rapidly flip the setting.
+      if (!event.repeat) {
+        window.chrome.webview.postMessage({ type: 'toggleAutoScroll', source });
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
     function postContextMenuAction(action) {
       if (!window.chrome || !window.chrome.webview) {
         return;
@@ -706,6 +727,10 @@
     });
 
     document.addEventListener('keydown', event => {
+      if (postAutoScrollToggleShortcut(event, 'xterm-keydown')) {
+        return;
+      }
+
       const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
         !event.altKey &&
         event.key.toLowerCase() === 'c';

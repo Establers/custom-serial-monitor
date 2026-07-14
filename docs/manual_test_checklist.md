@@ -7,6 +7,11 @@ real hardware when available.
 ## Startup
 
 - [ ] Start the app.
+- [ ] Confirm the bridge is `BRIDGE OFF` after startup, including when the saved
+  profile previously contained an enabled bridge and the device COM auto-connects.
+- [ ] Disconnect/reconnect the device and change a receive setting that triggers
+  an automatic reconnect; confirm the bridge stays OFF until `Start bridge` is
+  pressed explicitly.
 - [ ] Confirm the window opens without an unhandled exception.
 - [ ] Confirm the Port list includes one `MOCK` entry.
 - [ ] Confirm bottom health shows `HEALTH OK` or a clear non-stale warning.
@@ -67,6 +72,18 @@ real hardware when available.
   shows `TX waiting for bridge idle`; verify a second button/Enter/saved/history/
   shortcut request is rejected as Busy and the first payload is sent once after
   25 ms of global bridge idle.
+- [ ] Confirm Send, Enter, Quick command, saved shortcut, and history resend are
+  disabled immediately on the Waiting transition and remain disabled through
+  Sending, without waiting for the Diagnostics refresh timer.
+- [ ] Split one HEX rule pattern at every byte boundary across consecutive
+  writes on COM5 and confirm the TxOnly/Both rule fires once for each logical
+  idle group while the bytes reaching the device remain unchanged.
+- [ ] Send HEX continuously without a 25 ms idle gap and confirm display records
+  appear within 50 ms or 256 bytes, each `RawBytes` payload is at most 256 bytes,
+  and a pattern split across two display records does not match Event, Highlight,
+  or View filter rules.
+- [ ] Stop the bridge while a COM5 read is completing and confirm normal stop
+  does not increase virtual-to-device drop/overflow counters or set a fault.
 - [ ] Confirm command sequences cannot start while Bridge is ON.
 - [ ] Saturate the device-to-virtual queue and confirm the bridge alone stops
   with `Bridge stopped: virtual COM consumer too slow`, while the device COM and
@@ -148,16 +165,23 @@ real hardware when available.
 - [ ] Confirm markers are searchable.
 - [ ] Confirm markers appear in the serial log file.
 
-## Sessions
+## Log File Name And Runs
 
-- [ ] Open Settings > Log or Profile section containing session controls.
-- [ ] Set session name `inverter test`.
-- [ ] Confirm `MARK > Session start: inverter test` appears.
-- [ ] End the session if available.
-- [ ] Confirm `MARK > Session end: inverter test` appears.
-- [ ] Enable `Use session name in log file name`.
-- [ ] Set a new session.
-- [ ] Confirm current serial/event log paths include the sanitized session name.
+- [ ] Start the app and confirm the header shows red-orange `LOG OFF` even if the
+  previously saved profile had logging enabled.
+- [ ] Connect and confirm no serial log is written until `LOG ON` is pressed.
+- [ ] Enter log file name `inverter test.log` and confirm the adjacent `Current:` value shows
+  exactly `inverter test.log`.
+- [ ] Press `LOG ON` and confirm only `inverter test.log` is created, with no
+  date, time, `_serial`, or extra extension added.
+- [ ] Confirm the file-name field is disabled while LOG is ON and enabled again
+  after `LOG OFF`.
+- [ ] With `inverter test.log` still present, press `LOG ON` and confirm it is
+  refused rather than appended to or overwritten.
+- [ ] Clear the file name, press `LOG ON`, and confirm a new automatic
+  `yyyy-MM-dd_HHmmss_serial.log` file is created.
+- [ ] Confirm `LOG ON` is light green and `LOG OFF` is red-orange in both the
+  header and Settings.
 
 ## Event Detection And Context
 
@@ -170,7 +194,8 @@ real hardware when available.
 - [ ] Confirm BEFORE, MATCHED, and AFTER sections are visible.
 - [ ] Select context text and press Ctrl+C.
 - [ ] Click Copy Event Context and paste into Notepad.
-- [ ] Confirm event log file contains the full context block.
+- [ ] Confirm event detection/context works with Log Save OFF.
+- [ ] Confirm no `*_events.log` file is created.
 
 ## Event Auto And Latest
 
@@ -221,6 +246,9 @@ real hardware when available.
 - [ ] Confirm match count updates.
 - [ ] Click Next and Prev.
 - [ ] Confirm xterm jumps/selects matches.
+- [ ] Click the xterm log and press Enter; confirm Auto Scroll toggles once.
+- [ ] Hold Enter while xterm is focused; confirm key repeat does not toggle it repeatedly.
+- [ ] Focus the TX input and press Enter; confirm the command sends without toggling Auto Scroll.
 - [ ] Toggle Case and confirm behavior changes.
 - [ ] Confirm logs continue appending during search.
 
@@ -261,13 +289,12 @@ real hardware when available.
 
 - [ ] Connect to `MOCK`.
 - [ ] Wait until serial log file is created.
-- [ ] Generate an event so event log file is created.
+- [ ] Generate an event and confirm it remains available in Events/Context.
 - [ ] Open Settings > Log.
 - [ ] Open current serial log.
-- [ ] Open current event log.
 - [ ] Open logs folder.
 - [ ] Copy serial log path and paste into Notepad.
-- [ ] Copy event log path and paste into Notepad.
+- [ ] Confirm no event-log open/copy action is shown.
 - [ ] Confirm FileWriter remains running.
 - [ ] Confirm EventDetector remains running.
 

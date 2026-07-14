@@ -3,6 +3,13 @@ using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
 
+internal enum BridgeQueueEnqueueResult
+{
+    BridgeStopped,
+    Enqueued,
+    Overflow
+}
+
 public sealed class SerialBridgeService : ISerialBridgeService
 {
     private const string DeviceToVirtualOverflowMessage =
@@ -65,6 +72,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
     public event EventHandler<string>? Error;
 
     public event EventHandler? StatusChanged;
+
+    public event EventHandler<ManualTxStateChangedEventArgs>? ManualTxStateChanged;
 
     public bool IsRunning { get { lock (_stateGate) return _isRunning; } }
 
@@ -247,6 +256,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
     {
         ArgumentNullException.ThrowIfNull(transmitAsync);
         ManualRequest request;
+        ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
             if (!_isRunning)
@@ -261,9 +271,10 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
             request = new ManualRequest(transmitAsync, _clock.GetTimestamp());
             _pendingManual = request;
-            _manualTxState = ManualTxState.WaitingForBridgeIdle;
+            stateChange = SetManualTxStateLocked(ManualTxState.WaitingForBridgeIdle);
         }
 
+        RaiseManualTxStateChanged(stateChange);
         RaiseStatusChanged();
         SignalArbiter();
         using var registration = cancellationToken.Register(() => CancelWaitingManual(request));
@@ -297,20 +308,25 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 }
 
                 var chunk = buffer.AsSpan(0, bytesRead).ToArray();
-                var enqueued = false;
+                BridgeQueueEnqueueResult enqueueResult;
                 lock (_stateGate)
                 {
-                    if (_isRunning)
+                    enqueueResult = TryEnqueueVirtualToDevice(
+                        _isRunning,
+                        _virtualToDeviceQueue,
+                        chunk);
+                    if (enqueueResult == BridgeQueueEnqueueResult.Enqueued)
                     {
-                        enqueued = _virtualToDeviceQueue.TryEnqueue(chunk, chunk.Length);
-                        if (enqueued)
-                        {
-                            MarkBridgeActivityLocked();
-                        }
+                        MarkBridgeActivityLocked();
                     }
                 }
 
-                if (!enqueued)
+                if (enqueueResult == BridgeQueueEnqueueResult.BridgeStopped)
+                {
+                    return;
+                }
+
+                if (enqueueResult == BridgeQueueEnqueueResult.Overflow)
                 {
                     Interlocked.Increment(ref _droppedVirtualToDeviceChunkCount);
                     Interlocked.Add(ref _droppedVirtualToDeviceByteCount, chunk.Length);
@@ -414,6 +430,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
             {
                 byte[]? bridgeBytes = null;
                 ManualRequest? manual = null;
+                ManualTxStateChangedEventArgs? stateChange = null;
                 double waitMs = Timeout.Infinite;
                 lock (_stateGate)
                 {
@@ -431,7 +448,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                             !_virtualToDeviceWriteActive)
                         {
                             manual = _pendingManual;
-                            _manualTxState = ManualTxState.Sending;
+                            stateChange = SetManualTxStateLocked(ManualTxState.Sending);
                             _virtualToDeviceWriteActive = true;
                         }
                         else if (waitMs <= 0)
@@ -440,6 +457,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
                         }
                     }
                 }
+
+                RaiseManualTxStateChanged(stateChange);
 
                 if (bridgeBytes is not null)
                 {
@@ -486,6 +505,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     }
                     finally
                     {
+                        ManualTxStateChangedEventArgs? completedStateChange;
                         lock (_stateGate)
                         {
                             manual.Completion.TrySetResult(result);
@@ -494,10 +514,11 @@ public sealed class SerialBridgeService : ISerialBridgeService
                                 _pendingManual = null;
                             }
 
-                            _manualTxState = ManualTxState.Idle;
+                            completedStateChange = SetManualTxStateLocked(ManualTxState.Idle);
                             _virtualToDeviceWriteActive = false;
                         }
 
+                        RaiseManualTxStateChanged(completedStateChange);
                         SignalArbiter();
                         RaiseStatusChanged();
                     }
@@ -541,19 +562,21 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private void CancelWaitingManual(ManualRequest request)
     {
         var canceled = false;
+        ManualTxStateChangedEventArgs? stateChange = null;
         lock (_stateGate)
         {
             if (ReferenceEquals(_pendingManual, request) &&
                 _manualTxState == ManualTxState.WaitingForBridgeIdle)
             {
                 _pendingManual = null;
-                _manualTxState = ManualTxState.Idle;
+                stateChange = SetManualTxStateLocked(ManualTxState.Idle);
                 canceled = true;
             }
         }
 
         if (canceled)
         {
+            RaiseManualTxStateChanged(stateChange);
             request.Completion.TrySetResult(ManualTransmitResult.Canceled);
             SignalArbiter();
             RaiseStatusChanged();
@@ -565,6 +588,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         CancellationTokenSource? cancellation;
         SerialPortStream? virtualPort;
         ManualRequest? manual;
+        ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
             if (!_isRunning)
@@ -579,7 +603,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
             virtualPort = _virtualPort;
             manual = _pendingManual;
             _pendingManual = null;
-            _manualTxState = ManualTxState.Idle;
+            stateChange = SetManualTxStateLocked(ManualTxState.Idle);
         }
 
         Interlocked.Increment(ref _errorCount);
@@ -587,6 +611,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         _deviceToVirtualQueue.TryComplete();
         _virtualToDeviceQueue.TryComplete();
         manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
+        RaiseManualTxStateChanged(stateChange);
         Error?.Invoke(this, message);
         RaiseStatusChanged();
         _ = Task.Run(() => SafeCloseAndDispose(virtualPort));
@@ -600,6 +625,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         Task? writerTask;
         Task? deviceWriterTask;
         ManualRequest? manual;
+        ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
             cancellation = _cancellation;
@@ -614,7 +640,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
             _writerTask = null;
             _deviceWriterTask = null;
             _pendingManual = null;
-            _manualTxState = ManualTxState.Idle;
+            stateChange = SetManualTxStateLocked(ManualTxState.Idle);
             _isRunning = false;
         }
 
@@ -622,6 +648,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         _deviceToVirtualQueue.TryComplete();
         _virtualToDeviceQueue.TryComplete();
         manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
+        RaiseManualTxStateChanged(stateChange);
         SignalArbiter();
         SafeCloseAndDispose(virtualPort);
 
@@ -675,6 +702,52 @@ public sealed class SerialBridgeService : ISerialBridgeService
     }
 
     private void RaiseStatusChanged() => StatusChanged?.Invoke(this, EventArgs.Empty);
+
+    private ManualTxStateChangedEventArgs? SetManualTxStateLocked(ManualTxState state)
+    {
+        if (_manualTxState == state)
+        {
+            return null;
+        }
+
+        var previous = _manualTxState;
+        _manualTxState = state;
+        return new ManualTxStateChangedEventArgs(previous, state);
+    }
+
+    private void RaiseManualTxStateChanged(ManualTxStateChangedEventArgs? args)
+    {
+        if (args is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ManualTxStateChanged?.Invoke(this, args);
+        }
+        catch (Exception ex)
+        {
+            ReportError($"Manual TX state observer failed: {ex.Message}");
+        }
+    }
+
+    internal static BridgeQueueEnqueueResult TryEnqueueVirtualToDevice(
+        bool bridgeRunning,
+        BoundedByteQueue<byte[]> queue,
+        byte[] chunk)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        ArgumentNullException.ThrowIfNull(chunk);
+        if (!bridgeRunning)
+        {
+            return BridgeQueueEnqueueResult.BridgeStopped;
+        }
+
+        return queue.TryEnqueue(chunk, chunk.Length)
+            ? BridgeQueueEnqueueResult.Enqueued
+            : BridgeQueueEnqueueResult.Overflow;
+    }
 
     private static BoundedByteQueue<BridgeRxChunk> CreateDeviceQueue(int chunks, int bytes) => new(chunks, bytes);
     private static BoundedByteQueue<byte[]> CreateByteQueue(int chunks, int bytes) => new(chunks, bytes);

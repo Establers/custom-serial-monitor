@@ -30,8 +30,6 @@ public sealed class EventDetectorModeTests
                 }
             },
             new EventContextSettings(),
-            Path.GetTempPath(),
-            eventLogWritingEnabled: false,
             CancellationToken.None);
 
         detector.UpdateRuleMode(LogRuleMatchMode.Hex);

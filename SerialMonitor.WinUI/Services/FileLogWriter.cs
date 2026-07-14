@@ -28,9 +28,8 @@ public sealed class FileLogWriter : IFileLogWriter
     private long _lifecycleErrorCount;
     private long _maximumFileSizeBytes;
     private string _lastLifecycleAction = "File logging has not started.";
-    private string _sessionFileName = string.Empty;
-    private string _sessionFileTimeText = string.Empty;
-    private bool _useSessionNameInFileName;
+    private string _logFileName = string.Empty;
+    private string _logRunTimeText = string.Empty;
     private bool _rotationRequested;
     private bool _isRunning;
     private bool _disposed;
@@ -116,40 +115,31 @@ public sealed class FileLogWriter : IFileLogWriter
         set => Interlocked.Exchange(ref _maximumFileSizeBytes, Math.Max(0, value));
     }
 
-    public void UpdateSessionFileNaming(
-        string? sanitizedSessionName,
-        bool useSessionNameInFileName,
-        DateTimeOffset? sessionStartedAt,
-        bool requestNewFile)
+    public void UpdateLogFileName(string? exactLogFileName, bool requestNewFile)
     {
-        var normalizedSessionName = NormalizeSessionFileName(sanitizedSessionName);
-        var useSessionFileName = useSessionNameInFileName && !string.IsNullOrWhiteSpace(normalizedSessionName);
-        var sessionTimeText = useSessionFileName
-            ? (sessionStartedAt ?? DateTimeOffset.Now).LocalDateTime.ToString("HHmm")
-            : string.Empty;
-
-        var naming = new LogFileNamingSnapshot(useSessionFileName, normalizedSessionName, sessionTimeText);
+        var normalizedLogFileName = LogFileNamePolicy.Validate(exactLogFileName);
+        var naming = new LogFileNamingSnapshot(normalizedLogFileName);
         if (requestNewFile && IsRunning && _writerTask is not null)
         {
             if (_queue.Writer.TryWrite(FileLogWriteRequest.ForNaming(naming)))
             {
                 Interlocked.Increment(ref _pendingRequestCount);
-                SetLifecycleAction(useSessionFileName
-                    ? $"Session log filename active: {normalizedSessionName}"
-                    : "Session log filename disabled; regular filename will be used on next write.");
+                SetLifecycleAction(string.IsNullOrWhiteSpace(normalizedLogFileName)
+                    ? "Log file name cleared; creating a new timestamped log."
+                    : $"Log file name active: {normalizedLogFileName}");
                 return;
             }
         }
 
         lock (_stateGate)
         {
-            ApplySessionFileNamingState(naming);
+            ApplyLogFileNamingState(naming);
             if (requestNewFile && _isRunning)
             {
                 _rotationRequested = true;
-                _lastLifecycleAction = useSessionFileName
-                    ? $"Session log filename active: {normalizedSessionName}"
-                    : "Session log filename disabled; regular filename will be used on next write.";
+                _lastLifecycleAction = string.IsNullOrWhiteSpace(normalizedLogFileName)
+                    ? "Log file name cleared; creating a new timestamped log."
+                    : $"Log file name active: {normalizedLogFileName}";
             }
         }
 
@@ -178,18 +168,43 @@ public sealed class FileLogWriter : IFileLogWriter
 
             _directory = string.IsNullOrWhiteSpace(directory) ? CreateDefaultLogDirectory() : directory;
             Directory.CreateDirectory(_directory);
+            var naming = GetLogFileNamingSnapshot();
+            if (!string.IsNullOrWhiteSpace(naming.LogFileName))
+            {
+                var explicitPath = CreateLogFilePath(string.Empty, rotationIndex: 0, duplicateIndex: 0, naming);
+                if (File.Exists(explicitPath) || Directory.Exists(explicitPath))
+                {
+                    throw new IOException($"Log file already exists: {explicitPath}");
+                }
+            }
+
+            var openedAt = DateTimeOffset.Now;
+            lock (_stateGate)
+            {
+                _logRunTimeText = openedAt.LocalDateTime.ToString("HHmmss");
+            }
+            SetCurrentLogFilePath(null);
             _queue = CreateQueue();
             Volatile.Write(ref _pendingRequestCount, 0);
+            var openCompletion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!_queue.Writer.TryWrite(FileLogWriteRequest.ForOpen(openedAt, openCompletion)))
+            {
+                throw new InvalidOperationException("Could not queue the initial serial log file open request.");
+            }
+
+            Interlocked.Increment(ref _pendingRequestCount);
             _writerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Interlocked.Increment(ref _startCount);
             SetLifecycleAction($"Starting file logging: {_directory}", raiseStatusChanged: false);
             SetRunningState(isRunning: true, clearLastError: true);
             _writerTask = Task.Run(() => ProcessAsync(_writerCancellation.Token), CancellationToken.None);
+            await openCompletion.Task.WaitAsync(cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             RecordLifecycleError($"File logging start failed: {ex.Message}");
             ReportFileError($"File logging start failed: {ex.Message}");
+            await StopWriterAsync(CancellationToken.None);
             throw;
         }
         finally
@@ -316,7 +331,7 @@ public sealed class FileLogWriter : IFileLogWriter
                 Interlocked.Decrement(ref _pendingRequestCount);
                 if (request.Naming.HasValue)
                 {
-                    ApplySessionFileNamingState(request.Naming.Value);
+                    ApplyLogFileNamingState(request.Naming.Value);
                     await FlushAndDisposeAsync(writer);
                     writer = null;
                     currentDate = string.Empty;
@@ -326,6 +341,31 @@ public sealed class FileLogWriter : IFileLogWriter
                     writtenSinceFlush = 0;
                     lastFlush = DateTimeOffset.UtcNow;
                     RaiseStatusChanged();
+                    continue;
+                }
+
+                if (request.OpenedAt.HasValue)
+                {
+                    try
+                    {
+                        var openedDate = request.OpenedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
+                        var openNaming = GetLogFileNamingSnapshot();
+                        writer = CreateNewWriter(openedDate, rotationIndex: 0, openNaming, out var path);
+                        currentDate = openedDate;
+                        currentLogIdentity = CreateLogFileIdentity(openedDate, openNaming);
+                        currentSizeBytes = 0;
+                        rotationIndex = 0;
+                        writtenSinceFlush = 0;
+                        lastFlush = DateTimeOffset.UtcNow;
+                        SetCurrentLogFilePath(path);
+                        request.OpenCompletion?.TrySetResult(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        request.OpenCompletion?.TrySetException(ex);
+                        throw;
+                    }
+
                     continue;
                 }
 
@@ -339,9 +379,11 @@ public sealed class FileLogWriter : IFileLogWriter
                 var naming = GetLogFileNamingSnapshot();
                 var lineLogIdentity = CreateLogFileIdentity(lineDate, naming);
                 var rotationRequested = ConsumeRotationRequest();
+                var automaticDateChanged = string.IsNullOrWhiteSpace(naming.LogFileName) &&
+                    !string.Equals(currentDate, lineDate, StringComparison.Ordinal);
                 if (writer is null ||
                     rotationRequested ||
-                    !string.Equals(currentDate, lineDate, StringComparison.Ordinal) ||
+                    automaticDateChanged ||
                     !string.Equals(currentLogIdentity, lineLogIdentity, StringComparison.Ordinal))
                 {
                     await FlushAndDisposeAsync(writer);
@@ -350,9 +392,8 @@ public sealed class FileLogWriter : IFileLogWriter
                     currentDate = lineDate;
                     currentLogIdentity = lineLogIdentity;
                     rotationIndex = 0;
-                    var path = CreateLogFilePath(currentDate, rotationIndex, naming);
-                    writer = CreateWriter(path);
-                    currentSizeBytes = new FileInfo(path).Length;
+                    writer = CreateNewWriter(currentDate, rotationIndex, naming, out var path);
+                    currentSizeBytes = 0;
                     SetCurrentLogFilePath(path);
                     writtenSinceFlush = 0;
                     lastFlush = DateTimeOffset.UtcNow;
@@ -364,9 +405,8 @@ public sealed class FileLogWriter : IFileLogWriter
                 {
                     await FlushAndDisposeAsync(writer);
                     rotationIndex++;
-                    var path = CreateLogFilePath(currentDate, rotationIndex, GetLogFileNamingSnapshot());
-                    writer = CreateWriter(path);
-                    currentSizeBytes = new FileInfo(path).Length;
+                    writer = CreateNewWriter(currentDate, rotationIndex, GetLogFileNamingSnapshot(), out var path);
+                    currentSizeBytes = 0;
                     SetCurrentLogFilePath(path);
                     writtenSinceFlush = 0;
                     lastFlush = DateTimeOffset.UtcNow;
@@ -401,29 +441,74 @@ public sealed class FileLogWriter : IFileLogWriter
         {
             await FlushAndDisposeAsync(writer);
             Volatile.Write(ref _pendingRequestCount, 0);
+            SetCurrentLogFilePath(null);
             SetLifecycleAction("File writer task stopped.", raiseStatusChanged: false);
             SetRunningState(isRunning: false);
         }
     }
 
-    private string CreateLogFilePath(string dateText, int rotationIndex, LogFileNamingSnapshot naming)
+    private StreamWriter CreateNewWriter(
+        string dateText,
+        int rotationIndex,
+        LogFileNamingSnapshot naming,
+        out string path)
     {
-        var baseName = naming.UseSessionNameInFileName
-            ? $"{dateText}_{naming.SessionFileTimeText}_{naming.SessionFileName}_serial"
-            : $"{dateText}_serial";
+        if (!string.IsNullOrWhiteSpace(naming.LogFileName))
+        {
+            path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex: 0, naming);
+            return CreateWriter(path, FileMode.CreateNew);
+        }
 
-        var fileName = rotationIndex == 0
-            ? $"{baseName}.log"
-            : $"{baseName}_{rotationIndex:D3}.log";
+        for (var duplicateIndex = 0; duplicateIndex < 10_000; duplicateIndex++)
+        {
+            path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex, naming);
+            try
+            {
+                return CreateWriter(path, FileMode.CreateNew);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+            }
+        }
 
+        throw new IOException("Could not create a unique timestamped serial log file.");
+    }
+
+    private string CreateLogFilePath(
+        string dateText,
+        int rotationIndex,
+        int duplicateIndex,
+        LogFileNamingSnapshot naming)
+    {
+        if (!string.IsNullOrWhiteSpace(naming.LogFileName))
+        {
+            if (rotationIndex == 0)
+            {
+                return Path.Combine(_directory, naming.LogFileName);
+            }
+
+            var extension = Path.GetExtension(naming.LogFileName);
+            var stem = Path.GetFileNameWithoutExtension(naming.LogFileName);
+            return Path.Combine(_directory, $"{stem}_{rotationIndex:D3}{extension}");
+        }
+
+        string runTimeText;
+        lock (_stateGate)
+        {
+            runTimeText = _logRunTimeText;
+        }
+
+        var rotationPart = rotationIndex == 0 ? string.Empty : $"_{rotationIndex:D3}";
+        var duplicatePart = duplicateIndex == 0 ? string.Empty : $"_dup{duplicateIndex:D3}";
+        var fileName = $"{dateText}_{runTimeText}_serial{rotationPart}{duplicatePart}.log";
         return Path.Combine(_directory, fileName);
     }
 
     private static string CreateLogFileIdentity(string dateText, LogFileNamingSnapshot naming)
     {
-        return naming.UseSessionNameInFileName
-            ? $"{dateText}_{naming.SessionFileTimeText}_{naming.SessionFileName}"
-            : dateText;
+        return string.IsNullOrWhiteSpace(naming.LogFileName)
+            ? $"automatic|{dateText}"
+            : $"explicit|{naming.LogFileName}";
     }
 
     private LogFileNamingSnapshot GetLogFileNamingSnapshot()
@@ -431,9 +516,7 @@ public sealed class FileLogWriter : IFileLogWriter
         lock (_stateGate)
         {
             return new LogFileNamingSnapshot(
-                _useSessionNameInFileName,
-                _sessionFileName,
-                _sessionFileTimeText);
+                _logFileName);
         }
     }
 
@@ -451,59 +534,19 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
-    private static string NormalizeSessionFileName(string? sessionName)
-    {
-        if (string.IsNullOrWhiteSpace(sessionName))
-        {
-            return string.Empty;
-        }
-
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(sessionName.Trim().Length);
-        var previousWasSpace = false;
-        foreach (var character in sessionName.Trim())
-        {
-            if (char.IsWhiteSpace(character))
-            {
-                if (!previousWasSpace)
-                {
-                    builder.Append(' ');
-                    previousWasSpace = true;
-                }
-
-                continue;
-            }
-
-            previousWasSpace = false;
-            if (char.IsLetterOrDigit(character) ||
-                character == '_' ||
-                character == '-')
-            {
-                builder.Append(character);
-                continue;
-            }
-
-            builder.Append(invalidFileNameChars.Contains(character) || char.IsControl(character) ? '_' : character);
-        }
-
-        return builder.ToString().Trim();
-    }
-
-    private void ApplySessionFileNamingState(LogFileNamingSnapshot naming)
+    private void ApplyLogFileNamingState(LogFileNamingSnapshot naming)
     {
         lock (_stateGate)
         {
-            _sessionFileName = naming.SessionFileName;
-            _sessionFileTimeText = naming.SessionFileTimeText;
-            _useSessionNameInFileName = naming.UseSessionNameInFileName;
+            _logFileName = naming.LogFileName;
         }
     }
 
-    private static StreamWriter CreateWriter(string path)
+    private static StreamWriter CreateWriter(string path, FileMode fileMode)
     {
         var stream = new FileStream(
             path,
-            FileMode.Append,
+            fileMode,
             FileAccess.Write,
             FileShare.Read,
             bufferSize: 64 * 1024,
@@ -539,7 +582,7 @@ public sealed class FileLogWriter : IFileLogWriter
         RaiseStatusChanged();
     }
 
-    private void SetCurrentLogFilePath(string path)
+    private void SetCurrentLogFilePath(string? path)
     {
         lock (_stateGate)
         {
@@ -627,15 +670,20 @@ public sealed class FileLogWriter : IFileLogWriter
         });
     }
 
-    private readonly record struct LogFileNamingSnapshot(
-        bool UseSessionNameInFileName,
-        string SessionFileName,
-        string SessionFileTimeText);
+    private readonly record struct LogFileNamingSnapshot(string LogFileName);
 
-    private readonly record struct FileLogWriteRequest(LogLine? Line, LogFileNamingSnapshot? Naming)
+    private readonly record struct FileLogWriteRequest(
+        LogLine? Line,
+        LogFileNamingSnapshot? Naming,
+        DateTimeOffset? OpenedAt,
+        TaskCompletionSource<string>? OpenCompletion)
     {
-        public static FileLogWriteRequest ForLine(LogLine line) => new(line, null);
+        public static FileLogWriteRequest ForLine(LogLine line) => new(line, null, null, null);
 
-        public static FileLogWriteRequest ForNaming(LogFileNamingSnapshot naming) => new(null, naming);
+        public static FileLogWriteRequest ForNaming(LogFileNamingSnapshot naming) => new(null, naming, null, null);
+
+        public static FileLogWriteRequest ForOpen(
+            DateTimeOffset openedAt,
+            TaskCompletionSource<string> completion) => new(null, null, openedAt, completion);
     }
 }

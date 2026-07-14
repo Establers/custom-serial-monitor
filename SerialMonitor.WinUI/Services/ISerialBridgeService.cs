@@ -8,6 +8,8 @@ public interface ISerialBridgeService : IAsyncDisposable
 
     event EventHandler? StatusChanged;
 
+    event EventHandler<ManualTxStateChangedEventArgs>? ManualTxStateChanged;
+
     bool IsRunning { get; }
 
     string VirtualPortName { get; }

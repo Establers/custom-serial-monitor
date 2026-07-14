@@ -5,6 +5,16 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class LogRuleMatcherModeTests
 {
+    [Fact]
+    public void HexPattern_Over256Bytes_IsAccepted()
+    {
+        var keyword = string.Join(' ', Enumerable.Repeat("AA", 257));
+
+        Assert.True(LogRuleMatcher.TryParseHexPattern(keyword, out var bytes, out var error));
+        Assert.Equal(257, bytes.Length);
+        Assert.Empty(error);
+    }
+
     private static readonly byte[] ErrorBytes = "ERROR"u8.ToArray();
 
     [Fact]

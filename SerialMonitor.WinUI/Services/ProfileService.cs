@@ -419,7 +419,9 @@ public sealed class ProfileService : IProfileService
             profile.ProfileSchemaVersion = CurrentProfileSchemaVersion;
         }
 
-        profile.CurrentSessionName = NormalizeSessionName(profile.CurrentSessionName);
+        profile.CurrentSessionName = string.IsNullOrWhiteSpace(profile.CurrentSessionName)
+            ? string.Empty
+            : profile.CurrentSessionName;
 
         if (profile.SerialSettings is null)
         {
@@ -466,6 +468,12 @@ public sealed class ProfileService : IProfileService
         else
         {
             profile.BridgeSettings.VirtualPortName = profile.BridgeSettings.VirtualPortName?.Trim() ?? string.Empty;
+            if (profile.BridgeSettings.Enabled)
+            {
+                profile.BridgeSettings.Enabled = false;
+                warnings.Add("Bridge start state is never restored from a profile; bridge remains off until explicitly started.");
+            }
+
             profile.BridgeSettings.MaxQueuedChunks = Math.Clamp(
                 profile.BridgeSettings.MaxQueuedChunks,
                 1,
@@ -787,6 +795,12 @@ public sealed class ProfileService : IProfileService
         {
             settings.HexGroupTimeoutMs = defaults.HexGroupTimeoutMs;
             warnings.Add("HEX group timeout was invalid.");
+        }
+
+        if (!Enum.IsDefined(settings.TimestampDisplayFormat))
+        {
+            settings.TimestampDisplayFormat = defaults.TimestampDisplayFormat;
+            warnings.Add("Timestamp display format was invalid.");
         }
 
         settings.LastSearchText = settings.LastSearchText?.Trim() ?? string.Empty;
@@ -1386,13 +1400,4 @@ public sealed class ProfileService : IProfileService
         }
     }
 
-    private static string NormalizeSessionName(string? sessionName)
-    {
-        if (string.IsNullOrWhiteSpace(sessionName))
-        {
-            return string.Empty;
-        }
-
-        return sessionName.Trim();
-    }
 }

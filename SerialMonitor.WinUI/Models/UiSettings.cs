@@ -7,6 +7,14 @@ public enum MockGeneratorPattern
     NoNewlineZzzBurst
 }
 
+public enum TimestampDisplayFormat
+{
+    DateTimeMilliseconds,
+    DateTimeSeconds,
+    TimeMilliseconds,
+    TimeSeconds
+}
+
 public sealed class UiSettings
 {
     public int MaxVisibleLogLines { get; set; } = 50_000;
@@ -22,6 +30,8 @@ public sealed class UiSettings
     public bool ConfirmBeforeDisconnect { get; set; } = true;
 
     public bool ShowTimestampInLogView { get; set; } = true;
+
+    public TimestampDisplayFormat TimestampDisplayFormat { get; set; } = TimestampDisplayFormat.DateTimeMilliseconds;
 
     public bool ApplyRulesToNewLogsOnly { get; set; } = true;
 
@@ -68,6 +78,7 @@ public sealed class UiSettings
             XtermScrollbackSize = XtermScrollbackSize,
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
             ShowTimestampInLogView = ShowTimestampInLogView,
+            TimestampDisplayFormat = TimestampDisplayFormat,
             ApplyRulesToNewLogsOnly = ApplyRulesToNewLogsOnly,
             RxDisplayMode = RxDisplayMode,
             HexGroupTimeoutMs = HexGroupTimeoutMs,

@@ -38,10 +38,10 @@ the xterm view only; persisted logs remain plain text.
   writes, and serial counters. It never touches UI controls or files.
 - `LogPipeline` owns line framing, partial-line state, decoding, timestamps, and
   parser diagnostics. It publishes parsed lines through a bounded channel.
-- `FileLogWriter` owns buffered asynchronous writes, rotation, session naming,
+- `FileLogWriter` owns buffered asynchronous writes, rotation, file naming,
   flush, and file-write counters behind a bounded queue.
 - `EventDetector` owns rule evaluation, before/after context capture, bounded
-  pending captures, and asynchronous event-log persistence.
+  pending captures, and UI event notifications. It does not persist an event log.
 - `SerialBridgeService` owns the optional second COM port and forwards raw byte
   chunks in both directions through queues bounded by both chunk and byte count.
   Physical RX uses only a non-blocking offer; overflow faults and stops the
@@ -77,6 +77,14 @@ the xterm view only; persisted logs remain plain text.
 - Manual TX during a bridge uses a single pending slot. Existing bridge traffic
   has priority, both directions must be idle for the configured guard interval,
   and a payload that has started cannot be interleaved with bridge bytes.
+- Manual TX state changes have a dedicated low-frequency event. Waiting,
+  Sending, and terminal Idle transitions are dispatched to command UI
+  immediately without forwarding high-frequency bridge counters to the UI.
+- Virtual-to-device HEX display logs flush at 256 bytes, 25 ms idle, or 50 ms
+  maximum latency, whichever applies first. Event, highlight, and view-filter
+  rules all evaluate the same individual `LogLine.RawBytes`; patterns split
+  across display records do not match. Raw transport queues and timing are
+  independent of this processing.
 - Virtual-to-device completion never waits for UI rendering. Its optional TX
   log input and output enter bounded queues before the existing bounded UI-only
   queue; saturation is counted and may omit file/event/UI records while raw
@@ -91,7 +99,7 @@ the xterm view only; persisted logs remain plain text.
 ## Persistence
 
 - Default profile: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
-- Serial/event logs: `%LOCALAPPDATA%\SerialMonitor\logs`
+- Serial logs: `%LOCALAPPDATA%\SerialMonitor\logs`
 - Runtime diagnostics: `%LOCALAPPDATA%\SerialMonitor\diagnostics`
 
 Profile writes use a temporary file and replacement/backup flow. Generated

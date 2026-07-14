@@ -68,7 +68,21 @@ public sealed class LogLine
     };
 
     public string Formatted =>
-        $"[{Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}] {DirectionText} {DisplayText}";
+        $"[{FormatTimestamp(TimestampDisplayFormat.DateTimeMilliseconds)}] {DirectionText} {DisplayText}";
+
+    public string Format(TimestampDisplayFormat timestampFormat) =>
+        $"[{FormatTimestamp(timestampFormat)}] {DirectionText} {DisplayText}";
+
+    public string FormatTimestamp(TimestampDisplayFormat timestampFormat) =>
+        Timestamp.LocalDateTime.ToString(GetTimestampFormatPattern(timestampFormat), CultureInfo.InvariantCulture);
+
+    public static string GetTimestampFormatPattern(TimestampDisplayFormat timestampFormat) => timestampFormat switch
+    {
+        TimestampDisplayFormat.DateTimeSeconds => "yyyy-MM-dd HH:mm:ss",
+        TimestampDisplayFormat.TimeMilliseconds => "HH:mm:ss.fff",
+        TimestampDisplayFormat.TimeSeconds => "HH:mm:ss",
+        _ => "yyyy-MM-dd HH:mm:ss.fff"
+    };
 
     public static LogLine Rx(
         string text,

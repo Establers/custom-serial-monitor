@@ -143,27 +143,18 @@ public static class LogRuleMatcher
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(rule);
 
-        error = null;
         var source = rule.Rule;
-        if (!source.Enabled ||
-            string.IsNullOrWhiteSpace(source.Keyword) ||
-            activeMode != source.Mode ||
-            !IsDirectionMatch(line.Direction, source.MatchDirection))
-        {
-            return false;
-        }
-
-        if (rule.CompileError is not null)
-        {
-            return false;
-        }
-
-        if (source.Mode == LogRuleMatchMode.Hex)
-        {
-            return rule.HexPattern is not null && ContainsBytes(line.RawBytes, rule.HexPattern);
-        }
-
-        return line.Text.Contains(source.Keyword, rule.TextComparison);
+        return IsCompiledMatch(
+            line,
+            source.Enabled,
+            source.Keyword,
+            source.Mode,
+            IsDirectionMatch(line.Direction, source.MatchDirection),
+            rule.HexPattern,
+            rule.CompileError,
+            rule.TextComparison,
+            activeMode,
+            out error);
     }
 
     public static bool IsMatch(
@@ -196,27 +187,18 @@ public static class LogRuleMatcher
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(rule);
 
-        error = null;
         var source = rule.Rule;
-        if (!source.Enabled ||
-            string.IsNullOrWhiteSpace(source.Keyword) ||
-            activeMode != source.Mode ||
-            !IsDirectionMatch(line.Direction, source.MatchDirection))
-        {
-            return false;
-        }
-
-        if (rule.CompileError is not null)
-        {
-            return false;
-        }
-
-        if (source.Mode == LogRuleMatchMode.Hex)
-        {
-            return rule.HexPattern is not null && ContainsBytes(line.RawBytes, rule.HexPattern);
-        }
-
-        return line.Text.Contains(source.Keyword, rule.TextComparison);
+        return IsCompiledMatch(
+            line,
+            source.Enabled,
+            source.Keyword,
+            source.Mode,
+            IsDirectionMatch(line.Direction, source.MatchDirection),
+            rule.HexPattern,
+            rule.CompileError,
+            rule.TextComparison,
+            activeMode,
+            out error);
     }
 
     public static bool TryParseHexPattern(string? keyword, out byte[] bytes, out string error)
@@ -304,13 +286,40 @@ public static class LogRuleMatcher
         return line.Text.Contains(keyword, comparison);
     }
 
+    private static bool IsCompiledMatch(
+        LogLine line,
+        bool enabled,
+        string keyword,
+        LogRuleMatchMode ruleMode,
+        bool directionMatches,
+        byte[]? hexPattern,
+        string? compileError,
+        StringComparison textComparison,
+        LogRuleMatchMode activeMode,
+        out string? error)
+    {
+        error = null;
+        if (!enabled ||
+            string.IsNullOrWhiteSpace(keyword) ||
+            activeMode != ruleMode ||
+            !directionMatches ||
+            compileError is not null)
+        {
+            return false;
+        }
+
+        return ruleMode == LogRuleMatchMode.Hex
+            ? hexPattern is not null && ContainsBytes(line.RawBytes, hexPattern)
+            : line.Text.Contains(keyword, textComparison);
+    }
+
     private static bool IsDirectionMatch(LogDirection direction, HighlightMatchDirection matchDirection)
     {
         return matchDirection switch
         {
             HighlightMatchDirection.RxOnly => direction == LogDirection.Rx,
             HighlightMatchDirection.TxOnly => direction == LogDirection.Tx,
-            _ => true
+            _ => direction is LogDirection.Rx or LogDirection.Tx
         };
     }
 

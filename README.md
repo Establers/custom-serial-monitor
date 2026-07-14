@@ -16,15 +16,15 @@ marketing-style UI.
 - Manual TX command sending with configurable line endings.
 - Saved TX commands with add/edit/delete, quick-send buttons, and shortcuts.
 - Command sequences for repeatable RTOS test workflows.
-- User markers and session start/end markers inserted into the log timeline.
-- Optional session names in new serial/event log filenames.
+- User markers inserted into the log timeline.
+- Optional log file names added to timestamped serial log filenames.
 - Configurable event detection rules.
 - Event context capture with before/matched/after lines.
 - Native selectable event context viewer with horizontal and vertical scrolling.
 - Configurable xterm highlight rules.
 - Visible-buffer search with Next/Prev and xterm jump/selection.
 - Search Results inspector tab with manual refresh by default.
-- Asynchronous plain-text serial and event file logging.
+- Asynchronous plain-text serial file logging with daily and optional size rotation.
 - JSON profile save/load/reset.
 - MOCK port and opt-in mock stress mode with sequence-loss counters.
 - Compact health summary and copyable diagnostics.
@@ -85,12 +85,13 @@ profiles under `%LOCALAPPDATA%\SerialMonitor`. See
 - Real serial ports use `RJCP.SerialPortStream`.
 - The `MOCK` port can be used without hardware for UI, logging, event, search,
   sequence, and stress testing.
-- File and event logs are plain text. Visual xterm coloring does not write ANSI
-  escape codes to saved logs.
+- Serial logs are plain text. Visual xterm coloring does not write ANSI escape
+  codes to saved logs. Detected events and their context stay in the bounded UI
+  event/context views; no separate event log file is created.
 
 ## Default File Locations
 
-- Serial/event logs:
+- Serial logs:
   `%LOCALAPPDATA%\SerialMonitor\logs`
 - Default profile:
   `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
@@ -106,6 +107,7 @@ profiles under `%LOCALAPPDATA%\SerialMonitor`. See
 - Optional installer deployment: `docs/installer_deployment.md`
 - Architecture: `docs/architecture.md`
 - Requirements: `docs/requirements.md`
+- Logging behavior: `docs/logging.md`
 - Historical UI/UX audit: `SerialMonitor.WinUI/docs/ui_ux_audit.md`
 - Draft release notes: `docs/release_notes_draft.md`
 
