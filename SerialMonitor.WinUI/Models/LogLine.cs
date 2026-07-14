@@ -20,7 +20,8 @@ public sealed class LogLine
         long? sequenceNumber = null,
         bool isPartialRxSegment = false,
         bool isPartialRxTerminator = false,
-        string? displayText = null)
+        string? displayText = null,
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Text)
     {
         Timestamp = timestamp;
         Direction = direction;
@@ -30,6 +31,7 @@ public sealed class LogLine
         SequenceNumber = sequenceNumber;
         IsPartialRxSegment = isPartialRxSegment;
         IsPartialRxTerminator = isPartialRxTerminator;
+        ContentMode = contentMode;
     }
 
     public DateTimeOffset Timestamp { get; }
@@ -53,6 +55,10 @@ public sealed class LogLine
 
     public bool IsPartialRxTerminator { get; }
 
+    // Rules are deliberately mode-exclusive: HEX content accepts only HEX
+    // rules, and terminal/text content accepts only Text rules.
+    public LogRuleMatchMode ContentMode { get; }
+
     public string DirectionText => Direction switch
     {
         LogDirection.Tx => "TX >",
@@ -69,7 +75,8 @@ public sealed class LogLine
         byte[]? rawBytes = null,
         long? sequenceNumber = null,
         bool isPartialRxSegment = false,
-        string? displayText = null) =>
+        string? displayText = null,
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Text) =>
         new(
             DateTimeOffset.Now,
             LogDirection.Rx,
@@ -77,13 +84,18 @@ public sealed class LogLine
             rawBytes,
             sequenceNumber,
             isPartialRxSegment: isPartialRxSegment,
-            displayText: displayText);
+            displayText: displayText,
+            contentMode: contentMode);
 
     public static LogLine RxPartialTerminator(long? sequenceNumber = null) =>
         new(DateTimeOffset.Now, LogDirection.Rx, string.Empty, null, sequenceNumber, isPartialRxTerminator: true);
 
-    public static LogLine Tx(string text, byte[]? rawBytes = null, long? sequenceNumber = null) =>
-        new(DateTimeOffset.Now, LogDirection.Tx, text, rawBytes, sequenceNumber);
+    public static LogLine Tx(
+        string text,
+        byte[]? rawBytes = null,
+        long? sequenceNumber = null,
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Text) =>
+        new(DateTimeOffset.Now, LogDirection.Tx, text, rawBytes, sequenceNumber, contentMode: contentMode);
 
     public static LogLine Mark(string text) => new(DateTimeOffset.Now, LogDirection.Mark, text);
 

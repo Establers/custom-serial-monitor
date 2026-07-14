@@ -121,6 +121,7 @@ public static class LogRuleMatcher
         error = null;
         if (!rule.Enabled ||
             string.IsNullOrWhiteSpace(rule.Keyword) ||
+            line.ContentMode != rule.MatchMode ||
             !IsDirectionMatch(line.Direction, rule.MatchDirection))
         {
             return false;
@@ -138,6 +139,7 @@ public static class LogRuleMatcher
         var source = rule.Rule;
         if (!source.Enabled ||
             string.IsNullOrWhiteSpace(source.Keyword) ||
+            line.ContentMode != source.MatchMode ||
             !IsDirectionMatch(line.Direction, source.MatchDirection))
         {
             return false;
@@ -164,6 +166,7 @@ public static class LogRuleMatcher
         error = null;
         if (!rule.Enabled ||
             string.IsNullOrWhiteSpace(rule.Keyword) ||
+            line.ContentMode != rule.MatchMode ||
             !IsDirectionMatch(line.Direction, rule.MatchDirection))
         {
             return false;
@@ -181,6 +184,7 @@ public static class LogRuleMatcher
         var source = rule.Rule;
         if (!source.Enabled ||
             string.IsNullOrWhiteSpace(source.Keyword) ||
+            line.ContentMode != source.MatchMode ||
             !IsDirectionMatch(line.Direction, source.MatchDirection))
         {
             return false;

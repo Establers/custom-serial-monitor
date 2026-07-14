@@ -564,7 +564,8 @@ public sealed class LogPipeline : ILogPipeline
                 bytes,
                 sequenceNumber,
                 isPartialRxSegment: true,
-                displayText: hexDisplay.Text),
+                displayText: hexDisplay.Text,
+                contentMode: LogRuleMatchMode.Hex),
             cancellationToken);
         Interlocked.Add(ref _hexEmittedByteCount, bytes.Length);
         AddParsedLine();

@@ -1432,7 +1432,7 @@
                                                         <TextBlock Grid.Column="6"
                                                                    Text="{Binding MatchMode, Converter={StaticResource DisplayModeNameConverter}}"
                                                                    Style="{StaticResource RuleCellTextStyle}"
-                                                                   ToolTipService.ToolTip="Text matches decoded text. HEX matches raw bytes." />
+                                                                   ToolTipService.ToolTip="Rules are mode-exclusive: Text rules apply only to Terminal logs, while HEX rules apply only to HEX logs and match raw bytes." />
                                                         <TextBlock Grid.Column="7"
                                                                    Text="{Binding MatchDirection}"
                                                                    Style="{StaticResource RuleCellTextStyle}" />

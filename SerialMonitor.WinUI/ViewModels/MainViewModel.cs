@@ -5222,7 +5222,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         await _serialService.SendBytesAsync(bytes, "[BRIDGE RAW]", cancellationToken);
 
-        var txLine = LogLine.Tx($"[BRIDGE] {FormatBridgeBytePreview(bytes)}", bytes);
+        var txLine = LogLine.Tx(
+            $"[BRIDGE] {FormatBridgeBytePreview(bytes)}",
+            bytes,
+            contentMode: LogRuleMatchMode.Hex);
         if (FileLoggingEnabled)
         {
             _fileLogWriter.TryEnqueue(txLine);
@@ -6566,7 +6569,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     break;
             }
 
-            var txLine = LogLine.Tx(txDisplayText, txRawBytes);
+            var txLine = LogLine.Tx(
+                txDisplayText,
+                txRawBytes,
+                contentMode: sendMode == TxSendMode.Hex
+                    ? LogRuleMatchMode.Hex
+                    : LogRuleMatchMode.Text);
             if (FileLoggingEnabled)
             {
                 _fileLogWriter.TryEnqueue(txLine);
