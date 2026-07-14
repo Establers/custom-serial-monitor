@@ -15,7 +15,7 @@ public sealed class LogViewModelModeSwitchTests
             {
                 Enabled = true,
                 Keyword = "45 52 52 4F 52",
-                MatchMode = LogRuleMatchMode.Hex,
+                Mode = LogRuleMatchMode.Hex,
                 ForegroundColor = "Red"
             }
         });
@@ -24,7 +24,7 @@ public sealed class LogViewModelModeSwitchTests
             LogLine.Rx(
                 "ERROR",
                 "ERROR"u8.ToArray(),
-                contentMode: LogRuleMatchMode.Text)
+                contentMode: LogRuleMatchMode.Terminal)
         });
 
         Assert.DoesNotContain("\u001b[31m", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
@@ -34,5 +34,31 @@ public sealed class LogViewModelModeSwitchTests
         var hexSnapshot = viewModel.GetVisibleTextSnapshot();
         Assert.Contains("45 52 52 4F 52", hexSnapshot, StringComparison.Ordinal);
         Assert.Contains("\u001b[31m", hexSnapshot, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TxLine_AlsoUsesCurrentAppModeForHighlightRules()
+    {
+        var viewModel = new LogViewModel(capacity: 100);
+        viewModel.SetHighlightRules(new[]
+        {
+            new HighlightRule
+            {
+                Enabled = true,
+                Keyword = "ERROR",
+                Mode = LogRuleMatchMode.Terminal,
+                ForegroundColor = "Red"
+            }
+        });
+        viewModel.AddRange(new[]
+        {
+            LogLine.Tx("ERROR", "ERROR"u8.ToArray(), contentMode: LogRuleMatchMode.Terminal)
+        });
+
+        Assert.Contains("\u001b[31m", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+
+        viewModel.SetRxDisplayMode(RxDisplayMode.Hex);
+
+        Assert.DoesNotContain("\u001b[31m", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
     }
 }

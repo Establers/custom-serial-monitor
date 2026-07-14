@@ -35,8 +35,8 @@ dotnet test SerialMonitor.WinUI.Tests\SerialMonitor.WinUI.Tests.csproj -c Releas
   from being treated as proven idle;
 - HEX text remains an exact byte representation even if the saved terminal
   character encoding is UTF-8, CP949, or ASCII;
-- HEX log lines accept only HEX event/highlight/filter rules; decoded text is
-  retained internally but Text rules are deliberately skipped;
+- while the app is in HEX mode, only HEX event/highlight/filter rules are active;
+  decoded text is retained internally but Terminal rules are deliberately skipped;
 - bounded bridge queues apply backpressure and preserve order instead of
   dropping writes when temporarily full.
 

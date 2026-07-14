@@ -41,6 +41,15 @@ This file tracks current intentional limits and validation gaps.
   extreme overload, parser/file/event/UI records may be incomplete and the
   bridge-priority parser-drop counters must be checked. With Bridge OFF, the
   original awaited RX pipeline is used unchanged.
+- Virtual-to-device Terminal bridge logs group adjacent read chunks until a
+  short idle boundary so split multibyte characters and keywords remain intact.
+  Bridge log queue/drop/decode counters are reported separately; these logging
+  conditions never change the forwarded bytes.
+- Device-to-virtual idle gaps are replayed best-effort from monotonic receive
+  timestamps. Windows scheduling and virtual COM buffering do not guarantee
+  sub-millisecond timing; Diagnostics reports delivery delay and lateness.
+- Queue overflow intentionally faults the bridge instead of continuing with a
+  silently incomplete byte stream. It does not disconnect the physical device.
 - com0com or another virtual-port driver must be installed and configured
   separately. The application does not install or manage kernel drivers.
 
@@ -70,6 +79,9 @@ This file tracks current intentional limits and validation gaps.
 ## Event Processing
 
 - Event detection is keyword/rule based.
+- Rule `Mode` is exclusive: an enabled Terminal rule is inactive in HEX mode,
+  and an enabled HEX rule is inactive in Terminal mode. Terminal rules match
+  decoded text; HEX rules match raw bytes.
 - Event context capture is line based.
 - MARK/session lines can appear in context, but they are not RX data and should
   not create events.
@@ -77,5 +89,7 @@ This file tracks current intentional limits and validation gaps.
 ## Profiles
 
 - Profile loading normalizes invalid or missing fields to safe defaults.
+- Profiles using the former `MatchMode: Text/Hex` fields are migrated when read;
+  newly saved profiles use `Mode: Terminal/Hex`.
 - Older profiles should load gracefully, but newly added settings may use
   defaults until saved again.

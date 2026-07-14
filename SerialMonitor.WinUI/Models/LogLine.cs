@@ -21,7 +21,7 @@ public sealed class LogLine
         bool isPartialRxSegment = false,
         bool isPartialRxTerminator = false,
         string? displayText = null,
-        LogRuleMatchMode contentMode = LogRuleMatchMode.Text)
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal)
     {
         Timestamp = timestamp;
         Direction = direction;
@@ -40,7 +40,7 @@ public sealed class LogLine
 
     public string Text { get; }
 
-    // Text remains the decoded payload used by text rules and searches.
+    // Text remains the decoded payload used by Terminal rules and searches.
     // DisplayText is the presentation captured when the line was created
     // (for example, byte-exact HEX while the RX view is in HEX mode).
     public string DisplayText { get; }
@@ -55,8 +55,8 @@ public sealed class LogLine
 
     public bool IsPartialRxTerminator { get; }
 
-    // Rules are deliberately mode-exclusive: HEX content accepts only HEX
-    // rules, and terminal/text content accepts only Text rules.
+    // Captures the mode used when this line was created. Rule activation is
+    // based on the app's current mode, not this historical value.
     public LogRuleMatchMode ContentMode { get; }
 
     public string DirectionText => Direction switch
@@ -76,7 +76,7 @@ public sealed class LogLine
         long? sequenceNumber = null,
         bool isPartialRxSegment = false,
         string? displayText = null,
-        LogRuleMatchMode contentMode = LogRuleMatchMode.Text) =>
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal) =>
         new(
             DateTimeOffset.Now,
             LogDirection.Rx,
@@ -94,7 +94,7 @@ public sealed class LogLine
         string text,
         byte[]? rawBytes = null,
         long? sequenceNumber = null,
-        LogRuleMatchMode contentMode = LogRuleMatchMode.Text) =>
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal) =>
         new(DateTimeOffset.Now, LogDirection.Tx, text, rawBytes, sequenceNumber, contentMode: contentMode);
 
     public static LogLine Mark(string text) => new(DateTimeOffset.Now, LogDirection.Mark, text);

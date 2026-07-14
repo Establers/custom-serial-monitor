@@ -221,7 +221,7 @@ public sealed class LogPipelineHexFramingTests
     }
 
     [Fact]
-    public async Task HexDisplay_SkipsTextRuleEvenThoughDecodedTextIsRetained()
+    public async Task HexMode_SkipsTerminalRuleEvenThoughDecodedTextIsRetained()
     {
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var input = Channel.CreateUnbounded<ReceivedByteChunk>();
@@ -243,22 +243,22 @@ public sealed class LogPipelineHexFramingTests
         Assert.Equal(LogRuleMatchMode.Hex, line.ContentMode);
         Assert.Contains("45 52 52 4F 52", line.Formatted);
 
-        var textRule = new EventRule
+        var terminalRule = new EventRule
         {
             Enabled = true,
             Keyword = "ERROR",
-            MatchMode = LogRuleMatchMode.Text
+            Mode = LogRuleMatchMode.Terminal
         };
-        Assert.False(LogRuleMatcher.IsMatch(line, textRule, out var error));
+        Assert.False(LogRuleMatcher.IsMatch(line, terminalRule, LogRuleMatchMode.Hex, out var error));
         Assert.Null(error);
 
         var hexRule = new EventRule
         {
             Enabled = true,
             Keyword = "45 52 52 4F 52",
-            MatchMode = LogRuleMatchMode.Hex
+            Mode = LogRuleMatchMode.Hex
         };
-        Assert.True(LogRuleMatcher.IsMatch(line, hexRule, out error));
+        Assert.True(LogRuleMatcher.IsMatch(line, hexRule, LogRuleMatchMode.Hex, out error));
         Assert.Null(error);
 
         input.Writer.TryComplete();

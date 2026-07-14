@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SerialMonitor.WinUI.Models;
 
 public enum EventMatchDirection
@@ -17,7 +19,17 @@ public sealed class EventRule
 
     public bool CaseSensitive { get; set; }
 
-    public LogRuleMatchMode MatchMode { get; set; } = LogRuleMatchMode.Text;
+    public LogRuleMatchMode Mode { get; set; } = LogRuleMatchMode.Terminal;
+
+    [JsonPropertyName("MatchMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyMatchMode
+    {
+        get => null;
+        set => Mode = string.Equals(value, "Hex", StringComparison.OrdinalIgnoreCase)
+            ? LogRuleMatchMode.Hex
+            : LogRuleMatchMode.Terminal;
+    }
 
     public EventMatchDirection MatchDirection { get; set; } = EventMatchDirection.RxOnly;
 

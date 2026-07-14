@@ -466,6 +466,18 @@ public sealed class ProfileService : IProfileService
         else
         {
             profile.BridgeSettings.VirtualPortName = profile.BridgeSettings.VirtualPortName?.Trim() ?? string.Empty;
+            profile.BridgeSettings.MaxQueuedChunks = Math.Clamp(
+                profile.BridgeSettings.MaxQueuedChunks,
+                1,
+                65_536);
+            profile.BridgeSettings.MaxQueuedBytes = Math.Clamp(
+                profile.BridgeSettings.MaxQueuedBytes,
+                64 * 1024,
+                256 * 1024 * 1024);
+            profile.BridgeSettings.ManualTxIdleGuardMs = Math.Clamp(
+                profile.BridgeSettings.ManualTxIdleGuardMs,
+                0,
+                10_000);
             if (string.Equals(
                     profile.BridgeSettings.VirtualPortName,
                     profile.SerialSettings.PortName,
@@ -1020,9 +1032,9 @@ public sealed class ProfileService : IProfileService
                 warnings.Add("An event match direction was invalid.");
             }
 
-            if (!Enum.IsDefined(rule.MatchMode))
+            if (!Enum.IsDefined(rule.Mode))
             {
-                rule.MatchMode = LogRuleMatchMode.Text;
+                rule.Mode = LogRuleMatchMode.Terminal;
                 warnings.Add("An event rule match mode was invalid.");
             }
 
@@ -1059,9 +1071,9 @@ public sealed class ProfileService : IProfileService
                 warnings.Add("A highlight match direction was invalid.");
             }
 
-            if (!Enum.IsDefined(rule.MatchMode))
+            if (!Enum.IsDefined(rule.Mode))
             {
-                rule.MatchMode = LogRuleMatchMode.Text;
+                rule.Mode = LogRuleMatchMode.Terminal;
                 warnings.Add("A highlight rule match mode was invalid.");
             }
         }
@@ -1092,9 +1104,9 @@ public sealed class ProfileService : IProfileService
                 warnings.Add("A log rule match direction was invalid.");
             }
 
-            if (!Enum.IsDefined(rule.MatchMode))
+            if (!Enum.IsDefined(rule.Mode))
             {
-                rule.MatchMode = LogRuleMatchMode.Text;
+                rule.Mode = LogRuleMatchMode.Terminal;
                 warnings.Add("A log rule match mode was invalid.");
             }
 
@@ -1199,7 +1211,7 @@ public sealed class ProfileService : IProfileService
                 UseForHighlight = false,
                 UseAsViewFilter = false,
                 CaseSensitive = eventRule.CaseSensitive,
-                MatchMode = eventRule.MatchMode,
+                Mode = eventRule.Mode,
                 MatchDirection = ConvertDirection(eventRule.MatchDirection),
                 ForegroundColor = string.IsNullOrWhiteSpace(eventRule.HighlightColor) ? "Default" : eventRule.HighlightColor.Trim(),
                 TrayNotificationEnabled = eventRule.TrayNotificationEnabled,
@@ -1229,7 +1241,7 @@ public sealed class ProfileService : IProfileService
                     UseForHighlight = true,
                     UseAsViewFilter = highlightRule.UseAsViewFilter,
                     CaseSensitive = highlightRule.CaseSensitive,
-                    MatchMode = highlightRule.MatchMode,
+                    Mode = highlightRule.Mode,
                     MatchDirection = highlightRule.MatchDirection,
                     ForegroundColor = string.IsNullOrWhiteSpace(highlightRule.ForegroundColor) ? "Default" : highlightRule.ForegroundColor.Trim(),
                     BackgroundColor = string.IsNullOrWhiteSpace(highlightRule.BackgroundColor) ? null : highlightRule.BackgroundColor.Trim(),
@@ -1258,7 +1270,7 @@ public sealed class ProfileService : IProfileService
         return string.Equals(rule.Name?.Trim(), highlightRule.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
             string.Equals(rule.Keyword?.Trim(), highlightRule.Keyword?.Trim(), StringComparison.OrdinalIgnoreCase) &&
             rule.CaseSensitive == highlightRule.CaseSensitive &&
-            rule.MatchMode == highlightRule.MatchMode &&
+            rule.Mode == highlightRule.Mode &&
             rule.Enabled == highlightRule.Enabled;
     }
 
@@ -1272,7 +1284,7 @@ public sealed class ProfileService : IProfileService
                 Keyword = rule.Keyword,
                 Enabled = rule.Enabled,
                 CaseSensitive = rule.CaseSensitive,
-                MatchMode = rule.MatchMode,
+                Mode = rule.Mode,
                 MatchDirection = ConvertDirection(rule.MatchDirection),
                 HighlightColor = rule.ForegroundColor,
                 TrayNotificationEnabled = rule.TrayNotificationEnabled,
@@ -1293,7 +1305,7 @@ public sealed class ProfileService : IProfileService
                 Keyword = rule.Keyword,
                 Enabled = rule.Enabled,
                 CaseSensitive = rule.CaseSensitive,
-                MatchMode = rule.MatchMode,
+                Mode = rule.Mode,
                 UseAsViewFilter = rule.UseAsViewFilter,
                 ForegroundColor = rule.ForegroundColor,
                 BackgroundColor = rule.BackgroundColor,

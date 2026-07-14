@@ -20,26 +20,29 @@ Released: 2026-07-14
   context files no longer contain replacement characters for binary payloads.
 - Keeps HEX event/context/file output in spaced uppercase byte form such as
   `45 52 52 4F 52`.
-- Enforces mode-exclusive rules: HEX RX/TX/bridge lines accept only HEX event,
-  highlight, and filter rules; Terminal lines accept only Text rules.
+- Enforces mode-exclusive rules: while the app is in HEX mode only HEX event,
+  highlight, and filter rules are active; Terminal mode activates only Terminal rules.
 - Applies the same mode policy to both direct and precompiled rule paths.
 
 ## Raw COM bridge
 
-- Replaces full-queue `TryWrite` drops with bounded asynchronous backpressure
-  in both bridge directions.
-- Cancels a blocked bridge enqueue with the bridge lifetime and treats an
-  intentional stop as normal completion rather than `Raw RX observer failed`.
-- Derives pending counts from the channel itself, eliminating the shutdown
-  reset/decrement race that could show a negative pending value.
-- Does not count cancellation caused by intentional bridge shutdown as a
-  transport error or data drop.
+- Physical RX now offers timing-aware chunks to the bridge without awaiting.
+  Chunk or byte-budget overflow faults only the bridge and reports the slow
+  consumer instead of silently continuing with missing bytes.
+- Replays device-to-virtual receive gaps best-effort, including a minimum native
+  idle boundary, and exposes delay/lateness diagnostics.
+- Adds a bridge-owned physical TX scheduler with bridge priority, a 25 ms global
+  idle guard, and exactly one pending manual TX slot. All manual entry paths use
+  the same Busy state; command sequences are disabled while bridging.
+- Adds queue byte counts, oldest age, overflow reason, last activity, and manual
+  arbitration diagnostics.
 
 ## Validation
 
-- Passed 35 Core tests and 34 WinUI tests (69 total).
-- Passed repeated HEX/Text rule-exclusivity and bridge lifecycle/backpressure
-  test runs.
+- Passed 35 Core tests and 54 WinUI tests (89 total).
+- Passed COM4/COM5 com0com integration for bidirectional SHA-256 byte equality,
+  manual TX arbitration/cancellation, and immediate bridge-only overflow fault.
+- Passed repeated HEX/Terminal rule-exclusivity and bridge lifecycle/timing tests.
 - Release build completed with zero warnings and zero errors.
 - `git diff --check` completed successfully.
 

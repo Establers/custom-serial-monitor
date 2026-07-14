@@ -8,7 +8,7 @@ public sealed class LogRuleMatcherModeTests
     private static readonly byte[] ErrorBytes = "ERROR"u8.ToArray();
 
     [Fact]
-    public void HexContent_AcceptsOnlyHexEventAndHighlightRules()
+    public void HexMode_AcceptsOnlyHexEventAndHighlightRules()
     {
         var line = LogLine.Rx(
             "ERROR",
@@ -16,30 +16,30 @@ public sealed class LogRuleMatcherModeTests
             displayText: "45 52 52 4F 52",
             contentMode: LogRuleMatchMode.Hex);
 
-        Assert.False(LogRuleMatcher.IsMatch(line, TextEventRule(), out var eventError));
+        Assert.False(LogRuleMatcher.IsMatch(line, TerminalEventRule(), LogRuleMatchMode.Hex, out var eventError));
         Assert.Null(eventError);
-        Assert.True(LogRuleMatcher.IsMatch(line, HexEventRule(), out eventError));
+        Assert.True(LogRuleMatcher.IsMatch(line, HexEventRule(), LogRuleMatchMode.Hex, out eventError));
         Assert.Null(eventError);
 
-        Assert.False(LogRuleMatcher.IsMatch(line, TextHighlightRule(), out var highlightError));
+        Assert.False(LogRuleMatcher.IsMatch(line, TerminalHighlightRule(), LogRuleMatchMode.Hex, out var highlightError));
         Assert.Null(highlightError);
-        Assert.True(LogRuleMatcher.IsMatch(line, HexHighlightRule(), out highlightError));
+        Assert.True(LogRuleMatcher.IsMatch(line, HexHighlightRule(), LogRuleMatchMode.Hex, out highlightError));
         Assert.Null(highlightError);
     }
 
     [Fact]
-    public void TextContent_AcceptsOnlyTextEventAndHighlightRules()
+    public void TerminalMode_AcceptsOnlyTerminalEventAndHighlightRules()
     {
-        var line = LogLine.Rx("ERROR", ErrorBytes, contentMode: LogRuleMatchMode.Text);
+        var line = LogLine.Rx("ERROR", ErrorBytes, contentMode: LogRuleMatchMode.Terminal);
 
-        Assert.True(LogRuleMatcher.IsMatch(line, TextEventRule(), out var eventError));
+        Assert.True(LogRuleMatcher.IsMatch(line, TerminalEventRule(), LogRuleMatchMode.Terminal, out var eventError));
         Assert.Null(eventError);
-        Assert.False(LogRuleMatcher.IsMatch(line, HexEventRule(), out eventError));
+        Assert.False(LogRuleMatcher.IsMatch(line, HexEventRule(), LogRuleMatchMode.Terminal, out eventError));
         Assert.Null(eventError);
 
-        Assert.True(LogRuleMatcher.IsMatch(line, TextHighlightRule(), out var highlightError));
+        Assert.True(LogRuleMatcher.IsMatch(line, TerminalHighlightRule(), LogRuleMatchMode.Terminal, out var highlightError));
         Assert.Null(highlightError);
-        Assert.False(LogRuleMatcher.IsMatch(line, HexHighlightRule(), out highlightError));
+        Assert.False(LogRuleMatcher.IsMatch(line, HexHighlightRule(), LogRuleMatchMode.Terminal, out highlightError));
         Assert.Null(highlightError);
     }
 
@@ -51,21 +51,21 @@ public sealed class LogRuleMatcherModeTests
             ErrorBytes,
             displayText: "45 52 52 4F 52",
             contentMode: LogRuleMatchMode.Hex);
-        var textLine = LogLine.Rx("ERROR", ErrorBytes, contentMode: LogRuleMatchMode.Text);
-        var textEvent = LogRuleMatcher.Compile(TextEventRule());
+        var terminalLine = LogLine.Rx("ERROR", ErrorBytes, contentMode: LogRuleMatchMode.Terminal);
+        var terminalEvent = LogRuleMatcher.Compile(TerminalEventRule());
         var hexEvent = LogRuleMatcher.Compile(HexEventRule());
-        var textHighlight = LogRuleMatcher.Compile(TextHighlightRule());
+        var terminalHighlight = LogRuleMatcher.Compile(TerminalHighlightRule());
         var hexHighlight = LogRuleMatcher.Compile(HexHighlightRule());
 
-        Assert.False(LogRuleMatcher.IsMatch(hexLine, textEvent, out _));
-        Assert.True(LogRuleMatcher.IsMatch(hexLine, hexEvent, out _));
-        Assert.False(LogRuleMatcher.IsMatch(hexLine, textHighlight, out _));
-        Assert.True(LogRuleMatcher.IsMatch(hexLine, hexHighlight, out _));
+        Assert.False(LogRuleMatcher.IsMatch(hexLine, terminalEvent, LogRuleMatchMode.Hex, out _));
+        Assert.True(LogRuleMatcher.IsMatch(hexLine, hexEvent, LogRuleMatchMode.Hex, out _));
+        Assert.False(LogRuleMatcher.IsMatch(hexLine, terminalHighlight, LogRuleMatchMode.Hex, out _));
+        Assert.True(LogRuleMatcher.IsMatch(hexLine, hexHighlight, LogRuleMatchMode.Hex, out _));
 
-        Assert.True(LogRuleMatcher.IsMatch(textLine, textEvent, out _));
-        Assert.False(LogRuleMatcher.IsMatch(textLine, hexEvent, out _));
-        Assert.True(LogRuleMatcher.IsMatch(textLine, textHighlight, out _));
-        Assert.False(LogRuleMatcher.IsMatch(textLine, hexHighlight, out _));
+        Assert.True(LogRuleMatcher.IsMatch(terminalLine, terminalEvent, LogRuleMatchMode.Terminal, out _));
+        Assert.False(LogRuleMatcher.IsMatch(terminalLine, hexEvent, LogRuleMatchMode.Terminal, out _));
+        Assert.True(LogRuleMatcher.IsMatch(terminalLine, terminalHighlight, LogRuleMatchMode.Terminal, out _));
+        Assert.False(LogRuleMatcher.IsMatch(terminalLine, hexHighlight, LogRuleMatchMode.Terminal, out _));
     }
 
     [Fact]
@@ -74,10 +74,14 @@ public sealed class LogRuleMatcherModeTests
         var retainedTerminalLine = LogLine.Rx(
             "ERROR",
             ErrorBytes,
-            contentMode: LogRuleMatchMode.Text);
+            contentMode: LogRuleMatchMode.Terminal);
         var hexHighlight = LogRuleMatcher.Compile(HexHighlightRule());
 
-        Assert.False(LogRuleMatcher.IsMatch(retainedTerminalLine, hexHighlight, out _));
+        Assert.False(LogRuleMatcher.IsMatch(
+            retainedTerminalLine,
+            hexHighlight,
+            LogRuleMatchMode.Terminal,
+            out _));
         Assert.True(LogRuleMatcher.IsMatch(
             retainedTerminalLine,
             hexHighlight,
@@ -86,31 +90,54 @@ public sealed class LogRuleMatcherModeTests
         Assert.Null(error);
     }
 
-    private static EventRule TextEventRule() => new()
+    [Fact]
+    public void CompiledEventRule_UsesCurrentModeInsteadOfLineArrivalMode()
+    {
+        var lineCreatedInTerminalMode = LogLine.Rx(
+            "ERROR",
+            ErrorBytes,
+            contentMode: LogRuleMatchMode.Terminal);
+        var terminalEvent = LogRuleMatcher.Compile(TerminalEventRule());
+        var hexEvent = LogRuleMatcher.Compile(HexEventRule());
+
+        Assert.False(LogRuleMatcher.IsMatch(
+            lineCreatedInTerminalMode,
+            terminalEvent,
+            LogRuleMatchMode.Hex,
+            out _));
+        Assert.True(LogRuleMatcher.IsMatch(
+            lineCreatedInTerminalMode,
+            hexEvent,
+            LogRuleMatchMode.Hex,
+            out var error));
+        Assert.Null(error);
+    }
+
+    private static EventRule TerminalEventRule() => new()
     {
         Enabled = true,
         Keyword = "ERROR",
-        MatchMode = LogRuleMatchMode.Text
+        Mode = LogRuleMatchMode.Terminal
     };
 
     private static EventRule HexEventRule() => new()
     {
         Enabled = true,
         Keyword = "45 52 52 4F 52",
-        MatchMode = LogRuleMatchMode.Hex
+        Mode = LogRuleMatchMode.Hex
     };
 
-    private static HighlightRule TextHighlightRule() => new()
+    private static HighlightRule TerminalHighlightRule() => new()
     {
         Enabled = true,
         Keyword = "ERROR",
-        MatchMode = LogRuleMatchMode.Text
+        Mode = LogRuleMatchMode.Terminal
     };
 
     private static HighlightRule HexHighlightRule() => new()
     {
         Enabled = true,
         Keyword = "45 52 52 4F 52",
-        MatchMode = LogRuleMatchMode.Hex
+        Mode = LogRuleMatchMode.Hex
     };
 }

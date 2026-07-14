@@ -45,7 +45,7 @@ public sealed class SerialService : ISerialService
 
     public event EventHandler? StatusChanged;
 
-    public event Func<byte[], CancellationToken, ValueTask>? RawBytesReceived;
+    public event Action<BridgeRxChunk>? RawBytesReceived;
 
     public bool IsConnected => ConnectionState == SerialConnectionState.Connected;
 
@@ -727,7 +727,11 @@ public sealed class SerialService : ISerialService
         var bytes = receivedChunk.Bytes;
         if (IsRawBridgePriorityEnabled)
         {
-            await PublishRawBytesReceivedAsync(bytes, cancellationToken);
+            PublishRawBytesReceived(new BridgeRxChunk(
+                bytes,
+                receivedChunk.ReceivedTimestamp,
+                receivedChunk.EndsAtNativeIdleBoundary,
+                AppliedReceiveIdleTimeoutMs));
             if (!_receivedBytes.Writer.TryWrite(receivedChunk))
             {
                 Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
@@ -746,7 +750,7 @@ public sealed class SerialService : ISerialService
         }
     }
 
-    private async ValueTask PublishRawBytesReceivedAsync(byte[] bytes, CancellationToken cancellationToken)
+    private void PublishRawBytesReceived(BridgeRxChunk chunk)
     {
         var handlers = RawBytesReceived;
         if (handlers is null)
@@ -754,15 +758,11 @@ public sealed class SerialService : ISerialService
             return;
         }
 
-        foreach (var handler in handlers.GetInvocationList().Cast<Func<byte[], CancellationToken, ValueTask>>())
+        foreach (var handler in handlers.GetInvocationList().Cast<Action<BridgeRxChunk>>())
         {
             try
             {
-                await handler(bytes, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
+                handler(chunk);
             }
             catch (Exception ex)
             {

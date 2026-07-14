@@ -39,20 +39,40 @@ real hardware when available.
 
 ## Bidirectional COM Bridge
 
-- [ ] Create a com0com pair such as `COM10 <-> COM11`.
+- [ ] Confirm the configured com0com pair `COM4 <-> COM5` is present.
 - [ ] Connect Serial Monitor to the real device COM port.
-- [ ] Open the Bridge tab and select `COM10` as the app-side virtual port.
+- [ ] Open the Bridge tab and select `COM4` as the app-side virtual port.
 - [ ] Start the bridge and confirm `BRIDGE ON` appears in both the top and bottom status areas.
-- [ ] Open an external controller or analyzer on `COM11`, not `COM10`.
+- [ ] Open an external controller or analyzer on `COM5`, not `COM4`.
 - [ ] Confirm real-device RX bytes arrive unchanged at the external program.
 - [ ] Send binary/HEX data from the external program and confirm the exact bytes reach the device.
 - [ ] Confirm virtual-to-device traffic appears as `[BRIDGE]` TX in the app log.
+- [ ] In Terminal mode with UTF-8 selected, send bytes `45 52 52 4F 52` and
+  confirm the log shows `[BRIDGE] ERROR`, a Terminal `TxOnly` rule fires, and an
+  equivalent HEX rule does not fire.
+- [ ] In HEX mode, send bytes `45 52 52 4F 52` and confirm the log shows
+  `[BRIDGE] 45 52 52 4F 52`, a HEX `TxOnly` rule fires, and an equivalent
+  Terminal rule does not fire.
+- [ ] In Terminal mode, split one UTF-8 multibyte character across consecutive
+  bridge writes and confirm it is decoded without replacement characters.
+- [ ] Repeat with CP949 and confirm a Terminal keyword spanning consecutive
+  bridge chunks still matches.
 - [ ] Change RX encoding and Terminal/HEX display modes; confirm forwarded bytes remain unchanged.
 - [ ] Pause rendering and minimize the app while sending sustained virtual-to-device traffic; confirm the device continues receiving without bridge transport drops.
 - [ ] If the UI-only bridge log queue is forced to overflow, confirm only its UI drop counter increases while transport byte counts continue.
 - [ ] While Bridge is OFF, confirm Diagnostics reports raw bridge priority OFF and the normal awaited RX pipeline remains active.
 - [ ] While Bridge is ON, force parser/UI overload and confirm raw bridge traffic continues while only the bridge-priority parser/log drop counter increases.
 - [ ] Stop the external program temporarily and confirm bridge backlog/drop/error counters remain bounded and visible.
+- [ ] While bridge traffic is active, request one manual TX and confirm the UI
+  shows `TX waiting for bridge idle`; verify a second button/Enter/saved/history/
+  shortcut request is rejected as Busy and the first payload is sent once after
+  25 ms of global bridge idle.
+- [ ] Confirm command sequences cannot start while Bridge is ON.
+- [ ] Saturate the device-to-virtual queue and confirm the bridge alone stops
+  with `Bridge stopped: virtual COM consumer too slow`, while the device COM and
+  normal RX remain connected.
+- [ ] Check Diagnostics for queued chunks/bytes, oldest age, replay delay/
+  lateness, overflow reason, last activity, and manual TX state.
 - [ ] Stop the bridge and confirm the `BRIDGE ON` indicators disappear.
 - [ ] Disconnect the device and confirm the bridge stops before the device port closes.
 
@@ -176,6 +196,16 @@ real hardware when available.
 ## Highlight Rules
 
 - [ ] Open Rules tab.
+- [ ] Confirm the rule editor and rule list label the selector as `Mode`, with
+  `Terminal` and `HEX` choices (not `Match = Text/HEX`).
+- [ ] In Terminal mode, enable one Terminal rule and one HEX rule whose keywords
+  both represent the same incoming bytes; confirm only the Terminal rule creates
+  events/highlights.
+- [ ] Switch to HEX mode without changing either rule's Enabled state and confirm
+  only the HEX rule creates events/highlights.
+- [ ] Mark both rules as filters and confirm the Filter dropdown lists only rules
+  for the current mode; switching modes must fall back to `ALL` if the selected
+  filter belongs to the other mode.
 - [ ] Toggle WARN highlight off.
 - [ ] Confirm future WARN lines no longer use the WARN highlight color.
 - [ ] Change ERROR highlight color.

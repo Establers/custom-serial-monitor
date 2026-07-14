@@ -18,11 +18,13 @@ SerialService
        -> bounded EventDetector queue -> event/context channels and files
 
 SerialService raw RX notification
-  -> bounded SerialBridgeService queue
+  -> non-blocking bounded SerialBridgeService queue (chunks + bytes)
+  -> timing-aware virtual writer
   -> app-side virtual COM port
 
 app-side virtual COM RX
   -> SerialBridgeService
+  -> physical TX arbiter (bridge priority, idle guard, one manual slot)
   -> SerialService raw TX
 ```
 
@@ -41,9 +43,15 @@ the xterm view only; persisted logs remain plain text.
 - `EventDetector` owns rule evaluation, before/after context capture, bounded
   pending captures, and asynchronous event-log persistence.
 - `SerialBridgeService` owns the optional second COM port and forwards raw byte
-  chunks in both directions through independent bounded queues. Neither receive
-  loop writes the opposite port directly; dedicated writers expose backlog,
-  drop, byte, chunk, and error counters.
+  chunks in both directions through queues bounded by both chunk and byte count.
+  Physical RX uses only a non-blocking offer; overflow faults and stops the
+  bridge without disconnecting the device. The virtual writer replays observed
+  monotonic receive gaps best-effort, while the physical writer is the sole
+  scheduler for bridge traffic and one pending manual TX.
+- `BridgeLogProcessor` owns the optional virtual-to-device TX representation.
+  Its bounded background pipeline uses a bridge-dedicated streaming decoder in
+  Terminal mode and byte-exact HEX matching data in HEX mode; it never modifies
+  the bytes forwarded by `SerialBridgeService`.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
 - `MainViewModel` coordinates lifecycle and fans parsed lines out to downstream
   components. It currently also contains search, profile application, command,
@@ -63,11 +71,16 @@ the xterm view only; persisted logs remain plain text.
 - Raw bridge priority mode exists only while a bridge is active. In normal
   operation, SerialService retains its original awaited/lossless handoff to the
   parser. While bridging, raw bytes are offered to the bridge first and the
-  parser handoff becomes non-blocking; parser/log overload is counted and may
-  drop parser chunks rather than stall raw bridge transport.
+  parser handoff becomes non-blocking. The bridge offer itself never waits; a
+  full chunk/byte budget faults that bridge session, while physical RX and the
+  device connection continue. Parser/log overload is counted separately.
+- Manual TX during a bridge uses a single pending slot. Existing bridge traffic
+  has priority, both directions must be idle for the configured guard interval,
+  and a payload that has started cannot be interleaved with bridge bytes.
 - Virtual-to-device completion never waits for UI rendering. Its optional TX
-  display record enters a separate bounded UI-only queue; saturation drops and
-  counts only that visual record while raw transport continues.
+  log input and output enter bounded queues before the existing bounded UI-only
+  queue; saturation is counted and may omit file/event/UI records while raw
+  transport continues unchanged.
 - UI work is marshalled through the WinUI dispatcher and appended in batches.
 - Visible logs and events are bounded; complete history belongs on disk.
 - Long-running workers accept cancellation and catch/report non-cancellation

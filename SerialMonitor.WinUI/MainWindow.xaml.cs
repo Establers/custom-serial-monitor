@@ -124,6 +124,7 @@ public sealed partial class MainWindow : Window
             new FileLogWriter(),
             new EventDetector(),
             new SerialBridgeService(),
+            new BridgeLogProcessor(),
             new ProfileService(),
             dispatcherQueue);
 
@@ -3824,7 +3825,7 @@ public sealed partial class MainWindow : Window
         var highlightBox = new CheckBox { Content = "Highlight", IsChecked = source.UseForHighlight };
         var filterBox = new CheckBox { Content = "Filter", IsChecked = source.UseAsViewFilter };
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
-        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var modeBox = CreateLogRuleModeComboBox(source.Mode);
         var directionBox = CreateEnumComboBox(source.MatchDirection);
         var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
         var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
@@ -3841,8 +3842,8 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(eventBox, "Event: add matching lines to Events.");
         ToolTipService.SetToolTip(highlightBox, "Highlight: color matching lines in the log view.");
         ToolTipService.SetToolTip(filterBox, "Filter: make this rule available in the Filter dropdown.");
-        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
         ToolTipService.SetToolTip(trayNotificationBox, "Windows tray balloon. OFF by default. Events are grouped per rule.");
         ToolTipService.SetToolTip(soundNotificationBox, "Play one Windows alert sound per grouped notification. OFF by default.");
         ToolTipService.SetToolTip(popupNotificationBox, "Show a non-blocking in-app popup for 8 seconds. OFF by default.");
@@ -3850,7 +3851,7 @@ public sealed partial class MainWindow : Window
 
         foreach (var input in new FrameworkElement[]
                  {
-                     nameBox, keywordBox, matchModeBox, directionBox, foregroundBox,
+                     nameBox, keywordBox, modeBox, directionBox, foregroundBox,
                      backgroundBox, priorityBox, notificationCooldownBox
                  })
         {
@@ -3882,7 +3883,7 @@ public sealed partial class MainWindow : Window
             row: 1,
             column: 0,
             columnSpan: 4);
-        AddDialogGridChild(panel, CreateDialogField("Match", matchModeBox), row: 2, column: 0);
+        AddDialogGridChild(panel, CreateDialogField("Mode", modeBox), row: 2, column: 0);
         AddDialogGridChild(panel, CreateDialogField("Direction", directionBox), row: 2, column: 1);
         AddDialogGridChild(panel, CreateDialogField("Color", foregroundBox), row: 2, column: 2);
         AddDialogGridChild(panel, CreateDialogField("Background", backgroundBox), row: 2, column: 3);
@@ -3938,7 +3939,7 @@ public sealed partial class MainWindow : Window
             UseForHighlight = highlightBox.IsChecked == true,
             UseAsViewFilter = filterBox.IsChecked == true,
             CaseSensitive = caseBox.IsChecked == true,
-            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            Mode = GetSelectedLogRuleMode(modeBox),
             MatchDirection = directionBox.SelectedItem is HighlightMatchDirection direction ? direction : HighlightMatchDirection.Both,
             ForegroundColor = GetSelectedString(foregroundBox, "Default"),
             BackgroundColor = background == "(none)" ? null : background,
@@ -3956,7 +3957,7 @@ public sealed partial class MainWindow : Window
         var keywordBox = CreateDialogTextBox(source.Keyword, "ERROR or 49 4E");
         var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
-        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var modeBox = CreateLogRuleModeComboBox(source.Mode);
         var directionBox = CreateEnumComboBox(source.MatchDirection);
         var trayNotificationBox = new CheckBox { Content = "Tray", IsChecked = source.TrayNotificationEnabled };
         var soundNotificationBox = new CheckBox { Content = "Sound", IsChecked = source.SoundNotificationEnabled };
@@ -3965,14 +3966,14 @@ public sealed partial class MainWindow : Window
             Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
             "30");
         var errorText = CreateDialogErrorText();
-        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
         ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
 
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
         panel.Children.Add(CreateDialogField("Keyword", keywordBox));
-        panel.Children.Add(CreateDialogField("Match", matchModeBox));
+        panel.Children.Add(CreateDialogField("Mode", modeBox));
         panel.Children.Add(CreateDialogField("Direction", directionBox));
         panel.Children.Add(CreateInlineDialogRow(enabledBox, caseBox));
         panel.Children.Add(CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox));
@@ -4008,7 +4009,7 @@ public sealed partial class MainWindow : Window
             Keyword = keywordBox.Text,
             Enabled = enabledBox.IsChecked == true,
             CaseSensitive = caseBox.IsChecked == true,
-            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            Mode = GetSelectedLogRuleMode(modeBox),
             MatchDirection = directionBox.SelectedItem is EventMatchDirection direction ? direction : EventMatchDirection.RxOnly,
             HighlightColor = source.HighlightColor,
             TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
@@ -4026,21 +4027,20 @@ public sealed partial class MainWindow : Window
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
         var filterBox = new CheckBox { Content = "View filter", IsChecked = source.UseAsViewFilter };
         ToolTipService.SetToolTip(filterBox, "Make this rule available in the xterm visible filter selector.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive text matching. Ignored when Match is HEX.");
+        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
         var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
         var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
         var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
         var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
-        var matchModeBox = CreateLogRuleMatchModeComboBox(source.MatchMode);
+        var modeBox = CreateLogRuleModeComboBox(source.Mode);
+        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
         var directionBox = CreateEnumComboBox(source.MatchDirection);
         var errorText = CreateDialogErrorText();
-        ToolTipService.SetToolTip(matchModeBox, "Text matches decoded text. HEX matches raw bytes and ignores Case.");
-
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
         panel.Children.Add(CreateDialogField("Keyword", keywordBox));
         panel.Children.Add(CreateInlineDialogRow(enabledBox, caseBox, filterBox));
-        panel.Children.Add(CreateDialogField("Match", matchModeBox));
+        panel.Children.Add(CreateDialogField("Mode", modeBox));
         panel.Children.Add(CreateDialogField("Foreground", foregroundBox));
         panel.Children.Add(CreateDialogField("Background", backgroundBox));
         panel.Children.Add(CreateDialogField("Priority", priorityBox));
@@ -4072,7 +4072,7 @@ public sealed partial class MainWindow : Window
             Keyword = keywordBox.Text,
             Enabled = enabledBox.IsChecked == true,
             CaseSensitive = caseBox.IsChecked == true,
-            MatchMode = GetSelectedLogRuleMatchMode(matchModeBox),
+            Mode = GetSelectedLogRuleMode(modeBox),
             UseAsViewFilter = filterBox.IsChecked == true,
             ForegroundColor = GetSelectedString(foregroundBox, "Default"),
             BackgroundColor = background == "(none)" ? null : background,
@@ -4355,12 +4355,12 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private static ComboBox CreateLogRuleMatchModeComboBox(LogRuleMatchMode selected)
+    private static ComboBox CreateLogRuleModeComboBox(LogRuleMatchMode selected)
     {
         var textItem = new ComboBoxItem
         {
-            Content = "Text",
-            Tag = LogRuleMatchMode.Text
+            Content = "Terminal",
+            Tag = LogRuleMatchMode.Terminal
         };
         var hexItem = new ComboBoxItem
         {
@@ -4379,11 +4379,11 @@ public sealed partial class MainWindow : Window
         return comboBox;
     }
 
-    private static LogRuleMatchMode GetSelectedLogRuleMatchMode(ComboBox comboBox)
+    private static LogRuleMatchMode GetSelectedLogRuleMode(ComboBox comboBox)
     {
         return comboBox.SelectedItem is ComboBoxItem { Tag: LogRuleMatchMode mode }
             ? mode
-            : LogRuleMatchMode.Text;
+            : LogRuleMatchMode.Terminal;
     }
 
     private static ComboBox CreateStringComboBox(IEnumerable<string> items, string? selected)
@@ -4613,7 +4613,7 @@ public sealed partial class MainWindow : Window
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
@@ -4634,7 +4634,7 @@ public sealed partial class MainWindow : Window
             UseForHighlight = rule.UseForHighlight,
             UseAsViewFilter = rule.UseAsViewFilter,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
@@ -4654,7 +4654,7 @@ public sealed partial class MainWindow : Window
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,

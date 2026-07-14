@@ -31,7 +31,7 @@ public sealed class EncodingDecoder
         }
     }
 
-    private static Encoding CreateEncoding(RxEncodingMode mode, DecoderFallback decoderFallback)
+    internal static Encoding CreateEncoding(RxEncodingMode mode, DecoderFallback decoderFallback)
     {
         var encoding = mode switch
         {

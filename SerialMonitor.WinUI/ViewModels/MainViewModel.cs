@@ -200,6 +200,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly IFileLogWriter _fileLogWriter;
     private readonly IEventDetector _eventDetector;
     private readonly ISerialBridgeService _bridgeService;
+    private readonly IBridgeLogProcessor _bridgeLogProcessor;
     private readonly IProfileService _profileService;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly UiBatchDispatcher<LogLine> _logBatchDispatcher;
@@ -220,10 +221,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task? _observeLogsTask;
     private Task? _observeEventsTask;
     private Task? _observeBridgeVisualLogsTask;
+    private Task? _observeBridgeProcessedLogsTask;
     private Task? _observeEventContextsTask;
     private Task? _automaticReceiveReconnectTask;
     private int _automaticReceiveReconnectWorkerRunning;
     private int _automaticReceiveReconnectRequestVersion;
+    private int _bridgeStopForSerialDisconnectRunning;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
     private string? _selectedPort;
@@ -615,6 +618,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         IFileLogWriter fileLogWriter,
         IEventDetector eventDetector,
         ISerialBridgeService bridgeService,
+        IBridgeLogProcessor bridgeLogProcessor,
         IProfileService profileService,
         DispatcherQueue dispatcherQueue)
     {
@@ -623,6 +627,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _fileLogWriter = fileLogWriter;
         _eventDetector = eventDetector;
         _bridgeService = bridgeService;
+        _bridgeLogProcessor = bridgeLogProcessor;
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
 
@@ -656,7 +661,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => !IsBusy && (IsConnected || CanConnect));
         DisconnectCommand = new AsyncRelayCommand(DisconnectAsync, () => IsConnected && !IsBusy);
         SendCommand = new AsyncRelayCommand(SendCurrentCommandAsync, CanSendCurrentCommand);
-        SendSavedCommandCommand = new AsyncRelayCommand(SendSavedCommandAsync, parameter => IsConnected && !IsBusy && parameter is TxCommand);
+        SendSavedCommandCommand = new AsyncRelayCommand(
+            SendSavedCommandAsync,
+            parameter => IsConnected && !IsBusy && !IsManualTxBusy && parameter is TxCommand);
         AddMarkerCommand = new AsyncRelayCommand(AddMarkerAsync, () => IsConnected && !IsBusy);
         AddDefaultMarkerCommand = new AsyncRelayCommand(AddDefaultMarkerAsync, () => IsConnected && !IsBusy);
         ToggleLogRenderingPauseCommand = new AsyncRelayCommand(ToggleLogRenderingPauseAsync);
@@ -722,6 +729,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.RawBytesReceived += OnRawBytesReceived;
         _bridgeService.Error += OnBackgroundError;
         _bridgeService.StatusChanged += OnBridgeStatusChanged;
+        _bridgeLogProcessor.Error += OnBackgroundError;
+        _observeBridgeProcessedLogsTask = Task.Run(
+            () => ObserveBridgeProcessedLogsAsync(_bridgeVisualLogCancellation.Token),
+            CancellationToken.None);
         _observeBridgeVisualLogsTask = Task.Run(
             () => ObserveBridgeVisualLogsAsync(_bridgeVisualLogCancellation.Token),
             CancellationToken.None);
@@ -1049,8 +1060,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SequenceStatusText));
                 OnPropertyChanged(nameof(SequenceRuntimeStateText));
                 OnPropertyChanged(nameof(SequenceCurrentStepDisplayText));
+                OnPropertyChanged(nameof(CanStartBridge));
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
                 StopCommandSequenceCommand.NotifyCanExecuteChanged();
+                StartBridgeCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -1216,6 +1229,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanStartBridge =>
         IsConnected &&
         !IsBusy &&
+        !IsSequenceRunning &&
         !IsBridgeActive &&
         !string.IsNullOrWhiteSpace(SelectedBridgePort) &&
         !string.Equals(
@@ -1266,11 +1280,29 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long BridgeDroppedChunkCount =>
         BridgeDroppedDeviceToVirtualChunkCount + BridgeDroppedVirtualToDeviceChunkCount;
 
-    public long BridgeErrorCount => _bridgeService.ErrorCount;
+    public long BridgeErrorCount => _bridgeService.ErrorCount + _bridgeLogProcessor.ErrorCount;
 
     public int BridgePendingDeviceToVirtualChunkCount => _bridgeService.PendingDeviceToVirtualChunkCount;
 
     public int BridgePendingVirtualToDeviceChunkCount => _bridgeService.PendingVirtualToDeviceChunkCount;
+
+    public int BridgePendingDeviceToVirtualByteCount => _bridgeService.PendingDeviceToVirtualByteCount;
+
+    public int BridgePendingVirtualToDeviceByteCount => _bridgeService.PendingVirtualToDeviceByteCount;
+
+    public double BridgeOldestPendingChunkAgeMs => _bridgeService.OldestPendingChunkAgeMs;
+
+    public ManualTxState ManualTxState => _bridgeService.ManualTxState;
+
+    public bool IsManualTxBusy => IsBridgeActive && ManualTxState != ManualTxState.Idle;
+
+    public string ManualTxStateText => ManualTxState switch
+    {
+        ManualTxState.WaitingForBridgeIdle =>
+            $"TX waiting for bridge idle ({_bridgeService.ManualTxWaitMs:0} ms, guard {_bridgeService.ManualTxIdleGuardRemainingMs:0} ms)",
+        ManualTxState.Sending => "TX sending",
+        _ => "TX idle"
+    };
 
     public int BridgePendingChunkCount =>
         BridgePendingDeviceToVirtualChunkCount + BridgePendingVirtualToDeviceChunkCount;
@@ -1288,7 +1320,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long BridgeVisualLogDroppedCount => Interlocked.Read(ref _bridgeVisualLogDroppedCount);
 
     public string BridgeVisualLogStatusText =>
-        $"UI log pending {BridgeVisualLogPendingCount:N0} / dropped {BridgeVisualLogDroppedCount:N0}";
+        $"Log input pending {_bridgeLogProcessor.PendingInputChunkCount:N0} / " +
+        $"input drops {_bridgeLogProcessor.DroppedInputChunkCount:N0} / " +
+        $"output drops {_bridgeLogProcessor.DroppedOutputLineCount:N0} / " +
+        $"decode errors {_bridgeLogProcessor.DecodeErrorCount:N0} / " +
+        $"UI pending {BridgeVisualLogPendingCount:N0} / UI drops {BridgeVisualLogDroppedCount:N0}";
 
     public bool IsRawBridgePriorityEnabled => _serialService.IsRawBridgePriorityEnabled;
 
@@ -1300,7 +1336,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ? $"Raw bridge priority ON · parser/log drops {BridgePriorityDroppedPipelineChunkCount:N0} chunks / {BridgePriorityDroppedPipelineByteCount:N0} bytes"
         : "Raw bridge priority OFF · normal lossless RX pipeline";
 
-    public string BridgeLastError => _bridgeService.LastError ?? string.Empty;
+    public string BridgeLastError => _bridgeLogProcessor.LastError ?? _bridgeService.LastError ?? string.Empty;
 
     public string? SelectedPort
     {
@@ -1394,6 +1430,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentUiSettings.RxDisplayMode = normalized;
             _currentUiSettings.TxSendMode = txMode;
+            var activeRuleMode = ToLogRuleMode(normalized);
+            _eventDetector.UpdateRuleMode(activeRuleMode);
+            ClearPendingEventNotifications();
             var reconnectRequired = RequiresAutomaticReceiveReconnect(normalized, HexGroupTimeoutMs);
             if (rxChanged)
             {
@@ -1422,6 +1461,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(IsTxLineEndingEffective));
             OnPropertyChanged(nameof(TxLineEndingToolTip));
+            RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
+            NotifyRuleEditorStateChanged();
             RefreshDiagnostics();
         }
     }
@@ -1649,6 +1690,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return NormalizeTxSendMode(mode) == TxSendMode.Hex
             ? "HEX"
             : "Terminal";
+    }
+
+    private static LogRuleMatchMode ToLogRuleMode(RxDisplayMode mode)
+    {
+        return NormalizeRxDisplayMode(mode) == RxDisplayMode.Hex
+            ? LogRuleMatchMode.Hex
+            : LogRuleMatchMode.Terminal;
     }
 
     private bool RequiresAutomaticReceiveReconnect(RxDisplayMode mode, int hexGroupTimeoutMs)
@@ -2800,19 +2848,31 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string ActiveLogViewModeText => "xterm.js";
 
     public int ActiveHighlightRuleCount =>
-        LogRules.Count(rule => rule.Enabled && rule.UseForHighlight && !string.IsNullOrWhiteSpace(rule.Keyword));
+        LogRules.Count(rule =>
+            rule.Enabled &&
+            rule.Mode == ToLogRuleMode(SelectedRxDisplayMode) &&
+            rule.UseForHighlight &&
+            !string.IsNullOrWhiteSpace(rule.Keyword));
 
     public int ActiveEventLogRuleCount =>
-        LogRules.Count(rule => rule.Enabled && rule.UseForEvent && !string.IsNullOrWhiteSpace(rule.Keyword));
+        LogRules.Count(rule =>
+            rule.Enabled &&
+            rule.Mode == ToLogRuleMode(SelectedRxDisplayMode) &&
+            rule.UseForEvent &&
+            !string.IsNullOrWhiteSpace(rule.Keyword));
 
     public int ActiveViewFilterRuleCount =>
-        LogRules.Count(rule => rule.Enabled && rule.UseAsViewFilter && !string.IsNullOrWhiteSpace(rule.Keyword));
+        LogRules.Count(rule =>
+            rule.Enabled &&
+            rule.Mode == ToLogRuleMode(SelectedRxDisplayMode) &&
+            rule.UseAsViewFilter &&
+            !string.IsNullOrWhiteSpace(rule.Keyword));
 
-    public int TextLogRuleCount =>
-        LogRules.Count(rule => rule.MatchMode == LogRuleMatchMode.Text);
+    public int TerminalLogRuleCount =>
+        LogRules.Count(rule => rule.Mode == LogRuleMatchMode.Terminal);
 
     public int HexLogRuleCount =>
-        LogRules.Count(rule => rule.MatchMode == LogRuleMatchMode.Hex);
+        LogRules.Count(rule => rule.Mode == LogRuleMatchMode.Hex);
 
     public int InvalidHexLogRuleCount =>
         LogRules.Count(IsInvalidHexLogRule);
@@ -3618,7 +3678,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         1. Rules 탭에서 +를 누릅니다.
         2. Name과 Keyword를 입력합니다.
         3. Enabled와 Event를 켭니다.
-        4. 문자열은 Match = Text, 원본 바이트는 Match = HEX를 선택합니다.
+        4. 현재 Terminal 모드에서 쓸 룰은 Mode = Terminal, HEX 모드에서 쓸 룰은 Mode = HEX를 선택합니다.
         5. 일반적인 장비 이벤트는 Direction = RxOnly를 권장합니다.
         6. Save 후 새로 들어오는 로그에서 동작을 확인합니다.
 
@@ -3646,6 +3706,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Bridge 탭에서 com0com 쌍 중 앱이 사용할 포트를 선택하고 Start bridge를 누릅니다.
         외부 프로그램은 반드시 가상 포트 쌍의 반대편을 엽니다.
         BRIDGE ON 표시가 보이면 원본 바이트가 양방향으로 전달됩니다.
+        외부 프로그램에서 장비로 보내는 로그는 현재 앱 모드를 따릅니다.
+        Terminal 모드는 선택한 인코딩으로 디코딩하고 Terminal TxOnly/Both 규칙을 사용합니다.
+        HEX 모드는 원본 바이트를 표시하고 HEX TxOnly/Both 규칙을 사용합니다.
 
         화면과 로그
 
@@ -3752,15 +3815,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         이벤트 규칙 옵션
 
-        * Match = Text: 디코딩된 문자열에서 찾습니다. 예: ERROR, WARN, boot complete
-        * Match = HEX: 수신 원본 바이트에서 찾습니다. 예: AA 55 01, 49 4E
+        * Mode = Terminal: 앱이 Terminal 모드일 때만 동작하며 디코딩된 문자열에서 찾습니다. 예: ERROR, WARN, boot complete
+        * Mode = HEX: 앱이 HEX 모드일 때만 동작하며 원본 바이트에서 찾습니다. 예: AA 55 01, 49 4E
         * Direction = RxOnly: 장비에서 받은 로그만 검사합니다. 일반적인 이벤트 규칙은 이 값을 권장합니다.
         * Direction = TxOnly: 앱에서 보낸 TX만 검사합니다.
         * Direction = Both: RX와 TX를 모두 검사합니다.
-        * Case sensitive: Text 규칙의 대소문자를 구분합니다. HEX 규칙에서는 무시됩니다.
+        * Case sensitive: Terminal 규칙의 대소문자를 구분합니다. HEX 규칙에서는 무시됩니다.
         * Priority: 여러 Highlight 규칙이 동시에 일치할 때 높은 값의 색상을 우선 적용합니다.
         * Background는 필요할 때만 사용합니다. 너무 많은 배경색은 로그 가독성을 떨어뜨릴 수 있습니다.
-        * RX View가 Terminal/HEX 중 무엇이든 실제 규칙 매칭 결과는 동일합니다.
+        * 현재 앱 모드와 Rule Mode가 다르면 Enabled 상태여도 이벤트, 하이라이트, 필터가 동작하지 않습니다.
 
         이벤트 확인과 Context 사용
 
@@ -3827,7 +3890,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         * Bridge는 실제 장비 COM과 선택한 가상 COM 사이에서 원본 바이트를 양방향 전달합니다.
         * 외부 프로그램은 com0com 쌍의 반대편 포트를 열어야 합니다.
-        * RX 표시 형식, 인코딩, 필터, 줄바꿈 설정은 브리지 바이트를 변경하지 않습니다.
+        * Bridge TX 로그는 현재 Terminal/HEX 모드를 따르며 방향은 TX입니다.
+        * Terminal에서는 선택한 인코딩으로 디코딩하고 Terminal 규칙만, HEX에서는 원본 바이트와 HEX 규칙만 사용합니다.
+        * 표시 형식, 인코딩, 필터, 줄바꿈 설정은 실제 브리지 전달 바이트를 변경하지 않습니다.
         * Bridge ON은 상단과 하단 상태줄에 항상 표시됩니다.
 
         Settings
@@ -4139,7 +4204,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.RawBytesReceived -= OnRawBytesReceived;
         _bridgeService.Error -= OnBackgroundError;
         _bridgeService.StatusChanged -= OnBridgeStatusChanged;
+        _bridgeLogProcessor.Error -= OnBackgroundError;
         await _bridgeService.DisposeAsync();
+        await _bridgeLogProcessor.DisposeAsync();
+        if (_observeBridgeProcessedLogsTask is not null)
+        {
+            try
+            {
+                await _observeBridgeProcessedLogsTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
         if (_observeBridgeVisualLogsTask is not null)
         {
             try
@@ -5219,6 +5296,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            _bridgeLogProcessor.ResetStream();
             await _bridgeService.StartAsync(
                 _currentBridgeSettings.Clone(),
                 CreateCurrentSettings(),
@@ -5251,6 +5329,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task StopBridgeCoreAsync(bool disableRequested, CancellationToken cancellationToken)
     {
         _serialService.SetRawBridgePriorityEnabled(false);
+        _bridgeLogProcessor.ResetStream();
         if (disableRequested)
         {
             _currentBridgeSettings.Enabled = false;
@@ -5279,30 +5358,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task ForwardBridgeBytesToDeviceAsync(byte[] bytes, CancellationToken cancellationToken)
     {
         await _serialService.SendBytesAsync(bytes, "[BRIDGE RAW]", cancellationToken);
-
-        var txLine = LogLine.Tx(
-            $"[BRIDGE] {FormatBridgeBytePreview(bytes)}",
-            bytes,
-            contentMode: LogRuleMatchMode.Hex);
-        if (FileLoggingEnabled)
+        if (!_bridgeLogProcessor.TryEnqueue(bytes, SelectedRxDisplayMode, SelectedRxEncoding))
         {
-            _fileLogWriter.TryEnqueue(txLine);
+            Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
         }
-
-        _eventDetector.TryEnqueue(txLine);
-        TryEnqueueBridgeVisualLog(txLine);
-    }
-
-    private static string FormatBridgeBytePreview(byte[] bytes)
-    {
-        const int previewLength = 64;
-        var visibleBytes = bytes.AsSpan(0, Math.Min(bytes.Length, previewLength));
-        var preview = string.Join(
-            ' ',
-            visibleBytes.ToArray().Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
-        return bytes.Length > previewLength
-            ? $"[HEX] {preview} … (+{bytes.Length - previewLength:N0} bytes)"
-            : $"[HEX] {preview}";
     }
 
     private void NotifyBridgePropertiesChanged()
@@ -5331,6 +5390,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(BridgePendingChunkCount));
         OnPropertyChanged(nameof(BridgePendingDeviceToVirtualChunkCount));
         OnPropertyChanged(nameof(BridgePendingVirtualToDeviceChunkCount));
+        OnPropertyChanged(nameof(BridgePendingDeviceToVirtualByteCount));
+        OnPropertyChanged(nameof(BridgePendingVirtualToDeviceByteCount));
+        OnPropertyChanged(nameof(BridgeOldestPendingChunkAgeMs));
+        OnPropertyChanged(nameof(ManualTxState));
+        OnPropertyChanged(nameof(IsManualTxBusy));
+        OnPropertyChanged(nameof(ManualTxStateText));
         OnPropertyChanged(nameof(BridgePendingText));
         OnPropertyChanged(nameof(BridgeDroppedChunksText));
         OnPropertyChanged(nameof(BridgeDroppedBytesText));
@@ -5345,6 +5410,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(BridgeLastError));
         StartBridgeCommand.NotifyCanExecuteChanged();
         StopBridgeCommand.NotifyCanExecuteChanged();
+        SendCommand.NotifyCanExecuteChanged();
+        SendSavedCommandCommand.NotifyCanExecuteChanged();
+        RunCommandSequenceCommand.NotifyCanExecuteChanged();
     }
 
     private async Task ConnectAsync()
@@ -6588,6 +6656,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         return IsConnected &&
             !IsBusy &&
+            !IsBridgeActive &&
             !IsSequenceRunning &&
             SelectedCommandSequence is { Enabled: true } sequence &&
             sequence.Steps.Count > 0;
@@ -6732,12 +6801,33 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     txByteCount = hexPayload.Length;
                     txRawBytes = hexPayload;
                     txDisplayText = $"[HEX] {FormatBytesAsHex(hexPayload)}";
-                    await _serialService.SendBytesAsync(hexPayload, txDisplayText, CancellationToken.None);
                     break;
 
                 default:
-                    await _serialService.SendAsync(command, CancellationToken.None);
                     break;
+            }
+
+            if (IsBridgeActive)
+            {
+                var transmitResult = await _bridgeService.QueueManualTransmitAsync(
+                    token => _serialService.SendBytesAsync(txRawBytes, txDisplayText, token),
+                    CancellationToken.None);
+                if (transmitResult != ManualTransmitResult.Sent)
+                {
+                    var message = transmitResult switch
+                    {
+                        ManualTransmitResult.Busy => "TX busy: another manual TX is already waiting or sending.",
+                        ManualTransmitResult.Canceled => "TX canceled: bridge stopped or the device disconnected.",
+                        ManualTransmitResult.BridgeNotRunning => "TX canceled: bridge state changed; retry the command.",
+                        _ => "TX failed in the bridge transmit scheduler."
+                    };
+                    RecordTxError(message);
+                    return false;
+                }
+            }
+            else
+            {
+                await _serialService.SendBytesAsync(txRawBytes, txDisplayText, CancellationToken.None);
             }
 
             var txLine = LogLine.Tx(
@@ -6745,7 +6835,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 txRawBytes,
                 contentMode: sendMode == TxSendMode.Hex
                     ? LogRuleMatchMode.Hex
-                    : LogRuleMatchMode.Text);
+                    : LogRuleMatchMode.Terminal);
             if (FileLoggingEnabled)
             {
                 _fileLogWriter.TryEnqueue(txLine);
@@ -6772,7 +6862,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool CanSendCurrentCommand()
     {
-        return IsConnected && !IsBusy && !string.IsNullOrWhiteSpace(Commands.CurrentCommandText);
+        return IsConnected && !IsBusy && !IsManualTxBusy && !string.IsNullOrWhiteSpace(Commands.CurrentCommandText);
     }
 
     private static bool TryParseHexTxPayload(string input, out byte[] bytes, out string error)
@@ -7882,9 +7972,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
     }
 
-    private static bool IsRuleAvailableAsViewFilter(LogRule rule)
+    private bool IsRuleAvailableAsViewFilter(LogRule rule)
     {
         return rule.Enabled &&
+            rule.Mode == ToLogRuleMode(SelectedRxDisplayMode) &&
             rule.UseAsViewFilter &&
             !string.IsNullOrWhiteSpace(rule.Keyword);
     }
@@ -7898,20 +7989,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             "|",
             name.Trim().ToUpperInvariant(),
             rule.Keyword.Trim().ToUpperInvariant(),
-            rule.MatchMode,
+            rule.Mode,
             rule.MatchDirection,
             rule.CaseSensitive);
     }
 
     private static bool IsInvalidHexLogRule(LogRule rule)
     {
-        return rule.MatchMode == LogRuleMatchMode.Hex &&
+        return rule.Mode == LogRuleMatchMode.Hex &&
             !LogRuleMatcher.TryParseHexPattern(rule.Keyword, out _, out _);
     }
 
     private static string GetHexRuleParseError(LogRule rule)
     {
-        if (rule.MatchMode != LogRuleMatchMode.Hex)
+        if (rule.Mode != LogRuleMatchMode.Hex)
         {
             return string.Empty;
         }
@@ -8059,7 +8150,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ActiveEventLogRuleCount));
         OnPropertyChanged(nameof(ActiveHighlightRuleCount));
         OnPropertyChanged(nameof(ActiveViewFilterRuleCount));
-        OnPropertyChanged(nameof(TextLogRuleCount));
+        OnPropertyChanged(nameof(TerminalLogRuleCount));
         OnPropertyChanged(nameof(HexLogRuleCount));
         OnPropertyChanged(nameof(InvalidHexLogRuleCount));
         OnPropertyChanged(nameof(LastInvalidHexLogRuleName));
@@ -8133,9 +8224,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             : normalized.Name.Trim();
         normalized.ForegroundColor = NormalizeHighlightColorName(normalized.ForegroundColor, out var foregroundFallback);
         normalized.BackgroundColor = NormalizeOptionalHighlightColorName(normalized.BackgroundColor, out var backgroundFallback);
-        if (!Enum.IsDefined(normalized.MatchMode))
+        if (!Enum.IsDefined(normalized.Mode))
         {
-            normalized.MatchMode = LogRuleMatchMode.Text;
+            normalized.Mode = LogRuleMatchMode.Terminal;
         }
 
         if (!Enum.IsDefined(normalized.MatchDirection))
@@ -8232,9 +8323,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name)
             ? normalized.Keyword
             : normalized.Name.Trim();
-        if (!Enum.IsDefined(normalized.MatchMode))
+        if (!Enum.IsDefined(normalized.Mode))
         {
-            normalized.MatchMode = LogRuleMatchMode.Text;
+            normalized.Mode = LogRuleMatchMode.Terminal;
         }
 
         if (!Enum.IsDefined(normalized.MatchDirection))
@@ -8269,9 +8360,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         normalized.BackgroundColor = string.IsNullOrWhiteSpace(normalized.BackgroundColor)
             ? null
             : normalized.BackgroundColor.Trim();
-        if (!Enum.IsDefined(normalized.MatchMode))
+        if (!Enum.IsDefined(normalized.Mode))
         {
-            normalized.MatchMode = LogRuleMatchMode.Text;
+            normalized.Mode = LogRuleMatchMode.Terminal;
         }
 
         if (!Enum.IsDefined(normalized.MatchDirection))
@@ -10464,6 +10555,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings.TxSendMode = _currentUiSettings.RxDisplayMode == RxDisplayMode.Hex
                 ? TxSendMode.Hex
                 : TxSendMode.Terminal;
+            _eventDetector.UpdateRuleMode(ToLogRuleMode(_currentUiSettings.RxDisplayMode));
+            ClearPendingEventNotifications();
             _currentEventContextSettings = profile.EventContextSettings.Clone();
             _currentBridgeSettings = profile.BridgeSettings.Clone();
             _sessionName = NormalizeSessionName(profile.CurrentSessionName);
@@ -10766,7 +10859,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
@@ -10787,7 +10880,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             UseForHighlight = rule.UseForHighlight,
             UseAsViewFilter = rule.UseAsViewFilter,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
@@ -10807,7 +10900,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = ConvertDirection(rule.MatchDirection),
             HighlightColor = rule.ForegroundColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
@@ -10825,7 +10918,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
@@ -10842,7 +10935,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
@@ -10909,7 +11002,33 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
+        if (!_serialService.IsConnected &&
+            _bridgeService.IsRunning &&
+            Interlocked.CompareExchange(ref _bridgeStopForSerialDisconnectRunning, 1, 0) == 0)
+        {
+            _ = StopBridgeAfterSerialDisconnectAsync();
+        }
+
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private async Task StopBridgeAfterSerialDisconnectAsync()
+    {
+        try
+        {
+            _serialService.SetRawBridgePriorityEnabled(false);
+            await _bridgeService.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.StopBridgeAfterSerialDisconnectAsync", ex);
+            _lastBackgroundError = $"Bridge stop after serial disconnect failed: {ex.Message}";
+        }
+        finally
+        {
+            Volatile.Write(ref _bridgeStopForSerialDisconnectRunning, 0);
+            Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+        }
     }
 
     private void OnPipelineStatusChanged(object? sender, EventArgs args)
@@ -10937,9 +11056,35 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
-    private ValueTask OnRawBytesReceived(byte[] bytes, CancellationToken cancellationToken)
+    private void OnRawBytesReceived(BridgeRxChunk chunk)
     {
-        return _bridgeService.EnqueueDeviceBytesAsync(bytes, cancellationToken);
+        _bridgeService.TryEnqueueDeviceChunk(chunk);
+    }
+
+    private async Task ObserveBridgeProcessedLogsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var line in _bridgeLogProcessor.Logs.ReadAllAsync(cancellationToken))
+            {
+                if (FileLoggingEnabled)
+                {
+                    _fileLogWriter.TryEnqueue(line);
+                }
+
+                _eventDetector.TryEnqueue(line);
+                TryEnqueueBridgeVisualLog(line);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.ObserveBridgeProcessedLogsAsync", ex);
+            _lastBackgroundError = $"Bridge log observer failed: {ex.Message}";
+            Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+        }
     }
 
     private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
@@ -11124,6 +11269,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             warnings,
             BridgeVisualLogDroppedCount > 0,
             $"Bridge UI-only log entries dropped: {BridgeVisualLogDroppedCount:N0} (bridge transport unaffected)");
+        AddWarningIf(
+            warnings,
+            _bridgeLogProcessor.DroppedInputChunkCount > 0 || _bridgeLogProcessor.DroppedOutputLineCount > 0,
+            $"Bridge log processing drops: input {_bridgeLogProcessor.DroppedInputChunkCount:N0} chunks / {_bridgeLogProcessor.DroppedInputByteCount:N0} bytes, output {_bridgeLogProcessor.DroppedOutputLineCount:N0} lines (bridge transport unaffected)");
+        AddWarningIf(
+            warnings,
+            _bridgeLogProcessor.DecodeErrorCount > 0,
+            $"Bridge Terminal decode errors: {_bridgeLogProcessor.DecodeErrorCount:N0}");
         AddWarningIf(
             warnings,
             BridgePriorityDroppedPipelineChunkCount > 0,
@@ -11492,11 +11645,25 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Virtual to device bytes/chunks: {BridgeVirtualToDeviceByteCount:N0}/{BridgeVirtualToDeviceChunkCount:N0}");
         builder.AppendLine($"  Pending device-to-virtual chunks: {BridgePendingDeviceToVirtualChunkCount:N0}");
         builder.AppendLine($"  Pending virtual-to-device chunks: {BridgePendingVirtualToDeviceChunkCount:N0}");
+        builder.AppendLine($"  Pending device-to-virtual bytes: {BridgePendingDeviceToVirtualByteCount:N0}");
+        builder.AppendLine($"  Pending virtual-to-device bytes: {BridgePendingVirtualToDeviceByteCount:N0}");
+        builder.AppendLine($"  Oldest pending bridge chunk age: {BridgeOldestPendingChunkAgeMs:0.###} ms");
+        builder.AppendLine($"  Last/max device-to-virtual delay: {_bridgeService.LastDeviceToVirtualDelayMs:0.###}/{_bridgeService.MaxDeviceToVirtualDelayMs:0.###} ms");
+        builder.AppendLine($"  Replay late count/max lateness: {_bridgeService.ReplayLateCount:N0}/{_bridgeService.MaxReplayLatenessMs:0.###} ms");
+        builder.AppendLine($"  Queue overflow count: {_bridgeService.QueueOverflowCount:N0}");
+        builder.AppendLine($"  Last bridge fault: {(_bridgeService.LastFaultReason ?? "(none)")}");
+        builder.AppendLine($"  Last bridge activity: {(_bridgeService.LastBridgeActivityAt?.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) ?? "(none)")}");
+        builder.AppendLine($"  Manual TX state/wait/idle guard remaining: {ManualTxState}/{_bridgeService.ManualTxWaitMs:0.###}/{_bridgeService.ManualTxIdleGuardRemainingMs:0.###} ms");
         builder.AppendLine($"  Dropped device-to-virtual bytes/chunks: {BridgeDroppedDeviceToVirtualByteCount:N0}/{BridgeDroppedDeviceToVirtualChunkCount:N0}");
         builder.AppendLine($"  Dropped virtual-to-device bytes/chunks: {BridgeDroppedVirtualToDeviceByteCount:N0}/{BridgeDroppedVirtualToDeviceChunkCount:N0}");
         builder.AppendLine($"  Errors: {BridgeErrorCount:N0}");
         builder.AppendLine($"  UI-only bridge log pending/dropped: {BridgeVisualLogPendingCount:N0}/{BridgeVisualLogDroppedCount:N0}");
         builder.AppendLine("  UI-only bridge log drops do not affect raw bridge transport.");
+        builder.AppendLine($"  Bridge log input pending/dropped chunks/bytes: {_bridgeLogProcessor.PendingInputChunkCount:N0}/{_bridgeLogProcessor.DroppedInputChunkCount:N0}/{_bridgeLogProcessor.DroppedInputByteCount:N0}");
+        builder.AppendLine($"  Bridge log output dropped lines: {_bridgeLogProcessor.DroppedOutputLineCount:N0}");
+        builder.AppendLine($"  Bridge Terminal decode errors: {_bridgeLogProcessor.DecodeErrorCount:N0}");
+        builder.AppendLine($"  Bridge log processor errors: {_bridgeLogProcessor.ErrorCount:N0}");
+        builder.AppendLine("  Bridge log processing drops do not affect raw bridge transport.");
         builder.AppendLine($"  Raw bridge priority enabled: {IsRawBridgePriorityEnabled}");
         builder.AppendLine($"  Bridge-priority parser/log dropped bytes/chunks: {BridgePriorityDroppedPipelineByteCount:N0}/{BridgePriorityDroppedPipelineChunkCount:N0}");
         builder.AppendLine("  Bridge-priority parser/log drops do not affect raw bridge transport.");
@@ -11588,7 +11755,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Command history in profile: {Commands.CommandHistoryCount:N0}");
         builder.AppendLine($"  Command sequences in profile: {CommandSequences.Count:N0}");
         builder.AppendLine($"  Unified log rules in profile: {LogRules.Count:N0}");
-        builder.AppendLine($"  Text log rules in profile: {TextLogRuleCount:N0}");
+        builder.AppendLine($"  Terminal log rules in profile: {TerminalLogRuleCount:N0}");
         builder.AppendLine($"  HEX log rules in profile: {HexLogRuleCount:N0}");
         builder.AppendLine($"  Invalid HEX log rules in profile: {InvalidHexLogRuleCount:N0}");
         builder.AppendLine($"  Event rule projections in profile: {EventRules.Count:N0}");
@@ -11609,7 +11776,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Rules used for events: {ActiveEventLogRuleCount:N0}");
         builder.AppendLine($"  Rules used for highlights: {ActiveHighlightRuleCount:N0}");
         builder.AppendLine($"  Rules used for filters: {ActiveViewFilterRuleCount:N0}");
-        builder.AppendLine($"  Text mode rule count: {TextLogRuleCount:N0}");
+        builder.AppendLine($"  Terminal mode rule count: {TerminalLogRuleCount:N0}");
         builder.AppendLine($"  HEX mode rule count: {HexLogRuleCount:N0}");
         builder.AppendLine($"  Invalid HEX rule count: {InvalidHexLogRuleCount:N0}");
         builder.AppendLine($"  Last invalid HEX rule: {(string.IsNullOrWhiteSpace(LastInvalidHexLogRuleName) ? "(none)" : LastInvalidHexLogRuleName)}");
@@ -11875,7 +12042,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Active highlight rule count: {ActiveHighlightRuleCount:N0}");
         builder.AppendLine($"  Visual dispatcher flush count: {VisualDispatcherFlushCount:N0}");
         builder.AppendLine($"  Max visual dispatcher batch size: {MaxVisualDispatcherBatchSize:N0}");
-        builder.AppendLine($"  Compiled highlight text rule count: {Log.CompiledTextRuleCount:N0}");
+        builder.AppendLine($"  Compiled highlight Terminal rule count: {Log.CompiledTerminalRuleCount:N0}");
         builder.AppendLine($"  Compiled highlight HEX rule count: {Log.CompiledHexRuleCount:N0}");
         builder.AppendLine($"  Invalid compiled highlight rule count: {Log.InvalidCompiledRuleCount:N0}");
         builder.AppendLine($"  Current visible filter: {CurrentVisibleFilterText}");
@@ -11999,7 +12166,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Running: {_eventDetector.IsRunning}");
         builder.AppendLine($"  Event log writing enabled: {_eventDetector.EventLogWritingEnabled}");
         builder.AppendLine($"  Event rule count: {_eventDetector.EventRuleCount:N0}");
-        builder.AppendLine($"  Compiled event text rule count: {_eventDetector.CompiledTextRuleCount:N0}");
+        builder.AppendLine($"  Active event rule mode: {_eventDetector.ActiveRuleMode}");
+        builder.AppendLine($"  Compiled event Terminal rule count: {_eventDetector.CompiledTerminalRuleCount:N0}");
         builder.AppendLine($"  Compiled event HEX rule count: {_eventDetector.CompiledHexRuleCount:N0}");
         builder.AppendLine($"  Invalid compiled event rule count: {_eventDetector.InvalidCompiledRuleCount:N0}");
         builder.AppendLine($"  Enabled rule count: {EventRules.Count(rule => rule.Enabled):N0}");

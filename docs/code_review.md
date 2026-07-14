@@ -27,7 +27,7 @@ Create a non-WinUI test project for logic that can run without a window:
 
 - `LineParser` chunk boundaries, CR/LF/CRLF modes, and partial-line flushes.
 - `EncodingDecoder` invalid bytes and supported encodings.
-- `LogRuleMatcher` text/hex rules, direction, case, priority, and invalid input.
+- `LogRuleMatcher` Terminal/HEX mode rules, direction, case, priority, and invalid input.
 - `BoundedLogBuffer` overflow, resize, and large-batch behavior.
 - `ProfileService` normalization, corrupt JSON recovery, and atomic-save fallback.
 - `FileLogWriter` rotation/session naming with a temporary directory.

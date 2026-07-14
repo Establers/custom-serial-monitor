@@ -9,7 +9,7 @@ public interface ISerialService : IAsyncDisposable
 
     event EventHandler? StatusChanged;
 
-    event Func<byte[], CancellationToken, ValueTask>? RawBytesReceived;
+    event Action<BridgeRxChunk>? RawBytesReceived;
 
     bool IsConnected { get; }
 

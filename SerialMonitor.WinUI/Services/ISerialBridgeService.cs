@@ -36,6 +36,32 @@ public interface ISerialBridgeService : IAsyncDisposable
 
     int PendingVirtualToDeviceChunkCount { get; }
 
+    int PendingDeviceToVirtualByteCount { get; }
+
+    int PendingVirtualToDeviceByteCount { get; }
+
+    double OldestPendingChunkAgeMs { get; }
+
+    double LastDeviceToVirtualDelayMs { get; }
+
+    double MaxDeviceToVirtualDelayMs { get; }
+
+    long ReplayLateCount { get; }
+
+    double MaxReplayLatenessMs { get; }
+
+    long QueueOverflowCount { get; }
+
+    string? LastFaultReason { get; }
+
+    DateTimeOffset? LastBridgeActivityAt { get; }
+
+    ManualTxState ManualTxState { get; }
+
+    double ManualTxWaitMs { get; }
+
+    double ManualTxIdleGuardRemainingMs { get; }
+
     Task StartAsync(
         BridgeSettings settings,
         SerialSettings deviceSettings,
@@ -44,5 +70,9 @@ public interface ISerialBridgeService : IAsyncDisposable
 
     Task StopAsync(CancellationToken cancellationToken);
 
-    ValueTask EnqueueDeviceBytesAsync(byte[] bytes, CancellationToken cancellationToken);
+    bool TryEnqueueDeviceChunk(BridgeRxChunk chunk);
+
+    Task<ManualTransmitResult> QueueManualTransmitAsync(
+        Func<CancellationToken, Task> transmitAsync,
+        CancellationToken cancellationToken);
 }

@@ -59,8 +59,9 @@ public sealed class EventDetector : IEventDetector
     private long _contextCaptureOverloadTransitionCount;
     private long _lastContextCaptureOverloadTransitionUtcTicks;
     private long _ruleEvaluationErrorCount;
-    private int _compiledTextRuleCount;
+    private int _compiledTerminalRuleCount;
     private int _compiledHexRuleCount;
+    private int _activeRuleMode = (int)LogRuleMatchMode.Terminal;
     private int _invalidCompiledRuleCount;
     private int _activePendingContextCount;
     private int _isContextCaptureOverloadActive;
@@ -99,9 +100,14 @@ public sealed class EventDetector : IEventDetector
 
     public int EventRuleCount => Volatile.Read(ref _rules).Length;
 
-    public int CompiledTextRuleCount => Volatile.Read(ref _compiledTextRuleCount);
+    public int CompiledTerminalRuleCount => Volatile.Read(ref _compiledTerminalRuleCount);
 
     public int CompiledHexRuleCount => Volatile.Read(ref _compiledHexRuleCount);
+
+    public LogRuleMatchMode ActiveRuleMode =>
+        Volatile.Read(ref _activeRuleMode) == (int)LogRuleMatchMode.Hex
+            ? LogRuleMatchMode.Hex
+            : LogRuleMatchMode.Terminal;
 
     public int InvalidCompiledRuleCount => Volatile.Read(ref _invalidCompiledRuleCount);
 
@@ -300,7 +306,7 @@ public sealed class EventDetector : IEventDetector
             .Select(LogRuleMatcher.Compile)
             .ToArray();
         Volatile.Write(ref _rules, snapshot);
-        Volatile.Write(ref _compiledTextRuleCount, snapshot.Count(rule => rule.IsTextRule));
+        Volatile.Write(ref _compiledTerminalRuleCount, snapshot.Count(rule => rule.IsTerminalRule));
         Volatile.Write(ref _compiledHexRuleCount, snapshot.Count(rule => rule.IsHexRule));
         Volatile.Write(ref _invalidCompiledRuleCount, snapshot.Count(rule => rule.IsInvalid));
         var invalidRule = snapshot.FirstOrDefault(rule => rule.IsInvalid);
@@ -310,6 +316,17 @@ public sealed class EventDetector : IEventDetector
         }
 
         RaiseStatusChanged();
+    }
+
+    public void UpdateRuleMode(LogRuleMatchMode mode)
+    {
+        var normalized = mode == LogRuleMatchMode.Hex
+            ? LogRuleMatchMode.Hex
+            : LogRuleMatchMode.Terminal;
+        if (Interlocked.Exchange(ref _activeRuleMode, (int)normalized) != (int)normalized)
+        {
+            RaiseStatusChanged();
+        }
     }
 
     public void UpdateContextSettings(EventContextSettings contextSettings)
@@ -510,13 +527,14 @@ public sealed class EventDetector : IEventDetector
         }
 
         IReadOnlyList<LogLine>? beforeContext = null;
+        var activeMode = ActiveRuleMode;
         foreach (var rule in rules)
         {
             bool isMatch;
             string? matchError;
             try
             {
-                isMatch = LogRuleMatcher.IsMatch(line, rule, out matchError);
+                isMatch = LogRuleMatcher.IsMatch(line, rule, activeMode, out matchError);
             }
             catch (Exception ex)
             {
@@ -536,7 +554,7 @@ public sealed class EventDetector : IEventDetector
                     ? _beforeContextBuffer.ToArray()
                     : Array.Empty<LogLine>();
                 var sourceRule = rule.Rule;
-                if (sourceRule.MatchMode == LogRuleMatchMode.Hex)
+                if (sourceRule.Mode == LogRuleMatchMode.Hex)
                 {
                     RecordHexRuleMatch(sourceRule, line);
                 }
@@ -1028,7 +1046,7 @@ public sealed class EventDetector : IEventDetector
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,

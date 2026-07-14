@@ -14,7 +14,7 @@ public sealed class DisplayModeNameConverter : IValueConverter
             LogRuleMatchMode.Hex => "HEX",
             RxDisplayMode.Terminal => "Terminal",
             TxSendMode.Terminal => "Terminal",
-            LogRuleMatchMode.Text => "Text",
+            LogRuleMatchMode.Terminal => "Terminal",
             _ => "Terminal"
         };
     }

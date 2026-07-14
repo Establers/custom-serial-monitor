@@ -19,9 +19,11 @@ public interface IEventDetector : IAsyncDisposable
 
     int EventRuleCount { get; }
 
-    int CompiledTextRuleCount { get; }
+    int CompiledTerminalRuleCount { get; }
 
     int CompiledHexRuleCount { get; }
+
+    LogRuleMatchMode ActiveRuleMode { get; }
 
     int InvalidCompiledRuleCount { get; }
 
@@ -87,6 +89,8 @@ public interface IEventDetector : IAsyncDisposable
         CancellationToken cancellationToken);
 
     void UpdateRules(IReadOnlyList<EventRule> rules);
+
+    void UpdateRuleMode(LogRuleMatchMode mode);
 
     void UpdateContextSettings(EventContextSettings contextSettings);
 

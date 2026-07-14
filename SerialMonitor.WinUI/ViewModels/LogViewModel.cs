@@ -59,7 +59,7 @@ public sealed class LogViewModel : ViewModelBase
     private long _visibleCharacterCount;
     private long _maxRetainedLineCountSeen;
     private long _partialRxAppendInPlaceCount;
-    private int _compiledTextRuleCount;
+    private int _compiledTerminalRuleCount;
     private int _compiledHexRuleCount;
     private int _invalidCompiledRuleCount;
 
@@ -141,7 +141,7 @@ public sealed class LogViewModel : ViewModelBase
 
     public long PartialRxAppendInPlaceCount => Interlocked.Read(ref _partialRxAppendInPlaceCount);
 
-    public int CompiledTextRuleCount => _compiledTextRuleCount;
+    public int CompiledTerminalRuleCount => _compiledTerminalRuleCount;
 
     public int CompiledHexRuleCount => _compiledHexRuleCount;
 
@@ -172,10 +172,10 @@ public sealed class LogViewModel : ViewModelBase
     public void SetHighlightRules(IEnumerable<HighlightRule> highlightRules)
     {
         _highlightRules = highlightRules.Select(LogRuleMatcher.Compile).ToArray();
-        _compiledTextRuleCount = _highlightRules.Count(rule => rule.IsTextRule);
+        _compiledTerminalRuleCount = _highlightRules.Count(rule => rule.IsTerminalRule);
         _compiledHexRuleCount = _highlightRules.Count(rule => rule.IsHexRule);
         _invalidCompiledRuleCount = _highlightRules.Count(rule => rule.IsInvalid);
-        OnPropertyChanged(nameof(CompiledTextRuleCount));
+        OnPropertyChanged(nameof(CompiledTerminalRuleCount));
         OnPropertyChanged(nameof(CompiledHexRuleCount));
         OnPropertyChanged(nameof(InvalidCompiledRuleCount));
     }
@@ -893,12 +893,10 @@ public sealed class LogViewModel : ViewModelBase
         RxDisplayMode rxDisplayMode,
         out string? error)
     {
-        var effectiveContentMode = line.Direction == LogDirection.Rx
-            ? NormalizeRxDisplayMode(rxDisplayMode) == RxDisplayMode.Hex
-                ? LogRuleMatchMode.Hex
-                : LogRuleMatchMode.Text
-            : line.ContentMode;
-        return LogRuleMatcher.IsMatch(line, rule, effectiveContentMode, out error);
+        var activeMode = NormalizeRxDisplayMode(rxDisplayMode) == RxDisplayMode.Hex
+            ? LogRuleMatchMode.Hex
+            : LogRuleMatchMode.Terminal;
+        return LogRuleMatcher.IsMatch(line, rule, activeMode, out error);
     }
 
     private static HighlightRule CloneHighlightRule(HighlightRule rule)
@@ -909,7 +907,7 @@ public sealed class LogViewModel : ViewModelBase
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
-            MatchMode = rule.MatchMode,
+            Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
             BackgroundColor = rule.BackgroundColor,
