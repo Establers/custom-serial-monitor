@@ -5,7 +5,7 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class TerminalBracketHighlightTests
 {
-    private const string AliceBlue = "\u001b[38;2;240;248;255m";
+    private const string BracketBlue = "\u001b[38;2;207;232;255m";
     private const string Cyan = "\u001b[36m";
     private const string Reset = "\u001b[0m";
 
@@ -18,8 +18,8 @@ public sealed class TerminalBracketHighlightTests
         var snapshot = viewModel.GetVisibleTextSnapshot();
 
         Assert.StartsWith("[", snapshot, StringComparison.Ordinal);
-        Assert.Contains($"RX < plain {AliceBlue}[INFO]{Reset} message", snapshot, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(snapshot, AliceBlue));
+        Assert.Contains($"RX < plain {BracketBlue}[INFO]{Reset} message", snapshot, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(snapshot, BracketBlue));
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public sealed class TerminalBracketHighlightTests
         var viewModel = new LogViewModel(capacity: 100);
         viewModel.AddRange(new[] { LogLine.Rx("plain [INFO message") });
 
-        Assert.DoesNotContain(AliceBlue, viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.DoesNotContain(BracketBlue, viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class TerminalBracketHighlightTests
         viewModel.SetRxDisplayMode(RxDisplayMode.Hex);
         viewModel.AddRange(new[] { LogLine.Tx("[INFO]") });
 
-        Assert.DoesNotContain(AliceBlue, viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.DoesNotContain(BracketBlue, viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class TerminalBracketHighlightTests
         viewModel.AddRange(new[] { LogLine.Tx("before [TAG] after") });
 
         Assert.Equal(
-            $"{Cyan}TX > before {AliceBlue}[TAG]{Reset}{Cyan} after{Reset}{Environment.NewLine}",
+            $"{Cyan}TX > before {BracketBlue}[TAG]{Reset}{Cyan} after{Reset}{Environment.NewLine}",
             viewModel.GetVisibleTextSnapshot());
     }
 
@@ -71,7 +71,7 @@ public sealed class TerminalBracketHighlightTests
 
         var snapshot = viewModel.GetVisibleTextSnapshot();
         Assert.Contains($"\u001b[31mRX < [TAG] ERROR{Reset}", snapshot, StringComparison.Ordinal);
-        Assert.DoesNotContain(AliceBlue, snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain(BracketBlue, snapshot, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,8 +87,8 @@ public sealed class TerminalBracketHighlightTests
         });
 
         var snapshot = viewModel.GetVisibleTextSnapshot();
-        Assert.Contains($"{AliceBlue}[A]{Reset} {AliceBlue}[B]{Reset}", snapshot, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(snapshot, AliceBlue));
+        Assert.Contains($"{BracketBlue}[A]{Reset} {BracketBlue}[B]{Reset}", snapshot, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(snapshot, BracketBlue));
     }
 
     private static int CountOccurrences(string text, string value)

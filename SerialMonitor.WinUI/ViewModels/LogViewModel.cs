@@ -30,7 +30,7 @@ public sealed class LogViewModel : ViewModelBase
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
     private const int LiveBatchPreallocationMaxChars = 1024 * 1024;
     private const int EstimatedFormattedLineOverheadChars = 64;
-    private const string AnsiAliceBlue = "\u001b[38;2;240;248;255m";
+    private const string AnsiBracketBlue = "\u001b[38;2;207;232;255m";
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
     private const string AnsiGray = "\u001b[90m";
@@ -907,7 +907,7 @@ public sealed class LogViewModel : ViewModelBase
         while (openIndex >= 0 && closeIndex >= 0)
         {
             builder.Append(text, cursor, openIndex - cursor);
-            builder.Append(AnsiAliceBlue);
+            builder.Append(AnsiBracketBlue);
             builder.Append(text, openIndex, closeIndex - openIndex + 1);
             builder.Append(AnsiReset);
 
