@@ -12,8 +12,8 @@ public sealed class LogRuleMatchingConsistencyTests
     [Fact]
     public async Task HexPattern_InOneLogLine_MatchesEventHighlightAndViewFilter()
     {
-        var line = LogLine.Tx(
-            "[BRIDGE] 10 DE AD BE EF 20",
+        var line = LogLine.Rx(
+            "10 DE AD BE EF 20",
             new byte[] { 0x10, 0xDE, 0xAD, 0xBE, 0xEF, 0x20 },
             contentMode: LogRuleMatchMode.Hex);
         var eventRule = CreateEventRule();
@@ -60,12 +60,12 @@ public sealed class LogRuleMatchingConsistencyTests
     {
         var lines = new[]
         {
-            LogLine.Tx(
-                "[BRIDGE] 10 DE AD",
+            LogLine.Rx(
+                "10 DE AD",
                 new byte[] { 0x10, 0xDE, 0xAD },
                 contentMode: LogRuleMatchMode.Hex),
-            LogLine.Tx(
-                "[BRIDGE] BE EF 20",
+            LogLine.Rx(
+                "BE EF 20",
                 new byte[] { 0xBE, 0xEF, 0x20 },
                 contentMode: LogRuleMatchMode.Hex)
         };
@@ -120,7 +120,7 @@ public sealed class LogRuleMatchingConsistencyTests
         Keyword = Pattern,
         Enabled = true,
         Mode = LogRuleMatchMode.Hex,
-        MatchDirection = EventMatchDirection.TxOnly
+        MatchDirection = EventMatchDirection.RxOnly
     };
 
     private static HighlightRule CreateHighlightRule() => new()
@@ -129,7 +129,7 @@ public sealed class LogRuleMatchingConsistencyTests
         Keyword = Pattern,
         Enabled = true,
         Mode = LogRuleMatchMode.Hex,
-        MatchDirection = HighlightMatchDirection.TxOnly,
+        MatchDirection = HighlightMatchDirection.RxOnly,
         ForegroundColor = "Red",
         UseAsViewFilter = true
     };

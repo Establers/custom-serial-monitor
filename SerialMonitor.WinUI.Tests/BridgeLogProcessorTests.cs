@@ -17,7 +17,7 @@ public sealed class BridgeLogProcessorTests
     };
 
     [Fact]
-    public async Task TerminalMode_DecodesTextAndActivatesOnlyTerminalTxRules()
+    public async Task TerminalMode_DecodesTextWithoutBridgePrefixAndActivatesOnlyTerminalRxRules()
     {
         await using var processor = new BridgeLogProcessor(TimeSpan.FromMilliseconds(10));
         var bytes = "ERROR"u8.ToArray();
@@ -25,27 +25,27 @@ public sealed class BridgeLogProcessorTests
         Assert.True(processor.TryEnqueue(bytes, RxDisplayMode.Terminal, RxEncodingMode.Utf8));
         var line = await ReadLineAsync(processor);
 
-        Assert.Equal(LogDirection.Tx, line.Direction);
-        Assert.Equal("[BRIDGE] ERROR", line.Text);
-        Assert.Equal("[BRIDGE] ERROR", line.DisplayText);
+        Assert.Equal(LogDirection.Rx, line.Direction);
+        Assert.Equal("ERROR", line.Text);
+        Assert.Equal("ERROR", line.DisplayText);
         Assert.Equal(bytes, line.RawBytes);
         Assert.Equal(LogRuleMatchMode.Terminal, line.ContentMode);
 
         var terminalRule = LogRuleMatcher.Compile(new EventRule
         {
-            Name = "terminal-tx",
+            Name = "terminal-rx",
             Keyword = "ERROR",
             Enabled = true,
             Mode = LogRuleMatchMode.Terminal,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
         var hexRule = LogRuleMatcher.Compile(new EventRule
         {
-            Name = "hex-tx",
+            Name = "hex-rx",
             Keyword = "45 52 52 4F 52",
             Enabled = true,
             Mode = LogRuleMatchMode.Hex,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
 
         Assert.True(LogRuleMatcher.IsMatch(line, terminalRule, LogRuleMatchMode.Terminal, out _));
@@ -53,7 +53,7 @@ public sealed class BridgeLogProcessorTests
     }
 
     [Fact]
-    public async Task HexMode_FormatsBytesAndActivatesOnlyHexTxRules()
+    public async Task HexMode_FormatsBytesWithoutBridgePrefixAndActivatesOnlyHexRxRules()
     {
         await using var processor = new BridgeLogProcessor(TimeSpan.FromMilliseconds(10));
         var bytes = "ERROR"u8.ToArray();
@@ -61,8 +61,8 @@ public sealed class BridgeLogProcessorTests
         Assert.True(processor.TryEnqueue(bytes, RxDisplayMode.Hex, RxEncodingMode.Utf8));
         var line = await ReadLineAsync(processor);
 
-        Assert.Equal(LogDirection.Tx, line.Direction);
-        Assert.Equal("[BRIDGE] 45 52 52 4F 52", line.Text);
+        Assert.Equal(LogDirection.Rx, line.Direction);
+        Assert.Equal("45 52 52 4F 52", line.Text);
         Assert.Equal(bytes, line.RawBytes);
         Assert.Equal(LogRuleMatchMode.Hex, line.ContentMode);
 
@@ -71,14 +71,14 @@ public sealed class BridgeLogProcessorTests
             Keyword = "ERROR",
             Enabled = true,
             Mode = LogRuleMatchMode.Terminal,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
         var hexRule = LogRuleMatcher.Compile(new EventRule
         {
             Keyword = "45 52 52 4F 52",
             Enabled = true,
             Mode = LogRuleMatchMode.Hex,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
 
         Assert.False(LogRuleMatcher.IsMatch(line, terminalRule, LogRuleMatchMode.Hex, out _));
@@ -109,7 +109,7 @@ public sealed class BridgeLogProcessorTests
             Keyword = "DE AD BE EF",
             Enabled = true,
             Mode = LogRuleMatchMode.Hex,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
 
         Assert.Equal(bytes, line.RawBytes);
@@ -138,7 +138,7 @@ public sealed class BridgeLogProcessorTests
             Keyword = "DE AD BE EF",
             Enabled = true,
             Mode = LogRuleMatchMode.Hex,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
 
         Assert.Equal(new byte[] { 0xBE, 0xEF }, line.RawBytes);
@@ -256,14 +256,14 @@ public sealed class BridgeLogProcessorTests
         Assert.True(processor.TryEnqueue(bytes[4..], RxDisplayMode.Terminal, encodingMode));
         var line = await ReadLineAsync(processor);
 
-        Assert.Equal("[BRIDGE] 가ERROR나", line.Text);
+        Assert.Equal("가ERROR나", line.Text);
         Assert.Equal(bytes, line.RawBytes);
         var rule = LogRuleMatcher.Compile(new EventRule
         {
             Keyword = "가ERROR나",
             Enabled = true,
             Mode = LogRuleMatchMode.Terminal,
-            MatchDirection = EventMatchDirection.TxOnly
+            MatchDirection = EventMatchDirection.RxOnly
         });
         Assert.True(LogRuleMatcher.IsMatch(line, rule, LogRuleMatchMode.Terminal, out _));
     }
@@ -284,7 +284,7 @@ public sealed class BridgeLogProcessorTests
         var line = await ReadLineAsync(processor);
 
         Assert.True(expected.HadError);
-        Assert.Equal($"[BRIDGE] {expected.Text}", line.Text);
+        Assert.Equal(expected.Text, line.Text);
         Assert.True(processor.DecodeErrorCount > 0);
     }
 

@@ -51,12 +51,13 @@ real hardware when available.
 - [ ] Open an external controller or analyzer on `COM5`, not `COM4`.
 - [ ] Confirm real-device RX bytes arrive unchanged at the external program.
 - [ ] Send binary/HEX data from the external program and confirm the exact bytes reach the device.
-- [ ] Confirm virtual-to-device traffic appears as `[BRIDGE]` TX in the app log.
+- [ ] Confirm virtual-to-device traffic appears as RX in the app log without a
+  `[BRIDGE]` prefix.
 - [ ] In Terminal mode with UTF-8 selected, send bytes `45 52 52 4F 52` and
-  confirm the log shows `[BRIDGE] ERROR`, a Terminal `TxOnly` rule fires, and an
+  confirm the log shows `ERROR`, a Terminal `RxOnly` rule fires, and an
   equivalent HEX rule does not fire.
 - [ ] In HEX mode, send bytes `45 52 52 4F 52` and confirm the log shows
-  `[BRIDGE] 45 52 52 4F 52`, a HEX `TxOnly` rule fires, and an equivalent
+  `45 52 52 4F 52`, a HEX `RxOnly` rule fires, and an equivalent
   Terminal rule does not fire.
 - [ ] In Terminal mode, split one UTF-8 multibyte character across consecutive
   bridge writes and confirm it is decoded without replacement characters.

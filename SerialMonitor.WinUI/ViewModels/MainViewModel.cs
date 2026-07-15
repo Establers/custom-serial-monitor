@@ -3964,8 +3964,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         * Bridge는 실제 장비 COM과 선택한 가상 COM 사이에서 원본 바이트를 양방향 전달합니다.
         * 외부 프로그램은 com0com 쌍의 반대편 포트를 열어야 합니다.
-        * Bridge TX 로그는 현재 Terminal/HEX 모드를 따르며 방향은 TX입니다.
-        * Terminal에서는 선택한 인코딩으로 디코딩하고 Terminal 규칙만, HEX에서는 원본 바이트와 HEX 규칙만 사용합니다.
+        * 가상 포트에서 들어온 Bridge 로그는 현재 Terminal/HEX 모드를 따르며 방향은 RX입니다.
+        * Terminal에서는 선택한 인코딩으로 디코딩하고 Terminal RX 규칙만, HEX에서는 원본 바이트와 HEX RX 규칙만 사용합니다.
         * 표시 형식, 인코딩, 필터, 줄바꿈 설정은 실제 브리지 전달 바이트를 변경하지 않습니다.
         * Bridge ON은 상단과 하단 상태줄에 항상 표시됩니다.
 
@@ -6890,7 +6890,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
-            var txDisplayText = command.CommandText;
             var txRawBytes = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(lineEndingMode));
             var txByteCount = txRawBytes.Length;
             var hexParseError = string.Empty;
@@ -6907,12 +6906,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                     txByteCount = hexPayload.Length;
                     txRawBytes = hexPayload;
-                    txDisplayText = $"[HEX] {FormatBytesAsHex(hexPayload)}";
                     break;
 
                 default:
                     break;
             }
+
+            var txDisplayText = FormatTxLogText(sendMode, command.CommandText, txRawBytes);
 
             if (IsBridgeActive)
             {
@@ -7065,6 +7065,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         return builder.ToString();
+    }
+
+    internal static string FormatTxLogText(TxSendMode mode, string commandText, byte[] rawBytes)
+    {
+        ArgumentNullException.ThrowIfNull(commandText);
+        ArgumentNullException.ThrowIfNull(rawBytes);
+        return mode == TxSendMode.Hex
+            ? FormatBytesAsHex(rawBytes)
+            : commandText;
     }
 
     private static string ToLineEnding(TxLineEndingMode mode)

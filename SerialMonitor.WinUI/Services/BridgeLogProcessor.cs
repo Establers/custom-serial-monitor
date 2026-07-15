@@ -311,12 +311,11 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         }
 
         var decodedText = group.Text.ToString().TrimEnd('\r', '\n');
-        var matchText = $"[BRIDGE] {decodedText}";
-        var displayText = $"[BRIDGE] {EscapeControlCharacters(decodedText)}";
+        var displayText = EscapeControlCharacters(decodedText);
         Emit(new LogLine(
             DateTimeOffset.Now,
-            LogDirection.Tx,
-            matchText,
+            LogDirection.Rx,
+            decodedText,
             group.RawBytes.ToArray(),
             displayText: displayText,
             contentMode: LogRuleMatchMode.Terminal));
@@ -341,8 +340,8 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
             builder.Append($" … (+{bytes.Length - visibleLength:N0} bytes)");
         }
 
-        Emit(LogLine.Tx(
-            $"[BRIDGE] {builder}",
+        Emit(LogLine.Rx(
+            builder.ToString(),
             bytes,
             contentMode: LogRuleMatchMode.Hex));
     }

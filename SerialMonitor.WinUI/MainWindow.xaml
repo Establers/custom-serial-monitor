@@ -1643,7 +1643,7 @@
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
                                         Padding="6">
-                                    <TextBlock Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs follow the current app mode: Terminal uses the selected encoding and Terminal TX rules; HEX shows bytes and uses HEX TX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
+                                    <TextBlock Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
                                                TextWrapping="WrapWholeWords"
                                                Style="{StaticResource CompactCellTextStyle}" />
                                 </Border>

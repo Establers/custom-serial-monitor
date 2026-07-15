@@ -48,7 +48,8 @@ the xterm view only; persisted logs remain plain text.
   bridge without disconnecting the device. The virtual writer replays observed
   monotonic receive gaps best-effort, while the physical writer is the sole
   scheduler for bridge traffic and one pending manual TX.
-- `BridgeLogProcessor` owns the optional virtual-to-device TX representation.
+- `BridgeLogProcessor` owns the optional virtual-to-device RX log representation
+  for data received from the virtual port.
   Its bounded background pipeline uses a bridge-dedicated streaming decoder in
   Terminal mode and byte-exact HEX matching data in HEX mode; it never modifies
   the bytes forwarded by `SerialBridgeService`.
