@@ -300,7 +300,7 @@ public sealed class SerialService : ISerialService
         ArgumentNullException.ThrowIfNull(command);
 
         var payload = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(command.LineEndingMode ?? TxLineEndingMode.None));
-        await SendPayloadAsync(payload, $"mock device received command: {command.CommandText}{Environment.NewLine}", cancellationToken);
+        await SendPayloadAsync(payload, $"{command.CommandText}{Environment.NewLine}", cancellationToken);
     }
 
     public async Task SendBytesAsync(byte[] payload, string mockEchoText, CancellationToken cancellationToken)
@@ -308,7 +308,7 @@ public sealed class SerialService : ISerialService
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(payload);
 
-        await SendPayloadAsync(payload, $"mock device received bytes: {mockEchoText}{Environment.NewLine}", cancellationToken);
+        await SendPayloadAsync(payload, $"{mockEchoText}{Environment.NewLine}", cancellationToken);
     }
 
     private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken)

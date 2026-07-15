@@ -5438,7 +5438,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ForwardBridgeBytesToDeviceAsync(byte[] bytes, CancellationToken cancellationToken)
     {
-        await _serialService.SendBytesAsync(bytes, "[BRIDGE RAW]", cancellationToken);
+        await _serialService.SendBytesAsync(bytes, FormatBytesAsHex(bytes), cancellationToken);
         if (!_bridgeLogProcessor.TryEnqueue(bytes, SelectedRxDisplayMode, SelectedRxEncoding))
         {
             Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
