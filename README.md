@@ -27,6 +27,7 @@ marketing-style UI.
 - Asynchronous plain-text serial file logging with daily and optional size rotation.
 - JSON profile save/load/reset.
 - MOCK port and opt-in mock stress mode with sequence-loss counters.
+- Physical/com0com packet stress generator for 3-5 ms traffic and native idle-timeout probes.
 - Compact health summary and copyable diagnostics.
 
 ## Basic Usage
@@ -101,6 +102,7 @@ profiles under `%LOCALAPPDATA%\SerialMonitor`. See
 ## Documentation
 
 - Manual regression checklist: `docs/manual_test_checklist.md`
+- com0com packet and timeout stress testing: `docs/com0com_stress_testing.md`
 - Known limitations: `docs/known_limitations.md`
 - Code review and improvement plan: `docs/code_review.md`
 - Portable deployment: `docs/portable_deployment.md`

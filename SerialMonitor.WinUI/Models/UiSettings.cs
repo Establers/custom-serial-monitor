@@ -4,7 +4,8 @@ public enum MockGeneratorPattern
 {
     NormalLines,
     NoNewlineZzz,
-    NoNewlineZzzBurst
+    NoNewlineZzzBurst,
+    VisualHexPackets
 }
 
 public enum TimestampDisplayFormat

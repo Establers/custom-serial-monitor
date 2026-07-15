@@ -2287,9 +2287,9 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding MockGeneratorPatternOptions}"
                                                       SelectedItem="{Binding SelectedMockGeneratorPatternOption, Mode=TwoWay}"
-                                                      Width="150"
+                                                      Width="170"
                                                       HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Choose normal MOCK lines or a no-newline zzz stream for partial RX testing." />
+                                                      ToolTipService.ToolTip="Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms." />
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"

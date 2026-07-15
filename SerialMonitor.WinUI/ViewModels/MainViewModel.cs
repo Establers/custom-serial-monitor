@@ -903,7 +903,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         new(MockGeneratorPattern.NormalLines, "Normal Lines"),
         new(MockGeneratorPattern.NoNewlineZzz, "No-Newline zzz"),
-        new(MockGeneratorPattern.NoNewlineZzzBurst, "No-Newline zzz burst")
+        new(MockGeneratorPattern.NoNewlineZzzBurst, "No-Newline zzz burst"),
+        new(MockGeneratorPattern.VisualHexPackets, "Visual HEX 3-5 ms")
     };
 
     public LogViewModel Log { get; } = new(DefaultVisibleLogLines);
@@ -1755,6 +1756,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             MockGeneratorPattern.NoNewlineZzz => "No-Newline zzz",
             MockGeneratorPattern.NoNewlineZzzBurst => "No-Newline zzz burst",
+            MockGeneratorPattern.VisualHexPackets => "Visual HEX 3-5 ms",
             _ => "Normal Lines"
         };
     }
@@ -2951,10 +2953,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsMockStressRunning => _serialService.IsMockStressRunning;
 
-    public string MockStressStatusText =>
-        _serialService.MockGeneratorPattern == MockGeneratorPattern.NormalLines
-            ? $"{_serialService.MockStressStatus}; Missing sequences: {MockMissingSequenceCount:N0}"
-            : $"{_serialService.MockStressStatus}; z bytes: {MockNoNewlineEmittedBytes:N0}";
+    public string MockStressStatusText => _serialService.MockGeneratorPattern switch
+    {
+        MockGeneratorPattern.NormalLines =>
+            $"{_serialService.MockStressStatus}; Missing sequences: {MockMissingSequenceCount:N0}",
+        MockGeneratorPattern.VisualHexPackets =>
+            $"{_serialService.MockStressStatus}; Packets: {MockGeneratedLineCount:N0}",
+        _ => $"{_serialService.MockStressStatus}; z bytes: {MockNoNewlineEmittedBytes:N0}"
+    };
 
     public long MockGeneratedLineCount => _serialService.MockGeneratedLineCount;
 
@@ -11401,7 +11407,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string CreateFooterStatus()
     {
-        var missingSequenceText = IsMockStressRunning
+        var missingSequenceText = IsMockStressRunning &&
+            _serialService.MockGeneratorPattern == MockGeneratorPattern.NormalLines
             ? $" | Missing {MockMissingSequenceCount:N0}"
             : string.Empty;
         var viewBacklogText = PendingVisualLineCount >= PendingVisualWarningThreshold
@@ -12087,7 +12094,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Selected burst size: {SelectedMockStressBurstSize:N0}");
         builder.AppendLine($"  ERROR/WARN/FAULT injection enabled: {IsMockStressEventInjectionEnabled}");
         builder.AppendLine($"  Invalid byte injection enabled: {IsMockStressInvalidByteInjectionEnabled}");
-        builder.AppendLine($"  Mock generated lines: {MockGeneratedLineCount:N0}");
+        builder.AppendLine($"  Mock generated lines/packets: {MockGeneratedLineCount:N0}");
         builder.AppendLine($"  Mock expected sequence: {MockExpectedSequence:N0}");
         builder.AppendLine($"  Mock last generated sequence: {MockLastGeneratedSequence:N0}");
         builder.AppendLine($"  Mock last parsed sequence: {MockLastParsedSequence:N0}");

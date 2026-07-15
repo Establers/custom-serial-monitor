@@ -325,6 +325,28 @@ real hardware when available.
 - [ ] Stop stress mode.
 - [ ] Reset stress counters.
 
+## Physical COM Packet And Timeout Stress
+
+- [ ] Confirm the `COM4 <-> COM5` com0com pair is free.
+- [ ] In the sender instance, connect to MOCK, bridge to `COM4`, select
+  `Visual HEX 3-5 ms`, and start stress.
+- [ ] In the receiver instance, connect to `COM5` at 460800 baud in HEX mode and
+  apply a 15 ms HEX timeout; confirm it sees
+  2-6 packets per group with a new group after each long gap.
+- [ ] Confirm every correct logical line starts `AA 55 F1`, stays on one group
+  number, and ends with its `F3` packet; treat lines starting `F2/F3` as splits
+  and an `F3 -> next F1` pair on one line as a merge.
+- [ ] For the standalone tool test, close both instances, reopen the receiver on
+  `COM4`, and run the stress tool on `COM5` in timeout mode using the command in
+  `docs/com0com_stress_testing.md`.
+- [ ] Confirm 3-5 ms packets stay in one HEX group until each 32-40 ms gap.
+- [ ] Confirm the next packet after the long gap starts a new HEX group.
+- [ ] Confirm RX/file counters rise, UI remains responsive, and serial and
+  connection error counters stay at zero.
+- [ ] Repeat in load mode for at least two minutes and verify the tool's final
+  actual-gap and throughput summary.
+- [ ] Close Serial Monitor and run the opt-in automated native-boundary test.
+
 ## Health And Diagnostics
 
 - [ ] Confirm bottom status shows `HEALTH OK` during a clean mock session.

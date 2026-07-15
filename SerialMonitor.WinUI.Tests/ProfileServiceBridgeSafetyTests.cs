@@ -7,6 +7,27 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class ProfileServiceBridgeSafetyTests
 {
     [Fact]
+    public async Task SaveAndLoad_PreservesVisualHexMockPattern()
+    {
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        profile.UiSettings.MockGeneratorPattern = MockGeneratorPattern.VisualHexPackets;
+        var path = CreateTemporaryProfilePath();
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(MockGeneratorPattern.VisualHexPackets, loaded.UiSettings.MockGeneratorPattern);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
     public async Task SaveAsync_NeverPersistsBridgeAsEnabled()
     {
         var service = new ProfileService();

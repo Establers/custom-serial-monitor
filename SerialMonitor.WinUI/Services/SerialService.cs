@@ -8,6 +8,7 @@ namespace SerialMonitor.WinUI.Services;
 public sealed class SerialService : ISerialService
 {
     private const int SerialReadBufferBytes = 1024 * 1024;
+    private const int MockVisualPacketOverheadBytes = 16;
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
@@ -131,6 +132,7 @@ public sealed class SerialService : ISerialService
         {
             MockGeneratorPattern.NoNewlineZzz => "Stress running: No-newline zzz slow",
             MockGeneratorPattern.NoNewlineZzzBurst => "Stress running: No-newline zzz burst",
+            MockGeneratorPattern.VisualHexPackets => "Stress running: Visual HEX AA55 F1/F2/F3, 3-5 ms",
             _ => $"Stress running: {MockStressLinesPerSecond:N0} lps, burst {MockStressBurstSize:N0}"
         }
         : "Stress stopped";
@@ -217,12 +219,15 @@ public sealed class SerialService : ISerialService
 
             _receivedBytes = CreateChannel();
             _receiveCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var receiveToken = _receiveCancellation.Token;
             SetConnectionState(SerialConnectionState.Connecting, clearLastError: true);
 
             if (IsMockPort(settings.PortName))
             {
                 _isMockConnection = true;
-                _receiveTask = Task.Run(() => RunMockReceiverAsync(settings.Clone(), _receiveCancellation.Token), CancellationToken.None);
+                _receiveTask = Task.Run(
+                    () => RunMockReceiverAsync(settings.Clone(), receiveToken),
+                    CancellationToken.None);
                 SetConnectionState(SerialConnectionState.Connected, clearLastError: true);
                 return;
             }
@@ -264,7 +269,7 @@ public sealed class SerialService : ISerialService
             _receiveTask = Task.Factory.StartNew(
                 () => RunSerialReceiver(
                     serialPort,
-                    _receiveCancellation.Token),
+                    receiveToken),
                 CancellationToken.None,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
@@ -546,6 +551,10 @@ public sealed class SerialService : ISerialService
     private async Task RunMockReceiverAsync(SerialSettings settings, CancellationToken cancellationToken)
     {
         var counter = 0;
+        var timedRandom = new Random(384_009_600);
+        var timedGroup = 0;
+        var timedPacketsInGroup = timedRandom.Next(2, 7);
+        var timedPacketIndex = 0;
 
         try
         {
@@ -561,6 +570,33 @@ public sealed class SerialService : ISerialService
                 }
 
                 var pattern = MockGeneratorPattern;
+                if (pattern == MockGeneratorPattern.VisualHexPackets)
+                {
+                    timedPacketIndex++;
+                    var bytes = CreateMockVisualPacket(
+                        timedRandom,
+                        timedGroup,
+                        timedPacketIndex,
+                        timedPacketsInGroup);
+                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
+
+                    double timedDelayMilliseconds;
+                    if (timedPacketIndex == timedPacketsInGroup)
+                    {
+                        timedGroup++;
+                        timedPacketsInGroup = timedRandom.Next(2, 7);
+                        timedPacketIndex = 0;
+                        timedDelayMilliseconds = 25 + (timedRandom.NextDouble() * 15);
+                    }
+                    else
+                    {
+                        timedDelayMilliseconds = 3 + (timedRandom.NextDouble() * 2);
+                    }
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(timedDelayMilliseconds), cancellationToken);
+                    continue;
+                }
+
                 if (pattern is MockGeneratorPattern.NoNewlineZzz or MockGeneratorPattern.NoNewlineZzzBurst)
                 {
                     var bytes = CreateMockNoNewlineChunk(pattern);
@@ -634,6 +670,41 @@ public sealed class SerialService : ISerialService
         Array.Fill(bytes, (byte)'z');
         Interlocked.Add(ref _mockNoNewlineEmittedBytes, length);
         return bytes;
+    }
+
+    private byte[] CreateMockVisualPacket(
+        Random random,
+        int group,
+        int packetIndex,
+        int packetsInGroup)
+    {
+        var sequence = Interlocked.Increment(ref _mockLastGeneratedSequence);
+        var length = random.Next(24, 65);
+        var packet = new byte[length];
+        packet[0] = 0xAA;
+        packet[1] = 0x55;
+        packet[2] = packetIndex == 1
+            ? (byte)0xF1
+            : packetIndex == packetsInGroup
+                ? (byte)0xF3
+                : (byte)0xF2;
+        packet[3] = (byte)(group >> 24);
+        packet[4] = (byte)(group >> 16);
+        packet[5] = (byte)(group >> 8);
+        packet[6] = (byte)group;
+        packet[7] = checked((byte)packetIndex);
+        packet[8] = checked((byte)packetsInGroup);
+        packet[9] = checked((byte)length);
+        packet[10] = (byte)(sequence >> 24);
+        packet[11] = (byte)(sequence >> 16);
+        packet[12] = (byte)(sequence >> 8);
+        packet[13] = (byte)sequence;
+        packet.AsSpan(14, length - MockVisualPacketOverheadBytes)
+            .Fill((byte)(0x40 + packetIndex));
+        packet[^2] = 0x55;
+        packet[^1] = 0xAA;
+        Interlocked.Increment(ref _mockGeneratedLineCount);
+        return packet;
     }
 
     private static BoundaryPreservingSerialPortStream CreateSerialPort(
