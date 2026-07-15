@@ -1651,9 +1651,202 @@
                         </ScrollViewer>
                     </TabViewItem>
 
+                    <TabViewItem x:Name="LogTabViewItem"
+                                 Header="Log"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
+                        <ScrollViewer Padding="0,2,0,0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="3">
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="3">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Log"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Actions and current paths"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Actions"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ScrollViewer Grid.Column="1"
+                                                          HorizontalScrollBarVisibility="Auto"
+                                                          VerticalScrollBarVisibility="Disabled">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Spacing="4">
+                                                    <Button Content="Serial"
+                                                            Command="{Binding OpenCurrentSerialLogCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open current serial log" />
+                                                    <Button Content="Folder"
+                                                            Command="{Binding OpenLogFolderCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
+                                                    <Button Content="Copy path"
+                                                            Command="{Binding CopySerialLogPathCommand}"
+                                                            Style="{StaticResource RuleActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Copy serial log path" />
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Log save"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <Button Grid.Column="1"
+                                                    Command="{Binding ToggleFileLoggingCommand}"
+                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    HorizontalAlignment="Left"
+                                                    ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
+                                                <TextBlock Text="{Binding FileLoggingToggleText}"
+                                                           FontWeight="Bold"
+                                                           Foreground="{Binding FileLoggingEnabled, Converter={StaticResource FileLoggingStateBrushConverter}}" />
+                                            </Button>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="View pause"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Keep saving file log"
+                                                      IsChecked="{Binding FileLoggingWhileViewPaused, Mode=TwoWay}"
+                                                      VerticalAlignment="Center"
+                                                      ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately, including during an active view pause." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Save dir"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="4">
+                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditConnectionSettings}"
+                                                         HorizontalAlignment="Stretch"
+                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
+                                                <Button Grid.Column="1"
+                                                        Content="Browse"
+                                                        Click="BrowseLogFolder_Click"
+                                                        IsEnabled="{Binding CanEditConnectionSettings}"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        ToolTipService.ToolTip="Browse log folder" />
+                                            </Grid>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Reconn"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies after reconnect." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Log file name"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="3*,Auto,2*"
+                                                  ColumnSpacing="6">
+                                                <TextBox Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         HorizontalAlignment="Stretch"
+                                                         IsEnabled="{Binding CanEditLogFileName}"
+                                                         PlaceholderText="empty = auto"
+                                                         ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name." />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="Current:"
+                                                           Style="{StaticResource SettingLabelTextStyle}" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
+                                                           Style="{StaticResource SettingValueTextStyle}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}" />
+                                            </Grid>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="OFF only"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="File split"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="New file on every LOG ON"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="A custom name is used exactly and must not already exist. An empty name creates yyyy-MM-dd_HHmmss_serial.log; automatic names also split when the date changes." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Per ON"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="LOG ON never appends to an earlier run. Choose a new custom name when that file already exists." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Size"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="6">
+                                                <CheckBox Content="Size rotation"
+                                                          IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}" />
+                                                <TextBox Text="{Binding SizeRotationBytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         PlaceholderText="bytes"
+                                                         Style="{StaticResource CompactTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditSizeRotationBytes}"
+                                                         Width="82" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Serial log"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentSerialLogPath}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding CurrentSerialLogPath}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Last action"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastLogFileActionStatus}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabViewItem>
+
                     <TabViewItem Header="Settings"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Configure serial, logging, display, profile, and MOCK options.">
+                                 ToolTipService.ToolTip="Configure serial, display, profile, and MOCK options.">
                         <ScrollViewer Padding="0,2,0,0"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -1847,188 +2040,6 @@
                                                       Content="Confirm before disconnect"
                                                       IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection." />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Log"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="Actions and current paths"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Actions"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ScrollViewer Grid.Column="1"
-                                                          HorizontalScrollBarVisibility="Auto"
-                                                          VerticalScrollBarVisibility="Disabled">
-                                                <StackPanel Orientation="Horizontal"
-                                                            Spacing="4">
-                                                    <Button Content="Serial"
-                                                            Command="{Binding OpenCurrentSerialLogCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open current serial log" />
-                                                    <Button Content="Folder"
-                                                            Command="{Binding OpenLogFolderCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
-                                                    <Button Content="Copy path"
-                                                            Command="{Binding CopySerialLogPathCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Copy serial log path" />
-                                                </StackPanel>
-                                            </ScrollViewer>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Log save"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <Button Grid.Column="1"
-                                                    Command="{Binding ToggleFileLoggingCommand}"
-                                                    Style="{StaticResource RuleActionButtonStyle}"
-                                                    HorizontalAlignment="Left"
-                                                    ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
-                                                <TextBlock Text="{Binding FileLoggingToggleText}"
-                                                           FontWeight="Bold"
-                                                           Foreground="{Binding FileLoggingEnabled, Converter={StaticResource FileLoggingStateBrushConverter}}" />
-                                            </Button>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="View pause"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
-                                                      Content="Keep saving file log"
-                                                      IsChecked="{Binding FileLoggingWhileViewPaused, Mode=TwoWay}"
-                                                      VerticalAlignment="Center"
-                                                      ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately, including during an active view pause." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Save dir"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="4">
-                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditConnectionSettings}"
-                                                         HorizontalAlignment="Stretch"
-                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
-                                                <Button Grid.Column="1"
-                                                        Content="Browse"
-                                                        Click="BrowseLogFolder_Click"
-                                                        IsEnabled="{Binding CanEditConnectionSettings}"
-                                                        Style="{StaticResource RuleActionButtonStyle}"
-                                                        ToolTipService.ToolTip="Browse log folder" />
-                                            </Grid>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Reconn"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies after reconnect." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Log file name"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="3*,Auto,2*"
-                                                  ColumnSpacing="6">
-                                                <TextBox Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         HorizontalAlignment="Stretch"
-                                                         IsEnabled="{Binding CanEditLogFileName}"
-                                                         PlaceholderText="empty = auto"
-                                                         ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name." />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="Current:"
-                                                           Style="{StaticResource SettingLabelTextStyle}" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
-                                                           Style="{StaticResource SettingValueTextStyle}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}" />
-                                            </Grid>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="OFF only"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="File split"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="New file on every LOG ON"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="A custom name is used exactly and must not already exist. An empty name creates yyyy-MM-dd_HHmmss_serial.log; automatic names also split when the date changes." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Per ON"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="LOG ON never appends to an earlier run. Choose a new custom name when that file already exists." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Size"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="6">
-                                                <CheckBox Content="Size rotation"
-                                                          IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}" />
-                                                <TextBox Text="{Binding SizeRotationBytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         PlaceholderText="bytes"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditSizeRotationBytes}"
-                                                         Width="82" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Serial log"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding CurrentSerialLogPath}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding CurrentSerialLogPath}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Last action"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding LastLogFileActionStatus}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
