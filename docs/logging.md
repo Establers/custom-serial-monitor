@@ -16,6 +16,26 @@ independent from file logging and does not create an event log file.
 - RX, TX, MARK, and system lines use the same ordered serial log stream.
 - Terminal rendering and event detection continue while Log Save is OFF.
 
+## Pause View
+
+- Pause View freezes the current terminal snapshot. Records received during the
+  pause are not retained in a visual backlog and are not replayed after Resume
+  Live; new display output starts with records received after resume.
+- The button briefly shows `Pausing View` while display work accepted before the
+  click is drained through xterm. Once it shows `Resume Live`, no in-flight
+  append from before the boundary remains and the terminal must not move.
+- Serial RX, parsing, and event detection continue while the view is paused.
+- `Keep saving file log` defaults to ON. When enabled, file logging continues
+  independently of the paused view. When disabled, pause-period records are
+  intentionally omitted from the file and a resume boundary records the gap.
+- Pause omissions are counted separately as `PS` and summarized by the gray
+  system boundary shown at Resume Live. `Drop UI` counts only actual UI-overload
+  losses. Neither counter applies backpressure to RX, parsing, file logging, or
+  event detection.
+- A filter/format change, full re-render, minimize/restore, or xterm recovery
+  cannot bring pause-period records back because they never enter the retained
+  visual buffer.
+
 ## File Names And Rotation
 
 - With an empty Log file name: `yyyy-MM-dd_HHmmss_serial.log`

@@ -32,6 +32,7 @@ public sealed class LogViewModel : ViewModelBase
     private const int EstimatedFormattedLineOverheadChars = 64;
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
+    private const string AnsiGray = "\u001b[90m";
 
     private int _capacity;
     private readonly Queue<LogLine> _retainedLines = new();
@@ -799,6 +800,13 @@ public sealed class LogViewModel : ViewModelBase
         string plainLine,
         RxDisplayMode rxDisplayMode)
     {
+        // System boundaries and diagnostics must remain visually neutral even when their text
+        // happens to match a user highlight rule.
+        if (line.Direction == LogDirection.System)
+        {
+            return ($"{AnsiGray}{plainLine}{AnsiReset}", false, false);
+        }
+
         if (line.Direction == LogDirection.Mark)
         {
             return ($"{AnsiGreen}{plainLine}{AnsiReset}", true, false);

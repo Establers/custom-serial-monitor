@@ -6,6 +6,19 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class LogViewModelModeSwitchTests
 {
     [Fact]
+    public void SystemLine_IsAlwaysRenderedInGray()
+    {
+        var viewModel = new LogViewModel(capacity: 100);
+        viewModel.AddRange(new[] { LogLine.System("VIEW RESUMED - PS 12") });
+
+        var snapshot = viewModel.GetVisibleTextSnapshot();
+
+        Assert.Contains("\u001b[90m", snapshot, StringComparison.Ordinal);
+        Assert.Contains("VIEW RESUMED - PS 12", snapshot, StringComparison.Ordinal);
+        Assert.Contains("\u001b[0m", snapshot, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RetainedRxLine_UsesCurrentViewModeForHighlightRules()
     {
         var viewModel = new LogViewModel(capacity: 100);

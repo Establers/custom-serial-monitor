@@ -137,6 +137,7 @@ public sealed partial class MainWindow : Window
         _viewModel.XtermSearchRequested += OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested += OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested += OnEventNotificationRequested;
+        _viewModel.ViewPauseDrainRequested += DrainXtermForViewPauseAsync;
         AppWindow.Closing += OnAppWindowClosing;
         AppWindow.Changed += OnAppWindowChanged;
         Activated += OnWindowActivated;
@@ -260,6 +261,7 @@ public sealed partial class MainWindow : Window
         _viewModel.XtermSearchRequested -= OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested -= OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested -= OnEventNotificationRequested;
+        _viewModel.ViewPauseDrainRequested -= DrainXtermForViewPauseAsync;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Events.Events.CollectionChanged -= OnDetectedEventsCollectionChanged;
         XtermLogWebView.NavigationCompleted -= OnXtermNavigationCompleted;
@@ -1455,8 +1457,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (isRestoreRender && _viewModel.IsLogRenderingPaused)
+        if (_viewModel.IsLogRenderingPaused)
         {
+            MarkXtermFullRerenderNeeded(normalizedReason);
             _viewModel.RecordFullXtermRerenderCanceled(
                 normalizedReason,
                 "rendering is paused");
@@ -2137,8 +2140,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (isRestoreRender && _viewModel.IsLogRenderingPaused)
+        if (_viewModel.IsLogRenderingPaused)
         {
+            MarkXtermFullRerenderNeeded(reason);
             _viewModel.RecordFullXtermRerenderCanceled(
                 reason,
                 "rendering is paused");
@@ -2178,7 +2182,7 @@ public sealed partial class MainWindow : Window
         try
         {
             if (IsXtermVisualAppendSuspended() ||
-                (isRestoreRender && _viewModel.IsLogRenderingPaused))
+                _viewModel.IsLogRenderingPaused)
             {
                 MarkXtermFullRerenderNeeded("xterm sync suspended");
                 _viewModel.RecordFullXtermRerenderEndedAfterError(
@@ -2704,6 +2708,27 @@ public sealed partial class MainWindow : Window
         _viewModel.RecordXtermLayoutError(
             $"xterm append queue did not become idle within {timeout.TotalSeconds:0.#} seconds.");
         return false;
+    }
+
+    private async Task<bool> DrainXtermForViewPauseAsync(CancellationToken cancellationToken)
+    {
+        // All pre-boundary records have already left the ViewModel queues when this is called.
+        // Wait for their host-side batches, then take the append gate so an in-flight script and
+        // the JavaScript append queue are both settled before the UI reports "Paused".
+        while (Volatile.Read(ref _pendingLiveXtermLines) > 0)
+        {
+            await Task.Delay(10, cancellationToken);
+        }
+
+        await _xtermAppendGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            _xtermAppendGate.Release();
+        }
     }
 
     private static bool? TryParseScriptBoolean(string? scriptResult)

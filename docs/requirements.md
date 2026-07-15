@@ -118,7 +118,8 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
   - case-sensitive option
 - Pause must pause only UI rendering.
   - RX must continue.
-  - File logging must continue.
+  - File logging must continue by default; an explicit pause-file option may
+    intentionally omit pause-period records without stopping the writer.
   - Event detection must continue.
 - Clear operations must be separated:
   - clear screen log

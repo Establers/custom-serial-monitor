@@ -100,9 +100,21 @@ real hardware when available.
 - [ ] Drag-select multiple xterm lines.
 - [ ] Press Ctrl+C.
 - [ ] Paste into Notepad and confirm selected text copied.
-- [ ] Click Pause rendering and confirm visual append pauses.
-- [ ] Confirm file/event counters continue increasing while paused.
-- [ ] Resume rendering.
+- [ ] Under sustained traffic, click Pause View and confirm it briefly shows
+  `Pausing View`, then `Resume Live`. Once `Resume Live` appears, confirm the
+  terminal no longer moves.
+- [ ] With `Keep saving file log` checked, confirm RX/file/event counters continue
+  increasing, UI pending stays bounded, PS increases, and Drop UI remains unchanged.
+- [ ] Leave the view paused for more than 10,000 incoming records and confirm the
+  serial log file continues growing beyond that point while Q U stays bounded.
+- [ ] Click Resume Live and confirm paused records are not replayed, a resume
+  boundary containing the pause PS count is shown in gray, and only newly
+  received records append afterward.
+- [ ] While paused, change a display format/filter if practical, minimize and
+  restore, then resume; confirm pause-period records never reappear after a full
+  re-render or restore.
+- [ ] Clear `Keep saving file log`, repeat the pause, and confirm RX/events continue
+  while pause-period records are omitted from the file and the gap is marked.
 - [ ] Click Clear and confirm only the visible terminal clears.
 
 ## TX Manual Command

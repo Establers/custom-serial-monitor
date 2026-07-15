@@ -206,6 +206,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static readonly TimeSpan SearchResultAutoRefreshInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ViewPauseDrainTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan AutomaticReceiveReconnectDebounce = TimeSpan.FromMilliseconds(150);
     private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
         new[] { "0.10", "0.20", "0.25", "0.30", "0.40", "0.50" };
@@ -229,7 +230,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly CancellationTokenSource _automaticReceiveReconnectCancellation = new();
     private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
-    private readonly SemaphoreSlim _visualLogEnqueueGate = new(1, 1);
+    private readonly object _viewPauseGate = new();
+    private readonly ViewPauseStateMachine _viewPause = new();
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
     private readonly Queue<Guid> _eventContextOrder = new();
     private CancellationTokenSource? _connectionCancellation;
@@ -249,7 +251,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private TxLineEndingMode _selectedTxLineEnding = TxLineEndingMode.Crlf;
     private bool _isConnected;
     private bool _isBusy;
-    private bool _isManualLogRenderingPaused;
     private bool _isXtermAppendBackpressureActive;
     private bool _isAutoScrollEnabled = true;
     private bool _isXtermReady;
@@ -655,7 +656,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ApplyLogRenderBatch,
             maxPendingItems: 10_000,
             maxItemsPerTick: SmoothVisualAppendMaxLines,
-            dropOldestWhenFull: false,
+            dropOldestWhenFull: true,
             catchUpMaxItemsPerTick: 400,
             catchUpPendingThreshold: 1_000);
 
@@ -766,6 +767,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public event EventHandler<ConnectFailureDialogRequest>? ConnectFailureDialogRequested;
 
     public event EventHandler<EventNotificationRequest>? EventNotificationRequested;
+
+    public event Func<CancellationToken, Task<bool>>? ViewPauseDrainRequested;
 
     public ObservableCollection<string> PortNames { get; } = new();
 
@@ -1954,6 +1957,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ? "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted."
         : "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
 
+    public bool FileLoggingWhileViewPaused
+    {
+        get => _currentUiSettings.FileLoggingWhileViewPaused;
+        set
+        {
+            if (_currentUiSettings.FileLoggingWhileViewPaused == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.FileLoggingWhileViewPaused = value;
+            RecordSettingsChange(
+                "File logging while view paused",
+                SettingsApplyBehavior.Immediate,
+                value ? "enabled" : "disabled");
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PauseRenderingToolTip));
+            SetFooter(CreateFooterStatus());
+        }
+    }
+
     public bool CanEditLogFileName =>
         !FileLoggingEnabled &&
         !IsBusy &&
@@ -2440,10 +2464,38 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsLogRenderingPaused
     {
-        get => _isManualLogRenderingPaused;
+        get
+        {
+            lock (_viewPauseGate)
+            {
+                return _viewPause.State != ViewPauseState.Live;
+            }
+        }
     }
 
-    public bool IsManualLogRenderingPaused => _isManualLogRenderingPaused;
+    public bool IsManualLogRenderingPaused => IsLogRenderingPaused;
+
+    public bool IsViewPauseTransitioning
+    {
+        get
+        {
+            lock (_viewPauseGate)
+            {
+                return _viewPause.State == ViewPauseState.Pausing;
+            }
+        }
+    }
+
+    public bool IsViewFullyPaused
+    {
+        get
+        {
+            lock (_viewPauseGate)
+            {
+                return _viewPause.State == ViewPauseState.Paused;
+            }
+        }
+    }
 
     public bool IsXtermAppendBackpressureActive => _isXtermAppendBackpressureActive;
 
@@ -2770,16 +2822,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
 
-    public string PauseRenderingButtonText => IsLogRenderingPaused ? "Resume Rendering" : "Pause Rendering";
+    public string PauseRenderingButtonText => IsViewPauseTransitioning
+        ? "Pausing View"
+        : IsViewFullyPaused
+            ? "Resume Live"
+            : "Pause View";
 
     public string CompactPauseRenderingButtonText => IsLogRenderingPaused ? ">" : "||";
 
     public string CompactPauseRenderingButtonGlyph => IsLogRenderingPaused ? "\uE768" : "\uE769";
 
-    public string PauseRenderingToolTip => IsLogRenderingPaused ? "Resume rendering" : "Pause rendering";
+    public string PauseRenderingToolTip => IsViewPauseTransitioning
+        ? "Finishing display work accepted before the pause boundary. RX, file logging, and events continue."
+        : IsViewFullyPaused
+        ? "Resume live display. Data received while paused is not replayed in the view."
+        : FileLoggingWhileViewPaused
+            ? "Freeze the current view. RX, parsing, events, and file logging continue; paused data is not replayed."
+            : "Freeze the current view. RX, parsing, and events continue; paused data is omitted from both the view and file log.";
 
-    public string RenderingPauseReason => _isManualLogRenderingPaused
-        ? "manual pause"
+    public string RenderingPauseReason => IsViewPauseTransitioning
+        ? "view pause drain"
+        : IsViewFullyPaused
+            ? "view paused"
         : _isXtermAppendBackpressureActive
             ? "xterm append backlog"
             : "none";
@@ -2793,13 +2857,35 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string RenderingStateText => IsVisualAppendSuspendedForMinimize
         ? "Rendering suspended: minimized"
-        : IsLogRenderingPaused
-            ? $"Rendering paused: {RenderingPauseReason}"
+        : IsViewPauseTransitioning
+            ? "Rendering state: pausing view"
+            : IsViewFullyPaused
+                ? "Rendering paused: view paused"
             : _isXtermAppendBackpressureActive
                 ? "Rendering catching up: xterm backlog"
             : "Rendering live";
 
     public int PendingVisualLineCount => _logBatchDispatcher.PendingItemCount;
+
+    public long CurrentViewPauseOmittedLineCount
+    {
+        get { lock (_viewPauseGate) return _viewPause.CurrentOmittedFromView; }
+    }
+
+    public long TotalViewPauseOmittedLineCount
+    {
+        get { lock (_viewPauseGate) return _viewPause.TotalOmittedFromView; }
+    }
+
+    public long ViewPauseCount
+    {
+        get { lock (_viewPauseGate) return _viewPause.PauseCount; }
+    }
+
+    public string LastViewPauseSummary
+    {
+        get { lock (_viewPauseGate) return _viewPause.LastSummary; }
+    }
 
     public long VisualDispatcherFlushCount => _logBatchDispatcher.FlushCount;
 
@@ -3698,7 +3784,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         화면과 로그
 
-        Pause Rendering은 화면 갱신만 멈춥니다.
+        Pause View는 현재 화면을 고정하고 Pause 중 수신 로그를 화면에서 생략합니다. Resume Live 이후 새 로그부터 표시됩니다.
+        Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Settings > Log의 View pause 옵션을 따릅니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
         HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 프로필 값이 그대로 사용됩니다.
@@ -3744,7 +3831,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * RX는 수신 데이터, TX는 전송 데이터, MARK는 사용자가 찍은 구분선입니다.
         * Auto Scroll ON: 새 로그가 오면 자동으로 맨 아래로 따라갑니다.
         * Auto Scroll OFF: 과거 로그를 보는 중에 화면이 아래로 끌려가지 않습니다.
-        * Pause Rendering: 화면 갱신만 잠시 멈춥니다. 수신, 이벤트, 저장은 계속 동작합니다.
+        * Pause View: 현재 화면을 고정하고 Pause 중 수신 로그는 화면에 보관하지 않습니다. Resume Live 이후 새 로그부터 표시합니다.
+        * 수신, 파싱, 이벤트 검출은 Pause 중에도 계속되며 파일 저장은 View pause의 Keep saving file log 옵션을 따릅니다.
         * 최소화 중에도 수신, 저장, 이벤트 감지는 계속 동작합니다.
         * 최소화 중에는 화면 렌더링만 일시 중지될 수 있고, 복원하면 최신 화면 버퍼를 다시 그립니다.
         * Clear는 화면만 지웁니다. 저장된 로그 파일이나 카운터는 삭제하지 않습니다.
@@ -3991,7 +4079,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long RecordedRxDropCount => CurrentPortIsMock ? MockMissingSequenceCount : 0;
 
-    public long RecordedUiDropCount => Log.DroppedPendingLineCount + EventContextUiDroppedCount;
+    public long RecordedUiDropCount =>
+        Log.DroppedPendingLineCount +
+        Interlocked.Read(ref _pendingLogDropCount) +
+        BridgeVisualLogDroppedCount;
 
     public string LastShutdownStartTimeText => _lastShutdownStartTimeText;
 
@@ -6022,17 +6113,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 VerifyMockSequence(line);
                 if (line.IsPartialRxTerminator)
                 {
-                    await QueueLogForRenderingAsync(line, cancellationToken);
+                    FanOutLogLine(line, fileEligible: false, detectEvent: false);
                     continue;
                 }
 
-                if (FileLoggingEnabled)
-                {
-                    _fileLogWriter.TryEnqueue(line);
-                }
-
-                _eventDetector.TryEnqueue(line);
-                await QueueLogForRenderingAsync(line, cancellationToken);
+                FanOutLogLine(line, fileEligible: true, detectEvent: true);
             }
         }
         catch (OperationCanceledException)
@@ -6602,27 +6687,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     }
 
-    private async Task AddMarkerAsync(string? markerText, string action)
+    private Task AddMarkerAsync(string? markerText, string action)
     {
         try
         {
             if (!IsConnected)
             {
                 RecordMarkerError("Marker insert failed: serial monitor is disconnected.");
-                return;
+                return Task.CompletedTask;
             }
 
             var insertedAt = DateTimeOffset.Now;
             var text = FormatMarkerText(insertedAt, markerText);
             var markerLine = new LogLine(insertedAt, LogDirection.Mark, text);
 
-            if (FileLoggingEnabled)
-            {
-                _fileLogWriter.TryEnqueue(markerLine);
-            }
-
-            _eventDetector.TryEnqueue(markerLine);
-            await QueueLogForRenderingAsync(markerLine, CancellationToken.None);
+            FanOutLogLine(markerLine, fileEligible: true, detectEvent: true);
             RecordMarkerSuccess(text, action, insertedAt);
             SetFooter(CreateFooterStatus());
         }
@@ -6630,6 +6709,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RecordMarkerError($"Marker insert failed: {ex.Message}");
         }
+
+        return Task.CompletedTask;
     }
 
     private static string FormatMarkerText(DateTimeOffset insertedAt, string? markerText)
@@ -6862,13 +6943,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 contentMode: sendMode == TxSendMode.Hex
                     ? LogRuleMatchMode.Hex
                     : LogRuleMatchMode.Terminal);
-            if (FileLoggingEnabled)
-            {
-                _fileLogWriter.TryEnqueue(txLine);
-            }
-
-            _eventDetector.TryEnqueue(txLine);
-            await QueueLogForRenderingAsync(txLine, CancellationToken.None);
+            FanOutLogLine(txLine, fileEligible: true, detectEvent: true);
             RecordTxSuccess(txDisplayText, sendMode, command.CommandText, txByteCount, hexParseError);
             if (addToHistory)
             {
@@ -9120,18 +9195,119 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
     }
 
-    private Task ToggleLogRenderingPauseAsync()
+    private async Task ToggleLogRenderingPauseAsync()
     {
-        if (IsLogRenderingPaused)
+        if (IsViewFullyPaused)
         {
-            _isManualLogRenderingPaused = false;
-            UpdateLogRenderingPauseState("UI log rendering resumed");
-            return Task.CompletedTask;
+            ResumeLiveView();
+            return;
         }
 
-        _isManualLogRenderingPaused = true;
-        UpdateLogRenderingPauseState("UI log rendering paused: manual pause");
-        return Task.CompletedTask;
+        lock (_viewPauseGate)
+        {
+            if (!_viewPause.BeginPause())
+            {
+                return;
+            }
+        }
+
+        UpdateLogRenderingPauseState("Pausing view: finishing records accepted before the pause boundary");
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(ViewPauseDrainTimeout);
+            if (!await DrainAcceptedViewWorkAsync(timeout.Token))
+            {
+                AbortViewPause("xterm drain did not complete");
+                return;
+            }
+
+            lock (_viewPauseGate)
+            {
+                _viewPause.CompletePause();
+            }
+
+            UpdateLogRenderingPauseState("View paused: incoming records are omitted from the display");
+        }
+        catch (OperationCanceledException)
+        {
+            AbortViewPause($"drain timed out after {ViewPauseDrainTimeout.TotalSeconds:0} seconds");
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.ToggleLogRenderingPauseAsync", ex);
+            AbortViewPause($"drain failed: {ex.Message}");
+        }
+    }
+
+    private void ResumeLiveView()
+    {
+        ViewPauseCompletion completion;
+        lock (_viewPauseGate)
+        {
+            completion = _viewPause.GetCompletion();
+            if (completion.OmittedFromView > 0 || completion.SkippedFromFile > 0)
+            {
+                var resumeLine = LogLine.System(completion.Summary);
+                var dropped = _logBatchDispatcher.Post(resumeLine);
+                RecordPendingUiDrops(dropped);
+                if (FileLoggingEnabled && completion.SkippedFromFile > 0)
+                {
+                    _fileLogWriter.TryEnqueue(resumeLine);
+                }
+            }
+
+            _viewPause.CompleteResume(completion);
+        }
+
+        UpdateLogRenderingPauseState(
+            $"Live view resumed; {completion.OmittedFromView:N0} paused records omitted from display");
+    }
+
+    private void AbortViewPause(string reason)
+    {
+        ViewPauseCompletion completion;
+        lock (_viewPauseGate)
+        {
+            completion = _viewPause.GetCompletion();
+            var failureSummary =
+                $"VIEW PAUSE FAILED - {reason}; PS {completion.OmittedFromView:N0} during transition";
+            completion = completion with { Summary = failureSummary };
+            var failureLine = LogLine.System(failureSummary);
+            RecordPendingUiDrops(_logBatchDispatcher.Post(failureLine));
+            if (FileLoggingEnabled && completion.SkippedFromFile > 0)
+            {
+                _fileLogWriter.TryEnqueue(failureLine);
+            }
+
+            _viewPause.CompleteResume(completion);
+        }
+
+        UpdateLogRenderingPauseState(reason);
+    }
+
+    private async Task<bool> DrainAcceptedViewWorkAsync(CancellationToken cancellationToken)
+    {
+        while (PendingVisualLineCount > 0 || BridgeVisualLogPendingCount > 0)
+        {
+            await Task.Delay(10, cancellationToken);
+        }
+
+        var handlers = ViewPauseDrainRequested;
+        if (handlers is null)
+        {
+            return true;
+        }
+
+        foreach (Func<CancellationToken, Task<bool>> handler in handlers.GetInvocationList())
+        {
+            if (!await handler(cancellationToken))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void SetXtermAppendBackpressure(bool active)
@@ -9142,7 +9318,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         _isXtermAppendBackpressureActive = active;
-        _logBatchDispatcher.IsPaused = IsLogRenderingPaused || _isXtermAppendBackpressureActive;
+        _logBatchDispatcher.IsPaused = IsViewFullyPaused || _isXtermAppendBackpressureActive;
         OnPropertyChanged(nameof(IsXtermAppendBackpressureActive));
         OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
         OnPropertyChanged(nameof(IsSearchAutoRefreshSuppressedByXtermBackpressure));
@@ -10064,21 +10240,52 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastBackgroundError = message;
     }
 
-    private async ValueTask QueueLogForRenderingAsync(LogLine line, CancellationToken cancellationToken)
+    private void FanOutLogLine(
+        LogLine line,
+        bool fileEligible,
+        bool detectEvent,
+        bool useBridgeVisualQueue = false)
     {
-        await _visualLogEnqueueGate.WaitAsync(cancellationToken);
-        try
+        if (detectEvent)
         {
-            await _logBatchDispatcher.PostAsync(line, cancellationToken);
-            UpdateMax(ref _maxVisualBacklogLineCount, PendingVisualLineCount);
+            _eventDetector.TryEnqueue(line);
         }
-        finally
+
+        lock (_viewPauseGate)
         {
-            _visualLogEnqueueGate.Release();
+            var decision = _viewPause.ClassifyRecord(
+                fileEligible,
+                FileLoggingEnabled,
+                FileLoggingWhileViewPaused);
+            if (decision.EnqueueFile)
+            {
+                _fileLogWriter.TryEnqueue(line);
+            }
+
+            if (decision.OmitFromView)
+            {
+                return;
+            }
+
+            if (useBridgeVisualQueue)
+            {
+                TryEnqueueAcceptedBridgeVisualLog(line);
+            }
+            else
+            {
+                PostAcceptedVisualLog(line);
+            }
         }
     }
 
-    private void TryEnqueueBridgeVisualLog(LogLine line)
+    private void PostAcceptedVisualLog(LogLine line)
+    {
+        var dropped = _logBatchDispatcher.Post(line);
+        RecordPendingUiDrops(dropped);
+        UpdateMax(ref _maxVisualBacklogLineCount, PendingVisualLineCount);
+    }
+
+    private void TryEnqueueAcceptedBridgeVisualLog(LogLine line)
     {
         Interlocked.Increment(ref _bridgeVisualLogPendingCount);
         if (_bridgeVisualLogQueue.Writer.TryWrite(line))
@@ -10097,8 +10304,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var line in _bridgeVisualLogQueue.Reader.ReadAllAsync(cancellationToken))
             {
+                // Post before decrementing so a pause drain can never observe both queues as empty
+                // while an accepted bridge record is between them.
+                PostAcceptedVisualLog(line);
                 Interlocked.Decrement(ref _bridgeVisualLogPendingCount);
-                await QueueLogForRenderingAsync(line, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -10417,9 +10626,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void UpdateLogRenderingPauseState(string statusMessage)
     {
-        _logBatchDispatcher.IsPaused = IsLogRenderingPaused || _isXtermAppendBackpressureActive;
+        // During Pausing, accepted pre-boundary work must continue draining. The dispatcher is
+        // suspended only after the xterm/UI boundary has completed.
+        _logBatchDispatcher.IsPaused = IsViewFullyPaused || _isXtermAppendBackpressureActive;
         OnPropertyChanged(nameof(IsLogRenderingPaused));
         OnPropertyChanged(nameof(IsManualLogRenderingPaused));
+        OnPropertyChanged(nameof(IsViewPauseTransitioning));
+        OnPropertyChanged(nameof(IsViewFullyPaused));
         OnPropertyChanged(nameof(RenderingPauseReason));
         OnPropertyChanged(nameof(RenderingStateText));
         OnPropertyChanged(nameof(PauseRenderingButtonText));
@@ -10699,6 +10912,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(FileLoggingWhileViewPaused));
         OnPropertyChanged(nameof(LogSaveDirectory));
         OnPropertyChanged(nameof(SizeRotationEnabled));
         OnPropertyChanged(nameof(SizeRotationBytesText));
@@ -10996,6 +11210,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private void RecordPendingUiDrops(int count)
+    {
+        if (count > 0)
+        {
+            Interlocked.Add(ref _pendingLogDropCount, count);
+        }
+    }
+
     private bool PrepareLogFileNameForNewRun()
     {
         if (!LogFileNamePolicy.TryValidate(LogFileName, out var logFileName, out var validationError))
@@ -11088,13 +11310,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var line in _bridgeLogProcessor.Logs.ReadAllAsync(cancellationToken))
             {
-                if (FileLoggingEnabled)
-                {
-                    _fileLogWriter.TryEnqueue(line);
-                }
-
-                _eventDetector.TryEnqueue(line);
-                TryEnqueueBridgeVisualLog(line);
+                FanOutLogLine(
+                    line,
+                    fileEligible: true,
+                    detectEvent: true,
+                    useBridgeVisualQueue: true);
             }
         }
         catch (OperationCanceledException)
@@ -11120,6 +11340,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         OnPropertyChanged(nameof(PendingVisualLineCount));
+        OnPropertyChanged(nameof(CurrentViewPauseOmittedLineCount));
+        OnPropertyChanged(nameof(TotalViewPauseOmittedLineCount));
+        OnPropertyChanged(nameof(ViewPauseCount));
+        OnPropertyChanged(nameof(LastViewPauseSummary));
         OnPropertyChanged(nameof(VisualDispatcherFlushCount));
         OnPropertyChanged(nameof(MaxVisualDispatcherBatchSize));
         OnPropertyChanged(nameof(LastVisualAppendLineCount));
@@ -11172,7 +11396,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ? $" | Missing {MockMissingSequenceCount:N0}"
             : string.Empty;
         var viewBacklogText = PendingVisualLineCount >= PendingVisualWarningThreshold
-            ? $" | View backlog {PendingVisualLineCount:N0}"
+            ? $" | View backlog {PendingVisualLineCount:N0} l"
             : string.Empty;
         var lastErrorText = CreateLastErrorSummaryText();
         var lastErrorSummary = string.IsNullOrWhiteSpace(lastErrorText)
@@ -11185,7 +11409,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return
             $"{HealthStateText} | " +
             CreateResourceStatusText() + " | " +
-            $"RX {_logPipeline.ParsedLineCount:N0} lines / {_serialService.ReceivedByteCount:N0} bytes | " +
+            $"RX {_logPipeline.ParsedLineCount:N0} l / {_serialService.ReceivedByteCount:N0} B | " +
             $"DRV F/P/O/RX {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0} | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
             CreateLogFileStatusText() +
@@ -11210,7 +11434,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return $"{diskText} | Session {sessionText} | Mem {memoryText} | " +
                $"UI {Log.TotalRetainedLineCount:N0}/{Log.Capacity:N0} | " +
                $"Q F/E/U {_fileLogWriter.PendingRequestCount:N0}/{_eventDetector.PendingInputLineCount:N0}/{TotalPendingUiCount:N0} | " +
-               $"Drop RX/F/UI {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0}";
+               $"Drop RX/F/UI {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0} | " +
+               $"PS {TotalViewPauseOmittedLineCount:N0}";
     }
 
     private string CreateLogFileStatusText()
@@ -11734,6 +11959,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile max visible event count: {_currentUiSettings.MaxVisibleEventCount:N0}");
         builder.AppendLine($"  Profile xterm scrollback size: {_currentUiSettings.XtermScrollbackSize:N0}");
         builder.AppendLine($"  Profile auto-scroll enabled: {_currentUiSettings.AutoScrollEnabled}");
+        builder.AppendLine($"  Profile file logging while view paused: {_currentUiSettings.FileLoggingWhileViewPaused}");
         builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
         builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
         builder.AppendLine($"  Profile timestamp display format: {LogLine.GetTimestampFormatPattern(_currentUiSettings.TimestampDisplayFormat)}");
@@ -11873,6 +12099,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Dropped UI visible lines: {Log.DroppedVisibleLineCount:N0}");
         builder.AppendLine($"  Dropped UI pending lines: {Log.DroppedPendingLineCount:N0}");
         builder.AppendLine($"  Pending visual line count: {PendingVisualLineCount:N0}");
+        builder.AppendLine($"  View pause active: {IsLogRenderingPaused}");
+        builder.AppendLine($"  Current pause skip (PS) lines: {CurrentViewPauseOmittedLineCount:N0}");
+        builder.AppendLine($"  Total pause skip (PS) lines: {TotalViewPauseOmittedLineCount:N0}");
+        builder.AppendLine($"  View pause count: {ViewPauseCount:N0}");
+        builder.AppendLine($"  File logging while view paused: {FileLoggingWhileViewPaused}");
+        builder.AppendLine($"  Last view-pause summary: {LastViewPauseSummary}");
         builder.AppendLine($"  File writer dropped lines: {_fileLogWriter.DroppedLineCount:N0}");
         builder.AppendLine($"  Event detector dropped input lines: {_eventDetector.DroppedInputLineCount:N0}");
         builder.AppendLine($"  Event detector dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
@@ -12515,6 +12747,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(FileLoggingWhileViewPaused));
         OnPropertyChanged(nameof(CanEditLogFileName));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
         SetFooter(CreateFooterStatus());

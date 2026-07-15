@@ -23,6 +23,8 @@ public sealed class UiSettings
 
     public bool AutoScrollEnabled { get; set; } = true;
 
+    public bool FileLoggingWhileViewPaused { get; set; } = true;
+
     public bool EventAutoScrollEnabled { get; set; } = true;
 
     public int XtermScrollbackSize { get; set; } = 50_000;
@@ -74,6 +76,7 @@ public sealed class UiSettings
             MaxVisibleLogLines = MaxVisibleLogLines,
             MaxVisibleEventCount = MaxVisibleEventCount,
             AutoScrollEnabled = AutoScrollEnabled,
+            FileLoggingWhileViewPaused = FileLoggingWhileViewPaused,
             EventAutoScrollEnabled = EventAutoScrollEnabled,
             XtermScrollbackSize = XtermScrollbackSize,
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
