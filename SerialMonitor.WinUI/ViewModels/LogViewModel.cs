@@ -30,6 +30,7 @@ public sealed class LogViewModel : ViewModelBase
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
     private const int LiveBatchPreallocationMaxChars = 1024 * 1024;
     private const int EstimatedFormattedLineOverheadChars = 64;
+    private const string AnsiAliceBlue = "\u001b[38;2;240;248;255m";
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
     private const string AnsiGray = "\u001b[90m";
@@ -719,15 +720,26 @@ public sealed class LogViewModel : ViewModelBase
                     text = " " + text;
                 }
 
-                return (text, text, text.Length, false);
+                var searchableText = text;
+                var displayText = _rxDisplayMode == RxDisplayMode.Terminal &&
+                    TryFormatTerminalBracketGroups(text, payloadStart: 0, baseColor: null, out var bracketText)
+                        ? bracketText
+                        : text;
+                return (displayText, searchableText, searchableText.Length, false);
             }
 
-            var searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _timestampDisplayFormat, _rxDisplayMode);
+            var searchableLine = FormatPlainSafeDisplayLine(
+                line,
+                _showTimestampInLogView,
+                _timestampDisplayFormat,
+                _rxDisplayMode,
+                out var payloadStart);
             (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 _highlightRules,
                 searchableLine,
-                _rxDisplayMode);
+                _rxDisplayMode,
+                payloadStart);
             return (displayLine, searchableLine, text.Length, hasFormattingError);
         }
         catch
@@ -749,12 +761,18 @@ public sealed class LogViewModel : ViewModelBase
         bool hasFormattingError;
         try
         {
-            searchableLine = FormatPlainSafeDisplayLine(line, _showTimestampInLogView, _timestampDisplayFormat, _rxDisplayMode);
+            searchableLine = FormatPlainSafeDisplayLine(
+                line,
+                _showTimestampInLogView,
+                _timestampDisplayFormat,
+                _rxDisplayMode,
+                out var payloadStart);
             (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 _highlightRules,
                 searchableLine,
-                _rxDisplayMode);
+                _rxDisplayMode,
+                payloadStart);
         }
         catch
         {
@@ -798,7 +816,8 @@ public sealed class LogViewModel : ViewModelBase
         LogLine line,
         IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules,
         string plainLine,
-        RxDisplayMode rxDisplayMode)
+        RxDisplayMode rxDisplayMode,
+        int payloadStart)
     {
         // System boundaries and diagnostics must remain visually neutral even when their text
         // happens to match a user highlight rule.
@@ -828,6 +847,17 @@ public sealed class LogViewModel : ViewModelBase
             return (plainLine, false, true);
         }
 
+        if (NormalizeRxDisplayMode(rxDisplayMode) == RxDisplayMode.Terminal)
+        {
+            var baseColor = line.Direction == LogDirection.Tx
+                ? AnsiCyan
+                : null;
+            if (TryFormatTerminalBracketGroups(plainLine, payloadStart, baseColor, out var bracketText))
+            {
+                return (bracketText, false, false);
+            }
+        }
+
         return line.Direction == LogDirection.Tx
             ? ($"{AnsiCyan}{plainLine}{AnsiReset}", false, false)
             : (plainLine, false, false);
@@ -837,16 +867,70 @@ public sealed class LogViewModel : ViewModelBase
         LogLine line,
         bool showTimestamp,
         TimestampDisplayFormat timestampDisplayFormat,
-        RxDisplayMode rxDisplayMode)
+        RxDisplayMode rxDisplayMode,
+        out int payloadStart)
     {
         var text = FormatDisplayText(line, rxDisplayMode);
-        if (!showTimestamp)
+        var plainLine = !showTimestamp
+            ? $"{line.DirectionText} {text}"
+            : $"[{line.FormatTimestamp(timestampDisplayFormat)}] {line.DirectionText} {text}";
+        payloadStart = plainLine.Length - text.Length;
+        return plainLine;
+    }
+
+    private static bool TryFormatTerminalBracketGroups(
+        string text,
+        int payloadStart,
+        string? baseColor,
+        out string formatted)
+    {
+        formatted = text;
+        var openIndex = text.IndexOf('[', Math.Clamp(payloadStart, 0, text.Length));
+        if (openIndex < 0)
         {
-            return $"{line.DirectionText} {text}";
+            return false;
         }
 
-        var timestamp = line.FormatTimestamp(timestampDisplayFormat);
-        return $"[{timestamp}] {line.DirectionText} {text}";
+        var closeIndex = text.IndexOf(']', openIndex + 1);
+        if (closeIndex < 0)
+        {
+            return false;
+        }
+
+        var builder = new StringBuilder(text.Length + 64);
+        if (!string.IsNullOrEmpty(baseColor))
+        {
+            builder.Append(baseColor);
+        }
+
+        var cursor = 0;
+        while (openIndex >= 0 && closeIndex >= 0)
+        {
+            builder.Append(text, cursor, openIndex - cursor);
+            builder.Append(AnsiAliceBlue);
+            builder.Append(text, openIndex, closeIndex - openIndex + 1);
+            builder.Append(AnsiReset);
+
+            cursor = closeIndex + 1;
+            if (!string.IsNullOrEmpty(baseColor) && cursor < text.Length)
+            {
+                builder.Append(baseColor);
+            }
+
+            openIndex = text.IndexOf('[', cursor);
+            closeIndex = openIndex >= 0
+                ? text.IndexOf(']', openIndex + 1)
+                : -1;
+        }
+
+        builder.Append(text, cursor, text.Length - cursor);
+        if (!string.IsNullOrEmpty(baseColor))
+        {
+            builder.Append(AnsiReset);
+        }
+
+        formatted = builder.ToString();
+        return true;
     }
 
     private static TimestampDisplayFormat NormalizeTimestampDisplayFormat(TimestampDisplayFormat timestampDisplayFormat) =>
