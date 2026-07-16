@@ -43,14 +43,14 @@ independent from file logging and does not create an event log file.
   `_serial`, or extension is added.
 - Every LOG ON creates a new file instead of appending. An explicitly named file
   must not already exist; LOG ON fails and preserves the existing file if it does.
-- Automatic names use `_dup001`, `_dup002`, and so on for same-second collisions
-  and split when the date changes. Explicitly named files do not split at midnight.
+- Automatic names use `_dup001`, `_dup002`, and so on for same-second collisions.
+  Date changes do not split an active log file.
 - Optional size rotation keeps the exact name for the first file and adds `_001`,
   `_002`, and so on before its extension for subsequent files.
 
 ## Log File Name
 
-The Settings > Log file name field is editable only while LOG is OFF. The current
+The Log tab's file name field is editable only while LOG is OFF. The current
 configured value is shown beside it. Invalid Windows file names are rejected
 instead of being silently changed. Leave the field empty to use the automatic
 timestamp name.

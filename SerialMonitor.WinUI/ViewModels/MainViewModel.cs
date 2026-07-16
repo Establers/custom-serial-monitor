@@ -11823,7 +11823,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile normalization count: {ProfileNormalizationCount:N0}");
         builder.AppendLine($"  Profile file logging enabled: {_currentLogSettings.FileLoggingEnabled}");
         builder.AppendLine($"  Profile log save directory: {_currentLogSettings.SaveDirectory}");
-        builder.AppendLine("  Automatic-name daily serial log rotation: enabled");
+        builder.AppendLine("  Date-based serial log rotation: disabled");
         builder.AppendLine($"  Profile size rotation enabled: {_currentLogSettings.SizeRotationEnabled}");
         builder.AppendLine($"  Profile last successful port: {LastSuccessfulPort}");
         builder.AppendLine($"  Profile last successful baud: {LastSuccessfulBaudRate:N0}");

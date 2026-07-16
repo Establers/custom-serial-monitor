@@ -1791,13 +1791,13 @@
                                             <TextBlock Text="Rotation"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="New file per LOG ON; daily split for automatic names"
+                                                       Text="New file per LOG ON; no date-based split"
                                                        Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log and starts a new file when the date changes. A custom exact file name does not split at midnight." />
+                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until LOG OFF unless optional size rotation is enabled." />
                                             <TextBlock Grid.Column="2"
                                                        Text="Always"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Every LOG ON creates a new file. Daily rotation is always active for automatic file names." />
+                                                       ToolTipService.ToolTip="Every LOG ON creates a new file instead of appending to an earlier run." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">

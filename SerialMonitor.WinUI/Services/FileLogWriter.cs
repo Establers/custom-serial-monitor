@@ -352,7 +352,7 @@ public sealed class FileLogWriter : IFileLogWriter
                         var openNaming = GetLogFileNamingSnapshot();
                         writer = CreateNewWriter(openedDate, rotationIndex: 0, openNaming, out var path);
                         currentDate = openedDate;
-                        currentLogIdentity = CreateLogFileIdentity(openedDate, openNaming);
+                        currentLogIdentity = CreateLogFileIdentity(openNaming);
                         currentSizeBytes = 0;
                         rotationIndex = 0;
                         writtenSinceFlush = 0;
@@ -377,13 +377,10 @@ public sealed class FileLogWriter : IFileLogWriter
 
                 var lineDate = line.Timestamp.LocalDateTime.ToString("yyyy-MM-dd");
                 var naming = GetLogFileNamingSnapshot();
-                var lineLogIdentity = CreateLogFileIdentity(lineDate, naming);
+                var lineLogIdentity = CreateLogFileIdentity(naming);
                 var rotationRequested = ConsumeRotationRequest();
-                var automaticDateChanged = string.IsNullOrWhiteSpace(naming.LogFileName) &&
-                    !string.Equals(currentDate, lineDate, StringComparison.Ordinal);
                 if (writer is null ||
                     rotationRequested ||
-                    automaticDateChanged ||
                     !string.Equals(currentLogIdentity, lineLogIdentity, StringComparison.Ordinal))
                 {
                     await FlushAndDisposeAsync(writer);
@@ -399,7 +396,7 @@ public sealed class FileLogWriter : IFileLogWriter
                     lastFlush = DateTimeOffset.UtcNow;
                 }
 
-                // Size rotation skeleton: default 0 disables size rotation until a future UI/profile setting is added.
+                // A value of 0 disables optional size-based rotation.
                 var maxFileSizeBytes = MaximumFileSizeBytes;
                 if (maxFileSizeBytes > 0 && currentSizeBytes >= maxFileSizeBytes)
                 {
@@ -504,10 +501,10 @@ public sealed class FileLogWriter : IFileLogWriter
         return Path.Combine(_directory, fileName);
     }
 
-    private static string CreateLogFileIdentity(string dateText, LogFileNamingSnapshot naming)
+    private static string CreateLogFileIdentity(LogFileNamingSnapshot naming)
     {
         return string.IsNullOrWhiteSpace(naming.LogFileName)
-            ? $"automatic|{dateText}"
+            ? "automatic"
             : $"explicit|{naming.LogFileName}";
     }
 

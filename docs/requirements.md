@@ -84,7 +84,8 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
 
 ### Log Rotation
 
-- Text log files must support daily rotation and/or size-based rotation.
+- Text log files must support optional size-based rotation. Date changes must not
+  split an active log file.
 - Example:
   - `2026-05-23_091530_serial.log`
   - `boot_test.log` (when entered explicitly)
@@ -92,7 +93,7 @@ The app must support 115200 bps serial monitoring, long-running log capture, com
 - Every explicit LOG ON must create a new serial log rather than append to an
   earlier run. A custom file name is used exactly and must not already exist.
 - The custom file name is editable only while LOG is OFF, and the configured
-  name must remain visible in Settings.
+  name must remain visible in the Log tab.
 
 ### Encoding / Raw Data
 

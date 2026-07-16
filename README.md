@@ -24,7 +24,7 @@ marketing-style UI.
 - Configurable xterm highlight rules.
 - Visible-buffer search with Next/Prev and xterm jump/selection.
 - Search Results inspector tab with manual refresh by default.
-- Asynchronous plain-text serial file logging with daily and optional size rotation.
+- Asynchronous plain-text serial file logging with optional size rotation.
 - JSON profile save/load/reset.
 - MOCK port and opt-in mock stress mode with sequence-loss counters.
 - Physical/com0com packet stress generator for 3-5 ms traffic and native idle-timeout probes.

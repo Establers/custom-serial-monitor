@@ -1,4 +1,3 @@
-using System.Globalization;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -146,31 +145,22 @@ public sealed class FileLogWriterTests
     }
 
     [Fact]
-    public async Task DifferentLogDates_AlwaysUseDifferentDailyFiles()
+    public async Task DifferentLogDates_StayInTheSameAutomaticFile()
     {
         using var directory = new TemporaryDirectory();
         await using var writer = new FileLogWriter();
         await writer.StartAsync(directory.Path, CancellationToken.None);
-        var initialPath = Assert.IsType<string>(writer.CurrentLogFilePath);
-        var initialFileName = Path.GetFileName(initialPath);
-        var initialDate = DateOnly.ParseExact(
-            initialFileName.AsSpan(0, 10),
-            "yyyy-MM-dd",
-            CultureInfo.InvariantCulture);
-        var firstLocalDateTime = initialDate.ToDateTime(new TimeOnly(12, 0));
-        var firstDate = new DateTimeOffset(
-            firstLocalDateTime,
-            TimeZoneInfo.Local.GetUtcOffset(firstLocalDateTime));
+        var firstDate = new DateTimeOffset(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
         var secondDate = firstDate.AddDays(1);
 
         Assert.True(writer.TryEnqueue(new LogLine(firstDate, LogDirection.System, "day one")));
         Assert.True(writer.TryEnqueue(new LogLine(secondDate, LogDirection.System, "day two")));
         await writer.StopAsync(CancellationToken.None);
 
-        var files = Directory.GetFiles(directory.Path, "*.log");
-        Assert.Equal(2, files.Length);
-        Assert.Contains(files, path => Path.GetFileName(path).StartsWith(firstDate.LocalDateTime.ToString("yyyy-MM-dd"), StringComparison.Ordinal));
-        Assert.Contains(files, path => Path.GetFileName(path).StartsWith(secondDate.LocalDateTime.ToString("yyyy-MM-dd"), StringComparison.Ordinal));
+        var file = Assert.Single(Directory.GetFiles(directory.Path, "*.log"));
+        var contents = await File.ReadAllTextAsync(file);
+        Assert.Contains("day one", contents, StringComparison.Ordinal);
+        Assert.Contains("day two", contents, StringComparison.Ordinal);
     }
 
     private sealed class TemporaryDirectory : IDisposable

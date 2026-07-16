@@ -303,7 +303,7 @@ real hardware when available.
 - [ ] Connect to `MOCK`.
 - [ ] Wait until serial log file is created.
 - [ ] Generate an event and confirm it remains available in Events/Context.
-- [ ] Open Settings > Log.
+- [ ] Open the Log tab.
 - [ ] Open current serial log.
 - [ ] Open logs folder.
 - [ ] Copy serial log path and paste into Notepad.
