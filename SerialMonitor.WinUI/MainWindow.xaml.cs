@@ -109,6 +109,9 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+#if !DEBUG
+        InspectorTabView.TabItems.Remove(TestTabViewItem);
+#endif
         ApplyAppIcon();
 
         var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();

@@ -193,13 +193,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int MaxMockStressBurstSize = 10_000;
     private const double MinCuteBackgroundOpacity = 0.02;
     private const double MaxCuteBackgroundOpacity = 0.50;
-    private const long MinSizeRotationBytes = 1_048_576;
-    private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
+    private const long MinSizeRotationMegabytes = 1;
+    private const long MaxSizeRotationMegabytes = 10 * 1024;
+    private const long MinSizeRotationBytes = MinSizeRotationMegabytes * LogSettings.BytesPerMegabyte;
+    private const long MaxSizeRotationBytes = MaxSizeRotationMegabytes * LogSettings.BytesPerMegabyte;
     private const long DiskWarningFreeBytes = 5L * 1024 * 1024 * 1024;
     private const long DiskErrorFreeBytes = 1L * 1024 * 1024 * 1024;
     private const string MockPortName = "MOCK";
     private const string MockPortDisplayName = "[TEST] MOCK";
-    private static readonly TimeSpan SearchResultAutoRefreshInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ViewPauseDrainTimeout = TimeSpan.FromSeconds(30);
@@ -322,7 +323,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _maxXtermAppendCharacterCount;
     private long _lastXtermAppendDurationMs;
     private long _maxXtermAppendDurationMs;
-    private long _xtermBackpressureSearchRefreshSuppressedCount;
     private long _xtermBackpressureEventAutoScrollSuppressedCount;
     private long _xtermBackpressureAutoScrollSuppressedCount;
     private long _xtermBackpressureFullRerenderDeferredCount;
@@ -360,9 +360,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastSearchResultBuildError = string.Empty;
     private string _lastSearchResultJumpError = string.Empty;
     private VisibleSearchResult? _selectedSearchResult;
-    private bool _isSearchResultAutoRefreshEnabled;
     private bool _areSearchResultsStale;
-    private DateTimeOffset _lastSearchResultAutoRefreshAt = DateTimeOffset.MinValue;
     private string _lastSearchShortcutAction = "No search shortcut used.";
     private string _lastSearchShortcutSource = "(none)";
     private DateTimeOffset? _lastSearchShortcutTime;
@@ -696,8 +694,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshSearchResultsCommand = new AsyncRelayCommand(RefreshSearchResultsAsync, CanSearch);
         CopyEventContextCommand = new AsyncRelayCommand(CopyEventContextAsync, CanCopyEventContext);
         SelectLatestEventCommand = new AsyncRelayCommand(SelectLatestEventAsync, CanSelectLatestEvent);
-        StartMockStressCommand = new AsyncRelayCommand(StartMockStressAsync, () => !IsBusy);
-        StopMockStressCommand = new AsyncRelayCommand(StopMockStressAsync);
+        StartMockStressCommand = new AsyncRelayCommand(StartMockStressAsync, () => CanStartMockStress);
+        StopMockStressCommand = new AsyncRelayCommand(StopMockStressAsync, () => CanStopMockStress);
         ResetMockStressCountersCommand = new AsyncRelayCommand(ResetMockStressCountersAsync);
         SendMockCrlfCommand = new AsyncRelayCommand(SendMockCrlfAsync, () => IsConnected && CurrentPortIsMock);
         RunCommandSequenceCommand = new AsyncRelayCommand(RunSelectedCommandSequenceAsync, CanRunSelectedCommandSequence);
@@ -1021,6 +1019,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 SelectedCommandSequenceStep = value?.Steps.FirstOrDefault();
                 OnPropertyChanged(nameof(HasSelectedCommandSequence));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequence));
                 OnPropertyChanged(nameof(SelectedCommandSequenceStepCount));
                 OnPropertyChanged(nameof(SelectedCommandSequenceStepCountText));
                 OnPropertyChanged(nameof(SelectedCommandSequenceName));
@@ -1034,6 +1033,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasSelectedCommandSequence => SelectedCommandSequence is not null;
 
+    public bool CanEditCommandSequences => !IsSequenceRunning && !IsBusy;
+
+    public bool CanEditSelectedCommandSequence => CanEditCommandSequences && HasSelectedCommandSequence;
+
     public CommandSequenceStep? SelectedCommandSequenceStep
     {
         get => _selectedCommandSequenceStep;
@@ -1042,11 +1045,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _selectedCommandSequenceStep, value))
             {
                 OnPropertyChanged(nameof(HasSelectedCommandSequenceStep));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
             }
         }
     }
 
     public bool HasSelectedCommandSequenceStep => SelectedCommandSequenceStep is not null;
+
+    public bool CanEditSelectedCommandSequenceStep => CanEditCommandSequences && HasSelectedCommandSequenceStep;
 
     public int SelectedCommandSequenceStepCount => SelectedCommandSequence?.Steps.Count ?? 0;
 
@@ -1067,6 +1073,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SequenceRuntimeStateText));
                 OnPropertyChanged(nameof(SequenceCurrentStepDisplayText));
                 OnPropertyChanged(nameof(CanStartBridge));
+                OnPropertyChanged(nameof(CanEditCommandSequences));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequence));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
                 StopCommandSequenceCommand.NotifyCanExecuteChanged();
                 StartBridgeCommand.NotifyCanExecuteChanged();
@@ -1733,7 +1742,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _logPipeline.ConfigureRxDisplay(normalizedMode, hexGroupTimeoutMs);
         SetVisibleLogRebuildReason(rebuildReason);
         Log.SetRxDisplayMode(normalizedMode);
-        RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+        MarkSearchResultsStale();
         _appliedRxDisplayMode = normalizedMode;
         _appliedHexGroupTimeoutMs = hexGroupTimeoutMs;
     }
@@ -2008,47 +2017,41 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentLogSettings.SizeRotationEnabled = value;
+            EnsureDefaultSizeRotationBytes();
             ApplySizeRotationSettings();
             RecordSettingsChange("Size rotation", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             OnPropertyChanged();
-            OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+            OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
         }
     }
 
-    public string SizeRotationBytesText
+    public string SizeRotationMegabytesText
     {
-        get => _currentLogSettings.SizeRotationBytes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        get => (_currentLogSettings.SizeRotationBytes.GetValueOrDefault() / LogSettings.BytesPerMegabyte)
+            .ToString(CultureInfo.InvariantCulture);
         set
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                if (SizeRotationEnabled)
-                {
-                    RecordSettingsValidationError($"Size rotation bytes must be between {FormatByteCount(MinSizeRotationBytes)} and {FormatByteCount(MaxSizeRotationBytes)}.");
-                }
-                else
-                {
-                    _currentLogSettings.SizeRotationBytes = null;
-                    ApplySizeRotationSettings();
-                    RecordSettingsChange("Size rotation bytes", SettingsApplyBehavior.Immediate, "disabled");
-                }
-
+                _currentLogSettings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
+                ApplySizeRotationSettings();
+                RecordSettingsChange("Size rotation", SettingsApplyBehavior.Immediate, "10 MB default");
                 OnPropertyChanged();
                 return;
             }
 
             if (long.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) &&
-                parsed >= MinSizeRotationBytes &&
-                parsed <= MaxSizeRotationBytes)
+                parsed >= MinSizeRotationMegabytes &&
+                parsed <= MaxSizeRotationMegabytes)
             {
-                _currentLogSettings.SizeRotationBytes = parsed;
+                _currentLogSettings.SizeRotationBytes = parsed * LogSettings.BytesPerMegabyte;
                 ApplySizeRotationSettings();
-                RecordSettingsChange("Size rotation bytes", SettingsApplyBehavior.Immediate, parsed.ToString(CultureInfo.InvariantCulture));
+                RecordSettingsChange("Size rotation", SettingsApplyBehavior.Immediate, $"{parsed:N0} MB");
                 OnPropertyChanged();
                 return;
             }
 
-            RecordSettingsValidationError($"Size rotation bytes must be a whole number between {FormatByteCount(MinSizeRotationBytes)} and {FormatByteCount(MaxSizeRotationBytes)}.");
+            RecordSettingsValidationError($"Size rotation must be a whole number between {MinSizeRotationMegabytes:N0} MB and {MaxSizeRotationMegabytes:N0} MB.");
             OnPropertyChanged();
         }
     }
@@ -2080,7 +2083,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SetVisibleLogRebuildReason("visible log capacity change");
             Log.SetCapacity(value);
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
-            RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+            MarkSearchResultsStale();
             RecordSettingsChange("Max visible log lines", SettingsApplyBehavior.Immediate, value.ToString(CultureInfo.InvariantCulture));
             OnPropertyChanged();
             OnPropertyChanged(nameof(MaxVisibleLogLinesText));
@@ -2282,7 +2285,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
-                OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+                OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
                 NotifyCommandStates();
@@ -2299,10 +2302,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isBusy, value))
             {
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
-                OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+                OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
                 OnPropertyChanged(nameof(CanEditLogFileName));
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
+                OnPropertyChanged(nameof(CanEditCommandSequences));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequence));
+                OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
                 NotifyCommandStates();
                 NotifyBridgePropertiesChanged();
             }
@@ -2311,7 +2317,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanEditConnectionSettings => !IsConnected && !IsBusy;
 
-    public bool CanEditSizeRotationBytes => !IsBusy && SizeRotationEnabled;
+    public bool CanEditSizeRotationMegabytes => !IsBusy && SizeRotationEnabled;
 
     public bool CanManualDisconnect => IsConnected && !IsBusy;
 
@@ -2362,9 +2368,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsEffectiveXtermAutoScrollEnabled =>
         IsAutoScrollEnabled && !IsXtermAppendBackpressureActive;
-
-    public bool IsSearchAutoRefreshSuppressedByXtermBackpressure =>
-        IsXtermAppendBackpressureActive && IsSearchResultAutoRefreshEnabled;
 
     public bool IsEventAutoScrollSuppressedByXtermBackpressure =>
         IsXtermAppendBackpressureActive && IsEventAutoScrollEnabled;
@@ -2421,7 +2424,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(LastTimestampDisplayModeChangeTimeText));
                 OnPropertyChanged(nameof(LastTimestampDisplayModeError));
                 RefreshSelectedEventContextText();
-                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: false);
+                MarkSearchResultsStale();
                 RecordSettingsChange("Show timestamp in log view", SettingsApplyBehavior.Immediate, value ? "shown" : "hidden");
             }
             catch (Exception ex)
@@ -2429,29 +2432,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 RecordTimestampDisplayModeError($"Timestamp display mode update failed: {ex.Message}");
                 OnPropertyChanged();
             }
-        }
-    }
-
-    public bool ApplyRulesToNewLogsOnly
-    {
-        get => _currentUiSettings.ApplyRulesToNewLogsOnly;
-        set
-        {
-            if (_currentUiSettings.ApplyRulesToNewLogsOnly == value)
-            {
-                return;
-            }
-
-            _currentUiSettings.ApplyRulesToNewLogsOnly = value;
-            OnPropertyChanged();
-            RecordSettingsChange(
-                "Apply rules to new logs only",
-                SettingsApplyBehavior.Immediate,
-                value ? "enabled" : "disabled");
-            SetStatus(value
-                ? "Rule changes apply to new logs only."
-                : "Rule changes may reprocess the retained visible buffer.");
-            RefreshDiagnostics();
         }
     }
 
@@ -2951,9 +2931,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string MaxXtermAppendDurationText => $"{Interlocked.Read(ref _maxXtermAppendDurationMs):N0} ms";
 
-    public long XtermBackpressureSearchRefreshSuppressedCount =>
-        Interlocked.Read(ref _xtermBackpressureSearchRefreshSuppressedCount);
-
     public long XtermBackpressureEventAutoScrollSuppressedCount =>
         Interlocked.Read(ref _xtermBackpressureEventAutoScrollSuppressedCount);
 
@@ -3068,7 +3045,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 }
 
                 _currentUiSettings.LastSearchText = value?.Trim() ?? string.Empty;
-                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+                InvalidateSearchResultsForCriteriaChange();
                 RecordSettingsChange("Search text", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(empty)" : value.Trim());
                 NotifySearchCommandStates();
             }
@@ -3083,37 +3060,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isSearchCaseSensitive, value))
             {
                 _currentUiSettings.SearchCaseSensitive = value;
-                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+                InvalidateSearchResultsForCriteriaChange();
                 RecordSettingsChange("Search case", SettingsApplyBehavior.Immediate, value ? "case-sensitive" : "case-insensitive");
-            }
-        }
-    }
-
-    public bool IsSearchResultAutoRefreshEnabled
-    {
-        get => _isSearchResultAutoRefreshEnabled;
-        set
-        {
-            if (SetProperty(ref _isSearchResultAutoRefreshEnabled, value))
-            {
-                _currentUiSettings.SearchResultAutoRefreshEnabled = value;
-                OnPropertyChanged(nameof(IsSearchAutoRefreshSuppressedByXtermBackpressure));
-                if (value)
-                {
-                    _lastSearchResultAutoRefreshAt = DateTimeOffset.MinValue;
-                    RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
-                    SetStatus("Search result auto-refresh enabled.");
-                }
-                else
-                {
-                    SearchResultStatusText = string.IsNullOrWhiteSpace(SearchText)
-                        ? "Enter search text."
-                        : "Manual · Refresh to update";
-                    SetStatus("Search result auto-refresh disabled. Use Refresh in the Search tab.");
-                }
-
-                RecordSettingsChange("Search results auto-refresh", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
-                RefreshDiagnostics();
             }
         }
     }
@@ -3454,7 +3402,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long ProfileSaveErrorCount => _profileService.SaveErrorCount;
 
-    public string CurrentSerialLogPath => FileLoggingEnabled ? _fileLogWriter.CurrentLogFilePath ?? string.Empty : string.Empty;
+    public string CurrentSerialLogPath =>
+        _fileLogWriter.CurrentLogFilePath ?? _fileLogWriter.LastLogFilePath ?? string.Empty;
 
     public string LastLogToggleAction => _lastLogToggleAction;
 
@@ -3536,6 +3485,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     public bool CurrentPortIsMock => IsMockPortName(GetActualPortName(SelectedPort) ?? _currentSerialSettings.PortName);
+
+    public bool CanStartMockStress => IsConnected && CurrentPortIsMock && !IsBusy && !IsMockStressRunning;
+
+    public bool CanStopMockStress => IsMockStressRunning;
 
     public bool LastPortRefreshIncludedMock => _lastPortRefreshIncludedMock;
 
@@ -3644,8 +3597,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         외부 프로그램은 반드시 가상 포트 쌍의 반대편을 엽니다.
         BRIDGE ON 표시가 보이면 원본 바이트가 양방향으로 전달됩니다.
         외부 프로그램에서 장비로 보내는 로그는 현재 앱 모드를 따릅니다.
-        Terminal 모드는 선택한 인코딩으로 디코딩하고 Terminal TxOnly/Both 규칙을 사용합니다.
-        HEX 모드는 원본 바이트를 표시하고 HEX TxOnly/Both 규칙을 사용합니다.
+        Terminal 모드는 선택한 인코딩으로 디코딩하고 Terminal RxOnly/Both 규칙을 사용합니다.
+        HEX 모드는 원본 바이트를 표시하고 HEX RxOnly/Both 규칙을 사용합니다.
 
         화면과 로그
 
@@ -4370,8 +4323,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(CanConnect));
         OnPropertyChanged(nameof(CanToggleConnection));
+        OnPropertyChanged(nameof(CanStartMockStress));
         ConnectCommand.NotifyCanExecuteChanged();
         ToggleConnectionCommand.NotifyCanExecuteChanged();
+        StartMockStressCommand.NotifyCanExecuteChanged();
     }
 
     private static IReadOnlyList<string> NormalizePortList(IEnumerable<string> ports, bool includeMock)
@@ -4581,7 +4536,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task FindNextSearchMatchAsync()
     {
         AddCurrentSearchTextToHistory();
-        RefreshVisibleLogSearch(SearchMove.Next, rebuildResults: true);
+        RunManualVisibleLogSearch(SearchMove.Next);
         RequestXtermSearch(SearchMove.Next);
         return Task.CompletedTask;
     }
@@ -4589,7 +4544,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task FindPreviousSearchMatchAsync()
     {
         AddCurrentSearchTextToHistory();
-        RefreshVisibleLogSearch(SearchMove.Previous, rebuildResults: true);
+        RunManualVisibleLogSearch(SearchMove.Previous);
         RequestXtermSearch(SearchMove.Previous);
         return Task.CompletedTask;
     }
@@ -4597,7 +4552,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task RefreshSearchResultsAsync()
     {
         AddCurrentSearchTextToHistory();
-        RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+        RunManualVisibleLogSearch(SearchMove.None);
         if (CanSearch())
         {
             SetStatus($"Search results refreshed: {SearchText}");
@@ -4745,22 +4700,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return !string.IsNullOrWhiteSpace(SearchText);
     }
 
-    private void RefreshVisibleLogSearch(SearchMove move, bool rebuildResults)
+    private void RunManualVisibleLogSearch(SearchMove move)
     {
         if (string.IsNullOrWhiteSpace(SearchText))
         {
             SearchMatchCount = 0;
             CurrentSearchMatchIndex = 0;
             CurrentSearchMatchedLine = string.Empty;
-            if (rebuildResults)
-            {
-                UpdateSearchResults(Array.Empty<string>(), Array.Empty<int>());
-            }
-            else
-            {
-                AreSearchResultsStale = false;
-                SearchResultStatusText = "Enter search text.";
-            }
+            UpdateSearchResults(Array.Empty<string>(), Array.Empty<int>());
 
             return;
         }
@@ -4782,23 +4729,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             SearchMatchCount = matchingLineIndexes.Count;
-            if (rebuildResults)
-            {
-                UpdateSearchResults(lines, matchingLineIndexes);
-            }
-            else
-            {
-                MarkSearchResultsStale();
-            }
+            UpdateSearchResults(lines, matchingLineIndexes);
 
             if (matchingLineIndexes.Count == 0)
             {
                 CurrentSearchMatchIndex = 0;
                 CurrentSearchMatchedLine = string.Empty;
-                if (rebuildResults)
-                {
-                    SelectedSearchResult = null;
-                }
+                SelectedSearchResult = null;
 
                 if (move is SearchMove.Next or SearchMove.Previous)
                 {
@@ -4822,10 +4759,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             CurrentSearchMatchIndex = currentIndex + 1;
             CurrentSearchMatchedLine = lines[matchingLineIndexes[currentIndex]];
-            if (rebuildResults || IsSearchResultAutoRefreshEnabled)
-            {
-                SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
-            }
+            SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
 
             ClearSearchError();
 
@@ -4871,9 +4805,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             if (matchingLineIndexes.Count == 0)
             {
-                SearchResultStatusText = IsSearchResultAutoRefreshEnabled
-                    ? "Auto · No matches"
-                    : "No matches";
+                SearchResultStatusText = "Manual · No matches";
                 SelectedSearchResult = null;
                 OnPropertyChanged(nameof(SearchResultVisibleCount));
                 RecordSearchResultsRebuild();
@@ -4890,12 +4822,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 SearchResults.Add(CreateVisibleSearchResult(i + 1, lineIndex, fullText));
             }
 
-            var modeText = IsSearchResultAutoRefreshEnabled ? "Auto" : "Manual";
             SearchResultStatusText = matchingLineIndexes.Count > MaxVisibleSearchResults
-                ? $"{modeText} · {visibleCount:N0}/{matchingLineIndexes.Count:N0} shown"
-                : IsSearchResultAutoRefreshEnabled
-                    ? $"Auto · {visibleCount:N0} shown"
-                    : $"Manual · {visibleCount:N0} shown";
+                ? $"Manual · {visibleCount:N0}/{matchingLineIndexes.Count:N0} shown"
+                : $"Manual · {visibleCount:N0} shown";
             OnPropertyChanged(nameof(SearchResultVisibleCount));
             RestoreSearchResultSelection(previousSelection);
             RecordSearchResultsRebuild();
@@ -4957,11 +4886,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         AreSearchResultsStale = true;
-        SearchResultStatusText = IsSearchResultAutoRefreshEnabled
-            ? "Auto · refresh pending"
-            : SearchResults.Count == 0
-                ? "Manual · Refresh to update"
-                : $"Stale · Refresh to update ({SearchResults.Count:N0} shown)";
+        SearchResultStatusText = SearchResults.Count == 0
+            ? "Manual · Refresh to update"
+            : $"Stale · Refresh to update ({SearchResults.Count:N0} shown)";
+    }
+
+    private void InvalidateSearchResultsForCriteriaChange()
+    {
+        SearchMatchCount = 0;
+        CurrentSearchMatchIndex = 0;
+        CurrentSearchMatchedLine = string.Empty;
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        OnPropertyChanged(nameof(SearchResultVisibleCount));
+        MarkSearchResultsStale();
     }
 
     private void RecordSearchResultsRebuild()
@@ -5160,17 +5098,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     .OrderBy(port => port, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
-                BridgePortNames.Clear();
-                foreach (var port in candidates)
-                {
-                    BridgePortNames.Add(port);
-                }
-
-                if (!string.IsNullOrWhiteSpace(SelectedBridgePort) &&
-                    !BridgePortNames.Contains(SelectedBridgePort, StringComparer.OrdinalIgnoreCase))
-                {
-                    BridgePortNames.Add(SelectedBridgePort);
-                }
+                ReplaceBridgePortOptions(candidates);
 
                 NotifyBridgePropertiesChanged();
                 SetStatus($"Bridge ports refreshed: {BridgePortNames.Count:N0} candidate(s).");
@@ -5195,17 +5123,43 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             .OrderBy(port => port, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        BridgePortNames.Clear();
-        foreach (var port in candidates)
+        ReplaceBridgePortOptions(candidates);
+    }
+
+    private void ReplaceBridgePortOptions(IReadOnlyList<string> candidates)
+    {
+        var preservedPort = SelectedBridgePort;
+        if (string.IsNullOrWhiteSpace(preservedPort) && IsBridgeActive)
         {
-            BridgePortNames.Add(port);
+            preservedPort = _bridgeService.VirtualPortName;
         }
 
-        if (!string.IsNullOrWhiteSpace(SelectedBridgePort) &&
-            !BridgePortNames.Contains(SelectedBridgePort, StringComparer.OrdinalIgnoreCase))
+        var desiredPorts = candidates
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(preservedPort) &&
+            !desiredPorts.Contains(preservedPort, StringComparer.OrdinalIgnoreCase))
         {
-            BridgePortNames.Add(SelectedBridgePort);
+            desiredPorts.Add(preservedPort);
         }
+
+        for (var index = BridgePortNames.Count - 1; index >= 0; index--)
+        {
+            if (!desiredPorts.Contains(BridgePortNames[index], StringComparer.OrdinalIgnoreCase))
+            {
+                BridgePortNames.RemoveAt(index);
+            }
+        }
+
+        foreach (var port in desiredPorts)
+        {
+            if (!BridgePortNames.Contains(port, StringComparer.OrdinalIgnoreCase))
+            {
+                BridgePortNames.Add(port);
+            }
+        }
+
+        SelectedBridgePort = preservedPort;
     }
 
     private async Task StartBridgeAsync()
@@ -5395,7 +5349,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(LastTimestampDisplayModeChangeTimeText));
             OnPropertyChanged(nameof(LastTimestampDisplayModeError));
             RefreshSelectedEventContextText();
-            RefreshVisibleLogSearch(SearchMove.None, rebuildResults: false);
+            MarkSearchResultsStale();
             RecordSettingsChange("Timestamp format", SettingsApplyBehavior.Immediate, value.DisplayName);
         }
     }
@@ -6280,7 +6234,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(LastSearchSelectedTextLength));
             SearchText = searchText;
             AddCurrentSearchTextToHistory();
-            RefreshVisibleLogSearch(SearchMove.Next, rebuildResults: true);
+            RunManualVisibleLogSearch(SearchMove.Next);
             RequestXtermSearch(SearchMove.Next);
             RecordXtermContextMenuAction($"Search selected text ({searchText.Length:N0} chars)");
             RefreshDiagnostics();
@@ -7364,7 +7318,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool AddCommandSequence(CommandSequence sequence)
     {
-        if (!CanEditCommandSequences("Add sequence"))
+        if (!EnsureCanEditCommandSequences("Add sequence"))
         {
             return false;
         }
@@ -7384,7 +7338,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool ReplaceSelectedCommandSequence(CommandSequence replacement)
     {
-        if (!CanEditCommandSequences("Edit sequence"))
+        if (!EnsureCanEditCommandSequences("Edit sequence"))
         {
             return false;
         }
@@ -7417,7 +7371,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool DeleteSelectedCommandSequence()
     {
-        if (!CanEditCommandSequences("Delete sequence"))
+        if (!EnsureCanEditCommandSequences("Delete sequence"))
         {
             return false;
         }
@@ -7446,7 +7400,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool AddCommandSequenceStep(CommandSequenceStep step)
     {
-        if (!CanEditCommandSequences("Add sequence step"))
+        if (!EnsureCanEditCommandSequences("Add sequence step"))
         {
             return false;
         }
@@ -7471,7 +7425,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool ReplaceSelectedCommandSequenceStep(CommandSequenceStep replacement)
     {
-        if (!CanEditCommandSequences("Edit sequence step"))
+        if (!EnsureCanEditCommandSequences("Edit sequence step"))
         {
             return false;
         }
@@ -7503,7 +7457,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool DeleteSelectedCommandSequenceStep()
     {
-        if (!CanEditCommandSequences("Delete sequence step"))
+        if (!EnsureCanEditCommandSequences("Delete sequence step"))
         {
             return false;
         }
@@ -7532,7 +7486,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool MoveSelectedCommandSequenceStep(int direction)
     {
-        if (!CanEditCommandSequences("Move sequence step"))
+        if (!EnsureCanEditCommandSequences("Move sequence step"))
         {
             return false;
         }
@@ -7555,14 +7509,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    private bool CanEditCommandSequences(string action)
+    private bool EnsureCanEditCommandSequences(string action)
     {
-        if (!IsSequenceRunning)
+        if (CanEditCommandSequences)
         {
             return true;
         }
 
-        RecordSequenceError($"{action} failed: stop the running sequence before editing sequences.");
+        RecordSequenceError(IsSequenceRunning
+            ? $"{action} failed: stop the running sequence before editing sequences."
+            : $"{action} failed: wait for the current operation to finish.");
         return false;
     }
 
@@ -7793,10 +7749,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyHighlightRuleChanges(string status)
     {
         _bridgeLogProcessor.ResetStream();
-        SetVisibleLogRebuildReason("legacy highlight rule change");
         Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
         RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
-        RecordRuleEditStatus(status);
+        RecordAutomaticRuleRerenderSuppressed();
+        RecordRuleEditStatus($"{status}. Applies to new logs only.");
         NotifyRuleEditorStateChanged();
     }
 
@@ -7807,16 +7763,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RebuildProjectedRulesFromLogRules();
         _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
         Log.SetHighlightRules(HighlightRules.Select(CloneHighlightRule).ToArray());
-        if (ApplyRulesToNewLogsOnly)
-        {
-            RecordAutomaticRuleRerenderSuppressed();
-        }
-        else
-        {
-            SetVisibleLogRebuildReason("log rule change");
-            Log.RefreshVisibleFormatting();
-        }
-
+        RecordAutomaticRuleRerenderSuppressed();
         RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
         RecordRuleEditStatus(FormatRuleChangeStatus(status));
         NotifyRuleEditorStateChanged();
@@ -7901,40 +7848,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var option = SelectedViewFilterOption ?? VisibleLogFilterOptions.FirstOrDefault() ?? VisibleLogFilterOption.All();
-            var liveOnly = ApplyRulesToNewLogsOnly;
-            if (liveOnly)
-            {
-                RecordAutomaticRuleRerenderSuppressed();
-            }
-            else
-            {
-                SetVisibleLogRebuildReason(option.IsAll
-                    ? "visible filter change to ALL"
-                    : $"visible filter change to {option.DisplayName}");
-            }
-
-            Log.SetViewFilter(option.Rule, rebuildExisting: !liveOnly);
+            RecordAutomaticRuleRerenderSuppressed();
+            Log.SetViewFilter(option.Rule, rebuildExisting: false);
             _lastVisibleFilterChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             _lastVisibleFilterError = string.Empty;
             OnPropertyChanged(nameof(CurrentVisibleFilterText));
             OnPropertyChanged(nameof(LastVisibleFilterChangeTimeText));
             OnPropertyChanged(nameof(LastVisibleFilterError));
             OnPropertyChanged(nameof(AvailableViewFilterCount));
-            if (!liveOnly)
-            {
-                RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
-            }
-
             SetFooter(CreateFooterStatus());
             if (recordStatus)
             {
-                SetStatus(liveOnly
-                    ? (option.IsAll
-                        ? "Visible log filter: ALL. Applies to new logs only."
-                        : $"Visible log filter: {option.DisplayName}. Applies to new logs only. Press Clear for a clean filtered view.")
-                    : (option.IsAll
-                        ? "Visible log filter: ALL"
-                        : $"Visible log filter: {option.DisplayName}"));
+                SetStatus(option.IsAll
+                    ? "Visible log filter: ALL. Applies to new logs only."
+                    : $"Visible log filter: {option.DisplayName}. Applies to new logs only. Press Clear for a clean filtered view.");
             }
 
             RefreshDiagnostics();
@@ -8033,11 +7960,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string FormatRuleChangeStatus(string status)
     {
-        if (!ApplyRulesToNewLogsOnly)
-        {
-            return status;
-        }
-
         Interlocked.Increment(ref _ruleChangesSinceClearCount);
         _lastRuleChangeLiveOnlyTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
         OnPropertyChanged(nameof(RuleChangesSinceClearCount));
@@ -9195,15 +9117,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _logBatchDispatcher.IsPaused = IsViewFullyPaused || _isXtermAppendBackpressureActive;
         OnPropertyChanged(nameof(IsXtermAppendBackpressureActive));
         OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
-        OnPropertyChanged(nameof(IsSearchAutoRefreshSuppressedByXtermBackpressure));
         OnPropertyChanged(nameof(IsEventAutoScrollSuppressedByXtermBackpressure));
         OnPropertyChanged(nameof(RenderingPauseReason));
         OnPropertyChanged(nameof(RenderingStateText));
-    }
-
-    public void RecordXtermBackpressureSearchRefreshSuppressed()
-    {
-        Interlocked.Increment(ref _xtermBackpressureSearchRefreshSuppressedCount);
     }
 
     public void RecordXtermBackpressureEventAutoScrollSuppressed()
@@ -9227,7 +9143,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Interlocked.Exchange(ref _pendingLogDropCount, 0);
         Interlocked.Exchange(ref _ruleChangesSinceClearCount, 0);
         Log.Clear();
-        RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+        InvalidateSearchResultsForCriteriaChange();
         OnPropertyChanged(nameof(PendingVisualLineCount));
         OnPropertyChanged(nameof(RuleChangesSinceClearCount));
         SetFooter(CreateFooterStatus());
@@ -9860,10 +9776,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplySizeRotationSettings()
     {
+        EnsureDefaultSizeRotationBytes();
         var maxFileSizeBytes = SizeRotationEnabled
             ? _currentLogSettings.SizeRotationBytes.GetValueOrDefault()
             : 0;
         _fileLogWriter.MaximumFileSizeBytes = Math.Max(0, maxFileSizeBytes);
+    }
+
+    private void EnsureDefaultSizeRotationBytes()
+    {
+        if (_currentLogSettings.SizeRotationBytes is null or < MinSizeRotationBytes or > MaxSizeRotationBytes)
+        {
+            _currentLogSettings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
+            OnPropertyChanged(nameof(SizeRotationMegabytesText));
+        }
     }
 
     private void ApplySessionFileNaming(bool requestNewFile)
@@ -10224,38 +10150,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Log.AddRange(batch);
-        if (ShouldAutoRefreshSearchResults())
-        {
-            RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
-        }
-        else
-        {
-            MarkSearchResultsStale();
-        }
+        MarkSearchResultsStale();
 
-    }
-
-    private bool ShouldAutoRefreshSearchResults()
-    {
-        if (!IsSearchResultAutoRefreshEnabled || string.IsNullOrWhiteSpace(SearchText))
-        {
-            return false;
-        }
-
-        if (IsXtermAppendBackpressureActive)
-        {
-            RecordXtermBackpressureSearchRefreshSuppressed();
-            return false;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        if (now - _lastSearchResultAutoRefreshAt < SearchResultAutoRefreshInterval)
-        {
-            return false;
-        }
-
-        _lastSearchResultAutoRefreshAt = now;
-        return true;
     }
 
     private void ApplyEventRenderBatch(IReadOnlyList<DetectedEvent> events)
@@ -10541,7 +10437,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         uiSettings.AutoScrollEnabled = IsAutoScrollEnabled;
         uiSettings.EventAutoScrollEnabled = IsEventAutoScrollEnabled;
         uiSettings.SearchCaseSensitive = IsSearchCaseSensitive;
-        uiSettings.SearchResultAutoRefreshEnabled = IsSearchResultAutoRefreshEnabled;
         uiSettings.LastSearchText = SearchText;
         uiSettings.MarkerText = MarkerText;
         uiSettings.RxDisplayMode = SelectedRxDisplayMode;
@@ -10550,7 +10445,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         uiSettings.CuteBackgroundMode = CuteBackgroundMode;
         uiSettings.CuteBackgroundImagePath = CuteBackgroundImagePath;
         uiSettings.CuteBackgroundOpacity = CuteBackgroundOpacity;
-        uiSettings.ApplyRulesToNewLogsOnly = ApplyRulesToNewLogsOnly;
         uiSettings.MockStressLinesPerSecond = SelectedMockStressLinesPerSecond;
         uiSettings.MockStressBurstSize = SelectedMockStressBurstSize;
         uiSettings.MockStressEventInjectionEnabled = IsMockStressEventInjectionEnabled;
@@ -10708,7 +10602,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _markerText = settings.MarkerText?.Trim() ?? string.Empty;
         _searchText = settings.LastSearchText?.Trim() ?? string.Empty;
         _isSearchCaseSensitive = settings.SearchCaseSensitive;
-        _isSearchResultAutoRefreshEnabled = settings.SearchResultAutoRefreshEnabled;
         _isEventAutoScrollEnabled = settings.EventAutoScrollEnabled;
         _selectedMockStressLinesPerSecond = settings.MockStressLinesPerSecond;
         _selectedMockStressBurstSize = settings.MockStressBurstSize;
@@ -10717,7 +10610,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _isMockStressInvalidByteInjectionEnabled = settings.MockStressInvalidByteInjectionEnabled;
 
         ConfigureMockStressFromUi();
-        RefreshVisibleLogSearch(SearchMove.None, rebuildResults: true);
+        InvalidateSearchResultsForCriteriaChange();
         NotifySearchCommandStates();
     }
 
@@ -10758,7 +10651,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void RefreshSettingsProperties(bool includeBackgroundVisualSettings = true)
     {
         OnPropertyChanged(nameof(CanEditConnectionSettings));
-        OnPropertyChanged(nameof(CanEditSizeRotationBytes));
+        OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
         OnPropertyChanged(nameof(CanEditLogFileName));
         OnPropertyChanged(nameof(SelectedDataBits));
         OnPropertyChanged(nameof(SelectedParity));
@@ -10789,7 +10682,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingWhileViewPaused));
         OnPropertyChanged(nameof(LogSaveDirectory));
         OnPropertyChanged(nameof(SizeRotationEnabled));
-        OnPropertyChanged(nameof(SizeRotationBytesText));
+        OnPropertyChanged(nameof(SizeRotationMegabytesText));
         OnPropertyChanged(nameof(SessionName));
         OnPropertyChanged(nameof(LogFileName));
         OnPropertyChanged(nameof(ConfiguredLogFileNameDisplayText));
@@ -10846,9 +10739,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MarkerText));
         OnPropertyChanged(nameof(SearchText));
         OnPropertyChanged(nameof(IsSearchCaseSensitive));
-        OnPropertyChanged(nameof(IsSearchResultAutoRefreshEnabled));
         OnPropertyChanged(nameof(IsEventAutoScrollEnabled));
-        OnPropertyChanged(nameof(ApplyRulesToNewLogsOnly));
         OnPropertyChanged(nameof(SelectedMockStressLinesPerSecond));
         OnPropertyChanged(nameof(SelectedMockStressBurstSize));
         OnPropertyChanged(nameof(SelectedMockGeneratorPatternOption));
@@ -10886,6 +10777,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CurrentPortIsMock));
         OnPropertyChanged(nameof(LastPortRefreshIncludedMock));
         OnPropertyChanged(nameof(IsMockStressRunning));
+        OnPropertyChanged(nameof(CanStartMockStress));
+        OnPropertyChanged(nameof(CanStopMockStress));
         OnPropertyChanged(nameof(MockStressStatusText));
         OnPropertyChanged(nameof(MockGeneratedLineCount));
         OnPropertyChanged(nameof(IsMockNoNewlineActive));
@@ -10899,6 +10792,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MockOutOfOrderSequenceCount));
         OnPropertyChanged(nameof(MockMalformedSequenceCount));
         OnPropertyChanged(nameof(LastMockSequenceError));
+        StartMockStressCommand.NotifyCanExecuteChanged();
+        StopMockStressCommand.NotifyCanExecuteChanged();
     }
 
     private static EventRule CloneEventRule(EventRule rule)
@@ -11835,7 +11730,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
         builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
         builder.AppendLine($"  Profile timestamp display format: {LogLine.GetTimestampFormatPattern(_currentUiSettings.TimestampDisplayFormat)}");
-        builder.AppendLine($"  Profile apply rules to new logs only: {_currentUiSettings.ApplyRulesToNewLogsOnly}");
+        builder.AppendLine("  Rule changes apply to new logs only: True (fixed)");
         builder.AppendLine($"  Profile RX display mode: {FormatRxDisplayModeName(_currentUiSettings.RxDisplayMode)}");
         builder.AppendLine($"  Profile HEX group timeout: {_currentUiSettings.HexGroupTimeoutMs:N0} ms");
         builder.AppendLine($"  Profile TX send mode: {FormatTxSendModeName(_currentUiSettings.TxSendMode)}");
@@ -11847,7 +11742,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile show MOCK test port: {_currentUiSettings.ShowMockTestPort}");
         builder.AppendLine($"  Profile event auto-scroll enabled: {_currentUiSettings.EventAutoScrollEnabled}");
         builder.AppendLine($"  Profile search case sensitive: {_currentUiSettings.SearchCaseSensitive}");
-        builder.AppendLine($"  Profile search auto-refresh enabled: {_currentUiSettings.SearchResultAutoRefreshEnabled}");
+        builder.AppendLine("  Search result refresh mode: Manual only");
         builder.AppendLine($"  Profile last search text: {(string.IsNullOrWhiteSpace(_currentUiSettings.LastSearchText) ? "(none)" : _currentUiSettings.LastSearchText)}");
         builder.AppendLine($"  Profile marker text: {(string.IsNullOrWhiteSpace(_currentUiSettings.MarkerText) ? "(none)" : _currentUiSettings.MarkerText)}");
         builder.AppendLine($"  Profile mock lines/sec: {_currentUiSettings.MockStressLinesPerSecond:N0}");
@@ -11891,7 +11786,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last rule evaluation error: {(string.IsNullOrWhiteSpace(_eventDetector.LastRuleEvaluationError) ? "(none)" : _eventDetector.LastRuleEvaluationError)}");
         builder.AppendLine($"  Last HEX rule match: {(string.IsNullOrWhiteSpace(_eventDetector.LastHexRuleMatchName) ? "(none)" : _eventDetector.LastHexRuleMatchName)}");
         builder.AppendLine($"  Last HEX rule match bytes: {(string.IsNullOrWhiteSpace(_eventDetector.LastHexRuleMatchBytesPreview) ? "(none)" : _eventDetector.LastHexRuleMatchBytesPreview)}");
-        builder.AppendLine($"  Apply rules to new logs only: {ApplyRulesToNewLogsOnly}");
+        builder.AppendLine("  Apply rules to new logs only: True (fixed)");
         builder.AppendLine($"  Automatic rule re-render suppressed count: {AutomaticRuleRerenderSuppressedCount:N0}");
         builder.AppendLine($"  Last live-only rule change time: {LastRuleChangeLiveOnlyTimeText}");
         builder.AppendLine($"  Rule changes since clear: {RuleChangesSinceClearCount:N0}");
@@ -12094,9 +11989,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  xterm append backpressure active: {IsXtermAppendBackpressureActive}");
         builder.AppendLine($"  xterm backlog UI relief active: {IsXtermAppendBackpressureActive}");
         builder.AppendLine($"  Effective xterm auto-scroll: {IsEffectiveXtermAutoScrollEnabled}");
-        builder.AppendLine($"  Search auto-refresh suppressed by xterm backlog: {IsSearchAutoRefreshSuppressedByXtermBackpressure}");
+        builder.AppendLine("  Search auto-refresh: disabled (manual only)");
         builder.AppendLine($"  Event auto-scroll suppressed by xterm backlog: {IsEventAutoScrollSuppressedByXtermBackpressure}");
-        builder.AppendLine($"  Backlog search refresh suppressions: {XtermBackpressureSearchRefreshSuppressedCount:N0}");
         builder.AppendLine($"  Backlog event auto-scroll suppressions: {XtermBackpressureEventAutoScrollSuppressedCount:N0}");
         builder.AppendLine($"  Backlog xterm auto-scroll suppressions: {XtermBackpressureAutoScrollSuppressedCount:N0}");
         builder.AppendLine($"  Backlog full re-renders deferred: {XtermBackpressureFullRerenderDeferredCount:N0}");
@@ -12231,7 +12125,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Selected search result index: {SelectedSearchResultIndex:N0}");
         builder.AppendLine($"  Search result status: {SearchResultStatusText}");
         builder.AppendLine($"  Search results rebuild count: {SearchResultsRebuildCount:N0}");
-        builder.AppendLine($"  Search results auto-refresh enabled: {IsSearchResultAutoRefreshEnabled}");
+        builder.AppendLine("  Search results refresh mode: Manual only");
         builder.AppendLine($"  Search results stale: {AreSearchResultsStale}");
         builder.AppendLine($"  Last search shortcut action: {LastSearchShortcutAction}");
         builder.AppendLine($"  Last search shortcut source: {LastSearchShortcutSource}");

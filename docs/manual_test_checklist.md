@@ -48,6 +48,7 @@ real hardware when available.
 - [ ] Connect Serial Monitor to the real device COM port.
 - [ ] Open the Bridge tab and select `COM4` as the app-side virtual port.
 - [ ] Start the bridge and confirm `BRIDGE ON` appears in both the top and bottom status areas.
+- [ ] While the bridge is running, click Refresh and confirm the selected virtual port and route remain unchanged.
 - [ ] Open an external controller or analyzer on `COM5`, not `COM4`.
 - [ ] Confirm real-device RX bytes arrive unchanged at the external program.
 - [ ] Send binary/HEX data from the external program and confirm the exact bytes reach the device.
@@ -270,7 +271,7 @@ real hardware when available.
 - [ ] Open Search tab.
 - [ ] Confirm result rows are compact and stable.
 - [ ] Confirm status appears in the toolbar, not as a result row.
-- [ ] Confirm Auto refresh is off by default.
+- [ ] Confirm there is no Auto refresh control and Search results update only after Refresh.
 - [ ] Click Refresh and confirm results rebuild.
 - [ ] Double-click a result and confirm xterm jumps/selects it.
 - [ ] Confirm stale/manual status is clear while logs append.

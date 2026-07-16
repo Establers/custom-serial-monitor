@@ -747,15 +747,15 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Log save directory was invalid.");
         }
 
-        if (settings.SizeRotationBytes is <= 0)
+        if (settings.SizeRotationBytes is null or <= 0)
         {
-            settings.SizeRotationBytes = null;
-            warnings.Add("Size rotation bytes was invalid.");
+            settings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
+            warnings.Add("Size rotation was missing or invalid and was reset to 10 MB.");
         }
         else if (settings.SizeRotationBytes is < MinSizeRotationBytes or > MaxSizeRotationBytes)
         {
-            settings.SizeRotationBytes = null;
-            warnings.Add("Size rotation bytes was outside the safe range.");
+            settings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
+            warnings.Add("Size rotation was outside the safe range and was reset to 10 MB.");
         }
     }
 
@@ -764,6 +764,14 @@ public sealed class ProfileService : IProfileService
         UiSettings defaults,
         ICollection<string> warnings)
     {
+#if !DEBUG
+        if (settings.ShowMockTestPort)
+        {
+            settings.ShowMockTestPort = false;
+            warnings.Add("MOCK test port was disabled because this is a Release build.");
+        }
+#endif
+
         if (settings.MaxVisibleLogLines is < MinVisibleLogLines or > MaxVisibleLogLines)
         {
             settings.MaxVisibleLogLines = defaults.MaxVisibleLogLines;

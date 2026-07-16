@@ -19,4 +19,12 @@ public sealed class LogSettingsTests
         Assert.NotNull(restored);
         Assert.False(restored.FileLoggingEnabled);
     }
+
+    [Fact]
+    public void Default_SizeRotationThreshold_IsTenMegabytes()
+    {
+        Assert.Equal(1024L * 1024, LogSettings.BytesPerMegabyte);
+        Assert.Equal(10, LogSettings.DefaultSizeRotationMegabytes);
+        Assert.Equal(10L * 1024 * 1024, new LogSettings().SizeRotationBytes);
+    }
 }

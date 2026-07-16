@@ -115,6 +115,75 @@ public sealed class ProfileServiceBridgeSafetyTests
         }
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("0")]
+    [InlineData("10737418241")]
+    public async Task LoadAsync_NullOrInvalidSizeRotationThreshold_DefaultsToTenMegabytes(string thresholdJson)
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var json = $$"""
+            {
+              "ProfileSchemaVersion": 1,
+              "Name": "Log rotation profile",
+              "LogSettings": {
+                "SizeRotationEnabled": true,
+                "SizeRotationBytes": {{thresholdJson}}
+              }
+            }
+            """;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json);
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(LogSettings.DefaultSizeRotationBytes, loaded.LogSettings.SizeRotationBytes);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_ShowMockTestPort_FollowsBuildPolicy()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var json = """
+            {
+              "ProfileSchemaVersion": 1,
+              "Name": "MOCK visibility profile",
+              "UiSettings": {
+                "ShowMockTestPort": true
+              }
+            }
+            """;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json);
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+#if DEBUG
+            Assert.True(loaded.UiSettings.ShowMockTestPort);
+#else
+            Assert.False(loaded.UiSettings.ShowMockTestPort);
+            Assert.Contains("Release build", service.LastError, StringComparison.OrdinalIgnoreCase);
+#endif
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
     private static string CreateTemporaryProfilePath()
     {
         return Path.Combine(

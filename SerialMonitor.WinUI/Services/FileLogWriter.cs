@@ -17,6 +17,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private Task? _writerTask;
     private string _directory = CreateDefaultLogDirectory();
     private string? _currentLogFilePath;
+    private string? _lastLogFilePath;
     private string? _lastFileError;
     private long _writtenLineCount;
     private long _writtenByteCount;
@@ -67,6 +68,17 @@ public sealed class FileLogWriter : IFileLogWriter
             lock (_stateGate)
             {
                 return _currentLogFilePath;
+            }
+        }
+    }
+
+    public string? LastLogFilePath
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return _lastLogFilePath;
             }
         }
     }
@@ -452,8 +464,25 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         if (!string.IsNullOrWhiteSpace(naming.LogFileName))
         {
-            path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex: 0, naming);
-            return CreateWriter(path, FileMode.CreateNew);
+            if (rotationIndex == 0)
+            {
+                path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex: 0, naming);
+                return CreateWriter(path, FileMode.CreateNew);
+            }
+
+            for (var duplicateIndex = 0; duplicateIndex < 10_000; duplicateIndex++)
+            {
+                path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex, naming);
+                try
+                {
+                    return CreateWriter(path, FileMode.CreateNew);
+                }
+                catch (IOException) when (File.Exists(path))
+                {
+                }
+            }
+
+            throw new IOException("Could not create a unique rotated serial log file.");
         }
 
         for (var duplicateIndex = 0; duplicateIndex < 10_000; duplicateIndex++)
@@ -486,7 +515,8 @@ public sealed class FileLogWriter : IFileLogWriter
 
             var extension = Path.GetExtension(naming.LogFileName);
             var stem = Path.GetFileNameWithoutExtension(naming.LogFileName);
-            return Path.Combine(_directory, $"{stem}_{rotationIndex:D3}{extension}");
+            var explicitDuplicatePart = duplicateIndex == 0 ? string.Empty : $"_dup{duplicateIndex:D3}";
+            return Path.Combine(_directory, $"{stem}_{rotationIndex:D3}{explicitDuplicatePart}{extension}");
         }
 
         string runTimeText;
@@ -584,6 +614,10 @@ public sealed class FileLogWriter : IFileLogWriter
         lock (_stateGate)
         {
             _currentLogFilePath = path;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                _lastLogFilePath = path;
+            }
         }
 
         RaiseStatusChanged();

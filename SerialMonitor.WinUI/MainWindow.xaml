@@ -1017,7 +1017,7 @@
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="5"
                                       MinWidth="0"
-                                      ColumnDefinitions="Auto,96,Auto,Auto,Auto,*">
+                                      ColumnDefinitions="Auto,96,Auto,Auto,*">
                                     <TextBlock Text="Search"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
                                                Margin="0,0,6,0" />
@@ -1034,15 +1034,10 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding RefreshSearchResultsCommand}"
                                             ToolTipService.ToolTip="Refresh search results" />
-                                    <CheckBox Grid.Column="3"
-                                              Content="Auto"
-                                              IsChecked="{Binding IsSearchResultAutoRefreshEnabled, Mode=TwoWay}"
-                                              ToolTipService.ToolTip="Auto-refresh search results while logs append"
-                                              VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="4"
+                                    <TextBlock Grid.Column="3"
                                                Text="{Binding SearchSummaryText}"
                                                Style="{StaticResource CompactCellTextStyle}" />
-                                    <TextBlock Grid.Column="5"
+                                    <TextBlock Grid.Column="4"
                                                Text="{Binding SearchResultStatusText}"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                MinWidth="0"
@@ -1113,25 +1108,26 @@
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
                                     <CheckBox Grid.Column="2"
                                               Content="En"
-                                               IsEnabled="{Binding HasSelectedCommandSequence}"
+                                               IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                                IsChecked="{Binding SelectedCommandSequence.Enabled, Mode=TwoWay}"
                                                Style="{StaticResource RuleCheckBoxStyle}"
                                                Click="CommandSequenceInlineClicked"
                                                ToolTipService.ToolTip="Enable selected sequence" />
                                     <Button Grid.Column="3"
                                             Content="+"
+                                            IsEnabled="{Binding CanEditCommandSequences}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddCommandSequence_Click"
                                             ToolTipService.ToolTip="Add sequence" />
                                     <Button Grid.Column="4"
                                             Content="Edit"
-                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="EditCommandSequence_Click"
                                             ToolTipService.ToolTip="Edit sequence" />
                                     <Button Grid.Column="5"
                                             Content="Del"
-                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DeleteCommandSequence_Click"
                                             ToolTipService.ToolTip="Delete sequence" />
@@ -1168,31 +1164,31 @@
                                                ToolTipService.ToolTip="Selected sequence step count" />
                                     <Button Grid.Column="3"
                                             Content="+"
-                                            IsEnabled="{Binding HasSelectedCommandSequence}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Add step" />
                                     <Button Grid.Column="4"
                                             Content="Edit"
-                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="EditCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Edit step" />
                                     <Button Grid.Column="5"
                                             Content="Del"
-                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DeleteCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Delete step" />
                                     <Button Grid.Column="6"
                                             Content="Up"
-                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepUp_Click"
                                             ToolTipService.ToolTip="Move step up" />
                                     <Button Grid.Column="7"
                                             Content="Dn"
-                                            IsEnabled="{Binding HasSelectedCommandSequenceStep}"
+                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepDown_Click"
                                             ToolTipService.ToolTip="Move step down" />
@@ -1231,6 +1227,7 @@
                                               MinHeight="0"
                                               ItemsSource="{Binding SelectedCommandSequence.Steps}"
                                               SelectedItem="{Binding SelectedCommandSequenceStep, Mode=TwoWay}"
+                                              IsEnabled="{Binding CanEditCommandSequences}"
                                               SelectionMode="Single"
                                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               ScrollViewer.VerticalScrollMode="Enabled"
@@ -1297,11 +1294,11 @@
                                       ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Text="Log Rules"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <CheckBox Grid.Column="1"
-                                              Content="New logs only"
-                                              IsChecked="{Binding ApplyRulesToNewLogsOnly, Mode=TwoWay}"
-                                              VerticalAlignment="Center"
-                                              ToolTipService.ToolTip="When enabled, rule changes affect only new incoming logs. Existing visible logs are not reprocessed. Default ON; disabling this may reprocess a large visible buffer and can be slow." />
+                                    <TextBlock Grid.Column="1"
+                                               Text="New logs only"
+                                               Style="{StaticResource SettingApplyHintTextStyle}"
+                                               VerticalAlignment="Center"
+                                               ToolTipService.ToolTip="Rule changes always affect only new incoming logs and do not reprocess existing visible logs." />
                                     <Button Grid.Column="2"
                                             Content="+"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
@@ -1540,6 +1537,12 @@
                                                       IsEnabled="{Binding CanEditBridgePort}"
                                                       MinWidth="110"
                                                       HorizontalAlignment="Stretch" />
+                                            <Button Grid.Column="2"
+                                                    Content="Refresh"
+                                                    Command="{Binding RefreshBridgePortsCommand}"
+                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    HorizontalAlignment="Left"
+                                                    ToolTipService.ToolTip="Refresh available virtual COM port candidates." />
                                             <StackPanel Grid.Row="1"
                                                         Grid.Column="1"
                                                         Grid.ColumnSpan="2"
@@ -1687,7 +1690,7 @@
                                                     <Button Content="Open"
                                                             Command="{Binding OpenCurrentSerialLogCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open current log file" />
+                                                            ToolTipService.ToolTip="Open the active or most recently completed log file" />
                                                     <Button Content="Folder"
                                                             Command="{Binding OpenLogFolderCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1695,7 +1698,7 @@
                                                     <Button Content="Copy path"
                                                             Command="{Binding CopySerialLogPathCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Copy current log file path" />
+                                                            ToolTipService.ToolTip="Copy the active or most recently completed log file path" />
                                                 </StackPanel>
                                             </ScrollViewer>
                                             <TextBlock Grid.Column="2"
@@ -1808,11 +1811,14 @@
                                                         Spacing="6">
                                                 <CheckBox Content="Size rotation"
                                                           IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}" />
-                                                <TextBox Text="{Binding SizeRotationBytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         PlaceholderText="bytes"
+                                                <TextBox Text="{Binding SizeRotationMegabytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         PlaceholderText="10"
                                                          Style="{StaticResource CompactTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditSizeRotationBytes}"
+                                                         IsEnabled="{Binding CanEditSizeRotationMegabytes}"
                                                          Width="82" />
+                                                <TextBlock Text="MB"
+                                                           VerticalAlignment="Center"
+                                                           Style="{StaticResource SettingValueTextStyle}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
@@ -2282,7 +2288,8 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem Header="Test"
+                    <TabViewItem x:Name="TestTabViewItem"
+                                 Header="Test"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
                         <ScrollViewer Padding="0,2,0,0"

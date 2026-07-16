@@ -178,8 +178,8 @@ workflows faster, not on adding more features.
   - Preserve dispatcher marshaling and channel boundaries.
   - Files: `MainViewModel.cs`, service status handlers.
 
-- **Do not make search results auto-refresh by default**
-  - The explicit/manual default improves selection stability during live logging.
+- **Do not auto-refresh search results**
+  - Manual refresh preserves selection stability during live logging.
 
 - **Do not write ANSI color codes to serial or event logs**
   - Highlighting must stay visual-only in `LogViewModel`/xterm path.
@@ -374,4 +374,3 @@ workflows faster, not on adding more features.
 - Open/copy serial and event log paths.
 - Run mock stress, pause rendering, and confirm file/event counters continue.
 - Resize to wide, medium, and narrow layouts.
-

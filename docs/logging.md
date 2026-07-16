@@ -12,7 +12,7 @@ independent from file logging and does not create an event log file.
 - Turning it ON while disconnected arms logging for the next connection.
 - Turning Log Save OFF immediately stops new file-log enqueues, drains lines
   already accepted by the bounded writer queue, flushes, closes the file, and
-  clears the current file path.
+  retains the completed file path for Open and Copy path actions.
 - RX, TX, MARK, and system lines use the same ordered serial log stream.
 - Terminal rendering and event detection continue while Log Save is OFF.
 
@@ -46,7 +46,11 @@ independent from file logging and does not create an event log file.
 - Automatic names use `_dup001`, `_dup002`, and so on for same-second collisions.
   Date changes do not split an active log file.
 - Optional size rotation keeps the exact name for the first file and adds `_001`,
-  `_002`, and so on before its extension for subsequent files.
+  `_002`, and so on before its extension for subsequent files. If a rotated
+  segment name already exists, `_dup001`, `_dup002`, and so on are added instead
+  of stopping file logging. A missing or invalid size threshold defaults to
+  10 MB. The Log tab accepts this threshold as a whole number in MB; for example,
+  entering `10` rotates at 10 MB.
 
 ## Log File Name
 

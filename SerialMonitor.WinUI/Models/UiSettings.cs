@@ -38,8 +38,6 @@ public sealed class UiSettings
 
     public TimestampDisplayFormat TimestampDisplayFormat { get; set; } = TimestampDisplayFormat.DateTimeMilliseconds;
 
-    public bool ApplyRulesToNewLogsOnly { get; set; } = true;
-
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
     public int HexGroupTimeoutMs { get; set; } = 10;
@@ -53,8 +51,6 @@ public sealed class UiSettings
     public double CuteBackgroundOpacity { get; set; } = 0.25;
 
     public bool SearchCaseSensitive { get; set; }
-
-    public bool SearchResultAutoRefreshEnabled { get; set; }
 
     public string LastSearchText { get; set; } = string.Empty;
 
@@ -85,7 +81,6 @@ public sealed class UiSettings
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
             ShowTimestampInLogView = ShowTimestampInLogView,
             TimestampDisplayFormat = TimestampDisplayFormat,
-            ApplyRulesToNewLogsOnly = ApplyRulesToNewLogsOnly,
             RxDisplayMode = RxDisplayMode,
             HexGroupTimeoutMs = HexGroupTimeoutMs,
             TxSendMode = TxSendMode,
@@ -93,7 +88,6 @@ public sealed class UiSettings
             CuteBackgroundImagePath = CuteBackgroundImagePath,
             CuteBackgroundOpacity = CuteBackgroundOpacity,
             SearchCaseSensitive = SearchCaseSensitive,
-            SearchResultAutoRefreshEnabled = SearchResultAutoRefreshEnabled,
             LastSearchText = LastSearchText,
             MarkerText = MarkerText,
             ShowMockTestPort = ShowMockTestPort,

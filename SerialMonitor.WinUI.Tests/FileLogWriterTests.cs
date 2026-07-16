@@ -47,6 +47,8 @@ public sealed class FileLogWriterTests
 
         Assert.False(writer.IsRunning);
         Assert.Null(writer.CurrentLogFilePath);
+        Assert.NotNull(writer.LastLogFilePath);
+        Assert.True(File.Exists(writer.LastLogFilePath));
         Assert.False(writer.TryEnqueue(LogLine.System("after OFF")));
         Assert.Equal(2, writer.WrittenLineCount);
 
@@ -142,6 +144,47 @@ public sealed class FileLogWriterTests
         var contents = await File.ReadAllTextAsync(file);
         Assert.Contains("day one", contents, StringComparison.Ordinal);
         Assert.Contains("day two", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExplicitLogFileName_SizeRotationAvoidsExistingSegmentNames()
+    {
+        using var directory = new TemporaryDirectory();
+        var existingRotationPath = Path.Combine(directory.Path, "capture_001.log");
+        await File.WriteAllTextAsync(existingRotationPath, "keep existing segment");
+        await using var writer = new FileLogWriter
+        {
+            MaximumFileSizeBytes = 1
+        };
+        writer.UpdateLogFileName("capture.log", requestNewFile: false);
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+
+        Assert.True(writer.TryEnqueue(LogLine.System("first")));
+        Assert.True(writer.TryEnqueue(LogLine.System("second")));
+        await writer.StopAsync(CancellationToken.None);
+
+        Assert.Equal("keep existing segment", await File.ReadAllTextAsync(existingRotationPath));
+        Assert.True(File.Exists(Path.Combine(directory.Path, "capture.log")));
+        var duplicateRotationPath = Path.Combine(directory.Path, "capture_001_dup001.log");
+        Assert.True(File.Exists(duplicateRotationPath));
+        Assert.Contains("second", await File.ReadAllTextAsync(duplicateRotationPath), StringComparison.Ordinal);
+        Assert.Equal(2, writer.WrittenLineCount);
+    }
+
+    [Fact]
+    public async Task StopAsync_RetainsLastCompletedLogPath()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var writer = new FileLogWriter();
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+        var activePath = writer.CurrentLogFilePath;
+
+        await writer.StopAsync(CancellationToken.None);
+
+        Assert.NotNull(activePath);
+        Assert.Null(writer.CurrentLogFilePath);
+        Assert.Equal(activePath, writer.LastLogFilePath);
+        Assert.True(File.Exists(writer.LastLogFilePath));
     }
 
     [Fact]

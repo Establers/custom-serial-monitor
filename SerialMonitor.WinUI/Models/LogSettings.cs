@@ -4,6 +4,10 @@ namespace SerialMonitor.WinUI.Models;
 
 public sealed class LogSettings
 {
+    public const long BytesPerMegabyte = 1024L * 1024;
+    public const long DefaultSizeRotationMegabytes = 10;
+    public const long DefaultSizeRotationBytes = DefaultSizeRotationMegabytes * BytesPerMegabyte;
+
     [JsonIgnore]
     public bool FileLoggingEnabled { get; set; }
 
@@ -12,7 +16,7 @@ public sealed class LogSettings
 
     public bool SizeRotationEnabled { get; set; }
 
-    public long? SizeRotationBytes { get; set; }
+    public long? SizeRotationBytes { get; set; } = DefaultSizeRotationBytes;
 
     public LogSettings Clone()
     {

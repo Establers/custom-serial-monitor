@@ -14,6 +14,8 @@ public interface IFileLogWriter : IAsyncDisposable
 
     string? CurrentLogFilePath { get; }
 
+    string? LastLogFilePath { get; }
+
     string? LastFileError { get; }
 
     long WrittenLineCount { get; }
