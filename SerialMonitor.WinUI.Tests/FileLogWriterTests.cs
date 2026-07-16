@@ -1,3 +1,4 @@
+using System.Globalization;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -150,7 +151,16 @@ public sealed class FileLogWriterTests
         using var directory = new TemporaryDirectory();
         await using var writer = new FileLogWriter();
         await writer.StartAsync(directory.Path, CancellationToken.None);
-        var firstDate = new DateTimeOffset(2026, 7, 14, 23, 59, 59, TimeSpan.Zero);
+        var initialPath = Assert.IsType<string>(writer.CurrentLogFilePath);
+        var initialFileName = Path.GetFileName(initialPath);
+        var initialDate = DateOnly.ParseExact(
+            initialFileName.AsSpan(0, 10),
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture);
+        var firstLocalDateTime = initialDate.ToDateTime(new TimeOnly(12, 0));
+        var firstDate = new DateTimeOffset(
+            firstLocalDateTime,
+            TimeZoneInfo.Local.GetUtcOffset(firstLocalDateTime));
         var secondDate = firstDate.AddDays(1);
 
         Assert.True(writer.TryEnqueue(new LogLine(firstDate, LogDirection.System, "day one")));

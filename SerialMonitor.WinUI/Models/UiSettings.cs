@@ -18,9 +18,11 @@ public enum TimestampDisplayFormat
 
 public sealed class UiSettings
 {
+    public const int FixedMaxVisibleEventCount = 100;
+
     public int MaxVisibleLogLines { get; set; } = 50_000;
 
-    public int MaxVisibleEventCount { get; set; } = 1_000;
+    public int MaxVisibleEventCount { get; set; } = FixedMaxVisibleEventCount;
 
     public bool AutoScrollEnabled { get; set; } = true;
 

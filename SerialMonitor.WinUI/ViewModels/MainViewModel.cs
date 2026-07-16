@@ -186,11 +186,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int MaxXtermScrollbackSizeLimit = 500_000;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
-    private const int DefaultVisibleEventCount = 1_000;
-    private const int MinVisibleEventCount = 500;
-    private const int MaxVisibleEventCountLimit = 5_000;
-    private const int MinEventContextLines = 0;
-    private const int MaxEventContextLines = 1_000;
+    private const int DefaultVisibleEventCount = UiSettings.FixedMaxVisibleEventCount;
     private const int MinMockStressLinesPerSecond = 1;
     private const int MaxMockStressLinesPerSecond = 50_000;
     private const int MinMockStressBurstSize = 1;
@@ -867,14 +863,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         100_000,
         200_000,
         500_000
-    };
-
-    public ObservableCollection<int> VisibleEventCountOptions { get; } = new()
-    {
-        500,
-        1_000,
-        2_000,
-        5_000
     };
 
     public ObservableCollection<int> MockStressLineRatePresets { get; } = new()
@@ -2118,58 +2106,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public int MaxVisibleEventCount
-    {
-        get => _currentUiSettings.MaxVisibleEventCount;
-        set
-        {
-            if (!ValidateIntRange("Max visible event count", value, MinVisibleEventCount, MaxVisibleEventCountLimit))
-            {
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(MaxVisibleEventCountText));
-                return;
-            }
-
-            if (_currentUiSettings.MaxVisibleEventCount == value)
-            {
-                return;
-            }
-
-            _currentUiSettings.MaxVisibleEventCount = value;
-            var dropped = Events.SetCapacity(value);
-            var droppedContexts = TrimRetainedEventContextsToLimit();
-            RecordSettingsChange("Max visible event count", SettingsApplyBehavior.Immediate, value.ToString(CultureInfo.InvariantCulture));
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(MaxVisibleEventCountText));
-            OnPropertyChanged(nameof(DetectedEventUiItemCount));
-            OnPropertyChanged(nameof(DetectedEventUiCountText));
-            SelectLatestEventCommand.NotifyCanExecuteChanged();
-            if (dropped > 0)
-            {
-                SetStatus($"Visible Events cap changed to {value:N0}; trimmed {dropped:N0} older visible events.");
-            }
-            else if (droppedContexts > 0)
-            {
-                SetStatus($"Visible Events cap changed to {value:N0}; trimmed {droppedContexts:N0} older event contexts.");
-            }
-        }
-    }
-
-    public string MaxVisibleEventCountText
-    {
-        get => MaxVisibleEventCount.ToString(CultureInfo.InvariantCulture);
-        set
-        {
-            if (TryParseIntSetting("Max visible event count", value, MinVisibleEventCount, MaxVisibleEventCountLimit, out var parsed))
-            {
-                MaxVisibleEventCount = parsed;
-            }
-            else
-            {
-                OnPropertyChanged();
-            }
-        }
-    }
+    public int MaxVisibleEventCount => _currentUiSettings.MaxVisibleEventCount;
 
     public int XtermScrollbackSize
     {
@@ -2220,87 +2157,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public int EffectiveXtermScrollbackSize => Math.Max(XtermScrollbackSize, MaxVisibleLogLines);
 
-    public int BeforeContextLines
-    {
-        get => _currentEventContextSettings.BeforeContextLines;
-        set
-        {
-            if (!ValidateIntRange("Before context lines", value, MinEventContextLines, MaxEventContextLines))
-            {
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(BeforeContextLinesText));
-                return;
-            }
+    public int BeforeContextLines => _currentEventContextSettings.BeforeContextLines;
 
-            if (_currentEventContextSettings.BeforeContextLines == value)
-            {
-                return;
-            }
-
-            _currentEventContextSettings.BeforeContextLines = value;
-            _eventDetector.UpdateContextSettings(_currentEventContextSettings);
-            RecordSettingsChange("Before context lines", SettingsApplyBehavior.Immediate, value.ToString(CultureInfo.InvariantCulture));
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(BeforeContextLinesText));
-        }
-    }
-
-    public string BeforeContextLinesText
-    {
-        get => BeforeContextLines.ToString(CultureInfo.InvariantCulture);
-        set
-        {
-            if (TryParseIntSetting("Before context lines", value, MinEventContextLines, MaxEventContextLines, out var parsed))
-            {
-                BeforeContextLines = parsed;
-            }
-            else
-            {
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    public int AfterContextLines
-    {
-        get => _currentEventContextSettings.AfterContextLines;
-        set
-        {
-            if (!ValidateIntRange("After context lines", value, MinEventContextLines, MaxEventContextLines))
-            {
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(AfterContextLinesText));
-                return;
-            }
-
-            if (_currentEventContextSettings.AfterContextLines == value)
-            {
-                return;
-            }
-
-            _currentEventContextSettings.AfterContextLines = value;
-            _eventDetector.UpdateContextSettings(_currentEventContextSettings);
-            RecordSettingsChange("After context lines", SettingsApplyBehavior.Immediate, value.ToString(CultureInfo.InvariantCulture));
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(AfterContextLinesText));
-        }
-    }
-
-    public string AfterContextLinesText
-    {
-        get => AfterContextLines.ToString(CultureInfo.InvariantCulture);
-        set
-        {
-            if (TryParseIntSetting("After context lines", value, MinEventContextLines, MaxEventContextLines, out var parsed))
-            {
-                AfterContextLines = parsed;
-            }
-            else
-            {
-                OnPropertyChanged();
-            }
-        }
-    }
+    public int AfterContextLines => _currentEventContextSettings.AfterContextLines;
 
     public string MarkerText
     {
@@ -3413,7 +3272,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private int RetainedEventContextLimit => Math.Min(
         MaxRetainedEventContexts,
-        Math.Max(MinVisibleEventCount, MaxVisibleEventCount));
+        Math.Max(DefaultVisibleEventCount, MaxVisibleEventCount));
 
     public int PendingEventUiCount => _eventBatchDispatcher.PendingItemCount;
 
@@ -3791,7 +3650,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         화면과 로그
 
         Pause View는 현재 화면을 고정하고 Pause 중 수신 로그를 화면에서 생략합니다. Resume Live 이후 새 로그부터 표시됩니다.
-        Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Settings > Log의 View pause 옵션을 따릅니다.
+        Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Log 탭의 View pause 옵션을 따릅니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
         HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 프로필 값이 그대로 사용됩니다.
@@ -3910,7 +3769,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         * 규칙이 일치하면 Events 탭에 시간, 규칙 이름, 방향, 원본 메시지가 추가됩니다.
         * 이벤트를 한 번 선택하면 관련 정보가 갱신되고, 더블클릭하면 Context 탭으로 이동합니다.
         * Context는 BEFORE / MATCHED / AFTER 순서로 이벤트 전후 로그를 보여줍니다.
-        * 전후 줄 수는 Settings의 Event Context에서 조정합니다. 기본값은 앞 10줄, 뒤 10줄입니다.
+        * 이벤트 Context는 앞 5줄과 뒤 5줄로 고정됩니다.
         * 뒤쪽 로그가 아직 도착하지 않았다면 Context pending으로 표시될 수 있습니다.
         * Copy Event Context로 전후 로그 전체를 복사할 수 있습니다.
 
@@ -10950,7 +10809,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MaxVisibleLogLinesText));
         OnPropertyChanged(nameof(LastVisibleCapChangeTimeText));
         OnPropertyChanged(nameof(MaxVisibleEventCount));
-        OnPropertyChanged(nameof(MaxVisibleEventCountText));
         OnPropertyChanged(nameof(XtermScrollbackSize));
         OnPropertyChanged(nameof(XtermScrollbackSizeText));
         OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
@@ -10998,9 +10856,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(IsMockStressEventInjectionEnabled));
         OnPropertyChanged(nameof(IsMockStressInvalidByteInjectionEnabled));
         OnPropertyChanged(nameof(BeforeContextLines));
-        OnPropertyChanged(nameof(BeforeContextLinesText));
         OnPropertyChanged(nameof(AfterContextLines));
-        OnPropertyChanged(nameof(AfterContextLinesText));
         RefreshSettingsApplyStatusProperties();
     }
 
@@ -11967,7 +11823,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile normalization count: {ProfileNormalizationCount:N0}");
         builder.AppendLine($"  Profile file logging enabled: {_currentLogSettings.FileLoggingEnabled}");
         builder.AppendLine($"  Profile log save directory: {_currentLogSettings.SaveDirectory}");
-        builder.AppendLine("  Daily serial log rotation: always enabled");
+        builder.AppendLine("  Automatic-name daily serial log rotation: enabled");
         builder.AppendLine($"  Profile size rotation enabled: {_currentLogSettings.SizeRotationEnabled}");
         builder.AppendLine($"  Profile last successful port: {LastSuccessfulPort}");
         builder.AppendLine($"  Profile last successful baud: {LastSuccessfulBaudRate:N0}");

@@ -11,13 +11,10 @@ public sealed class ProfileService : IProfileService
 {
     private const int MinVisibleLogLines = 1_000;
     private const int MaxVisibleLogLines = 500_000;
-    private const int MinVisibleEventCount = 500;
-    private const int MaxVisibleEventCount = 5_000;
     private const int MinXtermScrollbackSize = 1_000;
     private const int MaxXtermScrollbackSize = 500_000;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
-    private const int MaxEventContextLines = 1_000;
     private const int MinMockStressLinesPerSecond = 1;
     private const int MaxMockStressLinesPerSecond = 50_000;
     private const int MinMockStressBurstSize = 1;
@@ -458,7 +455,7 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Event context settings were missing.");
         }
 
-        NormalizeEventContextSettings(profile.EventContextSettings, defaults.EventContextSettings, warnings);
+        NormalizeEventContextSettings(profile.EventContextSettings, warnings);
 
         if (profile.BridgeSettings is null)
         {
@@ -773,10 +770,10 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Max visible log lines was invalid.");
         }
 
-        if (settings.MaxVisibleEventCount is < MinVisibleEventCount or > MaxVisibleEventCount)
+        if (settings.MaxVisibleEventCount != UiSettings.FixedMaxVisibleEventCount)
         {
-            settings.MaxVisibleEventCount = defaults.MaxVisibleEventCount;
-            warnings.Add("Max visible event count was invalid.");
+            settings.MaxVisibleEventCount = UiSettings.FixedMaxVisibleEventCount;
+            warnings.Add("Max visible event count was fixed at 100.");
         }
 
         if (settings.XtermScrollbackSize is < MinXtermScrollbackSize or > MaxXtermScrollbackSize)
@@ -948,19 +945,18 @@ public sealed class ProfileService : IProfileService
 
     private static void NormalizeEventContextSettings(
         EventContextSettings settings,
-        EventContextSettings defaults,
         ICollection<string> warnings)
     {
-        if (settings.BeforeContextLines is < 0 or > MaxEventContextLines)
+        if (settings.BeforeContextLines != EventContextSettings.FixedLineCount)
         {
-            settings.BeforeContextLines = defaults.BeforeContextLines;
-            warnings.Add("Before event context line count was invalid.");
+            settings.BeforeContextLines = EventContextSettings.FixedLineCount;
+            warnings.Add("Before event context line count was fixed at 5.");
         }
 
-        if (settings.AfterContextLines is < 0 or > MaxEventContextLines)
+        if (settings.AfterContextLines != EventContextSettings.FixedLineCount)
         {
-            settings.AfterContextLines = defaults.AfterContextLines;
-            warnings.Add("After event context line count was invalid.");
+            settings.AfterContextLines = EventContextSettings.FixedLineCount;
+            warnings.Add("After event context line count was fixed at 5.");
         }
     }
 

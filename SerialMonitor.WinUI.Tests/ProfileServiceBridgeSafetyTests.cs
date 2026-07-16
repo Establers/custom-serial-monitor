@@ -7,6 +7,31 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class ProfileServiceBridgeSafetyTests
 {
     [Fact]
+    public async Task SaveAndLoad_ForcesFixedEventRetentionValues()
+    {
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        profile.UiSettings.MaxVisibleEventCount = 5_000;
+        profile.EventContextSettings.BeforeContextLines = 25;
+        profile.EventContextSettings.AfterContextLines = 30;
+        var path = CreateTemporaryProfilePath();
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(UiSettings.FixedMaxVisibleEventCount, loaded.UiSettings.MaxVisibleEventCount);
+            Assert.Equal(EventContextSettings.FixedLineCount, loaded.EventContextSettings.BeforeContextLines);
+            Assert.Equal(EventContextSettings.FixedLineCount, loaded.EventContextSettings.AfterContextLines);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
     public async Task SaveAndLoad_PreservesVisualHexMockPattern()
     {
         var service = new ProfileService();

@@ -1293,11 +1293,16 @@
                               RowDefinitions="Auto,*">
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
-                                <Grid ColumnSpacing="4"
-                                      ColumnDefinitions="*,Auto">
+                                <Grid ColumnSpacing="6"
+                                      ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Text="Log Rules"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button Grid.Column="1"
+                                    <CheckBox Grid.Column="1"
+                                              Content="New logs only"
+                                              IsChecked="{Binding ApplyRulesToNewLogsOnly, Mode=TwoWay}"
+                                              VerticalAlignment="Center"
+                                              ToolTipService.ToolTip="When enabled, rule changes affect only new incoming logs. Existing visible logs are not reprocessed. Default ON; disabling this may reprocess a large visible buffer and can be slow." />
+                                    <Button Grid.Column="2"
                                             Content="+"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddLogRule_Click"
@@ -1679,10 +1684,10 @@
                                                           VerticalScrollBarVisibility="Disabled">
                                                 <StackPanel Orientation="Horizontal"
                                                             Spacing="4">
-                                                    <Button Content="Serial"
+                                                    <Button Content="Open"
                                                             Command="{Binding OpenCurrentSerialLogCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open current serial log" />
+                                                            ToolTipService.ToolTip="Open current log file" />
                                                     <Button Content="Folder"
                                                             Command="{Binding OpenLogFolderCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1690,7 +1695,7 @@
                                                     <Button Content="Copy path"
                                                             Command="{Binding CopySerialLogPathCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Copy serial log path" />
+                                                            ToolTipService.ToolTip="Copy current log file path" />
                                                 </StackPanel>
                                             </ScrollViewer>
                                             <TextBlock Grid.Column="2"
@@ -1759,7 +1764,7 @@
                                             <TextBlock Text="Log file name"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <Grid Grid.Column="1"
-                                                  ColumnDefinitions="3*,Auto,2*"
+                                                  ColumnDefinitions="2*,Auto,3*"
                                                   ColumnSpacing="6">
                                                 <TextBox Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
@@ -1769,7 +1774,7 @@
                                                          ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name." />
                                                 <TextBlock Grid.Column="1"
                                                            Text="Current:"
-                                                           Style="{StaticResource SettingLabelTextStyle}" />
+                                                           Style="{StaticResource CompactCellTextStyle}" />
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding ConfiguredLogFileNameDisplayText}"
                                                            Style="{StaticResource SettingValueTextStyle}"
@@ -1783,16 +1788,16 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock Text="File split"
+                                            <TextBlock Text="Rotation"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="New file on every LOG ON"
+                                                       Text="New file per LOG ON; daily split for automatic names"
                                                        Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="A custom name is used exactly and must not already exist. An empty name creates yyyy-MM-dd_HHmmss_serial.log; automatic names also split when the date changes." />
+                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log and starts a new file when the date changes. A custom exact file name does not split at midnight." />
                                             <TextBlock Grid.Column="2"
-                                                       Text="Per ON"
+                                                       Text="Always"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="LOG ON never appends to an earlier run. Choose a new custom name when that file already exists." />
+                                                       ToolTipService.ToolTip="Every LOG ON creates a new file. Daily rotation is always active for automatic file names." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
@@ -1816,18 +1821,6 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock Text="Serial log"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding CurrentSerialLogPath}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding CurrentSerialLogPath}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
                                             <TextBlock Text="Last action"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
@@ -1846,7 +1839,7 @@
 
                     <TabViewItem Header="Settings"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Configure serial, display, profile, and MOCK options.">
+                                 ToolTipService.ToolTip="Configure serial, display, and profile options.">
                         <ScrollViewer Padding="0,2,0,0"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -2185,87 +2178,117 @@
                                         Padding="3">
                                     <StackPanel Spacing="3">
                                         <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Rules"
+                                            <TextBlock Text="Profile"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="Live rule changes"
+                                                       Text="Load/reset disabled while connected"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Actions"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                <Button Content="Save"
+                                                        Command="{Binding SaveProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Load"
+                                                        Command="{Binding LoadProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                <Button Content="Reset"
+                                                        Command="{Binding ResetProfileCommand}"
+                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Profile actions run immediately when enabled." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Path"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding CurrentProfilePath}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding CurrentProfilePath}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Profile"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding ProfileStatusText}"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Last change"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastSettingsChange}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastSettingsChange}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
                                             <TextBlock Text="Apply"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
-                                                      Content="Apply rules to new logs only"
-                                                      IsChecked="{Binding ApplyRulesToNewLogsOnly, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="When enabled, rule changes affect only new incoming logs. Existing visible logs are not reprocessed." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Default ON. If OFF, rule/filter changes may reprocess large visible buffers and can be slow." />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Event context"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="Future captures"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
+                                                       Text="{Binding LastSettingsApplyStatus}"
+                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock Text="Before"
+                                            <TextBlock Text="Pending"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBox Grid.Column="1"
-                                                     Text="{Binding BeforeContextLinesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                     Style="{StaticResource CompactTextBoxStyle}"
-                                                     Width="72"
-                                                     HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding SettingsPendingSummaryText}"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}" />
                                             <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to future event captures." />
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock Text="After"
+                                            <TextBlock Text="Error"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBox Grid.Column="1"
-                                                     Text="{Binding AfterContextLinesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                     Style="{StaticResource CompactTextBoxStyle}"
-                                                     Width="72"
-                                                     HorizontalAlignment="Left" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastSettingsApplyError}"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
                                             <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to future event captures." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Max events"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
-                                                      ItemsSource="{Binding VisibleEventCountOptions}"
-                                                      SelectedItem="{Binding MaxVisibleEventCount, Mode=TwoWay}"
-                                                      Style="{StaticResource CompactComboBoxStyle}"
-                                                      Width="92"
-                                                      HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Limits retained visible Events rows. Lower values reduce UI memory and improve event-list performance." />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. Options: 500, 1,000, 2,000, 5,000." />
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabViewItem>
 
+                    <TabViewItem Header="Test"
+                                 IsClosable="False"
+                                 ToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
+                        <ScrollViewer Padding="0,2,0,0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="3">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
                                         Padding="3">
                                     <StackPanel Spacing="3">
@@ -2383,111 +2406,6 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding MockStressStatusText}"
-                                                       Style="{StaticResource SettingValueTextStyle}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Profile"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="Load/reset disabled while connected"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Actions"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="4">
-                                                <Button Content="Save"
-                                                        Command="{Binding SaveProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
-                                                <Button Content="Load"
-                                                        Command="{Binding LoadProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
-                                                <Button Content="Reset"
-                                                        Command="{Binding ResetProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Profile actions run immediately when enabled." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Path"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding CurrentProfilePath}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding CurrentProfilePath}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Profile"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding ProfileStatusText}"
-                                                       Style="{StaticResource SettingValueTextStyle}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Last change"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding LastSettingsChange}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastSettingsChange}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Apply"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding LastSettingsApplyStatus}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Pending"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding SettingsPendingSummaryText}"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Error"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding LastSettingsApplyError}"
                                                        Style="{StaticResource SettingValueTextStyle}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
