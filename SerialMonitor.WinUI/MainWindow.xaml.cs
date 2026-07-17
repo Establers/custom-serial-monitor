@@ -3835,21 +3835,6 @@ public sealed partial class MainWindow : Window
         _viewModel.MoveSelectedCommandSequenceStep(1);
     }
 
-    private void CommandSequenceInlineClicked(object sender, RoutedEventArgs args)
-    {
-        if (sender is FrameworkElement { DataContext: CommandSequence sequence })
-        {
-            _viewModel.SelectedCommandSequence = sequence;
-            _viewModel.ApplyCommandSequenceChangesFromUi($"Updated sequence: {sequence.Name}");
-            return;
-        }
-
-        if (_viewModel.SelectedCommandSequence is { } selectedSequence)
-        {
-            _viewModel.ApplyCommandSequenceChangesFromUi($"Updated sequence: {selectedSequence.Name}");
-        }
-    }
-
     private async Task<LogRule?> ShowLogRuleDialogAsync(string title, LogRule source)
     {
         var nameBox = CreateDialogTextBox(source.Name, "e.g. RESET");
@@ -4190,7 +4175,6 @@ public sealed partial class MainWindow : Window
     private async Task<CommandSequence?> ShowCommandSequenceDialogAsync(string title, CommandSequence source)
     {
         var nameBox = CreateDialogTextBox(source.Name, "e.g. Boot Check");
-        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
         var errorText = new TextBlock
         {
             FontSize = 12,
@@ -4200,7 +4184,6 @@ public sealed partial class MainWindow : Window
 
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
-        panel.Children.Add(enabledBox);
         panel.Children.Add(errorText);
 
         var dialog = new ContentDialog
@@ -4230,7 +4213,6 @@ public sealed partial class MainWindow : Window
 
         var sequence = CloneCommandSequence(source);
         sequence.Name = nameBox.Text;
-        sequence.Enabled = enabledBox.IsChecked == true;
         return sequence;
     }
 
@@ -4711,7 +4693,6 @@ public sealed partial class MainWindow : Window
         return new CommandSequence
         {
             Name = sequence.Name,
-            Enabled = sequence.Enabled,
             Steps = new System.Collections.ObjectModel.ObservableCollection<CommandSequenceStep>(
                 sequence.Steps.Select(CloneCommandSequenceStep))
         };

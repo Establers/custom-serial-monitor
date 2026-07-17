@@ -757,6 +757,15 @@ public sealed class ProfileService : IProfileService
             settings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
             warnings.Add("Size rotation was outside the safe range and was reset to 10 MB.");
         }
+        else
+        {
+            var normalizedBytes = LogSettings.FloorToWholeMegabytes(settings.SizeRotationBytes.Value);
+            if (settings.SizeRotationBytes.Value != normalizedBytes)
+            {
+                settings.SizeRotationBytes = normalizedBytes;
+                warnings.Add("Size rotation was rounded down to a whole megabyte so the UI and writer use the same threshold.");
+            }
+        }
     }
 
     private void NormalizeUiSettings(

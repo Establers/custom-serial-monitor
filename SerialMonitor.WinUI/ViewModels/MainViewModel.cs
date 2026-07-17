@@ -1023,6 +1023,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SelectedCommandSequenceStepCount));
                 OnPropertyChanged(nameof(SelectedCommandSequenceStepCountText));
                 OnPropertyChanged(nameof(SelectedCommandSequenceName));
+                OnPropertyChanged(nameof(SequenceStatusText));
+                OnPropertyChanged(nameof(SequenceRuntimeStateText));
                 OnPropertyChanged(nameof(SequenceCompletedStepsText));
                 RefreshSelectedCommandSequenceStepNumbers();
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
@@ -6584,7 +6586,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             !IsBusy &&
             !IsBridgeActive &&
             !IsSequenceRunning &&
-            SelectedCommandSequence is { Enabled: true } sequence &&
+            SelectedCommandSequence is { } sequence &&
             sequence.Steps.Count > 0;
     }
 
@@ -6593,13 +6595,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!CanRunSelectedCommandSequence() || SelectedCommandSequence is null)
         {
             RecordSequenceError(IsConnected
-                ? "Sequence run failed: select an enabled sequence with at least one step."
+                ? "Sequence run failed: select a sequence with at least one step."
                 : "Sequence run failed: serial port is disconnected.");
             return;
         }
 
         var sequence = CloneCommandSequence(SelectedCommandSequence);
         var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
+        if (sequenceSendMode == TxSendMode.Hex &&
+            !TryValidateHexSequenceSteps(sequence.Steps, out var validationError))
+        {
+            RecordSequenceError($"Sequence run failed: {validationError}");
+            return;
+        }
+
         _sequenceCancellation?.Dispose();
         _sequenceCancellation = new CancellationTokenSource();
         var cancellationToken = _sequenceCancellation.Token;
@@ -6716,7 +6725,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             switch (sendMode)
             {
                 case TxSendMode.Hex:
-                    if (!TryParseHexTxPayload(command.CommandText, out var hexPayload, out hexParseError))
+                    if (!HexPayloadParser.TryParse(command.CommandText, out var hexPayload, out hexParseError))
                     {
                         RecordTxAttemptDiagnostics(sendMode, command.CommandText, 0, hexParseError);
                         RecordTxError("Invalid HEX TX input.");
@@ -6783,86 +6792,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool CanSendCurrentCommand()
     {
         return CanSendManualTx && !string.IsNullOrWhiteSpace(Commands.CurrentCommandText);
-    }
-
-    private static bool TryParseHexTxPayload(string input, out byte[] bytes, out string error)
-    {
-        bytes = Array.Empty<byte>();
-        error = string.Empty;
-
-        var tokens = input
-            .Split(new[] { ' ', '\t', '\r', '\n', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        if (tokens.Length == 0)
-        {
-            error = "Invalid HEX TX input.";
-            return false;
-        }
-
-        var result = new List<byte>();
-        foreach (var rawToken in tokens)
-        {
-            var token = rawToken.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? rawToken[2..]
-                : rawToken;
-
-            if (token.Length == 0 || token.Length % 2 != 0)
-            {
-                error = "Invalid HEX TX input: odd number of hex digits.";
-                return false;
-            }
-
-            for (var index = 0; index < token.Length; index += 2)
-            {
-                if (!TryParseHexByte(token[index], token[index + 1], out var value))
-                {
-                    error = "Invalid HEX TX input: non-hex digit found.";
-                    return false;
-                }
-
-                result.Add(value);
-            }
-        }
-
-        bytes = result.ToArray();
-        return true;
-    }
-
-    private static bool TryParseHexByte(char high, char low, out byte value)
-    {
-        value = 0;
-        if (!TryGetHexNibble(high, out var highValue) ||
-            !TryGetHexNibble(low, out var lowValue))
-        {
-            return false;
-        }
-
-        value = (byte)((highValue << 4) | lowValue);
-        return true;
-    }
-
-    private static bool TryGetHexNibble(char ch, out int value)
-    {
-        if (ch is >= '0' and <= '9')
-        {
-            value = ch - '0';
-            return true;
-        }
-
-        if (ch is >= 'a' and <= 'f')
-        {
-            value = ch - 'a' + 10;
-            return true;
-        }
-
-        if (ch is >= 'A' and <= 'F')
-        {
-            value = ch - 'A' + 10;
-            return true;
-        }
-
-        value = 0;
-        return false;
     }
 
     private static string FormatBytesAsHex(byte[] bytes)
@@ -7520,11 +7449,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ? $"{action} failed: stop the running sequence before editing sequences."
             : $"{action} failed: wait for the current operation to finish.");
         return false;
-    }
-
-    public void ApplyCommandSequenceChangesFromUi(string status)
-    {
-        ApplyCommandSequenceChanges(status);
     }
 
     public void RecordEventSelectionError(string message)
@@ -8323,10 +8247,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         normalized = CloneCommandSequence(sequence);
         normalized.Name = normalized.Name.Trim();
         normalized.Steps.Clear();
-        foreach (var step in sequence.Steps)
+        for (var index = 0; index < sequence.Steps.Count; index++)
         {
-            if (!TryNormalizeCommandSequenceStep(step, out var normalizedStep, out error))
+            if (!TryNormalizeCommandSequenceStep(
+                    sequence.Steps[index],
+                    out var normalizedStep,
+                    out error))
             {
+                error = $"Sequence step {index + 1}: {error}";
                 return false;
             }
 
@@ -8336,7 +8264,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    private static bool TryNormalizeCommandSequenceStep(CommandSequenceStep step, out CommandSequenceStep normalized, out string error)
+    private static bool TryNormalizeCommandSequenceStep(
+        CommandSequenceStep step,
+        out CommandSequenceStep normalized,
+        out string error)
     {
         normalized = new CommandSequenceStep();
         error = string.Empty;
@@ -8363,6 +8294,25 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         normalized.CommandText = normalized.CommandText.Trim();
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? null : normalized.Name.Trim();
         normalized.Comment = string.IsNullOrWhiteSpace(normalized.Comment) ? null : normalized.Comment.Trim();
+        return true;
+    }
+
+    private static bool TryValidateHexSequenceSteps(
+        IEnumerable<CommandSequenceStep> steps,
+        out string error)
+    {
+        var index = 0;
+        foreach (var step in steps)
+        {
+            index++;
+            if (!HexPayloadParser.TryParse(step.CommandText, out _, out var parseError))
+            {
+                error = $"step {index} ({step.DisplayName}): {parseError}";
+                return false;
+            }
+        }
+
+        error = string.Empty;
         return true;
     }
 
@@ -9789,6 +9739,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             _currentLogSettings.SizeRotationBytes = LogSettings.DefaultSizeRotationBytes;
             OnPropertyChanged(nameof(SizeRotationMegabytesText));
+            return;
+        }
+
+        var normalizedBytes = LogSettings.FloorToWholeMegabytes(_currentLogSettings.SizeRotationBytes.Value);
+        if (_currentLogSettings.SizeRotationBytes.Value != normalizedBytes)
+        {
+            _currentLogSettings.SizeRotationBytes = normalizedBytes;
+            OnPropertyChanged(nameof(SizeRotationMegabytesText));
         }
     }
 
@@ -10913,7 +10871,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return new CommandSequence
         {
             Name = sequence.Name,
-            Enabled = sequence.Enabled,
             Steps = new ObservableCollection<CommandSequenceStep>(
                 sequence.Steps.Select(CloneCommandSequenceStep))
         };

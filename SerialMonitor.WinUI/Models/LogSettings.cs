@@ -8,6 +8,11 @@ public sealed class LogSettings
     public const long DefaultSizeRotationMegabytes = 10;
     public const long DefaultSizeRotationBytes = DefaultSizeRotationMegabytes * BytesPerMegabyte;
 
+    public static long FloorToWholeMegabytes(long bytes)
+    {
+        return Math.Max(BytesPerMegabyte, bytes / BytesPerMegabyte * BytesPerMegabyte);
+    }
+
     [JsonIgnore]
     public bool FileLoggingEnabled { get; set; }
 

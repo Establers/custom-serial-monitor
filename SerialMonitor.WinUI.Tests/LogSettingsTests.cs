@@ -27,4 +27,14 @@ public sealed class LogSettingsTests
         Assert.Equal(10, LogSettings.DefaultSizeRotationMegabytes);
         Assert.Equal(10L * 1024 * 1024, new LogSettings().SizeRotationBytes);
     }
+
+    [Fact]
+    public void FloorToWholeMegabytes_NonIntegralValue_UsesDisplayedWholeMegabytes()
+    {
+        var oneAndHalfMegabytes = LogSettings.BytesPerMegabyte + LogSettings.BytesPerMegabyte / 2;
+
+        var normalized = LogSettings.FloorToWholeMegabytes(oneAndHalfMegabytes);
+
+        Assert.Equal(LogSettings.BytesPerMegabyte, normalized);
+    }
 }

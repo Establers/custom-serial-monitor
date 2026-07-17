@@ -150,6 +150,80 @@ public sealed class ProfileServiceBridgeSafetyTests
     }
 
     [Fact]
+    public async Task LoadAsync_FractionalMegabyteThreshold_IsNormalizedToDisplayedValue()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var oneAndHalfMegabytes = LogSettings.BytesPerMegabyte + LogSettings.BytesPerMegabyte / 2;
+        var json = $$"""
+            {
+              "ProfileSchemaVersion": 1,
+              "Name": "Fractional rotation profile",
+              "LogSettings": {
+                "SizeRotationEnabled": true,
+                "SizeRotationBytes": {{oneAndHalfMegabytes}}
+              }
+            }
+            """;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json);
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(LogSettings.BytesPerMegabyte, loaded.LogSettings.SizeRotationBytes);
+            Assert.Contains("whole megabyte", service.LastError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadAsync_RemovedSequenceEnabledState_IsIgnored(bool legacyEnabled)
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var json = $$"""
+            {
+              "ProfileSchemaVersion": 1,
+              "Name": "Legacy sequence profile",
+              "CommandSequences": [
+                {
+                  "Name": "Reset device",
+                  "Enabled": {{legacyEnabled.ToString().ToLowerInvariant()}},
+                  "Steps": [
+                    {
+                      "CommandText": "reset",
+                      "DelayAfterMs": 300
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json);
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+            Assert.Single(loaded.CommandSequences);
+            Assert.DoesNotContain("remains inactive", service.LastError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
     public async Task LoadAsync_ShowMockTestPort_FollowsBuildPolicy()
     {
         var service = new ProfileService();
