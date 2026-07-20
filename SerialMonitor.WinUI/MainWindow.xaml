@@ -1874,7 +1874,7 @@
                                                        Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode and an active HEX timeout change automatically reconnect a real COM port; MOCK/disconnected changes apply immediately. TX ending and disconnect confirmation apply immediately." />
+                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately without disconnecting the active port." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -2023,7 +2023,7 @@
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
                                                         VerticalAlignment="Center"
                                                         Click="ApplyHexGroupTimeout_Click"
-                                                        ToolTipService.ToolTip="Save the entered timeout. When connected in HEX mode, reconnect so the same value is applied to native RX timing." />
+                                                        ToolTipService.ToolTip="Save and apply the entered timeout immediately without disconnecting the active port." />
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding HexGroupTimeoutAppliedText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
@@ -2040,7 +2040,7 @@
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
                                             <TextBlock Grid.Column="1"
-                                                       Text="Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. Example: inside ≤ 1 ms and between ≥ 3 ms → use 2 ms. If these ranges overlap, timing alone cannot separate packets reliably. Keep driver latency below the timeout; reconnect after driver changes."
+                                                       Text="Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. Example: inside ≤ 1 ms and between ≥ 3 ms → use 2 ms. If these ranges overlap, timing alone cannot separate packets reliably. Keep driver latency below the timeout."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
                                                        ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets." />

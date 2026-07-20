@@ -300,6 +300,47 @@ public sealed class LogPipelineHexFramingTests
         await pipeline.StopAsync(cancellation.Token);
     }
 
+    [Fact]
+    public async Task SwitchingTerminalToHexAndBack_ContinuesReadingFromSameSource()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var input = Channel.CreateUnbounded<ReceivedByteChunk>();
+        var pipeline = new LogPipeline(new EncodingDecoder(), new LineParser());
+        var settings = new SerialSettings
+        {
+            Encoding = RxEncodingMode.Utf8,
+            RxLineEnding = RxLineEndingMode.Lf
+        };
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Terminal, hexGroupTimeoutMs: 10);
+        await pipeline.StartAsync(input.Reader, settings, cancellation.Token);
+
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk("BEFORE\n"u8.ToArray(), Stopwatch.GetTimestamp()),
+            cancellation.Token);
+        var before = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.Equal("BEFORE", before.Text);
+        Assert.Equal(LogRuleMatchMode.Terminal, before.ContentMode);
+
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Hex, hexGroupTimeoutMs: 10);
+        var hexBytes = new byte[] { 0xAA, 0x55, 0x01 };
+        var hexGroupTask = ReadNextHexGroupAsync(pipeline.Logs, cancellation.Token);
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk(hexBytes, Stopwatch.GetTimestamp()),
+            cancellation.Token);
+        Assert.Equal(hexBytes, await hexGroupTask);
+
+        pipeline.ConfigureRxDisplay(RxDisplayMode.Terminal, hexGroupTimeoutMs: 10);
+        await input.Writer.WriteAsync(
+            new ReceivedByteChunk("AFTER\n"u8.ToArray(), Stopwatch.GetTimestamp()),
+            cancellation.Token);
+        var after = await pipeline.Logs.ReadAsync(cancellation.Token);
+        Assert.Equal("AFTER", after.Text);
+        Assert.Equal(LogRuleMatchMode.Terminal, after.ContentMode);
+
+        input.Writer.TryComplete();
+        await pipeline.StopAsync(cancellation.Token);
+    }
+
     private static async Task<PipelineResult> RunPipelineAsync(
         IReadOnlyList<ReceivedByteChunk> chunks,
         int timeoutMs)

@@ -26,6 +26,8 @@ Date: 2026-05-25
 - Compact health summary and detailed copyable diagnostics.
 - Log file quick actions for opening/copying the active serial log path.
 - In-app Help/Guide tab.
+- Live Terminal/HEX mode and HEX timeout changes without disconnecting the
+  active COM port.
 
 ## Stability Design Points
 

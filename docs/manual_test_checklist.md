@@ -9,9 +9,8 @@ real hardware when available.
 - [ ] Start the app.
 - [ ] Confirm the bridge is `BRIDGE OFF` after startup, including when the saved
   profile previously contained an enabled bridge and the device COM auto-connects.
-- [ ] Disconnect/reconnect the device and change a receive setting that triggers
-  an automatic reconnect; confirm the bridge stays OFF until `Start bridge` is
-  pressed explicitly.
+- [ ] Disconnect/reconnect the device and confirm the bridge stays OFF until
+  `Start bridge` is pressed explicitly.
 - [ ] Confirm the window opens without an unhandled exception.
 - [ ] Confirm the Port list includes one `MOCK` entry.
 - [ ] Confirm bottom health shows `HEALTH OK` or a clear non-stale warning.
@@ -34,10 +33,10 @@ real hardware when available.
 - [ ] Connect a known serial device.
 - [ ] Select its COM port and baud rate.
 - [ ] Connect and confirm RX logs arrive.
-- [ ] While connected, switch Terminal/HEX mode and confirm the app briefly
-  reconnects to the same port with the new mode active.
-- [ ] In HEX mode, change the HEX group timeout and confirm the same automatic
-  reconnect applies the new native timeout.
+- [ ] While connected, switch Terminal/HEX mode repeatedly and confirm the same
+  COM port remains selected and connected while new data uses the active mode.
+- [ ] In HEX mode, change the HEX group timeout and confirm it applies without
+  disconnecting the COM port.
 - [ ] Send a harmless command.
 - [ ] Disconnect and reconnect.
 - [ ] Confirm no app crash or stale connection state.
