@@ -352,6 +352,18 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void PortComboBox_DropDownOpened(object sender, object args)
+    {
+        try
+        {
+            await _viewModel.RefreshPortsAsync();
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.PortComboBox_DropDownOpened", ex);
+        }
+    }
+
     private async void ConnectionButton_Click(object sender, RoutedEventArgs args)
     {
         if (!_viewModel.IsConnected)

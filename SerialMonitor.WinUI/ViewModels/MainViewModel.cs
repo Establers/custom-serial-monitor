@@ -219,6 +219,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<LogLine> _logBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEvent> _eventBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
+    private readonly CoalescingAsyncOperation _portRefreshOperation;
     private readonly DispatcherQueueTimer _diagnosticsTimer;
     private readonly object _eventNotificationGate = new();
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
@@ -244,6 +245,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
     private string? _selectedPort;
+    private long _portRefreshGeneration;
     private int _selectedBaudRate = 115200;
     private TxLineEndingMode _selectedTxLineEnding = TxLineEndingMode.Crlf;
     private bool _isConnected;
@@ -641,6 +643,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _bridgeLogProcessor = bridgeLogProcessor;
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
+        _portRefreshOperation = new CoalescingAsyncOperation(RefreshPortsOnceAsync);
 
         var profile = profileService.CreateDefaultProfile();
 
@@ -753,7 +756,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
 
         _ = LoadStartupProfileAsync();
-        _ = LoadPortsAsync();
+        _ = RefreshPortsAsync();
     }
 
     public event EventHandler<XtermSearchRequest>? XtermSearchRequested;
@@ -2658,7 +2661,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     : "MOCK test port hidden.");
             }
 
-            _ = LoadPortsAsync();
+            _ = RefreshPortsAsync();
             RefreshDiagnostics();
         }
     }
@@ -4185,13 +4188,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return time.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
     }
 
-    private async Task LoadPortsAsync()
+    public Task RefreshPortsAsync()
     {
+        Interlocked.Increment(ref _portRefreshGeneration);
+        return _portRefreshOperation.RunAsync();
+    }
+
+    private async Task RefreshPortsOnceAsync()
+    {
+        var refreshGeneration = Volatile.Read(ref _portRefreshGeneration);
+
         try
         {
             var ports = await _serialService.GetAvailablePortsAsync(CancellationToken.None);
             RunOnUiThread(() =>
             {
+                if (refreshGeneration != Volatile.Read(ref _portRefreshGeneration))
+                {
+                    return;
+                }
+
                 var duplicateMockCount = Math.Max(
                     0,
                     ports.Count(IsMockPortName) - 1);
@@ -4202,11 +4218,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _lastPortRefreshIncludedMock = normalizedPorts.Any(IsMockPortSelectorValue);
                 OnPropertyChanged(nameof(LastPortRefreshIncludedMock));
 
-                PortNames.Clear();
-                foreach (var port in normalizedPorts)
+                var selectedActualPort = GetActualPortName(SelectedPort);
+                var selectedMissingAfterRefresh = !string.IsNullOrWhiteSpace(selectedActualPort) &&
+                    !ContainsActualPort(normalizedPorts, selectedActualPort);
+                var displayedPorts = normalizedPorts.ToList();
+                if (selectedMissingAfterRefresh &&
+                    selectedActualPort is not null &&
+                    !IsMockPortName(selectedActualPort))
                 {
-                    PortNames.Add(port);
+                    displayedPorts.Add(selectedActualPort);
                 }
+
+                SynchronizePortNames(displayedPorts);
 
                 RefreshBridgePortOptionsFromCurrentPorts();
                 NotifyBridgePropertiesChanged();
@@ -4218,16 +4241,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     NotifyPortSelectionDiagnosticsChanged();
                     RefreshDiagnostics();
                     return;
-                }
-
-                var selectedActualPort = GetActualPortName(SelectedPort);
-                var selectedMissingAfterRefresh = !string.IsNullOrWhiteSpace(selectedActualPort) &&
-                    !ContainsActualPort(normalizedPorts, selectedActualPort);
-                if (selectedMissingAfterRefresh &&
-                    selectedActualPort is not null &&
-                    !IsMockPortName(selectedActualPort))
-                {
-                    PortNames.Add(selectedActualPort);
                 }
 
                 if (string.IsNullOrWhiteSpace(selectedActualPort))
@@ -4274,11 +4287,56 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RunOnUiThread(() =>
             {
+                if (refreshGeneration != Volatile.Read(ref _portRefreshGeneration))
+                {
+                    return;
+                }
+
                 _lastPortRefreshResult = $"Port scan failed: {ex.Message}";
                 NotifyPortSelectionDiagnosticsChanged();
                 RefreshDiagnostics();
             });
-            SetStatus($"Port scan failed: {ex.Message}");
+            if (refreshGeneration == Volatile.Read(ref _portRefreshGeneration))
+            {
+                SetStatus($"Port scan failed: {ex.Message}");
+            }
+        }
+    }
+
+    private void SynchronizePortNames(IReadOnlyList<string> desiredPorts)
+    {
+        for (var desiredIndex = 0; desiredIndex < desiredPorts.Count; desiredIndex++)
+        {
+            var desiredPort = desiredPorts[desiredIndex];
+            if (desiredIndex < PortNames.Count &&
+                string.Equals(PortNames[desiredIndex], desiredPort, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var existingIndex = -1;
+            for (var index = desiredIndex + 1; index < PortNames.Count; index++)
+            {
+                if (string.Equals(PortNames[index], desiredPort, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingIndex = index;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0)
+            {
+                PortNames.Move(existingIndex, desiredIndex);
+            }
+            else
+            {
+                PortNames.Insert(desiredIndex, desiredPort);
+            }
+        }
+
+        while (PortNames.Count > desiredPorts.Count)
+        {
+            PortNames.RemoveAt(PortNames.Count - 1);
         }
     }
 
@@ -5878,7 +5936,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SetFooter(CreateFooterStatus());
             if (!ShowMockTestPort)
             {
-                _ = LoadPortsAsync();
+                _ = RefreshPortsAsync();
             }
         }
         finally
@@ -10551,7 +10609,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         if (!IsConnected)
         {
-            _ = LoadPortsAsync();
+            _ = RefreshPortsAsync();
         }
     }
 

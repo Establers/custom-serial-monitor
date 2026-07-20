@@ -616,6 +616,7 @@
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding PortNames}"
                           SelectedItem="{Binding SelectedPort, Mode=TwoWay}"
+                          DropDownOpened="PortComboBox_DropDownOpened"
                           IsEnabled="{Binding CanEditConnectionSettings}"
                           MinWidth="110"
                           HorizontalAlignment="Stretch" />
