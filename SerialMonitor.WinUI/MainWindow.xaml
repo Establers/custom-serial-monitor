@@ -752,11 +752,11 @@
                                  MaxWidth="380"
                                  VerticalAlignment="Center"
                                  KeyDown="SearchTextBox_KeyDown"
-                                 ToolTipService.ToolTip="Search visible log (Ctrl+F, Up/Down history)" />
+                                 ToolTipService.ToolTip="Search visible log (Enter searches, Up/Down history)" />
                         <Button Grid.Column="1"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
-                                ToolTipService.ToolTip="Previous (Shift+Enter, Shift+F3)">
+                                ToolTipService.ToolTip="Previous result from the last search (Shift+F3)">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       UseLayoutRounding="False"
@@ -765,7 +765,7 @@
                         <Button Grid.Column="2"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindNextCommand}"
-                                ToolTipService.ToolTip="Next (Enter, F3)">
+                                ToolTipService.ToolTip="Next result from the last search (F3)">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       UseLayoutRounding="False"
@@ -2034,7 +2034,7 @@
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            TextWrapping="Wrap"
                                                            VerticalAlignment="Center"
-                                                           ToolTipService.ToolTip="Calculated only from baud rate and serial frame format. It is a starting point, never applied automatically; the profile timeout remains authoritative." />
+                                                           ToolTipService.ToolTip="Until you press Set, the default follows the current baud rate and frame format as recommendation + 2 ms. After Set, your custom value is retained in the profile." />
                                             </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
@@ -2070,7 +2070,7 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock Text="Visible lines"
+                                            <TextBlock Text="Line scrollback"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding VisibleLogLineCapOptions}"
@@ -2078,25 +2078,11 @@
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       Width="102"
                                                       HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Controls in-app xterm scrollback, Search, Copy all visible, Copy since MARK, and Copy since TX capacity. 200,000 and 500,000 keep more logs but use more memory and can make re-render/search slower. Saved log files still keep all lines." />
+                                                      ToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="86,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Scrollback"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBox Grid.Column="1"
-                                                     Text="{Binding XtermScrollbackSizeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                     Style="{StaticResource CompactTextBoxStyle}"
-                                                     Width="92"
-                                                     HorizontalAlignment="Left" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to xterm scrollback. Effective scrollback is at least the visible line cap." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">

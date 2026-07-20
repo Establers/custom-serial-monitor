@@ -2224,7 +2224,7 @@ public sealed partial class MainWindow : Window
                 (_viewModel.IsAutoScrollEnabled || previousScrollState?.AtBottom == true);
 
             var xtermRenderGeneration = Interlocked.Increment(ref _xtermRenderGeneration);
-            var text = _viewModel.Log.GetVisibleTextSnapshot();
+            var text = _viewModel.Log.GetXtermTextSnapshot();
             var currentVisibleLineCount = _viewModel.Log.CurrentVisibleLineCount;
             var displayedLineCount = _viewModel.Log.DisplayedLineCount;
             // The bulk-replace bridge does not scroll between transport chunks.
@@ -2963,7 +2963,8 @@ public sealed partial class MainWindow : Window
                 text = request.SearchText,
                 caseSensitive = request.IsCaseSensitive,
                 direction = request.Direction,
-                resultIndex = request.ResultIndex
+                resultIndex = request.ResultIndex,
+                targetLineId = request.TargetLineId?.ToString(CultureInfo.InvariantCulture)
             });
             var resultJson = await XtermLogWebView.ExecuteScriptAsync(
                 $"window.serialMonitorSearch ? window.serialMonitorSearch({payload}) : {{ ok: false, found: false, error: 'xterm search bridge is not available' }};");
@@ -3388,13 +3389,9 @@ public sealed partial class MainWindow : Window
         }
 
         args.Handled = true;
-        if (IsModifierDown(VirtualKey.Shift))
-        {
-            await _viewModel.FindPreviousFromShortcutAsync("search box");
-            return;
-        }
-
-        await _viewModel.FindNextFromShortcutAsync("search box");
+        await _viewModel.SearchFromInputAsync(
+            previous: IsModifierDown(VirtualKey.Shift),
+            source: "search box");
     }
 
     private async Task HandleSearchShortcutAsync(string? action, string source)

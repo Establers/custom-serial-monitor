@@ -30,8 +30,6 @@ public sealed class UiSettings
 
     public bool EventAutoScrollEnabled { get; set; } = true;
 
-    public int XtermScrollbackSize { get; set; } = 50_000;
-
     public bool ConfirmBeforeDisconnect { get; set; } = true;
 
     public bool ShowTimestampInLogView { get; set; } = true;
@@ -40,7 +38,9 @@ public sealed class UiSettings
 
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
-    public int HexGroupTimeoutMs { get; set; } = 10;
+    public int HexGroupTimeoutMs { get; set; } = 3;
+
+    public bool HexGroupTimeoutUserConfigured { get; set; }
 
     public TxSendMode TxSendMode { get; set; } = TxSendMode.Terminal;
 
@@ -77,12 +77,12 @@ public sealed class UiSettings
             AutoScrollEnabled = AutoScrollEnabled,
             FileLoggingWhileViewPaused = FileLoggingWhileViewPaused,
             EventAutoScrollEnabled = EventAutoScrollEnabled,
-            XtermScrollbackSize = XtermScrollbackSize,
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
             ShowTimestampInLogView = ShowTimestampInLogView,
             TimestampDisplayFormat = TimestampDisplayFormat,
             RxDisplayMode = RxDisplayMode,
             HexGroupTimeoutMs = HexGroupTimeoutMs,
+            HexGroupTimeoutUserConfigured = HexGroupTimeoutUserConfigured,
             TxSendMode = TxSendMode,
             CuteBackgroundMode = CuteBackgroundMode,
             CuteBackgroundImagePath = CuteBackgroundImagePath,

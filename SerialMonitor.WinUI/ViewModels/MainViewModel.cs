@@ -14,13 +14,20 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed class XtermSearchRequest
 {
-    public XtermSearchRequest(long requestId, string searchText, bool isCaseSensitive, string direction, int? resultIndex = null)
+    public XtermSearchRequest(
+        long requestId,
+        string searchText,
+        bool isCaseSensitive,
+        string direction,
+        int? resultIndex = null,
+        long? targetLineId = null)
     {
         RequestId = requestId;
         SearchText = searchText;
         IsCaseSensitive = isCaseSensitive;
         Direction = direction;
         ResultIndex = resultIndex;
+        TargetLineId = targetLineId;
     }
 
     public long RequestId { get; }
@@ -32,6 +39,8 @@ public sealed class XtermSearchRequest
     public string Direction { get; }
 
     public int? ResultIndex { get; }
+
+    public long? TargetLineId { get; }
 }
 
 public sealed class ConnectFailureDialogRequest
@@ -86,6 +95,7 @@ public sealed class VisibleSearchResult
     public VisibleSearchResult(
         int matchIndex,
         int visibleLineIndex,
+        long lineId,
         string timeText,
         string directionText,
         string messagePreview,
@@ -93,6 +103,7 @@ public sealed class VisibleSearchResult
     {
         MatchIndex = matchIndex;
         VisibleLineIndex = visibleLineIndex;
+        LineId = lineId;
         TimeText = timeText;
         DirectionText = directionText;
         MessagePreview = messagePreview;
@@ -103,6 +114,8 @@ public sealed class VisibleSearchResult
 
     public int VisibleLineIndex { get; }
 
+    public long LineId { get; }
+
     public string TimeText { get; }
 
     public string DirectionText { get; }
@@ -111,6 +124,10 @@ public sealed class VisibleSearchResult
 
     public string FullText { get; }
 }
+
+internal readonly record struct SearchMatchSnapshot(
+    long LineId,
+    string FullText);
 
 public sealed class VisibleLogFilterOption
 {
@@ -182,8 +199,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int DefaultVisibleLogLines = 50_000;
     private const int MinVisibleLogLines = 1_000;
     private const int MaxVisibleLogLinesLimit = 500_000;
-    private const int MinXtermScrollbackSize = 1_000;
-    private const int MaxXtermScrollbackSizeLimit = 500_000;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
     private const int DefaultVisibleEventCount = UiSettings.FixedMaxVisibleEventCount;
@@ -255,8 +270,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
     private RxDisplayMode _appliedRxDisplayMode = RxDisplayMode.Terminal;
-    private int _appliedHexGroupTimeoutMs = 10;
-    private string _hexGroupTimeoutDraftText = "10";
+    private int _appliedHexGroupTimeoutMs = 3;
+    private string _hexGroupTimeoutDraftText = "3";
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
     private long _txErrorCount;
@@ -346,6 +361,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _isSearchCaseSensitive;
     private int _searchMatchCount;
     private int _currentSearchMatchIndex;
+    private long? _currentSearchLineId;
+    private readonly List<SearchMatchSnapshot> _activeSearchMatches = new();
     private long _searchErrorCount;
     private long _searchResultBuildErrorCount;
     private long _searchResultJumpErrorCount;
@@ -686,8 +703,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         LoadProfileCommand = new AsyncRelayCommand(LoadProfileAsync, () => !IsBusy && !IsConnected);
         ResetProfileCommand = new AsyncRelayCommand(ResetProfileAsync, () => !IsBusy && !IsConnected);
         ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync);
-        FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanSearch);
-        FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanSearch);
+        FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
+        FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
         RefreshSearchResultsCommand = new AsyncRelayCommand(RefreshSearchResultsAsync, CanSearch);
         CopyEventContextCommand = new AsyncRelayCommand(CopyEventContextAsync, CanCopyEventContext);
         SelectLatestEventCommand = new AsyncRelayCommand(SelectLatestEventAsync, CanSelectLatestEvent);
@@ -1391,6 +1408,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 _currentSerialSettings.BaudRate = value;
                 RecordSettingsChange("Baudrate", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
+                RefreshAutomaticHexGroupTimeoutDefault();
                 OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
@@ -1489,8 +1507,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            var wasUserConfigured = _currentUiSettings.HexGroupTimeoutUserConfigured;
+            _currentUiSettings.HexGroupTimeoutUserConfigured = true;
             if (_currentUiSettings.HexGroupTimeoutMs == value)
             {
+                if (!wasUserConfigured)
+                {
+                    RecordSettingsChange(
+                        "HEX group timeout",
+                        SettingsApplyBehavior.Immediate,
+                        $"{value} ms (custom)");
+                    OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
+                    RefreshDiagnostics();
+                }
                 return;
             }
 
@@ -1510,6 +1539,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(HexGroupTimeoutMsText));
+            OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
             RefreshDiagnostics();
         }
     }
@@ -1570,8 +1600,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     SerialStopBitsMode.Two => 2.0,
                     _ => 1.0
                 });
-            return $"Start ≥ {recommendation.SuggestedStartingTimeoutMilliseconds:N0} ms " +
-                   $"({recommendation.CharacterTimeMilliseconds:0.###} ms/char); tune to actual gaps";
+            var suggestedDefault = Math.Clamp(
+                recommendation.SuggestedStartingTimeoutMilliseconds + 2,
+                MinHexGroupTimeoutMs,
+                MaxHexGroupTimeoutMs);
+            var mode = _currentUiSettings.HexGroupTimeoutUserConfigured
+                ? $"custom {HexGroupTimeoutMs:N0} ms retained"
+                : "automatic default";
+            return $"Default {suggestedDefault:N0} ms = recommendation " +
+                   $"{recommendation.SuggestedStartingTimeoutMilliseconds:N0} + 2 ms; {mode}";
         }
     }
 
@@ -1696,6 +1733,44 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             : LogRuleMatchMode.Terminal;
     }
 
+    private void RefreshAutomaticHexGroupTimeoutDefault()
+    {
+        if (_currentUiSettings.HexGroupTimeoutUserConfigured)
+        {
+            return;
+        }
+
+        var recommendation = SerialTimingAdvisor.Calculate(
+            Math.Max(1, SelectedBaudRate),
+            Math.Max(1, SelectedDataBits),
+            SelectedParity != SerialParityMode.None,
+            SelectedStopBits switch
+            {
+                SerialStopBitsMode.OnePointFive => 1.5,
+                SerialStopBitsMode.Two => 2.0,
+                _ => 1.0
+            });
+        var suggestedDefault = Math.Clamp(
+            recommendation.SuggestedStartingTimeoutMilliseconds + 2,
+            MinHexGroupTimeoutMs,
+            MaxHexGroupTimeoutMs);
+        if (_currentUiSettings.HexGroupTimeoutMs == suggestedDefault)
+        {
+            return;
+        }
+
+        _currentUiSettings.HexGroupTimeoutMs = suggestedDefault;
+        _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, suggestedDefault);
+        _appliedHexGroupTimeoutMs = suggestedDefault;
+        _hexGroupTimeoutDraftText = suggestedDefault.ToString(CultureInfo.InvariantCulture);
+        OnPropertyChanged(nameof(HexGroupTimeoutMs));
+        OnPropertyChanged(nameof(HexGroupTimeoutMsText));
+        OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
+        OnPropertyChanged(nameof(HasPendingHexGroupTimeout));
+        OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+    }
+
     private void ApplyRxDisplayRuntime(RxDisplayMode mode, int hexGroupTimeoutMs, string rebuildReason)
     {
         var normalizedMode = NormalizeRxDisplayMode(mode);
@@ -1751,6 +1826,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentSerialSettings.DataBits = value;
             RecordSettingsChange("Data bits", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
+            RefreshAutomaticHexGroupTimeoutDefault();
             OnPropertyChanged();
             OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
@@ -1775,6 +1851,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentSerialSettings.Parity = value;
             RecordSettingsChange("Parity", SettingsApplyBehavior.ReconnectRequired, value.ToString());
+            RefreshAutomaticHexGroupTimeoutDefault();
             OnPropertyChanged();
             OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
@@ -1799,6 +1876,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentSerialSettings.StopBits = value;
             RecordSettingsChange("Stop bits", SettingsApplyBehavior.ReconnectRequired, value.ToString());
+            RefreshAutomaticHexGroupTimeoutDefault();
             OnPropertyChanged();
             OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
         }
@@ -2048,12 +2126,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.MaxVisibleLogLines = value;
-            if (_currentUiSettings.XtermScrollbackSize < value)
-            {
-                _currentUiSettings.XtermScrollbackSize = value;
-                OnPropertyChanged(nameof(XtermScrollbackSize));
-                OnPropertyChanged(nameof(XtermScrollbackSizeText));
-            }
             SetVisibleLogRebuildReason("visible log capacity change");
             Log.SetCapacity(value);
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
@@ -2085,54 +2157,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public int MaxVisibleEventCount => _currentUiSettings.MaxVisibleEventCount;
 
-    public int XtermScrollbackSize
-    {
-        get => _currentUiSettings.XtermScrollbackSize;
-        set
-        {
-            if (!ValidateIntRange("xterm scrollback size", value, MinXtermScrollbackSize, MaxXtermScrollbackSizeLimit))
-            {
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(XtermScrollbackSizeText));
-                return;
-            }
-
-            var normalizedValue = Math.Max(value, MaxVisibleLogLines);
-            if (_currentUiSettings.XtermScrollbackSize == normalizedValue)
-            {
-                if (normalizedValue != value)
-                {
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(XtermScrollbackSizeText));
-                }
-                return;
-            }
-
-            _currentUiSettings.XtermScrollbackSize = normalizedValue;
-            RecordSettingsChange("xterm scrollback", SettingsApplyBehavior.Immediate, normalizedValue.ToString(CultureInfo.InvariantCulture));
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(XtermScrollbackSizeText));
-            OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
-        }
-    }
-
-    public string XtermScrollbackSizeText
-    {
-        get => XtermScrollbackSize.ToString(CultureInfo.InvariantCulture);
-        set
-        {
-            if (TryParseIntSetting("xterm scrollback size", value, MinXtermScrollbackSize, MaxXtermScrollbackSizeLimit, out var parsed))
-            {
-                XtermScrollbackSize = parsed;
-            }
-            else
-            {
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    public int EffectiveXtermScrollbackSize => Math.Max(XtermScrollbackSize, MaxVisibleLogLines);
+    public int EffectiveXtermScrollbackSize => MaxVisibleLogLines;
 
     public int BeforeContextLines => _currentEventContextSettings.BeforeContextLines;
 
@@ -3021,7 +3046,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _currentUiSettings.LastSearchText = value?.Trim() ?? string.Empty;
                 InvalidateSearchResultsForCriteriaChange();
                 RecordSettingsChange("Search text", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(empty)" : value.Trim());
-                NotifySearchCommandStates();
             }
         }
     }
@@ -3580,10 +3604,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Log 탭의 View pause 옵션을 따릅니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
         RX View = HEX는 수신 원본 바이트 확인용입니다.
-        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간이며 프로필 값이 그대로 사용됩니다.
+        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간입니다.
         한 패킷 내부에서 관측되는 가장 긴 공백 < HEX timeout < 서로 다른 패킷 사이의 가장 짧은 공백으로 설정합니다.
         예: 내부 공백 최대 1ms, 패킷 사이 최소 3ms이면 2ms를 사용합니다. 두 범위가 겹치면 시간만으로 안정적인 구분이 불가능합니다.
-        표시되는 권장값은 baud와 프레임 형식만 반영한 시작점이며 자동 적용되지 않습니다.
+        최초 기본값은 baud와 프레임 형식의 권장값 + 2ms입니다. Set으로 지정한 값은 프로필에 저장되어 이후 자동 변경되지 않습니다.
         연결 중에도 HEX timeout과 Terminal/HEX 모드는 COM 포트를 끊지 않고 즉시 적용됩니다.
         Diag의 Last RX chunk gap과 Last HEX group bytes를 기대 패킷 크기와 비교해 확인합니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
@@ -3591,7 +3615,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         단축키
 
         Ctrl+F  검색
-        F3 / Shift+F3  다음 / 이전 결과
+        Enter / Shift+Enter  검색 실행 후 첫 / 마지막 결과
+        F3 / Shift+F3  마지막 검색의 다음 / 이전 결과
         Ctrl+C  선택 로그 복사
         Ctrl+M  MARK 삽입
         TX 입력창 ↑ / ↓  전송 기록 이동
@@ -3609,10 +3634,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         주요 단축키
 
         * Ctrl+F: 검색창으로 이동
-        * Enter: 검색 다음 결과
-        * Shift+Enter: 검색 이전 결과
-        * F3: 검색 다음 결과
-        * Shift+F3: 검색 이전 결과
+        * Enter: 현재 로그를 새로 검색하고 첫 결과 선택
+        * Shift+Enter: 현재 로그를 새로 검색하고 마지막 결과 선택
+        * F3: 마지막 검색 스냅샷의 다음 결과
+        * Shift+F3: 마지막 검색 스냅샷의 이전 결과
         * Esc: 검색창 포커스 해제 또는 로그창으로 복귀
         * Ctrl+C: 로그에서 선택한 텍스트 복사
         * Ctrl+M: 기본 MARK 삽입
@@ -3660,7 +3685,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         * 검색은 현재 화면에 유지된 로그 버퍼를 대상으로 합니다.
         * 전체 로그 파일을 검색하는 기능은 아닙니다.
-        * 검색 결과 이동은 Enter, Shift+Enter, F3, Shift+F3을 사용합니다.
+        * Enter/Shift+Enter로 검색 스냅샷을 만들고 F3/Shift+F3으로 그 결과 안에서 이동합니다.
 
         Visible Log Max Lines
 
@@ -4556,17 +4581,34 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private Task FindNextSearchMatchAsync()
     {
-        AddCurrentSearchTextToHistory();
-        RunManualVisibleLogSearch(SearchMove.Next);
-        RequestXtermSearch(SearchMove.Next);
+        NavigateSearchSnapshot(SearchMove.Next);
         return Task.CompletedTask;
     }
 
     private Task FindPreviousSearchMatchAsync()
     {
-        AddCurrentSearchTextToHistory();
-        RunManualVisibleLogSearch(SearchMove.Previous);
-        RequestXtermSearch(SearchMove.Previous);
+        NavigateSearchSnapshot(SearchMove.Previous);
+        return Task.CompletedTask;
+    }
+
+    public Task SearchFromInputAsync(bool previous, string source)
+    {
+        try
+        {
+            AddCurrentSearchTextToHistory();
+            var move = previous ? SearchMove.Previous : SearchMove.Next;
+            CurrentSearchMatchIndex = 0;
+            CurrentSearchMatchedLine = string.Empty;
+            _currentSearchLineId = null;
+            RunManualVisibleLogSearch(move);
+            RequestXtermSearch(move);
+            RecordSearchShortcutAction(previous ? "Search and select previous" : "Search and select next", source);
+        }
+        catch (Exception ex)
+        {
+            RecordSearchShortcutError($"Search from input failed: {ex.Message}", source);
+        }
+
         return Task.CompletedTask;
     }
 
@@ -4721,41 +4763,92 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return !string.IsNullOrWhiteSpace(SearchText);
     }
 
+    private bool CanNavigateSearchSnapshot()
+    {
+        return !string.IsNullOrWhiteSpace(SearchText) && _activeSearchMatches.Count > 0;
+    }
+
+    private void NavigateSearchSnapshot(SearchMove move)
+    {
+        if (_activeSearchMatches.Count == 0)
+        {
+            SetStatus("Press Enter in the search box to search first.");
+            return;
+        }
+
+        var currentIndex = CurrentSearchMatchIndex > 0
+            ? CurrentSearchMatchIndex - 1
+            : move == SearchMove.Previous ? 0 : -1;
+        currentIndex = move == SearchMove.Previous
+            ? (currentIndex - 1 + _activeSearchMatches.Count) % _activeSearchMatches.Count
+            : (currentIndex + 1) % _activeSearchMatches.Count;
+
+        ApplySearchSnapshotMatch(currentIndex);
+        RequestXtermSearch(move);
+        SetStatus($"Search match {CurrentSearchMatchIndex:N0} of {SearchMatchCount:N0}: {SearchText}");
+    }
+
+    private void ApplySearchSnapshotMatch(int zeroBasedIndex)
+    {
+        if (zeroBasedIndex < 0 || zeroBasedIndex >= _activeSearchMatches.Count)
+        {
+            CurrentSearchMatchIndex = 0;
+            CurrentSearchMatchedLine = string.Empty;
+            _currentSearchLineId = null;
+            SelectedSearchResult = null;
+            return;
+        }
+
+        var match = _activeSearchMatches[zeroBasedIndex];
+        CurrentSearchMatchIndex = zeroBasedIndex + 1;
+        CurrentSearchMatchedLine = match.FullText;
+        _currentSearchLineId = match.LineId;
+        SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
+    }
+
     private void RunManualVisibleLogSearch(SearchMove move)
     {
         if (string.IsNullOrWhiteSpace(SearchText))
         {
+            _activeSearchMatches.Clear();
             SearchMatchCount = 0;
             CurrentSearchMatchIndex = 0;
             CurrentSearchMatchedLine = string.Empty;
-            UpdateSearchResults(Array.Empty<string>(), Array.Empty<int>());
+            _currentSearchLineId = null;
+            UpdateSearchResults(Array.Empty<VisibleLogSearchLine>(), Array.Empty<int>());
+            NotifySearchCommandStates();
 
             return;
         }
 
         try
         {
-            var lines = Log.GetVisibleSearchLinesSnapshot();
+            var searchLines = Log.GetVisibleSearchContentSnapshot();
             var comparison = IsSearchCaseSensitive
                 ? StringComparison.Ordinal
                 : StringComparison.OrdinalIgnoreCase;
             var matchingLineIndexes = new List<int>();
+            _activeSearchMatches.Clear();
 
-            for (var i = 0; i < lines.Count; i++)
+            for (var i = 0; i < searchLines.Count; i++)
             {
-                if (lines[i].Contains(SearchText, comparison))
+                if (searchLines[i].PayloadText.Contains(SearchText, comparison))
                 {
                     matchingLineIndexes.Add(i);
+                    _activeSearchMatches.Add(new SearchMatchSnapshot(
+                        searchLines[i].LineId,
+                        searchLines[i].FullText));
                 }
             }
 
             SearchMatchCount = matchingLineIndexes.Count;
-            UpdateSearchResults(lines, matchingLineIndexes);
+            UpdateSearchResults(searchLines, matchingLineIndexes);
 
             if (matchingLineIndexes.Count == 0)
             {
                 CurrentSearchMatchIndex = 0;
                 CurrentSearchMatchedLine = string.Empty;
+                _currentSearchLineId = null;
                 SelectedSearchResult = null;
 
                 if (move is SearchMove.Next or SearchMove.Previous)
@@ -4778,9 +4871,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _ => Math.Clamp(currentIndex < 0 ? 0 : currentIndex, 0, matchingLineIndexes.Count - 1)
             };
 
-            CurrentSearchMatchIndex = currentIndex + 1;
-            CurrentSearchMatchedLine = lines[matchingLineIndexes[currentIndex]];
-            SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
+            ApplySearchSnapshotMatch(currentIndex);
 
             ClearSearchError();
 
@@ -4794,8 +4885,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Interlocked.Increment(ref _searchErrorCount);
             _lastSearchError = $"Search failed: {ex.Message}";
             SearchMatchCount = 0;
+            _activeSearchMatches.Clear();
             CurrentSearchMatchIndex = 0;
             CurrentSearchMatchedLine = string.Empty;
+            _currentSearchLineId = null;
             SearchResults.Clear();
             SearchResultStatusText = $"Search failed: {ex.Message}";
             SelectedSearchResult = null;
@@ -4805,9 +4898,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SetStatus(_lastSearchError);
             RefreshDiagnostics();
         }
+        finally
+        {
+            NotifySearchCommandStates();
+        }
     }
 
-    private void UpdateSearchResults(IReadOnlyList<string> lines, IReadOnlyList<int> matchingLineIndexes)
+    private void UpdateSearchResults(
+        IReadOnlyList<VisibleLogSearchLine> lines,
+        IReadOnlyList<int> matchingLineIndexes)
     {
         try
         {
@@ -4837,10 +4936,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             for (var i = 0; i < visibleCount; i++)
             {
                 var lineIndex = matchingLineIndexes[i];
-                var fullText = lineIndex >= 0 && lineIndex < lines.Count
+                var line = lineIndex >= 0 && lineIndex < lines.Count
                     ? lines[lineIndex]
-                    : string.Empty;
-                SearchResults.Add(CreateVisibleSearchResult(i + 1, lineIndex, fullText));
+                    : new VisibleLogSearchLine(0, string.Empty, string.Empty);
+                SearchResults.Add(CreateVisibleSearchResult(i + 1, lineIndex, line.LineId, line.FullText));
             }
 
             SearchResultStatusText = matchingLineIndexes.Count > MaxVisibleSearchResults
@@ -4882,6 +4981,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (previousSelection is not null)
         {
             restored = SearchResults.FirstOrDefault(result =>
+                    result.LineId == previousSelection.LineId)
+                ?? SearchResults.FirstOrDefault(result =>
                     result.VisibleLineIndex == previousSelection.VisibleLineIndex &&
                     string.Equals(result.FullText, previousSelection.FullText, StringComparison.Ordinal))
                 ?? SearchResults.FirstOrDefault(result =>
@@ -4915,12 +5016,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void InvalidateSearchResultsForCriteriaChange()
     {
         SearchMatchCount = 0;
+        _activeSearchMatches.Clear();
         CurrentSearchMatchIndex = 0;
         CurrentSearchMatchedLine = string.Empty;
+        _currentSearchLineId = null;
         SearchResults.Clear();
         SelectedSearchResult = null;
         OnPropertyChanged(nameof(SearchResultVisibleCount));
         MarkSearchResultsStale();
+        NotifySearchCommandStates();
     }
 
     private void RecordSearchResultsRebuild()
@@ -4929,7 +5033,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SearchResultsRebuildCount));
     }
 
-    private static VisibleSearchResult CreateVisibleSearchResult(int matchIndex, int visibleLineIndex, string fullText)
+    private static VisibleSearchResult CreateVisibleSearchResult(
+        int matchIndex,
+        int visibleLineIndex,
+        long lineId,
+        string fullText)
     {
         var timeText = string.Empty;
         var directionText = string.Empty;
@@ -4949,6 +5057,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return new VisibleSearchResult(
             matchIndex,
             visibleLineIndex,
+            lineId,
             timeText,
             directionText,
             messagePreview,
@@ -5033,7 +5142,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     requestId,
                     SearchText,
                     IsSearchCaseSensitive,
-                    direction));
+                    direction,
+                    CurrentSearchMatchIndex > 0 ? CurrentSearchMatchIndex - 1 : -1,
+                    _currentSearchLineId));
         }
         catch (Exception ex)
         {
@@ -5059,6 +5170,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SelectedSearchResult = result;
             CurrentSearchMatchIndex = result.MatchIndex;
             CurrentSearchMatchedLine = result.FullText;
+            _currentSearchLineId = result.LineId;
 
             var requestId = Interlocked.Increment(ref _xtermSearchRequestId);
             XtermSearchRequested?.Invoke(
@@ -5068,7 +5180,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     SearchText,
                     IsSearchCaseSensitive,
                     "indexed",
-                    Math.Max(0, result.MatchIndex - 1)));
+                    Math.Max(0, result.MatchIndex - 1),
+                    result.LineId));
             SetStatus($"Search result {result.MatchIndex:N0} selected: {SearchText}");
             RefreshDiagnostics();
         }
@@ -10572,8 +10685,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MaxVisibleLogLinesText));
         OnPropertyChanged(nameof(LastVisibleCapChangeTimeText));
         OnPropertyChanged(nameof(MaxVisibleEventCount));
-        OnPropertyChanged(nameof(XtermScrollbackSize));
-        OnPropertyChanged(nameof(XtermScrollbackSizeText));
         OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
         OnPropertyChanged(nameof(ConfirmBeforeDisconnect));
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
@@ -11591,9 +11702,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile size rotation enabled: {_currentLogSettings.SizeRotationEnabled}");
         builder.AppendLine($"  Profile last successful port: {LastSuccessfulPort}");
         builder.AppendLine($"  Profile last successful baud: {LastSuccessfulBaudRate:N0}");
-        builder.AppendLine($"  Profile max visible log lines: {_currentUiSettings.MaxVisibleLogLines:N0}");
+        builder.AppendLine($"  Profile visible/xterm line limit: {_currentUiSettings.MaxVisibleLogLines:N0}");
         builder.AppendLine($"  Profile max visible event count: {_currentUiSettings.MaxVisibleEventCount:N0}");
-        builder.AppendLine($"  Profile xterm scrollback size: {_currentUiSettings.XtermScrollbackSize:N0}");
         builder.AppendLine($"  Profile auto-scroll enabled: {_currentUiSettings.AutoScrollEnabled}");
         builder.AppendLine($"  Profile file logging while view paused: {_currentUiSettings.FileLoggingWhileViewPaused}");
         builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
@@ -11894,10 +12004,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Last full re-render visibility toggle count: {LastFullXtermVisibilityToggleCount:N0}");
         builder.AppendLine($"  Suppressed intermediate auto-scroll count: {SuppressedIntermediateAutoScrollCount:N0}");
         builder.AppendLine($"  Last full re-render error: {(string.IsNullOrWhiteSpace(LastFullXtermRerenderError) ? "(none)" : LastFullXtermRerenderError)}");
-        builder.AppendLine($"  Visible max lines setting: {MaxVisibleLogLines:N0}");
+        builder.AppendLine($"  Visible/xterm line limit: {MaxVisibleLogLines:N0}");
         builder.AppendLine($"  Last visible cap change time: {LastVisibleCapChangeTimeText}");
-        builder.AppendLine($"  xterm scrollback setting: {XtermScrollbackSize:N0}");
-        builder.AppendLine($"  Effective xterm scrollback size: {EffectiveXtermScrollbackSize:N0}");
         builder.AppendLine($"  Last applied xterm scrollback size: {LastAppliedXtermScrollbackSize:N0}");
         builder.AppendLine($"  Pending visual line count: {PendingVisualLineCount:N0}");
         builder.AppendLine($"  Visual pending char count: {XtermPendingCharacterCount:N0}");

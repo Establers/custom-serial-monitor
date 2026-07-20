@@ -24,10 +24,13 @@ public sealed class LogTextBatch
     public long EndDisplayedLineCount { get; }
 }
 
+public sealed record VisibleLogSearchLine(long LineId, string FullText, string PayloadText);
+
 public sealed class LogViewModel : ViewModelBase
 {
     // Rule snapshots are shared by all lines received under the same rule version.
     private readonly record struct RetainedLogLine(
+        long LineId,
         LogLine Line,
         LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
         LogRuleMatcher.CompiledHighlightRule? ViewFilter);
@@ -40,6 +43,9 @@ public sealed class LogViewModel : ViewModelBase
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
     private const string AnsiGray = "\u001b[90m";
+    private const string XtermLineIdentityOscPrefix = "\u001b]777;";
+    private const string XtermOscTerminator = "\u0007";
+    private static readonly string[] DirectionPrefixes = ["RX <", "TX >", "MARK >", "SYS"];
 
     private int _capacity;
     private readonly Queue<RetainedLogLine> _retainedLines = new();
@@ -47,6 +53,7 @@ public sealed class LogViewModel : ViewModelBase
     private readonly LinkedList<int> _visibleLineLengths = new();
     private readonly LinkedList<string> _visibleLines = new();
     private readonly LinkedList<string> _searchableVisibleLines = new();
+    private readonly LinkedList<long> _visibleLineIds = new();
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule? _viewFilter;
     private bool _showTimestampInLogView = true;
@@ -71,6 +78,7 @@ public sealed class LogViewModel : ViewModelBase
     private int _compiledTerminalRuleCount;
     private int _compiledHexRuleCount;
     private int _invalidCompiledRuleCount;
+    private long _nextLineId;
 
     public LogViewModel(int capacity)
     {
@@ -258,7 +266,7 @@ public sealed class LogViewModel : ViewModelBase
         var appendedVisibleLineCount = 0;
         foreach (var line in lines)
         {
-            var retainedLine = new RetainedLogLine(line, _highlightRules, _viewFilter);
+            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules, _viewFilter);
             _retainedLines.Enqueue(retainedLine);
             var visibleContribution = 0;
             if (line.IsPartialRxTerminator)
@@ -288,15 +296,21 @@ public sealed class LogViewModel : ViewModelBase
 
                 if (_partialRxVisualLineActive && _visibleLines.Last is not null)
                 {
-                    AppendPartialRxVisualSegment(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
-                    builder.Append(formattedPartial.DisplayLine);
+                    var appendedPartialDisplayText = AppendPartialRxVisualSegment(
+                        formattedPartial.DisplayLine,
+                        formattedPartial.SearchableLine,
+                        retainedLine.LineId);
+                    builder.Append(appendedPartialDisplayText);
                     Interlocked.Increment(ref _partialRxAppendInPlaceCount);
                 }
                 else
                 {
-                    AddVisibleLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
+                    var taggedPartialDisplayLine = AddVisibleLine(
+                        formattedPartial.DisplayLine,
+                        formattedPartial.SearchableLine,
+                        retainedLine.LineId);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
-                    builder.Append(formattedPartial.DisplayLine);
+                    builder.Append(taggedPartialDisplayLine);
                     _partialRxVisualLength = formattedPartial.RawTextLength;
                     visibleContribution = 1;
                 }
@@ -317,8 +331,11 @@ public sealed class LogViewModel : ViewModelBase
                 formattingErrors++;
             }
 
-            builder.Append(formatted.DisplayLine);
-            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine);
+            var taggedDisplayLine = AddVisibleLine(
+                formatted.DisplayLine,
+                formatted.SearchableLine,
+                retainedLine.LineId);
+            builder.Append(taggedDisplayLine);
             appendedVisibleLineCount++;
             visibleContribution = 1;
 
@@ -371,12 +388,93 @@ public sealed class LogViewModel : ViewModelBase
         return builder.ToString();
     }
 
+    public string GetXtermTextSnapshot()
+    {
+        if (_visibleLines.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        FlushActivePartialRxLineToNodes();
+        var estimatedCapacity = (int)Math.Min(
+            SnapshotPreallocationMaxChars,
+            Math.Max(0, VisibleCharacterCount + ((long)_visibleLineIds.Count * 20)));
+        var builder = new StringBuilder(estimatedCapacity);
+        var lineNode = _visibleLines.First;
+        var idNode = _visibleLineIds.First;
+        while (lineNode is not null && idNode is not null)
+        {
+            builder.Append(FormatXtermLineIdentity(idNode.Value));
+            builder.Append(lineNode.Value);
+            lineNode = lineNode.Next;
+            idNode = idNode.Next;
+        }
+
+        return builder.ToString();
+    }
+
     public IReadOnlyList<string> GetVisibleSearchLinesSnapshot()
     {
         FlushActivePartialRxLineToNodes();
         return _searchableVisibleLines.Count == 0
             ? Array.Empty<string>()
             : _searchableVisibleLines.ToArray();
+    }
+
+    public IReadOnlyList<VisibleLogSearchLine> GetVisibleSearchContentSnapshot()
+    {
+        FlushActivePartialRxLineToNodes();
+        if (_searchableVisibleLines.Count == 0)
+        {
+            return Array.Empty<VisibleLogSearchLine>();
+        }
+
+        var results = new VisibleLogSearchLine[_searchableVisibleLines.Count];
+        var textNode = _searchableVisibleLines.First;
+        var idNode = _visibleLineIds.First;
+        for (var index = 0; index < results.Length && textNode is not null && idNode is not null; index++)
+        {
+            results[index] = new VisibleLogSearchLine(
+                idNode.Value,
+                textNode.Value,
+                ExtractPayloadText(textNode.Value));
+            textNode = textNode.Next;
+            idNode = idNode.Next;
+        }
+
+        return results;
+    }
+
+    private static string ExtractPayloadText(string visibleLine)
+    {
+        var contentStart = 0;
+        if (visibleLine.StartsWith("[", StringComparison.Ordinal))
+        {
+            var timestampEnd = visibleLine.IndexOf("] ", StringComparison.Ordinal);
+            if (timestampEnd >= 0)
+            {
+                contentStart = timestampEnd + 2;
+            }
+        }
+
+        var content = visibleLine.AsSpan(contentStart);
+        foreach (var prefix in DirectionPrefixes)
+        {
+            if (!content.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var payloadStart = prefix.Length;
+            if (payloadStart < content.Length && content[payloadStart] == ' ')
+            {
+                payloadStart++;
+            }
+
+            return content[payloadStart..].ToString();
+        }
+
+        return content.ToString();
     }
 
     public void AddPendingDropCount(int droppedCount)
@@ -402,6 +500,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineLengths.Clear();
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
+        _visibleLineIds.Clear();
         _visibleCharacterCount = 0;
         _partialRxVisualLineActive = false;
         _partialRxVisualLength = 0;
@@ -415,6 +514,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineLengths.Clear();
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
+        _visibleLineIds.Clear();
         _retainedVisibleLineContributions.Clear();
         _visibleCharacterCount = 0;
         _partialRxVisualLineActive = false;
@@ -449,11 +549,17 @@ public sealed class LogViewModel : ViewModelBase
 
                 if (_partialRxVisualLineActive && _visibleLines.Last is not null)
                 {
-                    AppendPartialRxVisualSegment(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
+                    AppendPartialRxVisualSegment(
+                        formattedPartial.DisplayLine,
+                        formattedPartial.SearchableLine,
+                        retainedLine.LineId);
                 }
                 else
                 {
-                    AddVisibleLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
+                    AddVisibleLine(
+                        formattedPartial.DisplayLine,
+                        formattedPartial.SearchableLine,
+                        retainedLine.LineId);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     _partialRxVisualLineActive = true;
                     _partialRxVisualLength = formattedPartial.RawTextLength;
@@ -471,7 +577,7 @@ public sealed class LogViewModel : ViewModelBase
                 formattingErrors++;
             }
 
-            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine);
+            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine, retainedLine.LineId);
             _retainedVisibleLineContributions.Enqueue(1);
         }
 
@@ -531,7 +637,8 @@ public sealed class LogViewModel : ViewModelBase
     {
         if (_visibleLineLengths.First is null ||
             _visibleLines.First is null ||
-            _searchableVisibleLines.First is null)
+            _searchableVisibleLines.First is null ||
+            _visibleLineIds.First is null)
         {
             return false;
         }
@@ -542,6 +649,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineLengths.RemoveFirst();
         _visibleLines.RemoveFirst();
         _searchableVisibleLines.RemoveFirst();
+        _visibleLineIds.RemoveFirst();
         if (ReferenceEquals(removedDisplayNode, _partialRxDisplayNode) ||
             ReferenceEquals(removedSearchableNode, _partialRxSearchableNode))
         {
@@ -564,13 +672,19 @@ public sealed class LogViewModel : ViewModelBase
         OnPropertyChanged(nameof(PartialRxAppendInPlaceCount));
     }
 
-    private void AddVisibleLine(string displayLine, string searchableLine)
+    private string AddVisibleLine(string displayLine, string searchableLine, long lineId)
     {
+        var taggedDisplayLine = FormatXtermLineIdentity(lineId) + displayLine;
         _visibleLineLengths.AddLast(displayLine.Length);
         _visibleLines.AddLast(displayLine);
         _searchableVisibleLines.AddLast(searchableLine);
+        _visibleLineIds.AddLast(lineId);
         _visibleCharacterCount += displayLine.Length;
+        return taggedDisplayLine;
     }
+
+    private static string FormatXtermLineIdentity(long lineId) =>
+        $"{XtermLineIdentityOscPrefix}{lineId.ToString(CultureInfo.InvariantCulture)}{XtermOscTerminator}";
 
     private int EstimateLiveBatchCharacterCount(IReadOnlyList<LogLine> lines)
     {
@@ -648,16 +762,17 @@ public sealed class LogViewModel : ViewModelBase
         _partialRxLineDirty = false;
     }
 
-    private void AppendPartialRxVisualSegment(string displayText, string searchableText)
+    private string AppendPartialRxVisualSegment(string displayText, string searchableText, long lineId)
     {
         if (_visibleLines.Last is null ||
             _searchableVisibleLines.Last is null ||
-            _visibleLineLengths.Last is null)
+            _visibleLineLengths.Last is null ||
+            _visibleLineIds.Last is null)
         {
-            AddVisibleLine(displayText, searchableText);
+            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId);
             BeginActivePartialRxVisualLine(displayText, searchableText);
             _partialRxVisualLength = searchableText.Length;
-            return;
+            return taggedDisplayLine;
         }
 
         EnsureActivePartialRxBuilders();
@@ -676,6 +791,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineLengths.Last.Value += displayText.Length;
         _visibleCharacterCount += displayText.Length;
         _partialRxVisualLength += searchableText.Length;
+        return displayText;
     }
 
     private bool CompleteActivePartialRxVisualLine(StringBuilder? appendedText = null)

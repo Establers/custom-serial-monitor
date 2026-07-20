@@ -205,8 +205,10 @@
 
     const appendQueue = [];
     const replaceQueue = [];
+    const parsedLogLineIds = [];
     let appendQueueHead = 0;
     let replaceQueueHead = 0;
+    let parsedLogLineIdHead = 0;
     let appendDrainScheduled = false;
     let appendWriting = false;
     let replaceWriting = false;
@@ -215,6 +217,39 @@
     const restoreOverlay = document.getElementById('restoreOverlay');
     const restoreOverlayTitle = document.getElementById('restoreOverlayTitle');
     const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
+
+    function resetParsedLogLineIds() {
+      parsedLogLineIds.length = 0;
+      parsedLogLineIdHead = 0;
+    }
+
+    function trimParsedLogLineIds() {
+      const maxRetainedIds = Math.max(1, Number(terminal.options.scrollback || 0) + terminal.rows + 1);
+      if (parsedLogLineIds.length - parsedLogLineIdHead > maxRetainedIds) {
+        parsedLogLineIdHead = parsedLogLineIds.length - maxRetainedIds;
+      }
+
+      if (parsedLogLineIdHead > 4096 && parsedLogLineIdHead * 2 > parsedLogLineIds.length) {
+        parsedLogLineIds.splice(0, parsedLogLineIdHead);
+        parsedLogLineIdHead = 0;
+      }
+    }
+
+    function getParsedLogLineIdsSnapshot() {
+      trimParsedLogLineIds();
+      return parsedLogLineIds.slice(parsedLogLineIdHead);
+    }
+
+    terminal.parser.registerOscHandler(777, data => {
+      const lineId = String(data ?? '').trim();
+      if (!/^\d+$/.test(lineId)) {
+        return false;
+      }
+
+      parsedLogLineIds.push(lineId);
+      trimParsedLogLineIds();
+      return true;
+    });
 
     function normalizeLogText(text) {
       return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
@@ -537,6 +572,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
+      resetParsedLogLineIds();
       terminal.clear();
       return true;
     };
@@ -604,6 +640,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
+      resetParsedLogLineIds();
       terminal.clear();
       return true;
     };
@@ -615,6 +652,7 @@
       }
 
       terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
+      trimParsedLogLineIds();
       return true;
     };
 
@@ -632,43 +670,192 @@
       return true;
     };
 
+    let payloadSearchStateKey = '';
+    let payloadSearchStateIndex = -1;
+
+    function getPayloadStart(text) {
+      const metadata = /^(?:\[[^\]\r\n]*\]\s+)?(?:RX <|TX >|MARK >|SYS)(?: |$)/.exec(text);
+      return metadata ? metadata[0].length : -1;
+    }
+
+    function collectPayloadSearchMatches(searchText, caseSensitive) {
+      const matches = [];
+      const buffer = terminal.buffer.active;
+      const needle = caseSensitive ? searchText : searchText.toLocaleLowerCase();
+      let applicationLineCount = 0;
+
+      for (let row = 0; row < buffer.length;) {
+        const firstLine = buffer.getLine(row);
+        if (!firstLine) {
+          row++;
+          continue;
+        }
+
+        // A wrapped row at the beginning of scrollback may have lost its logical
+        // first row. It cannot be mapped reliably to a retained application line.
+        if (firstLine.isWrapped) {
+          row++;
+          continue;
+        }
+
+        const rows = [];
+        const stringStarts = [];
+        let logicalText = '';
+        do {
+          const line = buffer.getLine(row);
+          if (!line) {
+            break;
+          }
+
+          rows.push(row);
+          stringStarts.push(logicalText.length);
+          const nextLine = buffer.getLine(row + 1);
+          const continues = !!nextLine && nextLine.isWrapped;
+          logicalText += line.translateToString(!continues);
+          row++;
+          if (!continues) {
+            break;
+          }
+        } while (row < buffer.length);
+
+        const payloadStart = getPayloadStart(logicalText);
+        if (payloadStart < 0) {
+          continue;
+        }
+
+        const applicationLineIndex = applicationLineCount++;
+        const haystack = caseSensitive ? logicalText : logicalText.toLocaleLowerCase();
+        const matchOffset = haystack.indexOf(needle, payloadStart);
+        if (matchOffset >= payloadStart) {
+          matches.push({
+            applicationLineIndex,
+            rows,
+            stringStarts,
+            startOffset: matchOffset,
+            endOffset: matchOffset + searchText.length
+          });
+        }
+      }
+
+      const retainedLineIds = getParsedLogLineIdsSnapshot();
+      const retainedIdStart = retainedLineIds.length - applicationLineCount;
+      for (const match of matches) {
+        const retainedIdIndex = retainedIdStart + match.applicationLineIndex;
+        match.lineId = retainedIdIndex >= 0 && retainedIdIndex < retainedLineIds.length
+          ? retainedLineIds[retainedIdIndex]
+          : '';
+      }
+
+      return matches;
+    }
+
+    function stringOffsetToBufferPosition(match, stringOffset) {
+      let segmentIndex = match.stringStarts.length - 1;
+      for (let i = 0; i < match.stringStarts.length - 1; i++) {
+        if (stringOffset < match.stringStarts[i + 1]) {
+          segmentIndex = i;
+          break;
+        }
+      }
+
+      const row = match.rows[segmentIndex];
+      const line = terminal.buffer.active.getLine(row);
+      const localOffset = Math.max(0, stringOffset - match.stringStarts[segmentIndex]);
+      let consumed = 0;
+      let col = 0;
+      for (; line && col < terminal.cols; col++) {
+        const cell = line.getCell(col);
+        if (!cell || cell.getWidth() === 0) {
+          continue;
+        }
+
+        if (consumed >= localOffset) {
+          break;
+        }
+
+        const chars = cell.getChars();
+        consumed += cell.getCode() === 0 ? 1 : Math.max(1, chars.length);
+      }
+
+      return { row, col: Math.min(col, terminal.cols) };
+    }
+
+    function selectPayloadSearchMatch(match) {
+      const start = stringOffsetToBufferPosition(match, match.startOffset);
+      const end = stringOffsetToBufferPosition(match, match.endOffset);
+      const size = Math.max(1, ((end.row - start.row) * terminal.cols) + end.col - start.col);
+      terminal.select(start.col, start.row, size);
+
+      const viewportTop = terminal.buffer.active.viewportY;
+      if (start.row < viewportTop || start.row >= viewportTop + terminal.rows) {
+        terminal.scrollToLine(Math.max(0, start.row - Math.floor(terminal.rows / 2)));
+      }
+    }
+
     window.serialMonitorSearch = function (request) {
       try {
         const searchText = String(request?.text ?? '');
         if (!searchText) {
           terminal.clearSelection();
           searchAddon.clearDecorations();
+          payloadSearchStateKey = '';
+          payloadSearchStateIndex = -1;
           return { ok: true, found: false };
         }
 
-        const options = {
-          caseSensitive: !!request?.caseSensitive,
-          regex: false,
-          wholeWord: false
-        };
-
-        if (Number.isInteger(request?.resultIndex) && request.resultIndex >= 0) {
+        const caseSensitive = !!request?.caseSensitive;
+        const matches = collectPayloadSearchMatches(searchText, caseSensitive);
+        searchAddon.clearDecorations();
+        if (Number.isInteger(request?.resultIndex) && request.resultIndex < 0) {
           terminal.clearSelection();
-          searchAddon.clearDecorations();
-          terminal.scrollToTop();
+          payloadSearchStateIndex = -1;
+          return { ok: true, found: false };
+        }
 
-          let found = false;
-          for (let i = 0; i <= request.resultIndex; i++) {
-            found = searchAddon.findNext(searchText, options);
-            if (!found) {
-              break;
-            }
+        if (matches.length === 0) {
+          terminal.clearSelection();
+          payloadSearchStateIndex = -1;
+          return { ok: true, found: false };
+        }
+
+        const targetLineId = String(request?.targetLineId ?? '');
+        if (targetLineId) {
+          const retainedResultIndex = matches.findIndex(match => match.lineId === targetLineId);
+          if (retainedResultIndex < 0) {
+            terminal.clearSelection();
+            return { ok: true, found: false };
           }
 
-          return { ok: true, found: !!found };
+          payloadSearchStateIndex = retainedResultIndex;
+          payloadSearchStateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
+          selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
+          return { ok: true, found: true };
+        }
+
+        if (Number.isInteger(request?.resultIndex) && request.resultIndex >= 0) {
+          if (request.resultIndex >= matches.length) {
+            terminal.clearSelection();
+            return { ok: true, found: false };
+          }
+
+          payloadSearchStateIndex = request.resultIndex;
+          payloadSearchStateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
+          selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
+          return { ok: true, found: true };
+        }
+
+        const stateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
+        if (payloadSearchStateKey !== stateKey) {
+          payloadSearchStateKey = stateKey;
+          payloadSearchStateIndex = request?.direction === 'previous' ? 0 : -1;
         }
 
         const direction = request?.direction === 'previous' ? 'previous' : 'next';
-        const found = direction === 'previous'
-          ? searchAddon.findPrevious(searchText, options)
-          : searchAddon.findNext(searchText, options);
-
-        return { ok: true, found: !!found };
+        payloadSearchStateIndex = direction === 'previous'
+          ? (payloadSearchStateIndex - 1 + matches.length) % matches.length
+          : (payloadSearchStateIndex + 1) % matches.length;
+        selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
+        return { ok: true, found: true };
       } catch (error) {
         return {
           ok: false,

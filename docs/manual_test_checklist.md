@@ -259,10 +259,19 @@ real hardware when available.
 - [ ] Confirm match count updates.
 - [ ] Click Next and Prev.
 - [ ] Confirm xterm jumps/selects matches.
+- [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3;
+  confirm the total match count remains the last Enter-search snapshot.
+- [ ] Press Enter in the search box and confirm the total match count updates to
+  include the newly appended matches.
 - [ ] Click the xterm log and press Enter; confirm Auto Scroll toggles once.
 - [ ] Hold Enter while xterm is focused; confirm key repeat does not toggle it repeatedly.
 - [ ] Focus the TX input and press Enter; confirm the command sends without toggling Auto Scroll.
 - [ ] Toggle Case and confirm behavior changes.
+- [ ] Search for a timestamp-only value or direction marker such as `RX <` and
+  confirm it does not match unless the same text exists in the payload itself.
+- [ ] With a narrow log viewport, create long wrapped matching lines, leave the
+  results stale while newer matches append, and confirm an old result jumps to
+  the same logical line or reports no hit after that line leaves scrollback.
 - [ ] Confirm logs continue appending during search.
 
 ## Search Results Tab

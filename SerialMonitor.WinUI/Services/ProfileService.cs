@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.ObjectModel;
+using SerialMonitor.Core;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 
@@ -11,8 +12,6 @@ public sealed class ProfileService : IProfileService
 {
     private const int MinVisibleLogLines = 1_000;
     private const int MaxVisibleLogLines = 500_000;
-    private const int MinXtermScrollbackSize = 1_000;
-    private const int MaxXtermScrollbackSize = 500_000;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
     private const int MinMockStressLinesPerSecond = 1;
@@ -99,6 +98,11 @@ public sealed class ProfileService : IProfileService
     public AppProfile CreateDefaultProfile()
     {
         var serialSettings = new SerialSettings();
+        var uiSettings = new UiSettings
+        {
+            HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings),
+            HexGroupTimeoutUserConfigured = false
+        };
         var logSettings = new LogSettings
         {
             SaveDirectory = serialSettings.SaveDirectory
@@ -110,7 +114,7 @@ public sealed class ProfileService : IProfileService
             Name = "Default",
             SerialSettings = serialSettings,
             LogSettings = logSettings,
-            UiSettings = new UiSettings(),
+            UiSettings = uiSettings,
             EventContextSettings = new EventContextSettings(),
             BridgeSettings = new BridgeSettings(),
             LogRules = new List<LogRule>
@@ -244,6 +248,10 @@ public sealed class ProfileService : IProfileService
                 json.IndexOf(nameof(UiSettings.ConfirmBeforeDisconnect), StringComparison.OrdinalIgnoreCase) >= 0;
             var hasShowTimestampInLogView =
                 json.IndexOf(nameof(UiSettings.ShowTimestampInLogView), StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasHexGroupTimeout =
+                json.IndexOf(nameof(UiSettings.HexGroupTimeoutMs), StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasHexGroupTimeoutUserConfigured =
+                json.IndexOf(nameof(UiSettings.HexGroupTimeoutUserConfigured), StringComparison.OrdinalIgnoreCase) >= 0;
             var hasLogRules =
                 json.IndexOf(nameof(AppProfile.LogRules), StringComparison.OrdinalIgnoreCase) >= 0;
             var hasEventRules =
@@ -273,6 +281,14 @@ public sealed class ProfileService : IProfileService
                 if (!hasSavedCommands)
                 {
                     profile.SavedCommands = null!;
+                }
+
+                // Profiles written before the explicit-default marker existed may
+                // contain a timeout chosen by the user. Mark it before normalization
+                // so the stored value is not replaced by a baud-derived default.
+                if (hasHexGroupTimeout && !hasHexGroupTimeoutUserConfigured && profile.UiSettings is not null)
+                {
+                    profile.UiSettings.HexGroupTimeoutUserConfigured = true;
                 }
             }
 
@@ -447,7 +463,7 @@ public sealed class ProfileService : IProfileService
             warnings.Add("UI settings were missing.");
         }
 
-        NormalizeUiSettings(profile.UiSettings, defaults.UiSettings, warnings);
+        NormalizeUiSettings(profile.UiSettings, profile.SerialSettings, defaults.UiSettings, warnings);
 
         if (profile.EventContextSettings is null)
         {
@@ -770,6 +786,7 @@ public sealed class ProfileService : IProfileService
 
     private void NormalizeUiSettings(
         UiSettings settings,
+        SerialSettings serialSettings,
         UiSettings defaults,
         ICollection<string> warnings)
     {
@@ -793,22 +810,16 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Max visible event count was fixed at 100.");
         }
 
-        if (settings.XtermScrollbackSize is < MinXtermScrollbackSize or > MaxXtermScrollbackSize)
-        {
-            settings.XtermScrollbackSize = defaults.XtermScrollbackSize;
-            warnings.Add("xterm scrollback size was invalid.");
-        }
-
-        if (settings.XtermScrollbackSize < settings.MaxVisibleLogLines)
-        {
-            settings.XtermScrollbackSize = settings.MaxVisibleLogLines;
-            warnings.Add("xterm scrollback was raised to match visible log max lines.");
-        }
-
         if (settings.HexGroupTimeoutMs is < MinHexGroupTimeoutMs or > MaxHexGroupTimeoutMs)
         {
-            settings.HexGroupTimeoutMs = defaults.HexGroupTimeoutMs;
-            warnings.Add("HEX group timeout was invalid.");
+            settings.HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings);
+            settings.HexGroupTimeoutUserConfigured = false;
+            warnings.Add("HEX group timeout was invalid and was reset to the automatic baud/frame default.");
+        }
+
+        if (!settings.HexGroupTimeoutUserConfigured)
+        {
+            settings.HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings);
         }
 
         if (!Enum.IsDefined(settings.TimestampDisplayFormat))
@@ -871,6 +882,24 @@ public sealed class ProfileService : IProfileService
             settings.MockGeneratorPattern = defaults.MockGeneratorPattern;
             warnings.Add("Mock generator pattern was invalid.");
         }
+    }
+
+    private static int CalculateDefaultHexGroupTimeoutMs(SerialSettings settings)
+    {
+        var recommendation = SerialTimingAdvisor.Calculate(
+            settings.BaudRate,
+            settings.DataBits,
+            settings.Parity != SerialParityMode.None,
+            settings.StopBits switch
+            {
+                SerialStopBitsMode.OnePointFive => 1.5,
+                SerialStopBitsMode.Two => 2.0,
+                _ => 1.0
+            });
+        return Math.Clamp(
+            recommendation.SuggestedStartingTimeoutMilliseconds + 2,
+            MinHexGroupTimeoutMs,
+            MaxHexGroupTimeoutMs);
     }
 
     private string NormalizeCuteBackgroundImagePath(
