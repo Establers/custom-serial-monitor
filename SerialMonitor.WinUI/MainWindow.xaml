@@ -752,7 +752,7 @@
                                  MaxWidth="380"
                                  VerticalAlignment="Center"
                                  KeyDown="SearchTextBox_KeyDown"
-                                 ToolTipService.ToolTip="Search visible log (Enter searches, Up/Down history)" />
+                                 ToolTipService.ToolTip="Search visible log (Enter refreshes and moves next, Up/Down history)" />
                         <Button Grid.Column="1"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
@@ -2011,7 +2011,7 @@
                                                          HorizontalAlignment="Stretch"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
+                                                         ToolTipService.ToolTip="The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
                                                 <TextBlock Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
@@ -2034,16 +2034,16 @@
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            TextWrapping="Wrap"
                                                            VerticalAlignment="Center"
-                                                           ToolTipService.ToolTip="Until you press Set, the default follows the current baud rate and frame format as recommendation + 2 ms. After Set, your custom value is retained in the profile." />
+                                                           ToolTipService.ToolTip="Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile." />
                                             </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
                                             <TextBlock Grid.Column="1"
-                                                       Text="Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. Example: inside ≤ 1 ms and between ≥ 3 ms → use 2 ms. If these ranges overlap, timing alone cannot separate packets reliably. Keep driver latency below the timeout."
+                                                       Text="Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms)."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
-                                                       ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets." />
+                                                       ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -2491,12 +2491,57 @@
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto">
-                                    <TextBlock Text="{Binding HelpGuideText, Mode=OneWay}"
-                                               Padding="8"
-                                               FontFamily="Segoe UI"
-                                               FontSize="12"
-                                               IsTextSelectionEnabled="True"
-                                               TextWrapping="WrapWholeWords" />
+                                    <StackPanel Padding="8"
+                                                Spacing="8">
+                                        <Border Padding="12,10"
+                                                Background="#33240B0D"
+                                                BorderBrush="#FFD96870"
+                                                BorderThickness="1"
+                                                CornerRadius="6">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="HEX TIMEOUT"
+                                                           Foreground="#FFFF9FA5"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding HexFtdiHelpNoticeText, Mode=OneWay}"
+                                                           Foreground="#FFFFD1D4"
+                                                           FontFamily="Segoe UI"
+                                                           FontSize="12"
+                                                           IsTextSelectionEnabled="True"
+                                                           TextWrapping="WrapWholeWords" />
+                                            </StackPanel>
+                                        </Border>
+                                        <ItemsControl ItemsSource="{Binding HelpSections, Mode=OneWay}"
+                                                      IsTabStop="False">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="2,8,2,10"
+                                                                Spacing="6">
+                                                        <Grid ColumnDefinitions="3,*"
+                                                              ColumnSpacing="8">
+                                                            <Border Width="3"
+                                                                    MinHeight="18"
+                                                                    Background="#FF5B8DEF"
+                                                                    CornerRadius="2" />
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding Title}"
+                                                                       Foreground="#FF8EB8FF"
+                                                                       FontSize="14"
+                                                                       FontWeight="SemiBold"
+                                                                       VerticalAlignment="Center" />
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding Body}"
+                                                                   Foreground="#FFD7DCE3"
+                                                                   FontFamily="Segoe UI"
+                                                                   FontSize="12"
+                                                                   IsTextSelectionEnabled="True"
+                                                                   LineHeight="20"
+                                                                   TextWrapping="WrapWholeWords" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </ScrollViewer>
                             </Border>
                         </Grid>

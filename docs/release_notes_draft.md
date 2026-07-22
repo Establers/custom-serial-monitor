@@ -28,6 +28,9 @@ Date: 2026-05-25
 - In-app Help/Guide tab.
 - Live Terminal/HEX mode and HEX timeout changes without disconnecting the
   active COM port.
+- Fixed 40 ms automatic HEX grouping timeout across all baud rates, while
+  retaining explicitly saved custom timeout values.
+- Inline FTDI troubleshooting guidance without startup or connection popups.
 
 ## Stability Design Points
 

@@ -19,6 +19,7 @@ public enum TimestampDisplayFormat
 public sealed class UiSettings
 {
     public const int FixedMaxVisibleEventCount = 100;
+    public const int DefaultHexGroupTimeoutMs = 40;
 
     public int MaxVisibleLogLines { get; set; } = 50_000;
 
@@ -38,7 +39,7 @@ public sealed class UiSettings
 
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
-    public int HexGroupTimeoutMs { get; set; } = 3;
+    public int HexGroupTimeoutMs { get; set; } = DefaultHexGroupTimeoutMs;
 
     public bool HexGroupTimeoutUserConfigured { get; set; }
 

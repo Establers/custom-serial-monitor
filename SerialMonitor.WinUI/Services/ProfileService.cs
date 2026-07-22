@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.ObjectModel;
-using SerialMonitor.Core;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 
@@ -100,7 +99,7 @@ public sealed class ProfileService : IProfileService
         var serialSettings = new SerialSettings();
         var uiSettings = new UiSettings
         {
-            HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings),
+            HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs,
             HexGroupTimeoutUserConfigured = false
         };
         var logSettings = new LogSettings
@@ -463,7 +462,7 @@ public sealed class ProfileService : IProfileService
             warnings.Add("UI settings were missing.");
         }
 
-        NormalizeUiSettings(profile.UiSettings, profile.SerialSettings, defaults.UiSettings, warnings);
+        NormalizeUiSettings(profile.UiSettings, defaults.UiSettings, warnings);
 
         if (profile.EventContextSettings is null)
         {
@@ -786,7 +785,6 @@ public sealed class ProfileService : IProfileService
 
     private void NormalizeUiSettings(
         UiSettings settings,
-        SerialSettings serialSettings,
         UiSettings defaults,
         ICollection<string> warnings)
     {
@@ -812,14 +810,14 @@ public sealed class ProfileService : IProfileService
 
         if (settings.HexGroupTimeoutMs is < MinHexGroupTimeoutMs or > MaxHexGroupTimeoutMs)
         {
-            settings.HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings);
+            settings.HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
             settings.HexGroupTimeoutUserConfigured = false;
-            warnings.Add("HEX group timeout was invalid and was reset to the automatic baud/frame default.");
+            warnings.Add("HEX group timeout was invalid and was reset to the automatic 40 ms default.");
         }
 
         if (!settings.HexGroupTimeoutUserConfigured)
         {
-            settings.HexGroupTimeoutMs = CalculateDefaultHexGroupTimeoutMs(serialSettings);
+            settings.HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
         }
 
         if (!Enum.IsDefined(settings.TimestampDisplayFormat))
@@ -882,24 +880,6 @@ public sealed class ProfileService : IProfileService
             settings.MockGeneratorPattern = defaults.MockGeneratorPattern;
             warnings.Add("Mock generator pattern was invalid.");
         }
-    }
-
-    private static int CalculateDefaultHexGroupTimeoutMs(SerialSettings settings)
-    {
-        var recommendation = SerialTimingAdvisor.Calculate(
-            settings.BaudRate,
-            settings.DataBits,
-            settings.Parity != SerialParityMode.None,
-            settings.StopBits switch
-            {
-                SerialStopBitsMode.OnePointFive => 1.5,
-                SerialStopBitsMode.Two => 2.0,
-                _ => 1.0
-            });
-        return Math.Clamp(
-            recommendation.SuggestedStartingTimeoutMilliseconds + 2,
-            MinHexGroupTimeoutMs,
-            MaxHexGroupTimeoutMs);
     }
 
     private string NormalizeCuteBackgroundImagePath(

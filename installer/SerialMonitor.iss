@@ -1,7 +1,7 @@
 #define MyAppName "Serial Monitor"
 #define MyAppExeName "SerialMonitor.WinUI.exe"
 #define MyAppPublisher "Serial Monitor"
-#define MyAppVersion "1.1.7"
+#define MyAppVersion "1.1.8"
 #define BuildTimestamp GetDateTimeString('yyyymmdd_hhnn', '', '')
 
 [Setup]

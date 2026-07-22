@@ -183,6 +183,19 @@ public sealed class TimestampDisplayFormatOption
     public override string ToString() => DisplayName;
 }
 
+public sealed class HelpSection
+{
+    public HelpSection(string title, string body)
+    {
+        Title = title;
+        Body = body;
+    }
+
+    public string Title { get; }
+
+    public string Body { get; }
+}
+
 public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private const int MaxRetainedEventContexts = 5_000;
@@ -270,8 +283,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private LogSettings _currentLogSettings = new();
     private UiSettings _currentUiSettings = new();
     private RxDisplayMode _appliedRxDisplayMode = RxDisplayMode.Terminal;
-    private int _appliedHexGroupTimeoutMs = 3;
-    private string _hexGroupTimeoutDraftText = "3";
+    private int _appliedHexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
+    private string _hexGroupTimeoutDraftText = UiSettings.DefaultHexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
     private EventContextSettings _currentEventContextSettings = new();
     private long _sentCommandCount;
     private long _txErrorCount;
@@ -1590,25 +1603,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         get
         {
-            var recommendation = SerialTimingAdvisor.Calculate(
-                Math.Max(1, SelectedBaudRate),
-                Math.Max(1, SelectedDataBits),
-                SelectedParity != SerialParityMode.None,
-                SelectedStopBits switch
-                {
-                    SerialStopBitsMode.OnePointFive => 1.5,
-                    SerialStopBitsMode.Two => 2.0,
-                    _ => 1.0
-                });
-            var suggestedDefault = Math.Clamp(
-                recommendation.SuggestedStartingTimeoutMilliseconds + 2,
-                MinHexGroupTimeoutMs,
-                MaxHexGroupTimeoutMs);
             var mode = _currentUiSettings.HexGroupTimeoutUserConfigured
                 ? $"custom {HexGroupTimeoutMs:N0} ms retained"
                 : "automatic default";
-            return $"Default {suggestedDefault:N0} ms = recommendation " +
-                   $"{recommendation.SuggestedStartingTimeoutMilliseconds:N0} + 2 ms; {mode}";
+            return $"Default {UiSettings.DefaultHexGroupTimeoutMs:N0} ms for all baud rates; {mode}";
         }
     }
 
@@ -1740,29 +1738,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var recommendation = SerialTimingAdvisor.Calculate(
-            Math.Max(1, SelectedBaudRate),
-            Math.Max(1, SelectedDataBits),
-            SelectedParity != SerialParityMode.None,
-            SelectedStopBits switch
-            {
-                SerialStopBitsMode.OnePointFive => 1.5,
-                SerialStopBitsMode.Two => 2.0,
-                _ => 1.0
-            });
-        var suggestedDefault = Math.Clamp(
-            recommendation.SuggestedStartingTimeoutMilliseconds + 2,
-            MinHexGroupTimeoutMs,
-            MaxHexGroupTimeoutMs);
-        if (_currentUiSettings.HexGroupTimeoutMs == suggestedDefault)
+        var defaultTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
+        if (_currentUiSettings.HexGroupTimeoutMs == defaultTimeoutMs)
         {
             return;
         }
 
-        _currentUiSettings.HexGroupTimeoutMs = suggestedDefault;
-        _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, suggestedDefault);
-        _appliedHexGroupTimeoutMs = suggestedDefault;
-        _hexGroupTimeoutDraftText = suggestedDefault.ToString(CultureInfo.InvariantCulture);
+        _currentUiSettings.HexGroupTimeoutMs = defaultTimeoutMs;
+        _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, defaultTimeoutMs);
+        _appliedHexGroupTimeoutMs = defaultTimeoutMs;
+        _hexGroupTimeoutDraftText = defaultTimeoutMs.ToString(CultureInfo.InvariantCulture);
         OnPropertyChanged(nameof(HexGroupTimeoutMs));
         OnPropertyChanged(nameof(HexGroupTimeoutMsText));
         OnPropertyChanged(nameof(HexGroupTimeoutDraftText));
@@ -3552,75 +3537,91 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         private set => SetProperty(ref _diagnosticsText, value);
     }
 
-    public string HelpGuideText => """
-        빠른 시작
+    public string HexFtdiHelpNoticeText =>
+        "HEX TIMEOUT 기본값은 baud와 무관하게 40 ms입니다. 필요 시 수정하세요. " +
+        "패킷이 분리되는 현상이 있으면 FTDI Latency Timer 2 ms 설정을 검토하세요.";
 
+    public IReadOnlyList<HelpSection> HelpSections { get; } =
+    [
+        new HelpSection(
+            "빠른 시작",
+            """
         1. Port와 Baud를 선택하고 Connect를 누릅니다.
-        2. 일반 명령은 TX Mode를 Terminal로 두고 전송합니다.
-        3. 바이너리 패킷은 TX Mode를 HEX로 바꾸고 AA 55 01처럼 입력합니다.
-        4. 장시간 기록이 필요하면 Log ON을 확인합니다.
+        2. 일반 텍스트 명령은 Mode를 Terminal로 두고 전송합니다.
+        3. 바이너리 패킷은 Mode를 HEX로 바꾸고 A0 A6 E5처럼 입력합니다.
+        4. 로그 파일 저장이 필요하면 Log ON을 확인합니다.
         5. 설정을 유지하려면 Save Profile을 누릅니다.
-
-        이벤트 만들기
-
+        """),
+        new HelpSection(
+            "이벤트 만들기",
+            """
         1. Rules 탭에서 +를 누릅니다.
         2. Name과 Keyword를 입력합니다.
         3. Enabled와 Event를 켭니다.
         4. 현재 Terminal 모드에서 쓸 룰은 Mode = Terminal, HEX 모드에서 쓸 룰은 Mode = HEX를 선택합니다.
         5. 일반적인 장비 이벤트는 Direction = RxOnly를 권장합니다.
         6. Save 후 새로 들어오는 로그에서 동작을 확인합니다.
-
-        이벤트 확인
-
+        """),
+        new HelpSection(
+            "이벤트 확인",
+            """
         Events에서 발생 시간과 메시지를 확인합니다.
         이벤트를 더블클릭하면 Context에서 전후 로그를 볼 수 있습니다.
         Tray, Sound, Popup 알림은 규칙 편집창에서 필요한 것만 켭니다.
         알림 기본값은 모두 OFF이며 기본 쿨다운은 30초입니다.
-
-        명령 시퀀스
-
+        """),
+        new HelpSection(
+            "명령 시퀀스",
+            """
         1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.
         2. 아래쪽 +로 명령 Step을 추가합니다.
         3. Command, Line ending, Delay after ms를 설정합니다.
         4. Up과 Dn으로 순서를 조정합니다.
         5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.
 
-        현재 시퀀스는 명령과 지연 시간만 순서대로 실행합니다.
-        장비 응답 판정, 조건 분기, HEX Step은 아직 지원하지 않습니다.
-
-        COM Bridge
-
+        시퀀스는 실행 시 현재 Mode(Terminal/HEX)를 모든 Step에 공통 적용합니다.
+        Step별 Mode 선택, 장비 응답 판정, 조건 분기는 지원하지 않습니다.
+        """),
+        new HelpSection(
+            "COM Bridge",
+            """
         실제 장비에 먼저 Connect합니다.
         Bridge 탭에서 com0com 쌍 중 앱이 사용할 포트를 선택하고 Start bridge를 누릅니다.
         외부 프로그램은 반드시 가상 포트 쌍의 반대편을 엽니다.
         BRIDGE ON 표시가 보이면 원본 바이트가 양방향으로 전달됩니다.
-        외부 프로그램에서 장비로 보내는 로그는 현재 앱 모드를 따릅니다.
-        Terminal 모드는 선택한 인코딩으로 디코딩하고 Terminal RxOnly/Both 규칙을 사용합니다.
-        HEX 모드는 원본 바이트를 표시하고 HEX RxOnly/Both 규칙을 사용합니다.
-
-        화면과 로그
-
+        외부 프로그램에서 장비로 보내는 로그는 현재 Mode를 따릅니다.
+        Terminal은 선택한 인코딩으로 디코딩하고 Terminal RxOnly/Both 규칙을 사용합니다.
+        HEX는 원본 바이트를 표시하고 HEX RxOnly/Both 규칙을 사용합니다.
+        """),
+        new HelpSection(
+            "Mode와 로그",
+            """
+        상단 Mode 하나가 RX 표시와 TX 입력 해석을 함께 바꿉니다.
+        Terminal은 RX를 선택한 Encoding으로 줄 단위 표시하고, TX에 선택한 line ending을 붙입니다.
+        HEX는 RX 원본 바이트를 16진수로 표시하고, TX 입력을 실제 바이트로 전송합니다. TX line ending은 붙지 않습니다.
+        Mode와 HEX timeout은 연결을 끊지 않고 즉시 적용됩니다.
+        HEX timeout은 마지막 수신 바이트 이후 한 줄로 묶어 기다리는 시간입니다. 너무 짧으면 패킷이 나뉘고 너무 길면 이웃 패킷이 합쳐질 수 있습니다.
         Pause View는 현재 화면을 고정하고 Pause 중 수신 로그를 화면에서 생략합니다. Resume Live 이후 새 로그부터 표시됩니다.
         Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Log 탭의 View pause 옵션을 따릅니다.
         Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
-        RX View = HEX는 수신 원본 바이트 확인용입니다.
-        HEX timeout은 마지막 바이트 이후 한 줄로 묶을 대기 시간입니다.
-        한 패킷 내부에서 관측되는 가장 긴 공백 < HEX timeout < 서로 다른 패킷 사이의 가장 짧은 공백으로 설정합니다.
-        예: 내부 공백 최대 1ms, 패킷 사이 최소 3ms이면 2ms를 사용합니다. 두 범위가 겹치면 시간만으로 안정적인 구분이 불가능합니다.
-        최초 기본값은 baud와 프레임 형식의 권장값 + 2ms입니다. Set으로 지정한 값은 프로필에 저장되어 이후 자동 변경되지 않습니다.
-        연결 중에도 HEX timeout과 Terminal/HEX 모드는 COM 포트를 끊지 않고 즉시 적용됩니다.
-        Diag의 Last RX chunk gap과 Last HEX group bytes를 기대 패킷 크기와 비교해 확인합니다.
         Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
-
-        단축키
-
+        """),
+        new HelpSection(
+            "단축키",
+            """
         Ctrl+F  검색
-        Enter / Shift+Enter  검색 실행 후 첫 / 마지막 결과
+        Enter / Shift+Enter  검색 갱신 후 다음 / 이전 결과
         F3 / Shift+F3  마지막 검색의 다음 / 이전 결과
         Ctrl+C  선택 로그 복사
         Ctrl+M  MARK 삽입
         TX 입력창 ↑ / ↓  전송 기록 이동
-        """;
+        """)
+    ];
+
+    public string HelpGuideText => string.Join(
+        $"{Environment.NewLine}{Environment.NewLine}",
+        HelpSections.Select(section =>
+            $"{section.Title}{Environment.NewLine}{Environment.NewLine}{section.Body}"));
 
     private string LegacyHelpGuideText => """
         빠른 시작
@@ -3634,8 +3635,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         주요 단축키
 
         * Ctrl+F: 검색창으로 이동
-        * Enter: 현재 로그를 새로 검색하고 첫 결과 선택
-        * Shift+Enter: 현재 로그를 새로 검색하고 마지막 결과 선택
+        * Enter: 현재 로그를 새로 검색하고 다음 결과 선택
+        * Shift+Enter: 현재 로그를 새로 검색하고 이전 결과 선택
         * F3: 마지막 검색 스냅샷의 다음 결과
         * Shift+F3: 마지막 검색 스냅샷의 이전 결과
         * Esc: 검색창 포커스 해제 또는 로그창으로 복귀
@@ -4597,9 +4598,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             AddCurrentSearchTextToHistory();
             var move = previous ? SearchMove.Previous : SearchMove.Next;
-            CurrentSearchMatchIndex = 0;
-            CurrentSearchMatchedLine = string.Empty;
-            _currentSearchLineId = null;
             RunManualVisibleLogSearch(move);
             RequestXtermSearch(move);
             RecordSearchShortcutAction(previous ? "Search and select previous" : "Search and select next", source);
@@ -4823,6 +4821,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            var previousLineId = _currentSearchLineId;
             var searchLines = Log.GetVisibleSearchContentSnapshot();
             var comparison = IsSearchCaseSensitive
                 ? StringComparison.Ordinal
@@ -4860,9 +4859,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            var currentIndex = CurrentSearchMatchIndex > 0
-                ? CurrentSearchMatchIndex - 1
-                : -1;
+            var currentIndex = previousLineId.HasValue
+                ? _activeSearchMatches.FindIndex(match => match.LineId == previousLineId.Value)
+                : CurrentSearchMatchIndex > 0
+                    ? CurrentSearchMatchIndex - 1
+                    : -1;
 
             currentIndex = move switch
             {
@@ -9157,7 +9158,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var package = new DataPackage();
-            package.SetText(HelpGuideText);
+            package.SetText(
+                $"HEX TIMEOUT{Environment.NewLine}{HexFtdiHelpNoticeText}" +
+                $"{Environment.NewLine}{Environment.NewLine}{HelpGuideText}");
             Clipboard.SetContent(package);
             Clipboard.Flush();
             SetStatus("Help guide copied to clipboard");

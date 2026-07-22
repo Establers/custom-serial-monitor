@@ -7,13 +7,13 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class ProfileServiceDefaultsTests
 {
     [Fact]
-    public void DefaultProfile_UsesRecommendationPlusTwoMilliseconds()
+    public void DefaultProfile_UsesFixedFortyMillisecondHexTimeout()
     {
         var service = new ProfileService();
 
         var profile = service.CreateDefaultProfile();
 
-        Assert.Equal(3, profile.UiSettings.HexGroupTimeoutMs);
+        Assert.Equal(40, profile.UiSettings.HexGroupTimeoutMs);
         Assert.False(profile.UiSettings.HexGroupTimeoutUserConfigured);
     }
 
@@ -43,7 +43,7 @@ public sealed class ProfileServiceDefaultsTests
     }
 
     [Fact]
-    public async Task AutomaticDefault_FollowsSavedBaudAndFrameFormat()
+    public async Task AutomaticDefault_RemainsFortyMillisecondsAcrossBaudRates()
     {
         var service = new ProfileService();
         var profile = service.CreateDefaultProfile();
@@ -57,7 +57,7 @@ public sealed class ProfileServiceDefaultsTests
             await service.SaveAsync(path, profile, CancellationToken.None);
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
-            Assert.Equal(4, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.Equal(40, loaded.UiSettings.HexGroupTimeoutMs);
             Assert.False(loaded.UiSettings.HexGroupTimeoutUserConfigured);
         }
         finally
@@ -93,7 +93,7 @@ public sealed class ProfileServiceDefaultsTests
     [Theory]
     [InlineData(0)]
     [InlineData(5_001)]
-    public async Task InvalidUserConfiguredTimeout_UsesCurrentBaudDefaultAndReturnsToAutomaticMode(
+    public async Task InvalidUserConfiguredTimeout_UsesFixedDefaultAndReturnsToAutomaticMode(
         int invalidTimeoutMs)
     {
         var service = new ProfileService();
@@ -123,9 +123,9 @@ public sealed class ProfileServiceDefaultsTests
 
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
-            Assert.Equal(15, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.Equal(40, loaded.UiSettings.HexGroupTimeoutMs);
             Assert.False(loaded.UiSettings.HexGroupTimeoutUserConfigured);
-            Assert.Contains("automatic baud/frame default", service.LastError, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("automatic 40 ms default", service.LastError, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
