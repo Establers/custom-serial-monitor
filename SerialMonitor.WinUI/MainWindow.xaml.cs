@@ -35,6 +35,8 @@ public sealed partial class MainWindow : Window
     private const long XtermBackpressureHighChars = 8L * 1024 * 1024;
     private const long XtermBackpressureLowChars = 2L * 1024 * 1024;
     private const long XtermSuspendedBatchMaxChars = 32L * 1024 * 1024;
+    private const int DwmUseImmersiveDarkModeBefore20H1 = 19;
+    private const int DwmUseImmersiveDarkMode = 20;
     private static readonly TimeSpan XtermLiveAppendAckTimeout = TimeSpan.FromSeconds(30);
     private static readonly string BundledCuteBackgroundPath =
         Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
@@ -43,6 +45,7 @@ public sealed partial class MainWindow : Window
 
     private readonly MainViewModel _viewModel;
     private readonly WindowsTrayNotifier _trayNotifier = new();
+    private readonly Microsoft.UI.System.ThemeSettings _themeSettings;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _eventPopupTimer;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _trayIconTimer;
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
@@ -100,6 +103,13 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);
 
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(
+        nint windowHandle,
+        int attribute,
+        ref int attributeValue,
+        int attributeSize);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool MessageBeep(uint type);
@@ -109,6 +119,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(AppWindow.Id);
 #if !DEBUG
         InspectorTabView.TabItems.Remove(TestTabViewItem);
 #endif
@@ -145,6 +156,9 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += OnAppWindowChanged;
         Activated += OnWindowActivated;
         Closed += OnClosed;
+        Root.ActualThemeChanged += OnRootActualThemeChanged;
+        _themeSettings.Changed += OnThemeSettingsChanged;
+        ApplyTitleBarTheme();
         UpdateCuteBackgroundImage();
         _ = InitializeXtermWebViewAsync();
 
@@ -258,6 +272,8 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing -= OnAppWindowClosing;
         AppWindow.Changed -= OnAppWindowChanged;
         Activated -= OnWindowActivated;
+        Root.ActualThemeChanged -= OnRootActualThemeChanged;
+        _themeSettings.Changed -= OnThemeSettingsChanged;
         _viewModel.Log.TextBatchAppended -= OnLogTextBatchAppended;
         _viewModel.Log.TextCleared -= OnLogTextCleared;
         _viewModel.Log.TextRebuilt -= OnLogTextRebuilt;
@@ -404,11 +420,68 @@ public sealed partial class MainWindow : Window
 
     private void Root_Loaded(object sender, RoutedEventArgs args)
     {
+        ApplyTitleBarTheme();
         ApplyInspectorLayout();
         UpdateToolbarScrollButtons(ConnectionToolbarScrollViewer);
         UpdateToolbarScrollButtons(LogToolbarScrollViewer);
         UpdateToolbarScrollButtons(TxToolbarScrollViewer);
         UpdateToolbarScrollButtons(QuickToolbarScrollViewer);
+    }
+
+    private void OnRootActualThemeChanged(FrameworkElement sender, object args)
+    {
+        ApplyTitleBarTheme();
+    }
+
+    private void OnThemeSettingsChanged(Microsoft.UI.System.ThemeSettings sender, object args)
+    {
+        DispatcherQueue.TryEnqueue(ApplyTitleBarTheme);
+    }
+
+    private void ApplyTitleBarTheme()
+    {
+        try
+        {
+            if (AppWindowTitleBar.IsCustomizationSupported())
+            {
+                AppWindow.TitleBar.PreferredTheme = _themeSettings.HighContrast
+                    ? TitleBarTheme.UseDefaultAppMode
+                    : Root.ActualTheme == ElementTheme.Dark
+                        ? TitleBarTheme.Dark
+                        : TitleBarTheme.Light;
+                return;
+            }
+
+            ApplyLegacyTitleBarTheme();
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.ApplyTitleBarTheme", ex);
+        }
+    }
+
+    private void ApplyLegacyTitleBarTheme()
+    {
+        var useDarkMode = !_themeSettings.HighContrast &&
+            Root.ActualTheme == ElementTheme.Dark
+            ? 1
+            : 0;
+        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var attributeSize = Marshal.SizeOf<int>();
+        var result = DwmSetWindowAttribute(
+            windowHandle,
+            DwmUseImmersiveDarkMode,
+            ref useDarkMode,
+            attributeSize);
+
+        if (result != 0)
+        {
+            _ = DwmSetWindowAttribute(
+                windowHandle,
+                DwmUseImmersiveDarkModeBefore20H1,
+                ref useDarkMode,
+                attributeSize);
+        }
     }
 
     private void Root_SizeChanged(object sender, SizeChangedEventArgs args)

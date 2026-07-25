@@ -6,7 +6,7 @@
     Title="Serial Monitor">
 
     <Grid x:Name="Root"
-          Background="#0C0D0E"
+          Background="{ThemeResource AppBackgroundBrush}"
           Padding="4"
           RowSpacing="3"
           Loaded="Root_Loaded"
@@ -15,7 +15,6 @@
         <Grid.Resources>
             <infra:HighlightColorBrushConverter x:Key="HighlightColorBrushConverter" />
             <infra:DisplayModeNameConverter x:Key="DisplayModeNameConverter" />
-            <infra:FileLoggingStateBrushConverter x:Key="FileLoggingStateBrushConverter" />
             <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
                 <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}" />
             </DataTemplate>
@@ -32,13 +31,13 @@
                             <VisualState x:Name="PointerOver">
                                 <VisualState.Setters>
                                     <Setter Target="CheckBorder.BorderBrush"
-                                            Value="#FFB8B8B8" />
+                                            Value="{ThemeResource CompactCheckBoxPointerOverBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Pressed">
                                 <VisualState.Setters>
                                     <Setter Target="CheckBorder.Background"
-                                            Value="#FF2B2B2B" />
+                                            Value="{ThemeResource CompactCheckBoxPressedBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Disabled">
@@ -53,9 +52,9 @@
                             <VisualState x:Name="Checked">
                                 <VisualState.Setters>
                                     <Setter Target="CheckBorder.Background"
-                                            Value="#FF0078D4" />
+                                            Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                     <Setter Target="CheckBorder.BorderBrush"
-                                            Value="#FF3A96DD" />
+                                            Value="{ThemeResource AccentFillColorSecondaryBrush}" />
                                     <Setter Target="CheckGlyph.Text"
                                             Value="✓" />
                                     <Setter Target="CheckGlyph.Opacity"
@@ -65,9 +64,9 @@
                             <VisualState x:Name="Indeterminate">
                                 <VisualState.Setters>
                                     <Setter Target="CheckBorder.Background"
-                                            Value="#FF0078D4" />
+                                            Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                     <Setter Target="CheckBorder.BorderBrush"
-                                            Value="#FF3A96DD" />
+                                            Value="{ThemeResource AccentFillColorSecondaryBrush}" />
                                     <Setter Target="CheckGlyph.Text"
                                             Value="-" />
                                     <Setter Target="CheckGlyph.Opacity"
@@ -89,15 +88,15 @@
                                 Height="14"
                                 BorderThickness="1"
                                 CornerRadius="2"
-                                BorderBrush="#FF7A7A7A"
-                                Background="#FF101010"
+                                BorderBrush="{ThemeResource CompactCheckBoxBorderBrush}"
+                                Background="{ThemeResource CompactCheckBoxFillBrush}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                             <TextBlock x:Name="CheckGlyph"
                                        Text="✓"
                                        FontSize="10"
                                        FontWeight="SemiBold"
-                                       Foreground="White"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                        Opacity="0"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
@@ -218,19 +217,25 @@
                             <VisualState x:Name="PointerOver">
                                 <VisualState.Setters>
                                     <Setter Target="ButtonRoot.Background"
-                                            Value="#3DFFFFFF" />
+                                            Value="{ThemeResource NavigationButtonPointerOverBrush}" />
+                                    <Setter Target="NavigationContentPresenter.Foreground"
+                                            Value="{ThemeResource NavigationButtonInteractionForegroundBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Pressed">
                                 <VisualState.Setters>
                                     <Setter Target="ButtonRoot.Background"
-                                            Value="#52FFFFFF" />
+                                            Value="{ThemeResource NavigationButtonPressedBrush}" />
+                                    <Setter Target="NavigationContentPresenter.Foreground"
+                                            Value="{ThemeResource NavigationButtonInteractionForegroundBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Disabled">
                                 <VisualState.Setters>
                                     <Setter Target="ButtonRoot.Background"
-                                            Value="#12FFFFFF" />
+                                            Value="{ThemeResource NavigationButtonDisabledBrush}" />
+                                    <Setter Target="NavigationContentPresenter.Foreground"
+                                            Value="{ThemeResource NavigationButtonDisabledForegroundBrush}" />
                                     <Setter Target="ButtonRoot.Opacity"
                                             Value="0.45" />
                                 </VisualState.Setters>
@@ -238,8 +243,10 @@
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
 
-                    <ContentPresenter Content="{TemplateBinding Content}"
+                    <ContentPresenter x:Name="NavigationContentPresenter"
+                                      Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                       VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
                 </Grid>
@@ -262,7 +269,9 @@
                 <Setter Property="CornerRadius"
                         Value="12" />
                 <Setter Property="Background"
-                        Value="#26FFFFFF" />
+                        Value="{ThemeResource NavigationButtonBrush}" />
+                <Setter Property="Foreground"
+                        Value="{ThemeResource NavigationButtonForegroundBrush}" />
                 <Setter Property="BorderBrush"
                         Value="Transparent" />
                 <Setter Property="BorderThickness"
@@ -346,7 +355,7 @@
             <Style x:Key="CompactSurfaceBorderStyle"
                    TargetType="Border">
                 <Setter Property="Background"
-                        Value="#D90C0D0E" />
+                        Value="{ThemeResource CompactSurfaceBrush}" />
                 <Setter Property="BorderBrush"
                         Value="{ThemeResource SystemControlForegroundBaseLowBrush}" />
                 <Setter Property="BorderThickness"
@@ -399,7 +408,7 @@
             <Style x:Key="InspectorSectionBorderStyle"
                    TargetType="Border">
                 <Setter Property="Background"
-                        Value="#D90C0D0E" />
+                        Value="{ThemeResource InspectorSectionBrush}" />
                 <Setter Property="BorderBrush"
                         Value="{ThemeResource SystemControlForegroundBaseLowBrush}" />
                 <Setter Property="BorderThickness"
@@ -415,7 +424,7 @@
                    TargetType="Border"
                    BasedOn="{StaticResource CompactSurfaceBorderStyle}">
                 <Setter Property="Background"
-                        Value="#EE0C0D0E" />
+                        Value="{ThemeResource InspectorHeaderBrush}" />
                 <Setter Property="CornerRadius"
                         Value="3" />
                 <Setter Property="Padding"
@@ -427,7 +436,7 @@
                    TargetType="Border"
                    BasedOn="{StaticResource InspectorSectionBorderStyle}">
                 <Setter Property="Background"
-                        Value="#C90C0D0E" />
+                        Value="{ThemeResource InspectorBodyBrush}" />
                 <Setter Property="Padding"
                         Value="0" />
                 <Setter Property="MinHeight"
@@ -581,7 +590,7 @@
                    HorizontalAlignment="Stretch"
                    VerticalAlignment="Stretch"
                    Opacity="{Binding CuteBackgroundOpacity}" />
-            <Rectangle Fill="#FF0C0D0E"
+            <Rectangle Fill="{ThemeResource BackgroundImageOverlayBrush}"
                        Opacity="{Binding CuteBackgroundOverlayOpacity}" />
         </Grid>
 
@@ -643,9 +652,25 @@
                         Command="{Binding ToggleFileLoggingCommand}"
                         Style="{StaticResource RuleActionButtonStyle}"
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
-                    <TextBlock Text="{Binding FileLoggingToggleText}"
+                    <TextBlock x:Name="FileLoggingToggleTextBlock"
+                               Text="{Binding FileLoggingToggleText}"
                                FontWeight="Bold"
-                               Foreground="{Binding FileLoggingEnabled, Converter={StaticResource FileLoggingStateBrushConverter}}" />
+                               Foreground="{ThemeResource FileLoggingDisabledTextBrush}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="FileLoggingStates">
+                                <VisualState x:Name="FileLoggingDisabled" />
+                                <VisualState x:Name="FileLoggingEnabled">
+                                    <VisualState.StateTriggers>
+                                        <StateTrigger IsActive="{Binding FileLoggingEnabled}" />
+                                    </VisualState.StateTriggers>
+                                    <VisualState.Setters>
+                                        <Setter Target="FileLoggingToggleTextBlock.Foreground"
+                                                Value="{ThemeResource FileLoggingEnabledTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </TextBlock>
                 </Button>
 
                 <Grid Grid.Column="6"
@@ -665,7 +690,7 @@
                                ToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
                     <TextBlock Grid.Column="1"
                                Text="{Binding BridgeIndicatorText}"
-                               Foreground="#FFFFC857"
+                               Foreground="{ThemeResource WarningTextBrush}"
                                FontWeight="Bold"
                                Style="{StaticResource CompactLabelTextStyle}"
                                MaxWidth="170"
@@ -856,14 +881,14 @@
 
                 <Border x:Name="LogRestoreOverlay"
                         Grid.Row="1"
-                        Background="#DD0C0D0E"
+                        Background="{ThemeResource LogRestoreBackdropBrush}"
                         CornerRadius="3"
                         Visibility="Collapsed"
                         IsHitTestVisible="True">
                     <Border HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Background="#D916181A"
-                            BorderBrush="#553A3D42"
+                            Background="{ThemeResource LogRestoreCardBrush}"
+                            BorderBrush="{ThemeResource LogRestoreCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="6"
                             Padding="16,12"
@@ -877,14 +902,14 @@
                                    Opacity="0.96" />
                             <TextBlock x:Name="LogRestoreOverlayTitle"
                                        Text="로그 화면 복원 중..."
-                                       Foreground="#FFF2F2F2"
+                                       Foreground="{ThemeResource LogRestorePrimaryTextBrush}"
                                        FontSize="13"
                                        FontWeight="SemiBold"
                                        TextAlignment="Center"
                                        HorizontalAlignment="Center" />
                             <TextBlock x:Name="LogRestoreOverlayDetail"
                                        Text="Preparing log view"
-                                       Foreground="#FFC8CDD2"
+                                       Foreground="{ThemeResource LogRestoreSecondaryTextBrush}"
                                        FontSize="11"
                                        TextAlignment="Center"
                                        HorizontalAlignment="Center" />
@@ -896,7 +921,7 @@
             <Grid x:Name="InspectorPanel"
                   Grid.Row="1"
                   Grid.Column="0"
-                  Background="#700C0D0E"
+                  Background="{ThemeResource InspectorBackdropBrush}"
                   RowSpacing="0"
                   RowDefinitions="*"
                   MinHeight="160">
@@ -1470,7 +1495,7 @@
                                                                         Height="10"
                                                                         CornerRadius="2"
                                                                         BorderThickness="1"
-                                                                        BorderBrush="#FF767676"
+                                                                        BorderBrush="{ThemeResource ColorPreviewBorderBrush}"
                                                                         Background="{Binding ForegroundColor, Converter={StaticResource HighlightColorBrushConverter}}"
                                                                         VerticalAlignment="Center" />
                                                                 <TextBlock Grid.Column="1"
@@ -1521,13 +1546,13 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Text="{Binding ManualTxStateText}"
-                                                       Foreground="#FFFFC857"
+                                                       Foreground="{ThemeResource WarningTextBrush}"
                                                        TextWrapping="WrapWholeWords"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                         </StackPanel>
                                         <TextBlock Grid.Column="1"
                                                    Text="{Binding BridgeStateText}"
-                                                   Foreground="#FFFFC857"
+                                                   Foreground="{ThemeResource WarningTextBrush}"
                                                    FontWeight="Bold"
                                                    VerticalAlignment="Center" />
                                     </Grid>
@@ -1650,7 +1675,7 @@
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                         </Grid>
                                         <TextBlock Text="{Binding BridgeLastError}"
-                                                   Foreground="#FFFF8A80"
+                                                   Foreground="{ThemeResource ErrorTextBrush}"
                                                    TextWrapping="WrapWholeWords"
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                         <TextBlock Text="{Binding BridgeVisualLogStatusText}"
@@ -1729,9 +1754,25 @@
                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                     HorizontalAlignment="Left"
                                                     ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
-                                                <TextBlock Text="{Binding FileLoggingToggleText}"
+                                                <TextBlock x:Name="FileLoggingSettingsToggleTextBlock"
+                                                           Text="{Binding FileLoggingToggleText}"
                                                            FontWeight="Bold"
-                                                           Foreground="{Binding FileLoggingEnabled, Converter={StaticResource FileLoggingStateBrushConverter}}" />
+                                                           Foreground="{ThemeResource FileLoggingDisabledTextBrush}">
+                                                    <VisualStateManager.VisualStateGroups>
+                                                        <VisualStateGroup x:Name="FileLoggingSettingsStates">
+                                                            <VisualState x:Name="FileLoggingSettingsDisabled" />
+                                                            <VisualState x:Name="FileLoggingSettingsEnabled">
+                                                                <VisualState.StateTriggers>
+                                                                    <StateTrigger IsActive="{Binding FileLoggingEnabled}" />
+                                                                </VisualState.StateTriggers>
+                                                                <VisualState.Setters>
+                                                                    <Setter Target="FileLoggingSettingsToggleTextBlock.Foreground"
+                                                                            Value="{ThemeResource FileLoggingEnabledTextBrush}" />
+                                                                </VisualState.Setters>
+                                                            </VisualState>
+                                                        </VisualStateGroup>
+                                                    </VisualStateManager.VisualStateGroups>
+                                                </TextBlock>
                                             </Button>
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
@@ -2494,17 +2535,17 @@
                                     <StackPanel Padding="8"
                                                 Spacing="8">
                                         <Border Padding="12,10"
-                                                Background="#33240B0D"
-                                                BorderBrush="#FFD96870"
+                                                Background="{ThemeResource HelpWarningBackgroundBrush}"
+                                                BorderBrush="{ThemeResource HelpWarningBorderBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="6">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="HEX TIMEOUT"
-                                                           Foreground="#FFFF9FA5"
+                                                           Foreground="{ThemeResource HelpWarningTitleBrush}"
                                                            FontSize="13"
                                                            FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding HexFtdiHelpNoticeText, Mode=OneWay}"
-                                                           Foreground="#FFFFD1D4"
+                                                           Foreground="{ThemeResource HelpWarningTextBrush}"
                                                            FontFamily="Segoe UI"
                                                            FontSize="12"
                                                            IsTextSelectionEnabled="True"
@@ -2521,17 +2562,17 @@
                                                               ColumnSpacing="8">
                                                             <Border Width="3"
                                                                     MinHeight="18"
-                                                                    Background="#FF5B8DEF"
+                                                                    Background="{ThemeResource HelpAccentBrush}"
                                                                     CornerRadius="2" />
                                                             <TextBlock Grid.Column="1"
                                                                        Text="{Binding Title}"
-                                                                       Foreground="#FF8EB8FF"
+                                                                       Foreground="{ThemeResource HelpTitleBrush}"
                                                                        FontSize="14"
                                                                        FontWeight="SemiBold"
                                                                        VerticalAlignment="Center" />
                                                         </Grid>
                                                         <TextBlock Text="{Binding Body}"
-                                                                   Foreground="#FFD7DCE3"
+                                                                   Foreground="{ThemeResource HelpBodyTextBrush}"
                                                                    FontFamily="Segoe UI"
                                                                    FontSize="12"
                                                                    IsTextSelectionEnabled="True"

@@ -1,9 +1,128 @@
 <Application
     x:Class="SerialMonitor.WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    RequestedTheme="Dark">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FF0C0D0E" />
+                    <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF7A7A7A" />
+                    <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="#FF101010" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="#FFB8B8B8" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPressedBrush" Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="NavigationButtonBrush" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonPointerOverBrush" Color="#3DFFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonPressedBrush" Color="#52FFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledBrush" Color="#12FFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#7FFFFFFF" />
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#D90C0D0E" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#D90C0D0E" />
+                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#EE0C0D0E" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#C90C0D0E" />
+                    <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FF0C0D0E" />
+                    <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#DD0C0D0E" />
+                    <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#D916181A" />
+                    <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="#553A3D42" />
+                    <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="#FFF2F2F2" />
+                    <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="#FFC8CDD2" />
+                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="#700C0D0E" />
+                    <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="#FF767676" />
+                    <SolidColorBrush x:Key="WarningTextBrush" Color="#FFFFC857" />
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFFF8A80" />
+                    <SolidColorBrush x:Key="FileLoggingEnabledTextBrush" Color="#FF8BC34A" />
+                    <SolidColorBrush x:Key="FileLoggingDisabledTextBrush" Color="#FFFF5722" />
+                    <SolidColorBrush x:Key="HelpWarningBackgroundBrush" Color="#33240B0D" />
+                    <SolidColorBrush x:Key="HelpWarningBorderBrush" Color="#FFD96870" />
+                    <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="#FFFF9FA5" />
+                    <SolidColorBrush x:Key="HelpWarningTextBrush" Color="#FFFFD1D4" />
+                    <SolidColorBrush x:Key="HelpAccentBrush" Color="#FF5B8DEF" />
+                    <SolidColorBrush x:Key="HelpTitleBrush" Color="#FF8EB8FF" />
+                    <SolidColorBrush x:Key="HelpBodyTextBrush" Color="#FFD7DCE3" />
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FFF3F3F3" />
+                    <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF5F5F5F" />
+                    <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="#FF323232" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPressedBrush" Color="#FFE5E5E5" />
+                    <SolidColorBrush x:Key="NavigationButtonBrush" Color="#0F000000" />
+                    <SolidColorBrush x:Key="NavigationButtonPointerOverBrush" Color="#16000000" />
+                    <SolidColorBrush x:Key="NavigationButtonPressedBrush" Color="#24000000" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledBrush" Color="#08000000" />
+                    <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#E4000000" />
+                    <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#E4000000" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#61000000" />
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#F2FFFFFF" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#ECFFFFFF" />
+                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#FAFFFFFF" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#E3FFFFFF" />
+                    <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#E6F3F3F3" />
+                    <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#FAFFFFFF" />
+                    <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="#33000000" />
+                    <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="#FF1B1B1B" />
+                    <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="#FF5D5D5D" />
+                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="#70FFFFFF" />
+                    <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="#FF707070" />
+                    <SolidColorBrush x:Key="WarningTextBrush" Color="#FF8A4F00" />
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFB3261E" />
+                    <SolidColorBrush x:Key="FileLoggingEnabledTextBrush" Color="#FF287D3C" />
+                    <SolidColorBrush x:Key="FileLoggingDisabledTextBrush" Color="#FFB32D1E" />
+                    <SolidColorBrush x:Key="HelpWarningBackgroundBrush" Color="#12B3261E" />
+                    <SolidColorBrush x:Key="HelpWarningBorderBrush" Color="#FFB3261E" />
+                    <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="#FFA4261D" />
+                    <SolidColorBrush x:Key="HelpWarningTextBrush" Color="#FF5F1712" />
+                    <SolidColorBrush x:Key="HelpAccentBrush" Color="#FF0067C0" />
+                    <SolidColorBrush x:Key="HelpTitleBrush" Color="#FF005A9E" />
+                    <SolidColorBrush x:Key="HelpBodyTextBrush" Color="#FF303030" />
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="CompactCheckBoxPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonPointerOverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                    <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="LogRestoreCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="WarningTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="FileLoggingEnabledTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="FileLoggingDisabledTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HelpWarningBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="HelpWarningBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HelpWarningTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HelpAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="HelpTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HelpBodyTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

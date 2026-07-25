@@ -6,13 +6,84 @@
   <title>Serial Monitor xterm Log View</title>
   <link rel="stylesheet" href="./xterm.css">
   <style>
+    :root {
+      color-scheme: dark light;
+      --page-background: #0c0d0e;
+      --page-foreground: #d6d6d6;
+      --selection-background: #375a7f;
+      --selection-foreground: #ffffff;
+      --scrollbar-thumb: #3a3a3a;
+      --overlay-foreground: #f2f2f2;
+      --overlay-detail: #c8cdd2;
+      --card-background: #16181a;
+      --card-border: #3a3d42;
+      --menu-background: #18191a;
+      --menu-hover: #2d2f31;
+      --menu-disabled: #6b6d70;
+      --menu-separator: #303234;
+      --menu-shadow: rgba(0, 0, 0, 0.45);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --page-background: #ffffff;
+        --page-foreground: #1b1b1b;
+        --selection-background: #add6ff;
+        --selection-foreground: #000000;
+        --scrollbar-thumb: #a0a0a0;
+        --overlay-foreground: #1b1b1b;
+        --overlay-detail: #5d5d5d;
+        --card-background: #ffffff;
+        --card-border: #c7c7c7;
+        --menu-background: #ffffff;
+        --menu-hover: #e9e9e9;
+        --menu-disabled: #8a8a8a;
+        --menu-separator: #d6d6d6;
+        --menu-shadow: rgba(0, 0, 0, 0.20);
+      }
+    }
+
+    @media (forced-colors: active) {
+      :root {
+        color-scheme: light dark;
+        --page-background: Canvas;
+        --page-foreground: CanvasText;
+        --selection-background: Highlight;
+        --selection-foreground: HighlightText;
+        --scrollbar-thumb: ButtonText;
+        --overlay-foreground: CanvasText;
+        --overlay-detail: CanvasText;
+        --card-background: Canvas;
+        --card-border: CanvasText;
+        --menu-background: Canvas;
+        --menu-hover: Highlight;
+        --menu-disabled: GrayText;
+        --menu-separator: CanvasText;
+        --menu-shadow: none;
+      }
+
+      html,
+      body,
+      #terminal,
+      .xterm,
+      #restoreOverlay,
+      #contextMenu,
+      #contextMenu button {
+        forced-color-adjust: none;
+      }
+
+      #contextMenu button:hover:not(:disabled) {
+        color: HighlightText;
+      }
+    }
+
     html,
     body {
       width: 100%;
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     body {
@@ -24,7 +95,7 @@
       position: absolute;
       inset: 0;
       overflow: hidden;
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     .xterm {
@@ -32,33 +103,33 @@
       height: 100%;
       box-sizing: border-box;
       overflow: hidden;
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     .xterm .xterm-viewport {
-      background-color: #0c0d0e !important;
-      scrollbar-color: #3a3a3a #0c0d0e;
+      background-color: var(--page-background) !important;
+      scrollbar-color: var(--scrollbar-thumb) var(--page-background);
       scrollbar-width: thin;
     }
 
     .xterm .xterm-viewport::-webkit-scrollbar {
       width: 10px;
       height: 10px;
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     .xterm .xterm-viewport::-webkit-scrollbar-track {
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     .xterm .xterm-viewport::-webkit-scrollbar-thumb {
-      background: #3a3a3a;
-      border: 2px solid #0c0d0e;
+      background: var(--scrollbar-thumb);
+      border: 2px solid var(--page-background);
     }
 
     .xterm .xterm-viewport::-webkit-scrollbar-corner,
     ::-webkit-scrollbar-corner {
-      background: #0c0d0e;
+      background: var(--page-background);
     }
 
     #restoreOverlay {
@@ -68,9 +139,9 @@
       display: none;
       align-items: center;
       justify-content: center;
-      background: #0c0d0e;
+      background: var(--page-background);
       font-family: "Segoe UI", sans-serif;
-      color: #f2f2f2;
+      color: var(--overlay-foreground);
     }
 
     #restoreOverlay.visible {
@@ -81,8 +152,8 @@
       display: flex;
       max-width: 280px;
       padding: 14px 18px;
-      border: 1px solid #3a3d42;
-      background: #16181a;
+      border: 1px solid var(--card-border);
+      background: var(--card-background);
       flex-direction: column;
       align-items: center;
       gap: 8px;
@@ -101,7 +172,7 @@
     }
 
     #restoreOverlayDetail {
-      color: #c8cdd2;
+      color: var(--overlay-detail);
       font-size: 11px;
       text-align: center;
     }
@@ -112,12 +183,12 @@
       display: none;
       min-width: 154px;
       padding: 3px;
-      border: 1px solid #3a3a3a;
-      background: #18191a;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--card-border);
+      background: var(--menu-background);
+      box-shadow: 0 4px 16px var(--menu-shadow);
       font-family: "Segoe UI", sans-serif;
       font-size: 12px;
-      color: #d6d6d6;
+      color: var(--page-foreground);
       user-select: none;
     }
 
@@ -129,23 +200,23 @@
       padding: 0 8px;
       border: 0;
       background: transparent;
-      color: #d6d6d6;
+      color: var(--page-foreground);
       font: inherit;
       text-align: left;
     }
 
     #contextMenu button:hover:not(:disabled) {
-      background: #2d2f31;
+      background: var(--menu-hover);
     }
 
     #contextMenu button:disabled {
-      color: #6b6d70;
+      color: var(--menu-disabled);
     }
 
     #contextMenu .separator {
       height: 1px;
       margin: 3px 4px;
-      background: #303234;
+      background: var(--menu-separator);
     }
   </style>
 </head>
@@ -172,6 +243,150 @@
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
   <script>
+    const darkTerminalTheme = {
+      background: '#0c0d0e',
+      foreground: '#d6d6d6',
+      selectionBackground: '#375a7f',
+      selectionForeground: '#ffffff',
+      cursor: '#d6d6d6',
+      black: '#0c0d0e',
+      red: '#d9534f',
+      green: '#5cb85c',
+      yellow: '#f0ad4e',
+      blue: '#5bc0de',
+      magenta: '#b066d8',
+      cyan: '#5bc0de',
+      white: '#d6d6d6',
+      brightBlack: '#6b6d70',
+      brightRed: '#ff7b72',
+      brightGreen: '#8bc34a',
+      brightYellow: '#ffd166',
+      brightBlue: '#8eb8ff',
+      brightMagenta: '#d58cff',
+      brightCyan: '#7fdbff',
+      brightWhite: '#ffffff',
+      // Index 16 is automatic text for highlighted backgrounds; 17-26 are
+      // Red, Orange, Green, Yellow, Blue, Magenta, Cyan, White, Gray, Black backgrounds.
+      extendedAnsi: [
+        '#0c0d0e',
+        '#d9534f',
+        '#d16a00',
+        '#5cb85c',
+        '#f0ad4e',
+        '#5bc0de',
+        '#b066d8',
+        '#5bc0de',
+        '#d6d6d6',
+        '#808080',
+        '#7a7a7a'
+      ]
+    };
+
+    const lightTerminalTheme = {
+      background: '#ffffff',
+      foreground: '#1b1b1b',
+      selectionBackground: '#add6ff',
+      selectionForeground: '#000000',
+      cursor: '#1b1b1b',
+      black: '#1b1b1b',
+      red: '#c50f1f',
+      green: '#107c10',
+      yellow: '#765b00',
+      blue: '#005a9e',
+      magenta: '#7a1f7a',
+      cyan: '#00666f',
+      white: '#595959',
+      brightBlack: '#686868',
+      brightRed: '#a4262c',
+      brightGreen: '#0f6b2d',
+      brightYellow: '#6f5500',
+      brightBlue: '#004e8c',
+      brightMagenta: '#702070',
+      brightCyan: '#005e66',
+      brightWhite: '#242424',
+      // Keep foreground and background palettes independent in the light theme.
+      extendedAnsi: [
+        '#ffffff',
+        '#c50f1f',
+        '#9a4b00',
+        '#107c10',
+        '#765b00',
+        '#005a9e',
+        '#7a1f7a',
+        '#00666f',
+        '#595959',
+        '#686868',
+        '#1b1b1b'
+      ]
+    };
+
+    const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: light)');
+    const forcedColorsQuery = window.matchMedia('(forced-colors: active)');
+
+    const resolveSystemColor = systemColor => {
+      const probe = document.createElement('span');
+      probe.style.color = systemColor;
+      probe.style.position = 'fixed';
+      probe.style.visibility = 'hidden';
+      document.body.appendChild(probe);
+      const resolved = window.getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    };
+
+    const getHighContrastTerminalTheme = () => {
+      const background = resolveSystemColor('Canvas');
+      const foreground = resolveSystemColor('CanvasText');
+      const selectionBackground = resolveSystemColor('Highlight');
+      const selectionForeground = resolveSystemColor('HighlightText');
+
+      return {
+        background,
+        foreground,
+        selectionBackground,
+        selectionForeground,
+        cursor: foreground,
+        black: foreground,
+        red: foreground,
+        green: foreground,
+        yellow: foreground,
+        blue: foreground,
+        magenta: foreground,
+        cyan: foreground,
+        white: foreground,
+        brightBlack: foreground,
+        brightRed: foreground,
+        brightGreen: foreground,
+        brightYellow: foreground,
+        brightBlue: foreground,
+        brightMagenta: foreground,
+        brightCyan: foreground,
+        brightWhite: foreground,
+        // Use the user's selected-text pair for every highlighted background.
+        extendedAnsi: [
+          selectionForeground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground,
+          selectionBackground
+        ]
+      };
+    };
+
+    const getTerminalTheme = () => {
+      if (forcedColorsQuery.matches) {
+        return getHighContrastTerminalTheme();
+      }
+
+      return colorSchemeQuery.matches ? lightTerminalTheme : darkTerminalTheme;
+    };
+
     const terminal = new Terminal({
       allowTransparency: false,
       convertEol: true,
@@ -179,21 +394,9 @@
       disableStdin: true,
       fontFamily: 'Consolas, Cascadia Mono, Menlo, monospace',
       fontSize: 13,
+      minimumContrastRatio: 4.5,
       scrollback: 50000,
-      theme: {
-        background: '#0c0d0e',
-        foreground: '#d6d6d6',
-        selectionBackground: '#375a7f',
-        cursor: '#d6d6d6',
-        black: '#0c0d0e',
-        red: '#d9534f',
-        green: '#5cb85c',
-        yellow: '#f0ad4e',
-        blue: '#5bc0de',
-        magenta: '#b066d8',
-        cyan: '#5bc0de',
-        white: '#d6d6d6'
-      }
+      theme: getTerminalTheme()
     });
 
     const fitAddon = new FitAddon.FitAddon();
@@ -202,6 +405,22 @@
     terminal.loadAddon(searchAddon);
     terminal.open(document.getElementById('terminal'));
     fitAddon.fit();
+
+    const applyColorScheme = () => {
+      terminal.options.theme = getTerminalTheme();
+      terminal.refresh(0, Math.max(0, terminal.rows - 1));
+    };
+
+    const observeColorScheme = mediaQuery => {
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', applyColorScheme);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(applyColorScheme);
+      }
+    };
+
+    observeColorScheme(colorSchemeQuery);
+    observeColorScheme(forcedColorsQuery);
 
     const appendQueue = [];
     const replaceQueue = [];

@@ -43,6 +43,7 @@ public sealed class LogViewModel : ViewModelBase
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
     private const string AnsiGray = "\u001b[90m";
+    private const string AnsiBackgroundContrastForegroundCode = "38;5;16";
     private const string XtermLineIdentityOscPrefix = "\u001b]777;";
     private const string XtermOscTerminator = "\u0007";
     private static readonly string[] DirectionPrefixes = ["RX <", "TX >", "MARK >", "SYS"];
@@ -1171,22 +1172,21 @@ public sealed class LogViewModel : ViewModelBase
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(foregroundCode))
+        if (!TryGetAnsiColorCode(rule.BackgroundColor, isBackground: true, out var backgroundCode))
         {
-            colorCodes.Add(foregroundCode);
+            return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(rule.BackgroundColor))
+        if (!string.IsNullOrWhiteSpace(backgroundCode))
         {
-            if (!TryGetAnsiColorCode(rule.BackgroundColor, isBackground: true, out var backgroundCode))
-            {
-                return false;
-            }
-
-            if (!string.IsNullOrWhiteSpace(backgroundCode))
-            {
-                colorCodes.Add(backgroundCode);
-            }
+            colorCodes.Add(string.IsNullOrWhiteSpace(foregroundCode)
+                ? AnsiBackgroundContrastForegroundCode
+                : foregroundCode);
+            colorCodes.Add(backgroundCode);
+        }
+        else if (!string.IsNullOrWhiteSpace(foregroundCode))
+        {
+            colorCodes.Add(foregroundCode);
         }
 
         if (colorCodes.Count == 0)
@@ -1206,12 +1206,34 @@ public sealed class LogViewModel : ViewModelBase
             return true;
         }
 
-        var foregroundCode = color.Trim().ToLowerInvariant() switch
+        var normalizedColor = color.Trim().ToLowerInvariant();
+        if (isBackground)
+        {
+            ansiCode = normalizedColor switch
+            {
+                "default" or "none" => null,
+                "red" => "48;5;17",
+                "orange" => "48;5;18",
+                "green" => "48;5;19",
+                "yellow" => "48;5;20",
+                "blue" => "48;5;21",
+                "magenta" => "48;5;22",
+                "cyan" => "48;5;23",
+                "white" => "48;5;24",
+                "gray" or "grey" => "48;5;25",
+                "black" => "48;5;26",
+                _ => string.Empty
+            };
+
+            return ansiCode != string.Empty;
+        }
+
+        var foregroundCode = normalizedColor switch
         {
             "default" or "none" => null,
             "black" => "30",
             "red" => "31",
-            "orange" => isBackground ? "48;5;208" : "38;5;208",
+            "orange" => "38;5;208",
             "green" => "32",
             "yellow" => "33",
             "blue" => "34",
@@ -1239,20 +1261,7 @@ public sealed class LogViewModel : ViewModelBase
             return true;
         }
 
-        if (!isBackground)
-        {
-            ansiCode = foregroundCode;
-            return true;
-        }
-
-        if (foregroundCode.Contains(';', StringComparison.Ordinal))
-        {
-            ansiCode = foregroundCode;
-            return true;
-        }
-
-        var code = int.Parse(foregroundCode, CultureInfo.InvariantCulture);
-        ansiCode = (code + 10).ToString(CultureInfo.InvariantCulture);
+        ansiCode = foregroundCode;
         return true;
     }
 
