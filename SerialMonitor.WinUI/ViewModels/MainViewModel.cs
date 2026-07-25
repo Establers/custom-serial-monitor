@@ -3824,26 +3824,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public string AboutLicenseText => """
-        애플리케이션
-
-        Copyright © 2026 박재환.
-        이 애플리케이션은 MIT License로 배포됩니다.
-        누구나 라이선스 고지를 유지하는 조건으로 사용, 수정, 재배포 및 상업적으로 이용할 수 있습니다.
-        자세한 조건은 배포 패키지와 저장소의 LICENSE 파일을 확인하세요.
-
-        주요 서드파티 구성요소
-
-        * Microsoft Windows App SDK 1.8.260508005 — MIT License
-        * RJCP.SerialPortStream 3.0.5 — Microsoft Public License (MS-PL)
-        * xterm.js 및 xterm.js addons — MIT License
-        * .NET / System.Text.Encoding.CodePages — MIT License
-        * Microsoft Edge WebView2 Runtime — Microsoft의 해당 배포 및 사용 조건 적용
-
-        각 서드파티 구성요소의 저작권과 라이선스는 원 저작권자에게 있습니다.
-        정확한 전체 조건은 배포 패키지, NuGet 패키지 및 각 프로젝트 저장소의 라이선스 원문을 따릅니다.
-        """;
-
     public string HealthStateText
     {
         get => _healthStateText;

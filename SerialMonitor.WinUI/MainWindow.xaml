@@ -965,6 +965,9 @@
                          HorizontalAlignment="Stretch"
                          Loaded="InspectorTabView_Loaded"
                          SelectionChanged="InspectorTabView_SelectionChanged">
+                    <TabView.Resources>
+                        <Thickness x:Key="TabViewHeaderPadding">0,2,0,2</Thickness>
+                    </TabView.Resources>
                     <TabViewItem Header="Events"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Review log events detected by enabled rules.">
@@ -2605,7 +2608,7 @@
 
                     <TabViewItem Header="About"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="View the app version, author, GitHub repository, and license information.">
+                                 ToolTipService.ToolTip="View the app version, author, and GitHub repository.">
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -2656,17 +2659,6 @@
                                     </Grid>
                                 </Border>
 
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="10">
-                                    <StackPanel Spacing="5">
-                                        <TextBlock Text="License Information"
-                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                        <TextBlock Text="{Binding AboutLicenseText}"
-                                                   IsTextSelectionEnabled="True"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Style="{StaticResource CompactCellTextStyle}" />
-                                    </StackPanel>
-                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </TabViewItem>
