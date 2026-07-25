@@ -62,7 +62,6 @@ public sealed partial class MainWindow : Window
     private bool _eventAutoScrollQueued;
     private bool _isPointerOverEventList;
     private bool _xtermFitQueued;
-    private bool _rulesTableViewportResizeQueued;
     private bool _closeAllowed;
     private bool _closeCleanupStarted;
     private bool _isWindowMinimized;
@@ -487,7 +486,6 @@ public sealed partial class MainWindow : Window
     private void Root_SizeChanged(object sender, SizeChangedEventArgs args)
     {
         ApplyInspectorLayout();
-        QueueRulesTableViewportResize();
     }
 
     private void InspectorCollapseButton_Click(object sender, RoutedEventArgs args)
@@ -1764,6 +1762,7 @@ public sealed partial class MainWindow : Window
         _isXtermReady = true;
         _viewModel.SetXtermReady(true);
         await SyncXtermScrollbackSizeAsync();
+        await SyncXtermHexSelectionHintModeAsync();
         QueueXtermFit();
         if (_xtermNeedsFullRerenderAfterRestore)
         {
@@ -1780,6 +1779,11 @@ public sealed partial class MainWindow : Window
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
         {
             _ = SyncXtermScrollbackSizeAsync();
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.SelectedRxDisplayMode))
+        {
+            _ = SyncXtermHexSelectionHintModeAsync();
         }
 
         if (args.PropertyName == nameof(MainViewModel.IsAutoScrollEnabled) &&
@@ -2689,6 +2693,35 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task<bool> SyncXtermHexSelectionHintModeAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed)
+        {
+            return false;
+        }
+
+        try
+        {
+            var enabled = _viewModel.SelectedRxDisplayMode == RxDisplayMode.Hex
+                ? "true"
+                : "false";
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorSetHexSelectionHintEnabled && window.serialMonitorSetHexSelectionHintEnabled({enabled});");
+            if (TryParseScriptBoolean(result) == true)
+            {
+                return true;
+            }
+
+            _viewModel.RecordXtermLayoutError("xterm HEX selection length hint mode update was rejected.");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm HEX selection length hint mode update failed: {ex.Message}");
+            return false;
+        }
+    }
+
     private async Task ScrollXtermToBottomAsync(string action)
     {
         if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
@@ -3081,59 +3114,18 @@ public sealed partial class MainWindow : Window
         QueueXtermFit();
     }
 
-    private void RulesTableScrollViewer_Loaded(object sender, RoutedEventArgs args)
+    private void InspectorTabView_Loaded(object sender, RoutedEventArgs args)
     {
-        QueueRulesTableViewportResize();
-    }
-
-    private void RulesTableScrollViewer_SizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        QueueRulesTableViewportResize();
-    }
-
-    private void RulesTableBodyBorder_SizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        QueueRulesTableViewportResize();
-    }
-
-    private void QueueRulesTableViewportResize()
-    {
-        if (_rulesTableViewportResizeQueued || IsClosingOrClosed)
+        var contentPresenter = FindVisualDescendant<ContentPresenter>(
+            InspectorTabView,
+            "TabContentPresenter");
+        if (contentPresenter is null)
         {
             return;
         }
 
-        _rulesTableViewportResizeQueued = true;
-        if (!DispatcherQueue.TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () =>
-                {
-                    _rulesTableViewportResizeQueued = false;
-                    UpdateRulesTableViewportHeight();
-                }))
-        {
-            _rulesTableViewportResizeQueued = false;
-        }
-    }
-
-    private void UpdateRulesTableViewportHeight()
-    {
-        var viewportHeight = RulesTableScrollViewer.ViewportHeight;
-        if (!double.IsFinite(viewportHeight) || viewportHeight <= 0)
-        {
-            viewportHeight = RulesTableScrollViewer.ActualHeight;
-        }
-
-        if (!double.IsFinite(viewportHeight) || viewportHeight <= 0)
-        {
-            return;
-        }
-
-        if (Math.Abs(RulesTableViewportGrid.Height - viewportHeight) > 0.5 ||
-            double.IsNaN(RulesTableViewportGrid.Height))
-        {
-            RulesTableViewportGrid.Height = viewportHeight;
-        }
+        contentPresenter.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        contentPresenter.VerticalContentAlignment = VerticalAlignment.Stretch;
     }
 
     private void ApplyHexGroupTimeout_Click(object sender, RoutedEventArgs args)
@@ -3266,7 +3258,6 @@ public sealed partial class MainWindow : Window
             {
                 InspectorTabView.UpdateLayout();
                 RulesTabViewItem.UpdateLayout();
-                QueueRulesTableViewportResize();
             }
 
             QueueXtermFit();
@@ -4701,6 +4692,28 @@ public sealed partial class MainWindow : Window
         }
 
         return false;
+    }
+
+    private static T? FindVisualDescendant<T>(DependencyObject parent, string name)
+        where T : FrameworkElement
+    {
+        var childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (var index = 0; index < childCount; index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T matchingChild && matchingChild.Name == name)
+            {
+                return matchingChild;
+            }
+
+            var descendant = FindVisualDescendant<T>(child, name);
+            if (descendant is not null)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
     }
 
     private static EventRule CloneEventRule(EventRule rule)

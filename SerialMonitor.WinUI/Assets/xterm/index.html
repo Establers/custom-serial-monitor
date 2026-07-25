@@ -22,6 +22,10 @@
       --menu-disabled: #6b6d70;
       --menu-separator: #303234;
       --menu-shadow: rgba(0, 0, 0, 0.45);
+      --selection-hint-background: #25282c;
+      --selection-hint-foreground: #f3f3f3;
+      --selection-hint-border: #555a61;
+      --selection-hint-shadow: rgba(0, 0, 0, 0.35);
     }
 
     @media (prefers-color-scheme: light) {
@@ -40,6 +44,10 @@
         --menu-disabled: #8a8a8a;
         --menu-separator: #d6d6d6;
         --menu-shadow: rgba(0, 0, 0, 0.20);
+        --selection-hint-background: #f7f7f7;
+        --selection-hint-foreground: #1b1b1b;
+        --selection-hint-border: #a8a8a8;
+        --selection-hint-shadow: rgba(0, 0, 0, 0.18);
       }
     }
 
@@ -60,6 +68,10 @@
         --menu-disabled: GrayText;
         --menu-separator: CanvasText;
         --menu-shadow: none;
+        --selection-hint-background: Canvas;
+        --selection-hint-foreground: CanvasText;
+        --selection-hint-border: CanvasText;
+        --selection-hint-shadow: none;
       }
 
       html,
@@ -68,7 +80,8 @@
       .xterm,
       #restoreOverlay,
       #contextMenu,
-      #contextMenu button {
+      #contextMenu button,
+      #hexSelectionHint {
         forced-color-adjust: none;
       }
 
@@ -218,6 +231,25 @@
       margin: 3px 4px;
       background: var(--menu-separator);
     }
+
+    #hexSelectionHint {
+      position: fixed;
+      z-index: 15000;
+      display: none;
+      padding: 3px 7px;
+      border: 1px solid var(--selection-hint-border);
+      border-radius: 3px;
+      background: var(--selection-hint-background);
+      box-shadow: 0 2px 8px var(--selection-hint-shadow);
+      color: var(--selection-hint-foreground);
+      font-family: "Segoe UI", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 16px;
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -239,6 +271,7 @@
     <button type="button" data-action="quickMarker">Quick marker</button>
     <button type="button" data-action="searchSelected" data-requires-selection="true">Search selected text</button>
   </div>
+  <div id="hexSelectionHint" aria-hidden="true"></div>
   <script src="./xterm.js"></script>
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
@@ -432,7 +465,17 @@
     let appendWriting = false;
     let replaceWriting = false;
     let contextMenuSelection = '';
+    let hexSelectionHintEnabled = false;
+    let pointerSelectionGesture = false;
+    let selectionPointerX = 0;
+    let selectionPointerY = 0;
+    let hexSelectionHintIdentity = '';
+    let hexSelectionHintUpdateFrame = 0;
+    let forcePendingHexSelectionHintUpdate = false;
+    const maxLiveHexSelectionRows = 2000;
     const contextMenu = document.getElementById('contextMenu');
+    const terminalElement = document.getElementById('terminal');
+    const hexSelectionHint = document.getElementById('hexSelectionHint');
     const restoreOverlay = document.getElementById('restoreOverlay');
     const restoreOverlayTitle = document.getElementById('restoreOverlayTitle');
     const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
@@ -748,9 +791,157 @@
       contextMenu.setAttribute('aria-hidden', 'true');
     }
 
+    function hideHexSelectionHint() {
+      cancelQueuedHexSelectionHintUpdate();
+      hexSelectionHint.style.display = 'none';
+      hexSelectionHint.setAttribute('aria-hidden', 'true');
+    }
+
+    function cancelQueuedHexSelectionHintUpdate() {
+      if (hexSelectionHintUpdateFrame) {
+        window.cancelAnimationFrame(hexSelectionHintUpdateFrame);
+        hexSelectionHintUpdateFrame = 0;
+      }
+      forcePendingHexSelectionHintUpdate = false;
+    }
+
+    function getHexSelectionIdentity(position) {
+      return position ? JSON.stringify(position) : '';
+    }
+
+    function countHexBytesInSelectedLine(selectedLine) {
+      let byteCount = 0;
+      let candidate = selectedLine;
+      // The selection can start in the middle of a timestamp. In that case
+      // the remaining "] RX <" / "] TX >" marker still identifies payload.
+      const packetMetadata = /(?:^|]\s*)(?:RX\s*<|TX\s*>)(?:\s|$)/i.exec(candidate);
+      if (packetMetadata) {
+        candidate = candidate.slice(packetMetadata.index + packetMetadata[0].length);
+      } else {
+        // A drag can begin inside the short RX/TX prefix rather than at the
+        // start of the row (for example "X < AA 55").
+        candidate = candidate.replace(
+          /^\s*(?:(?:R?X\s*)?<|(?:T?X\s*)?>)\s*/i,
+          '');
+
+        // Without a full log prefix, accept only a plain HEX fragment. This
+        // prevents standalone numbers in SYS or Terminal text from counting.
+        if (!/^\s*(?:[0-9a-f]{0,2}\s+)*[0-9a-f]{0,2}\s*$/i.test(candidate)) {
+          return 0;
+        }
+      }
+
+      const bytePattern = /(?:^|\s)[0-9a-f]{2}(?=\s|$)/gi;
+      while (bytePattern.exec(candidate)) {
+        byteCount++;
+      }
+
+      return byteCount;
+    }
+
+    function countHexBytesInSelection(selectedText) {
+      const text = String(selectedText || '');
+      let byteCount = 0;
+      let lineStart = 0;
+      while (lineStart <= text.length) {
+        let lineEnd = lineStart;
+        while (lineEnd < text.length && text.charCodeAt(lineEnd) !== 10 && text.charCodeAt(lineEnd) !== 13) {
+          lineEnd++;
+        }
+
+        byteCount += countHexBytesInSelectedLine(text.slice(lineStart, lineEnd));
+        if (lineEnd >= text.length) {
+          break;
+        }
+
+        if (text.charCodeAt(lineEnd) === 13 && text.charCodeAt(lineEnd + 1) === 10) {
+          lineEnd++;
+        }
+        lineStart = lineEnd + 1;
+      }
+
+      return byteCount;
+    }
+
+    function positionHexSelectionHint() {
+      const margin = 6;
+      const offsetX = 12;
+      const offsetY = 16;
+      const width = hexSelectionHint.offsetWidth;
+      const height = hexSelectionHint.offsetHeight;
+      let left = selectionPointerX + offsetX;
+      let top = selectionPointerY + offsetY;
+
+      if (left + width > window.innerWidth - margin) {
+        left = selectionPointerX - width - offsetX;
+      }
+      if (top + height > window.innerHeight - margin) {
+        top = selectionPointerY - height - offsetY;
+      }
+
+      hexSelectionHint.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - width - margin))}px`;
+      hexSelectionHint.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - height - margin))}px`;
+    }
+
+    function showHexSelectionHint(text) {
+      hexSelectionHint.textContent = text;
+      hexSelectionHint.style.display = 'block';
+      hexSelectionHint.setAttribute('aria-hidden', 'false');
+      positionHexSelectionHint();
+    }
+
+    function updateHexSelectionHint(forceUpdate) {
+      if (!hexSelectionHintEnabled || (!pointerSelectionGesture && !forceUpdate)) {
+        return;
+      }
+
+      const selectionPosition = terminal.getSelectionPosition();
+      hexSelectionHintIdentity = getHexSelectionIdentity(selectionPosition);
+      if (!selectionPosition) {
+        hideHexSelectionHint();
+        return;
+      }
+
+      const selectedRowCount = Math.abs(selectionPosition.end.y - selectionPosition.start.y) + 1;
+      if (!forceUpdate && selectedRowCount > maxLiveHexSelectionRows) {
+        showHexSelectionHint('Len : …');
+        return;
+      }
+
+      // getSelection can allocate a very large string. Call it only once for
+      // the coalesced frame, and only after the live-size guard above.
+      const selectedText = terminal.getSelection();
+      const byteCount = countHexBytesInSelection(selectedText);
+      if (byteCount <= 0) {
+        hideHexSelectionHint();
+        return;
+      }
+
+      showHexSelectionHint(`Len : ${byteCount}`);
+    }
+
+    function queueHexSelectionHintUpdate(forceUpdate = false) {
+      if (!hexSelectionHintEnabled || (!pointerSelectionGesture && !forceUpdate)) {
+        return;
+      }
+
+      forcePendingHexSelectionHintUpdate ||= forceUpdate;
+      if (hexSelectionHintUpdateFrame) {
+        return;
+      }
+
+      hexSelectionHintUpdateFrame = window.requestAnimationFrame(() => {
+        hexSelectionHintUpdateFrame = 0;
+        const shouldForce = forcePendingHexSelectionHintUpdate;
+        forcePendingHexSelectionHintUpdate = false;
+        updateHexSelectionHint(shouldForce);
+      });
+    }
+
     function showContextMenu(event) {
       event.preventDefault();
       event.stopPropagation();
+      hideHexSelectionHint();
 
       contextMenuSelection = terminal.getSelection() || '';
       const hasSelection = contextMenuSelection.length > 0;
@@ -786,6 +977,8 @@
     };
 
     window.serialMonitorBeginReplaceLog = function () {
+      hideHexSelectionHint();
+      pointerSelectionGesture = false;
       appendQueue.length = 0;
       appendQueueHead = 0;
       replaceQueue.length = 0;
@@ -854,6 +1047,8 @@
     };
 
     window.serialMonitorClear = function () {
+      hideHexSelectionHint();
+      pointerSelectionGesture = false;
       appendQueue.length = 0;
       appendQueueHead = 0;
       replaceQueue.length = 0;
@@ -872,6 +1067,16 @@
 
       terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
       trimParsedLogLineIds();
+      return true;
+    };
+
+    window.serialMonitorSetHexSelectionHintEnabled = function (enabled) {
+      hexSelectionHintEnabled = !!enabled;
+      if (!hexSelectionHintEnabled) {
+        pointerSelectionGesture = false;
+        hideHexSelectionHint();
+      }
+
       return true;
     };
 
@@ -1165,6 +1370,62 @@
 
     document.addEventListener('contextmenu', showContextMenu, true);
 
+    terminal.onSelectionChange(() => {
+      if (pointerSelectionGesture) {
+        queueHexSelectionHintUpdate();
+      } else if (!forcePendingHexSelectionHintUpdate &&
+                 getHexSelectionIdentity(terminal.getSelectionPosition()) !== hexSelectionHintIdentity) {
+        hideHexSelectionHint();
+      }
+    });
+
+    terminalElement.addEventListener('pointerdown', event => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      pointerSelectionGesture = hexSelectionHintEnabled;
+      selectionPointerX = event.clientX;
+      selectionPointerY = event.clientY;
+      hideHexSelectionHint();
+    }, true);
+
+    document.addEventListener('pointermove', event => {
+      if (!pointerSelectionGesture) {
+        return;
+      }
+
+      // If the button was released outside the WebView, its document may not
+      // receive pointerup. The first move back inside reports no primary button.
+      if ((event.buttons & 1) === 0) {
+        pointerSelectionGesture = false;
+        hideHexSelectionHint();
+        return;
+      }
+
+      selectionPointerX = event.clientX;
+      selectionPointerY = event.clientY;
+      queueHexSelectionHintUpdate();
+    }, true);
+
+    document.addEventListener('pointerup', event => {
+      if (!pointerSelectionGesture || event.button !== 0) {
+        return;
+      }
+
+      selectionPointerX = event.clientX;
+      selectionPointerY = event.clientY;
+      window.setTimeout(() => {
+        pointerSelectionGesture = false;
+        queueHexSelectionHintUpdate(true);
+      }, 0);
+    }, true);
+
+    document.addEventListener('pointercancel', () => {
+      pointerSelectionGesture = false;
+      hideHexSelectionHint();
+    }, true);
+
     contextMenu.addEventListener('pointerdown', event => {
       event.stopPropagation();
     });
@@ -1186,8 +1447,15 @@
       }
     }, true);
 
-    document.addEventListener('scroll', hideContextMenu, true);
-    window.addEventListener('blur', hideContextMenu);
+    document.addEventListener('scroll', () => {
+      hideContextMenu();
+      hideHexSelectionHint();
+    }, true);
+    window.addEventListener('blur', () => {
+      hideContextMenu();
+      hideHexSelectionHint();
+      pointerSelectionGesture = false;
+    });
     // TODO: Add optional "Save visible buffer to file" after a file-picker bridge is needed.
   </script>
 </body>

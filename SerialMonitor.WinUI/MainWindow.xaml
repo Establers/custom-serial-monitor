@@ -932,6 +932,7 @@
                          CanDragTabs="False"
                          TabWidthMode="SizeToContent"
                          HorizontalAlignment="Stretch"
+                         Loaded="InspectorTabView_Loaded"
                          SelectionChanged="InspectorTabView_SelectionChanged">
                     <TabViewItem Header="Events"
                                  IsClosable="False"
@@ -1349,8 +1350,7 @@
                             <Border x:Name="RulesTableBodyBorder"
                                     Grid.Row="1"
                                     MinHeight="0"
-                                    Style="{StaticResource InspectorTabBodyBorderStyle}"
-                                    SizeChanged="RulesTableBodyBorder_SizeChanged">
+                                    Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <ScrollViewer x:Name="RulesTableScrollViewer"
                                               HorizontalScrollBarVisibility="Auto"
                                               VerticalScrollBarVisibility="Disabled"
@@ -1358,11 +1358,10 @@
                                               VerticalScrollMode="Disabled"
                                               IsHorizontalRailEnabled="True"
                                               MinHeight="0"
-                                              VerticalAlignment="Stretch"
-                                              Loaded="RulesTableScrollViewer_Loaded"
-                                              SizeChanged="RulesTableScrollViewer_SizeChanged">
-                                    <Grid x:Name="RulesTableViewportGrid"
-                                          MinWidth="728"
+                                              HorizontalContentAlignment="Stretch"
+                                              VerticalContentAlignment="Stretch"
+                                              VerticalAlignment="Stretch">
+                                    <Grid MinWidth="728"
                                           RowDefinitions="Auto,*"
                                           MinHeight="0">
                                         <Border Grid.Row="0"
