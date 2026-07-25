@@ -5,6 +5,10 @@
     xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
     Title="Serial Monitor">
 
+    <Window.SystemBackdrop>
+        <MicaBackdrop Kind="BaseAlt" />
+    </Window.SystemBackdrop>
+
     <Grid x:Name="Root"
           Background="{ThemeResource AppBackgroundBrush}"
           Padding="4"
@@ -87,7 +91,7 @@
                                 Width="14"
                                 Height="14"
                                 BorderThickness="1"
-                                CornerRadius="2"
+                                CornerRadius="3"
                                 BorderBrush="{ThemeResource CompactCheckBoxBorderBrush}"
                                 Background="{ThemeResource CompactCheckBoxFillBrush}"
                                 HorizontalAlignment="Center"
@@ -122,6 +126,8 @@
                         Value="5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -136,6 +142,8 @@
                         Value="5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -148,6 +156,8 @@
                         Value="5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="VerticalContentAlignment"
                         Value="Center" />
             </Style>
@@ -188,6 +198,8 @@
                         Value="86" />
                 <Setter Property="Padding"
                         Value="6,0" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="HorizontalContentAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -205,6 +217,8 @@
                         Value="2,0" />
                 <Setter Property="FontSize"
                         Value="11" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
             </Style>
             <ControlTemplate x:Key="NavigationIconButtonTemplate"
                              TargetType="Button">
@@ -295,6 +309,8 @@
                         Value="5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -310,6 +326,8 @@
                         Value="5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -357,11 +375,11 @@
                 <Setter Property="Background"
                         Value="{ThemeResource CompactSurfaceBrush}" />
                 <Setter Property="BorderBrush"
-                        Value="{ThemeResource SystemControlForegroundBaseLowBrush}" />
+                        Value="{ThemeResource AppSurfaceBorderBrush}" />
                 <Setter Property="BorderThickness"
                         Value="1" />
                 <Setter Property="CornerRadius"
-                        Value="4" />
+                        Value="5" />
                 <Setter Property="Padding"
                         Value="3" />
             </Style>
@@ -410,11 +428,11 @@
                 <Setter Property="Background"
                         Value="{ThemeResource InspectorSectionBrush}" />
                 <Setter Property="BorderBrush"
-                        Value="{ThemeResource SystemControlForegroundBaseLowBrush}" />
+                        Value="{ThemeResource AppSurfaceBorderBrush}" />
                 <Setter Property="BorderThickness"
                         Value="1" />
                 <Setter Property="CornerRadius"
-                        Value="3" />
+                        Value="4" />
                 <Setter Property="Padding"
                         Value="2" />
                 <Setter Property="MinHeight"
@@ -426,7 +444,7 @@
                 <Setter Property="Background"
                         Value="{ThemeResource InspectorHeaderBrush}" />
                 <Setter Property="CornerRadius"
-                        Value="3" />
+                        Value="4" />
                 <Setter Property="Padding"
                         Value="4,1" />
                 <Setter Property="MinHeight"
@@ -466,6 +484,8 @@
                         Value="24" />
                 <Setter Property="Padding"
                         Value="2,0" />
+                <Setter Property="CornerRadius"
+                        Value="3" />
             </Style>
             <Style x:Key="RuleActionButtonStyle"
                    TargetType="Button">
@@ -479,6 +499,8 @@
                         Value="3,0" />
                 <Setter Property="FontSize"
                         Value="11" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
             </Style>
             <Style x:Key="RuleCheckBoxStyle"
                    TargetType="CheckBox">
@@ -509,6 +531,10 @@
                         Value="7,0" />
                 <Setter Property="FontSize"
                         Value="11" />
+                <Setter Property="CornerRadius"
+                        Value="6" />
+                <Setter Property="Background"
+                        Value="{ThemeResource AppAccentTintBrush}" />
             </Style>
             <Style x:Key="SettingLabelTextStyle"
                    TargetType="TextBlock">
@@ -583,6 +609,7 @@
         </Grid.RowDefinitions>
 
         <Grid Grid.RowSpan="5"
+              Margin="-4"
               IsHitTestVisible="False"
               Opacity="{Binding CuteBackgroundLayerOpacity}">
             <Image x:Name="CuteBackgroundImage"
@@ -655,22 +682,7 @@
                     <TextBlock x:Name="FileLoggingToggleTextBlock"
                                Text="{Binding FileLoggingToggleText}"
                                FontWeight="Bold"
-                               Foreground="{ThemeResource FileLoggingDisabledTextBrush}">
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="FileLoggingStates">
-                                <VisualState x:Name="FileLoggingDisabled" />
-                                <VisualState x:Name="FileLoggingEnabled">
-                                    <VisualState.StateTriggers>
-                                        <StateTrigger IsActive="{Binding FileLoggingEnabled}" />
-                                    </VisualState.StateTriggers>
-                                    <VisualState.Setters>
-                                        <Setter Target="FileLoggingToggleTextBlock.Foreground"
-                                                Value="{ThemeResource FileLoggingEnabledTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </TextBlock>
+                               Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
                 </Button>
 
                 <Grid Grid.Column="6"
@@ -722,11 +734,13 @@
 
         <Grid x:Name="MainContentGrid"
               Grid.Row="1"
-              RowSpacing="4"
+              RowSpacing="0"
               ColumnSpacing="0">
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="ContentLogRow"
                                Height="2*" />
+                <RowDefinition x:Name="ContentResizeHandleRow"
+                               Height="6" />
                 <RowDefinition x:Name="ContentInspectorRow"
                                Height="*" />
             </Grid.RowDefinitions>
@@ -874,10 +888,23 @@
                     </Grid>
                 </Border>
 
-                <WebView2 x:Name="XtermLogWebView"
-                          Grid.Row="1"
-                          MinHeight="150"
-                          SizeChanged="XtermLogWebView_SizeChanged" />
+                <Border x:Name="XtermLogSurface"
+                        Grid.Row="1"
+                        Background="{ThemeResource XtermSurfaceBrush}"
+                        CornerRadius="4,4,0,0">
+                    <WebView2 x:Name="XtermLogWebView"
+                              MinHeight="150"
+                              SizeChanged="XtermLogWebView_SizeChanged" />
+                </Border>
+
+                <Border x:Name="XtermResizeShield"
+                        Grid.Row="1"
+                        Height="0"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource XtermSurfaceBrush}"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False"
+                        Canvas.ZIndex="5" />
 
                 <Border x:Name="LogRestoreOverlay"
                         Grid.Row="1"
@@ -919,15 +946,19 @@
             </Grid>
 
             <Grid x:Name="InspectorPanel"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   Grid.Column="0"
-                  Background="{ThemeResource InspectorBackdropBrush}"
+                  Background="Transparent"
                   RowSpacing="0"
                   RowDefinitions="*"
                   MinHeight="160">
+                <Border Grid.Row="0"
+                        Background="{ThemeResource InspectorBackdropBrush}"
+                        CornerRadius="5"
+                        IsHitTestVisible="False" />
                 <TabView x:Name="InspectorTabView"
                          Grid.Row="0"
-                         Margin="0,0,28,0"
+                         Margin="0"
                          IsAddTabButtonVisible="False"
                          CanDragTabs="False"
                          TabWidthMode="SizeToContent"
@@ -1756,22 +1787,7 @@
                                                 <TextBlock x:Name="FileLoggingSettingsToggleTextBlock"
                                                            Text="{Binding FileLoggingToggleText}"
                                                            FontWeight="Bold"
-                                                           Foreground="{ThemeResource FileLoggingDisabledTextBrush}">
-                                                    <VisualStateManager.VisualStateGroups>
-                                                        <VisualStateGroup x:Name="FileLoggingSettingsStates">
-                                                            <VisualState x:Name="FileLoggingSettingsDisabled" />
-                                                            <VisualState x:Name="FileLoggingSettingsEnabled">
-                                                                <VisualState.StateTriggers>
-                                                                    <StateTrigger IsActive="{Binding FileLoggingEnabled}" />
-                                                                </VisualState.StateTriggers>
-                                                                <VisualState.Setters>
-                                                                    <Setter Target="FileLoggingSettingsToggleTextBlock.Foreground"
-                                                                            Value="{ThemeResource FileLoggingEnabledTextBrush}" />
-                                                                </VisualState.Setters>
-                                                            </VisualState>
-                                                        </VisualStateGroup>
-                                                    </VisualStateManager.VisualStateGroups>
-                                                </TextBlock>
+                                                           Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
                                             </Button>
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
@@ -2656,24 +2672,46 @@
                     </TabViewItem>
                 </TabView>
             </Grid>
-            <Button x:Name="InspectorCollapseButton"
-                    Grid.Row="1"
-                    Grid.Column="0"
-                    Margin="0,3,2,0"
-                    Padding="0"
-                    Style="{StaticResource NavigationIconButtonStyle}"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Canvas.ZIndex="20"
-                    Click="InspectorCollapseButton_Click"
-                    AutomationProperties.Name="Collapse inspector menu"
-                    ToolTipService.ToolTip="Collapse inspector menu">
-                <FontIcon x:Name="InspectorCollapseGlyph"
-                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                          FontSize="12"
-                          UseLayoutRounding="False"
-                          Glyph="&#xE70D;" />
-            </Button>
+
+            <Grid Grid.Row="1"
+                  Grid.Column="0"
+                  Background="{ThemeResource CompactSurfaceBrush}"
+                  IsHitTestVisible="False">
+                <Border BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
+                        BorderThickness="0,1,0,1" />
+                <Border Width="36"
+                        Height="2"
+                        Background="{ThemeResource NavigationButtonForegroundBrush}"
+                        CornerRadius="1"
+                        Opacity="0.28"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+            </Grid>
+
+            <infra:ResizeHandleControl x:Name="InspectorResizeHandle"
+                                       Grid.Row="1"
+                                       Grid.Column="0"
+                                       Height="20"
+                                       VerticalAlignment="Bottom"
+                                       Canvas.ZIndex="30"
+                                       IsTabStop="False"
+                                       PointerPressed="InspectorResizeHandle_PointerPressed"
+                                       PointerMoved="InspectorResizeHandle_PointerMoved"
+                                       PointerReleased="InspectorResizeHandle_PointerReleased"
+                                       PointerCaptureLost="InspectorResizeHandle_PointerCaptureLost"
+                                       AutomationProperties.Name="Resize inspector panel"
+                                       AutomationProperties.HelpText="Drag to resize. Double-click to collapse or restore."
+                                       ToolTipService.ToolTip="Drag to resize. Double-click to collapse or restore.">
+                <infra:ResizeHandleControl.Template>
+                    <ControlTemplate TargetType="infra:ResizeHandleControl">
+                        <Grid Background="Transparent">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Grid>
+                    </ControlTemplate>
+                </infra:ResizeHandleControl.Template>
+            </infra:ResizeHandleControl>
         </Grid>
 
         <Border Grid.Row="2"

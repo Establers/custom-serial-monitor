@@ -10,7 +10,10 @@
 
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FF0C0D0E" />
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#E60A0F18" />
+                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="AppAccentTintBrush" Color="#245B8DEF" />
+                    <SolidColorBrush x:Key="XtermSurfaceBrush" Color="#FF0C0D0E" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF7A7A7A" />
                     <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="#FF101010" />
                     <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="#FFB8B8B8" />
@@ -22,10 +25,10 @@
                     <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#7FFFFFFF" />
-                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#D90C0D0E" />
-                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#D90C0D0E" />
-                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#EE0C0D0E" />
-                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#C90C0D0E" />
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#D9121823" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#CC121823" />
+                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#F01A2230" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#B80E141E" />
                     <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FF0C0D0E" />
                     <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#DD0C0D0E" />
                     <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#D916181A" />
@@ -48,7 +51,10 @@
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FFF3F3F3" />
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#EAF3F6FA" />
+                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="#180F172A" />
+                    <SolidColorBrush x:Key="AppAccentTintBrush" Color="#160067C0" />
+                    <SolidColorBrush x:Key="XtermSurfaceBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF5F5F5F" />
                     <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="#FF323232" />
@@ -60,10 +66,10 @@
                     <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#61000000" />
-                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#F2FFFFFF" />
-                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#ECFFFFFF" />
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#EFFFFFFF" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#E8FFFFFF" />
                     <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#FAFFFFFF" />
-                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#E3FFFFFF" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#DFFFFFFF" />
                     <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#E6F3F3F3" />
                     <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#FAFFFFFF" />
@@ -87,6 +93,9 @@
 
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="AppAccentTintBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="XtermSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="CompactCheckBoxFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="CompactCheckBoxPointerOverBrush" Color="{ThemeResource SystemColorHighlightColor}" />

@@ -95,6 +95,28 @@ public sealed partial class MainWindow : Window
     private string? _cachedCuteBackgroundPath;
     private BitmapImage? _cachedCuteBackgroundImage;
     private bool _isInspectorCollapsed;
+    private bool _isInspectorResizeDragging;
+    private bool _inspectorResizeMoved;
+    private double _inspectorResizeStartX;
+    private double _inspectorResizeStartY;
+    private double _inspectorResizeStartHeight;
+    private double _inspectorResizeStartXtermHeight;
+    private double _minimumXtermHeightDuringResize;
+    private double _pendingInspectorResizeHeight;
+    private double _liveInspectorResizeHeight = double.NaN;
+    private double _lastExpandedInspectorHeight = double.NaN;
+    private long _lastInspectorClickTimestamp;
+    private uint _lastInspectorClickPointerId;
+    private double _lastInspectorClickX;
+    private double _lastInspectorClickY;
+    private uint? _activeInspectorResizePointerId;
+    private long _xtermResizeShieldGeneration;
+
+    private const double InspectorCollapseThreshold = 56;
+    private const double MinimumLogPanelHeight = 180;
+    private const double InspectorDragThreshold = 3;
+    private const double InspectorDoubleClickDistance = 8;
+    private static readonly TimeSpan XtermResizeShieldDuration = TimeSpan.FromMilliseconds(110);
 
     private readonly record struct XtermAppendChunk(string Text, int LineCount);
     private sealed record XtermScrollState(bool Ok, int ViewportY, int BaseY, int Rows, bool AtBottom);
@@ -112,6 +134,9 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool MessageBeep(uint type);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDoubleClickTime();
 
     private bool IsClosingOrClosed => _closeCleanupStarted || _closeAllowed;
 
@@ -158,6 +183,7 @@ public sealed partial class MainWindow : Window
         Root.ActualThemeChanged += OnRootActualThemeChanged;
         _themeSettings.Changed += OnThemeSettingsChanged;
         ApplyTitleBarTheme();
+        ApplyXtermDefaultBackgroundColor();
         UpdateCuteBackgroundImage();
         _ = InitializeXtermWebViewAsync();
 
@@ -420,6 +446,8 @@ public sealed partial class MainWindow : Window
     private void Root_Loaded(object sender, RoutedEventArgs args)
     {
         ApplyTitleBarTheme();
+        ApplyXtermDefaultBackgroundColor();
+        UpdateFileLoggingTextColor();
         ApplyInspectorLayout();
         UpdateToolbarScrollButtons(ConnectionToolbarScrollViewer);
         UpdateToolbarScrollButtons(LogToolbarScrollViewer);
@@ -430,6 +458,8 @@ public sealed partial class MainWindow : Window
     private void OnRootActualThemeChanged(FrameworkElement sender, object args)
     {
         ApplyTitleBarTheme();
+        ApplyXtermDefaultBackgroundColor();
+        UpdateFileLoggingTextColor();
     }
 
     private void OnThemeSettingsChanged(Microsoft.UI.System.ThemeSettings sender, object args)
@@ -456,6 +486,14 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             RuntimeDiagnostics.RecordError("MainWindow.ApplyTitleBarTheme", ex);
+        }
+    }
+
+    private void ApplyXtermDefaultBackgroundColor()
+    {
+        if (XtermLogSurface.Background is SolidColorBrush backgroundBrush)
+        {
+            XtermLogWebView.DefaultBackgroundColor = backgroundBrush.Color;
         }
     }
 
@@ -488,11 +526,282 @@ public sealed partial class MainWindow : Window
         ApplyInspectorLayout();
     }
 
-    private void InspectorCollapseButton_Click(object sender, RoutedEventArgs args)
+    private void InspectorResizeHandle_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
+        var point = args.GetCurrentPoint(MainContentGrid);
+        if (_isInspectorResizeDragging ||
+            !point.Properties.IsLeftButtonPressed ||
+            sender is not UIElement handle)
+        {
+            return;
+        }
+
+        _inspectorResizeMoved = false;
+        _inspectorResizeStartX = point.Position.X;
+        _inspectorResizeStartY = point.Position.Y;
+        _inspectorResizeStartHeight = _isInspectorCollapsed
+            ? 0
+            : ContentInspectorRow.ActualHeight;
+        _inspectorResizeStartXtermHeight = XtermLogSurface.ActualHeight;
+        _minimumXtermHeightDuringResize = _inspectorResizeStartXtermHeight;
+        _pendingInspectorResizeHeight = _inspectorResizeStartHeight;
+        _liveInspectorResizeHeight = double.NaN;
+
+        if (!_isInspectorCollapsed && _inspectorResizeStartHeight > InspectorCollapseThreshold)
+        {
+            _lastExpandedInspectorHeight = _inspectorResizeStartHeight;
+        }
+
+        InspectorPanel.MinHeight = 0;
+        if (!handle.CapturePointer(args.Pointer))
+        {
+            _isInspectorResizeDragging = false;
+            _inspectorResizeMoved = false;
+            _liveInspectorResizeHeight = double.NaN;
+            _activeInspectorResizePointerId = null;
+            ResetInspectorClickTracking();
+            return;
+        }
+
+        Interlocked.Increment(ref _xtermResizeShieldGeneration);
+        ResetXtermResizeShieldVisual();
+        _activeInspectorResizePointerId = args.Pointer.PointerId;
+        _isInspectorResizeDragging = true;
+        args.Handled = true;
+    }
+
+    private void InspectorResizeHandle_PointerMoved(object sender, PointerRoutedEventArgs args)
+    {
+        if (!_isInspectorResizeDragging ||
+            _activeInspectorResizePointerId != args.Pointer.PointerId)
+        {
+            return;
+        }
+
+        var point = args.GetCurrentPoint(MainContentGrid);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            ResetInspectorClickTracking();
+            FinishInspectorResize(sender as UIElement, releasePointerCapture: true);
+            return;
+        }
+
+        if (InspectorResizeInteractionPolicy.HasMoved(
+                _inspectorResizeStartX,
+                _inspectorResizeStartY,
+                point.Position.X,
+                point.Position.Y,
+                InspectorDragThreshold))
+        {
+            _inspectorResizeMoved = true;
+        }
+
+        var deltaY = point.Position.Y - _inspectorResizeStartY;
+        var maximumHeight = Math.Max(
+            0,
+            MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+        var inspectorHeight = Math.Clamp(
+            _inspectorResizeStartHeight - deltaY,
+            0,
+            maximumHeight);
+        _pendingInspectorResizeHeight = inspectorHeight;
+        if (_inspectorResizeMoved)
+        {
+            UpdateXtermResizeShieldDuringDrag(inspectorHeight);
+            ApplyInspectorResize(inspectorHeight, persistExpandedHeight: false);
+        }
+        args.Handled = true;
+    }
+
+    private void InspectorResizeHandle_PointerReleased(object sender, PointerRoutedEventArgs args)
+    {
+        if (!_isInspectorResizeDragging ||
+            _activeInspectorResizePointerId != args.Pointer.PointerId)
+        {
+            return;
+        }
+
+        var point = args.GetCurrentPoint(MainContentGrid);
+        var pointerId = args.Pointer.PointerId;
+        var wasClick = !_inspectorResizeMoved &&
+            Math.Abs(point.Position.X - _inspectorResizeStartX) <= InspectorDragThreshold &&
+            Math.Abs(point.Position.Y - _inspectorResizeStartY) <= InspectorDragThreshold;
+
+        FinishInspectorResize(sender as UIElement, releasePointerCapture: true);
+        if (wasClick)
+        {
+            RegisterInspectorHandleClick(pointerId, point.Position.X, point.Position.Y);
+        }
+        else
+        {
+            ResetInspectorClickTracking();
+        }
+
+        args.Handled = true;
+    }
+
+    private void InspectorResizeHandle_PointerCaptureLost(object sender, PointerRoutedEventArgs args)
+    {
+        if (!_isInspectorResizeDragging ||
+            _activeInspectorResizePointerId != args.Pointer.PointerId)
+        {
+            return;
+        }
+
+        ResetInspectorClickTracking();
+        FinishInspectorResize(sender as UIElement, releasePointerCapture: false);
+    }
+
+    private void RegisterInspectorHandleClick(uint pointerId, double x, double y)
+    {
+        var clickTimestamp = Stopwatch.GetTimestamp();
+        var isDoubleClick = _lastInspectorClickTimestamp != 0 &&
+            InspectorResizeInteractionPolicy.IsDoubleClick(
+                Stopwatch.GetElapsedTime(_lastInspectorClickTimestamp, clickTimestamp),
+                TimeSpan.FromMilliseconds(GetDoubleClickTime()),
+                _lastInspectorClickPointerId,
+                pointerId,
+                _lastInspectorClickX,
+                _lastInspectorClickY,
+                x,
+                y,
+                InspectorDoubleClickDistance);
+
+        if (isDoubleClick)
+        {
+            ResetInspectorClickTracking();
+            ToggleInspectorCollapsed();
+            return;
+        }
+
+        _lastInspectorClickTimestamp = clickTimestamp;
+        _lastInspectorClickPointerId = pointerId;
+        _lastInspectorClickX = x;
+        _lastInspectorClickY = y;
+    }
+
+    private void ResetInspectorClickTracking()
+    {
+        _lastInspectorClickTimestamp = 0;
+        _lastInspectorClickPointerId = 0;
+        _lastInspectorClickX = 0;
+        _lastInspectorClickY = 0;
+    }
+
+    private void FinishInspectorResize(UIElement? handle, bool releasePointerCapture)
+    {
+        if (!_isInspectorResizeDragging)
+        {
+            return;
+        }
+
+        var shouldCommitResize = _inspectorResizeMoved;
+        _isInspectorResizeDragging = false;
+        _inspectorResizeMoved = false;
+        _activeInspectorResizePointerId = null;
+        if (releasePointerCapture)
+        {
+            handle?.ReleasePointerCaptures();
+        }
+
+        if (shouldCommitResize)
+        {
+            CommitInspectorResize(_pendingInspectorResizeHeight);
+        }
+        else
+        {
+            _liveInspectorResizeHeight = double.NaN;
+            ResetXtermResizeShieldVisual();
+        }
+    }
+
+    private void ApplyInspectorResize(double inspectorHeight, bool persistExpandedHeight)
+    {
+        _isInspectorCollapsed = inspectorHeight <= InspectorCollapseThreshold;
+        _liveInspectorResizeHeight = persistExpandedHeight
+            ? double.NaN
+            : inspectorHeight;
+        if (persistExpandedHeight && !_isInspectorCollapsed)
+        {
+            _lastExpandedInspectorHeight = inspectorHeight;
+        }
+
+        ApplyInspectorLayout();
+    }
+
+    private void ToggleInspectorCollapsed()
+    {
+        _liveInspectorResizeHeight = double.NaN;
+        if (!_isInspectorCollapsed && ContentInspectorRow.ActualHeight > InspectorCollapseThreshold)
+        {
+            _lastExpandedInspectorHeight = ContentInspectorRow.ActualHeight;
+        }
+
         _isInspectorCollapsed = !_isInspectorCollapsed;
+        BeginXtermResizeTransition();
         ApplyInspectorLayout();
         QueueXtermFit();
+    }
+
+    private void CommitInspectorResize(double inspectorHeight)
+    {
+        ApplyInspectorResize(inspectorHeight, persistExpandedHeight: true);
+        QueueXtermFit();
+        var generation = Interlocked.Read(ref _xtermResizeShieldGeneration);
+        _ = HideXtermResizeShieldAsync(generation);
+    }
+
+    private void UpdateXtermResizeShieldDuringDrag(double inspectorHeight)
+    {
+        var appliedInspectorHeight = inspectorHeight <= InspectorCollapseThreshold
+            ? 0
+            : inspectorHeight;
+        var expectedXtermHeight = Math.Max(
+            0,
+            _inspectorResizeStartXtermHeight + _inspectorResizeStartHeight - appliedInspectorHeight);
+        _minimumXtermHeightDuringResize = Math.Min(
+            _minimumXtermHeightDuringResize,
+            expectedXtermHeight);
+        var newlyExposedHeight = expectedXtermHeight - _minimumXtermHeightDuringResize;
+        if (newlyExposedHeight <= 0.5)
+        {
+            ResetXtermResizeShieldVisual();
+            return;
+        }
+
+        XtermResizeShield.VerticalAlignment = VerticalAlignment.Bottom;
+        XtermResizeShield.Height = Math.Min(expectedXtermHeight, newlyExposedHeight + 2);
+        XtermResizeShield.Visibility = Visibility.Visible;
+    }
+
+    private void BeginXtermResizeTransition()
+    {
+        var generation = Interlocked.Increment(ref _xtermResizeShieldGeneration);
+        XtermResizeShield.VerticalAlignment = VerticalAlignment.Stretch;
+        XtermResizeShield.Height = double.NaN;
+        XtermResizeShield.Visibility = Visibility.Visible;
+        _ = HideXtermResizeShieldAsync(generation);
+    }
+
+    private async Task HideXtermResizeShieldAsync(long generation)
+    {
+        await Task.Delay(XtermResizeShieldDuration).ConfigureAwait(false);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (generation != Interlocked.Read(ref _xtermResizeShieldGeneration) || IsClosingOrClosed)
+            {
+                return;
+            }
+
+            ResetXtermResizeShieldVisual();
+        });
+    }
+
+    private void ResetXtermResizeShieldVisual()
+    {
+        XtermResizeShield.Visibility = Visibility.Collapsed;
+        XtermResizeShield.VerticalAlignment = VerticalAlignment.Bottom;
+        XtermResizeShield.Height = 0;
     }
 
     private void ToolbarScrollBackButton_Click(object sender, RoutedEventArgs args)
@@ -602,31 +911,52 @@ public sealed partial class MainWindow : Window
 
     private void ApplyInspectorLayout()
     {
+        InspectorPanel.Visibility = _isInspectorCollapsed
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         InspectorTabView.Visibility = _isInspectorCollapsed
             ? Visibility.Collapsed
             : Visibility.Visible;
-        InspectorPanel.MinHeight = _isInspectorCollapsed ? 0 : 160;
-        InspectorCollapseGlyph.Glyph = _isInspectorCollapsed ? "\uE70E" : "\uE70D";
+        InspectorPanel.MinHeight = 0;
         ToolTipService.SetToolTip(
-            InspectorCollapseButton,
-            _isInspectorCollapsed ? "Expand inspector menu" : "Collapse inspector menu");
+            InspectorResizeHandle,
+            _isInspectorCollapsed
+                ? "Drag upward or double-click to restore the inspector."
+                : "Drag to resize the inspector. Double-click to collapse it.");
 
-        ContentLogRow.Height = new GridLength(_isInspectorCollapsed ? 1 : 2, GridUnitType.Star);
-        ContentInspectorRow.Height = _isInspectorCollapsed
-            ? new GridLength(0)
-            : new GridLength(1, GridUnitType.Star);
+        if (_isInspectorCollapsed)
+        {
+            ContentLogRow.Height = new GridLength(1, GridUnitType.Star);
+            ContentInspectorRow.Height = new GridLength(0);
+        }
+        else if (_isInspectorResizeDragging && double.IsFinite(_liveInspectorResizeHeight))
+        {
+            var maximumHeight = Math.Max(
+                0,
+                MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+            ContentLogRow.Height = new GridLength(1, GridUnitType.Star);
+            ContentInspectorRow.Height = new GridLength(
+                Math.Min(_liveInspectorResizeHeight, maximumHeight));
+        }
+        else if (double.IsFinite(_lastExpandedInspectorHeight))
+        {
+            var maximumHeight = Math.Max(
+                0,
+                MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+            ContentLogRow.Height = new GridLength(1, GridUnitType.Star);
+            ContentInspectorRow.Height = new GridLength(
+                Math.Min(_lastExpandedInspectorHeight, maximumHeight));
+        }
+        else
+        {
+            ContentLogRow.Height = new GridLength(2, GridUnitType.Star);
+            ContentInspectorRow.Height = new GridLength(1, GridUnitType.Star);
+        }
+
         LogColumn.Width = new GridLength(1, GridUnitType.Star);
         InspectorColumn.Width = new GridLength(0);
-        Grid.SetRow(InspectorPanel, 1);
+        Grid.SetRow(InspectorPanel, 2);
         Grid.SetColumn(InspectorPanel, 0);
-        Grid.SetRow(InspectorCollapseButton, _isInspectorCollapsed ? 0 : 1);
-        Grid.SetColumn(InspectorCollapseButton, 0);
-        InspectorCollapseButton.VerticalAlignment = _isInspectorCollapsed
-            ? VerticalAlignment.Bottom
-            : VerticalAlignment.Top;
-        InspectorCollapseButton.Margin = _isInspectorCollapsed
-            ? new Thickness(0, 0, 2, 2)
-            : new Thickness(0, 3, 2, 0);
     }
 
     private void ExecuteDisconnectCommand()
@@ -1776,6 +2106,11 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.FileLoggingEnabled))
+        {
+            UpdateFileLoggingTextColor();
+        }
+
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
         {
             _ = SyncXtermScrollbackSizeAsync();
@@ -1825,6 +2160,25 @@ public sealed partial class MainWindow : Window
             args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
         {
             UpdateCuteBackgroundImage();
+        }
+    }
+
+    private void UpdateFileLoggingTextColor()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(UpdateFileLoggingTextColor);
+            return;
+        }
+
+        var brushKey = _viewModel.FileLoggingEnabled
+            ? "FileLoggingEnabledTextBrush"
+            : "FileLoggingDisabledTextBrush";
+        if (Application.Current.Resources.TryGetValue(brushKey, out var resource) &&
+            resource is Brush brush)
+        {
+            FileLoggingToggleTextBlock.Foreground = brush;
+            FileLoggingSettingsToggleTextBlock.Foreground = brush;
         }
     }
 
@@ -3111,6 +3465,11 @@ public sealed partial class MainWindow : Window
 
     private void XtermLogWebView_SizeChanged(object sender, SizeChangedEventArgs args)
     {
+        if (_isInspectorResizeDragging)
+        {
+            return;
+        }
+
         QueueXtermFit();
     }
 
