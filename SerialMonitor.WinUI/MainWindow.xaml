@@ -299,6 +299,103 @@
                 <Setter Property="VerticalContentAlignment"
                         Value="Center" />
             </Style>
+            <ControlTemplate x:Key="CompactTextBoxTemplate"
+                             TargetType="TextBox">
+                <Grid Height="{TemplateBinding Height}"
+                      MinHeight="{TemplateBinding MinHeight}"
+                      UseLayoutRounding="True">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="BorderElement.Background"
+                                            Value="{ThemeResource TextControlBackgroundDisabled}" />
+                                    <Setter Target="BorderElement.BorderBrush"
+                                            Value="{ThemeResource TextControlBorderBrushDisabled}" />
+                                    <Setter Target="ContentElement.Foreground"
+                                            Value="{ThemeResource TextControlForegroundDisabled}" />
+                                    <Setter Target="PlaceholderTextContentPresenter.Foreground"
+                                            Value="{ThemeResource TextControlPlaceholderForegroundDisabled}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="BorderElement.Background"
+                                            Value="{ThemeResource TextControlBackgroundPointerOver}" />
+                                    <Setter Target="BorderElement.BorderBrush"
+                                            Value="{ThemeResource TextControlBorderBrushPointerOver}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Focused">
+                                <VisualState.Setters>
+                                    <Setter Target="BorderElement.Background"
+                                            Value="{ThemeResource TextControlBackgroundFocused}" />
+                                    <Setter Target="BorderElement.BorderBrush"
+                                            Value="{ThemeResource TextControlBorderBrushFocused}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                        <VisualStateGroup x:Name="ButtonStates">
+                            <VisualState x:Name="ButtonVisible">
+                                <VisualState.Setters>
+                                    <Setter Target="DeleteButton.Visibility"
+                                            Value="Visible" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="ButtonCollapsed" />
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+
+                    <Border x:Name="BorderElement"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Control.IsTemplateFocusTarget="True" />
+                    <Grid Margin="1"
+                          ColumnDefinitions="*,Auto">
+                        <ScrollViewer x:Name="ContentElement"
+                                      Grid.Column="0"
+                                      Padding="{TemplateBinding Padding}"
+                                      Foreground="{TemplateBinding Foreground}"
+                                      HorizontalScrollMode="{TemplateBinding ScrollViewer.HorizontalScrollMode}"
+                                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                      VerticalScrollMode="Disabled"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      IsHorizontalRailEnabled="{TemplateBinding ScrollViewer.IsHorizontalRailEnabled}"
+                                      IsDeferredScrollingEnabled="{TemplateBinding ScrollViewer.IsDeferredScrollingEnabled}"
+                                      IsTabStop="False"
+                                      AutomationProperties.AccessibilityView="Raw"
+                                      ZoomMode="Disabled" />
+                        <TextBlock x:Name="PlaceholderTextContentPresenter"
+                                   Grid.Column="0"
+                                   Padding="{TemplateBinding Padding}"
+                                   Foreground="{ThemeResource TextControlPlaceholderForeground}"
+                                   Text="{TemplateBinding PlaceholderText}"
+                                   TextAlignment="{TemplateBinding TextAlignment}"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsHitTestVisible="False" />
+                        <Button x:Name="DeleteButton"
+                                Grid.Column="1"
+                                Width="22"
+                                Height="22"
+                                MinWidth="22"
+                                MinHeight="22"
+                                Padding="0"
+                                Margin="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="3"
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                FontSize="10"
+                                Content="&#xE711;"
+                                IsTabStop="False"
+                                Visibility="Collapsed"
+                                AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+                </Grid>
+            </ControlTemplate>
             <Style x:Key="CompactTextBoxStyle"
                    TargetType="TextBox">
                 <Setter Property="Height"
@@ -306,11 +403,15 @@
                 <Setter Property="MinHeight"
                         Value="24" />
                 <Setter Property="Padding"
-                        Value="5,0" />
+                        Value="5,3,5,0" />
                 <Setter Property="FontSize"
                         Value="12" />
                 <Setter Property="CornerRadius"
                         Value="4" />
+                <Setter Property="UseLayoutRounding"
+                        Value="True" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactTextBoxTemplate}" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -417,7 +518,7 @@
             <Style x:Key="InspectorTabGridStyle"
                    TargetType="Grid">
                 <Setter Property="Padding"
-                        Value="0,2,0,0" />
+                        Value="4" />
                 <Setter Property="RowSpacing"
                         Value="2" />
                 <Setter Property="MinWidth"
@@ -779,16 +880,16 @@
                                   ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                     <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
-                          MinWidth="960"
+                          MinWidth="1040"
                           ColumnSpacing="5"
-                          ColumnDefinitions="270,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
+                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
                         <TextBox x:Name="SearchTextBox"
                                  Grid.Column="0"
                                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  PlaceholderText="Search visible log"
                                  Style="{StaticResource CompactTextBoxStyle}"
-                                 MinWidth="240"
-                                 MaxWidth="380"
+                                 MinWidth="310"
+                                 MaxWidth="495"
                                  VerticalAlignment="Center"
                                  KeyDown="SearchTextBox_KeyDown"
                                  ToolTipService.ToolTip="Search visible log (Enter refreshes and moves next, Up/Down history)" />
@@ -1047,7 +1148,7 @@
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               VerticalAlignment="Stretch"
-                              Padding="0"
+                              Padding="4"
                               RowSpacing="2"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -1564,7 +1665,7 @@
                     <TabViewItem Header="Bridge"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
-                        <ScrollViewer Padding="0,2,0,0"
+                        <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="4">
@@ -1735,7 +1836,7 @@
                                  Header="Log"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
-                        <ScrollViewer Padding="0,2,0,0"
+                        <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="3">
@@ -1919,7 +2020,7 @@
                     <TabViewItem Header="Settings"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure serial, display, and profile options.">
-                        <ScrollViewer Padding="0,2,0,0"
+                        <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="3">
@@ -2204,6 +2305,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBox Grid.Column="1"
                                                      Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     Style="{StaticResource CompactTextBoxStyle}"
                                                      TextWrapping="NoWrap"
                                                      ToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default." />
                                             <Button Grid.Column="2"
@@ -2351,7 +2453,7 @@
                                  Header="Test"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
-                        <ScrollViewer Padding="0,2,0,0"
+                        <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="3">
