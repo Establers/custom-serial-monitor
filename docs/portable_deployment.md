@@ -55,6 +55,11 @@ Windows App SDK files, local `Assets\xterm` files, local `Assets\context`
 files, and bundled `Assets\FunBackgrounds` files. Keep the full folder together
 when copying to another PC.
 
+The xterm assets include the bundled JetBrains Mono Regular/Bold WOFF2 files,
+their third-party notice, and the SIL Open Font License at
+`Assets\xterm\fonts\OFL.txt`. The font is loaded locally and is not installed on
+the target PC.
+
 ## Running On Another PC
 
 1. Copy the zip to the target PC.
@@ -89,6 +94,9 @@ If the app does not start, check:
 - [ ] `release\SerialMonitorPortable` exists.
 - [ ] `release\SerialMonitorPortable\SerialMonitor.WinUI.exe` exists.
 - [ ] `release\SerialMonitorPortable\Assets\xterm\index.html` exists.
+- [ ] `release\SerialMonitorPortable\Assets\xterm\fonts\JetBrainsMono-Regular.woff2` exists.
+- [ ] `release\SerialMonitorPortable\Assets\xterm\fonts\JetBrainsMono-Bold.woff2` exists.
+- [ ] `release\SerialMonitorPortable\Assets\xterm\fonts\OFL.txt` exists.
 - [ ] `release\SerialMonitorPortable\Assets\context\index.html` exists.
 - [ ] `release\SerialMonitorPortable\Assets\FunBackgrounds\default_cute_bg.jpg` exists.
 - [ ] `release\SerialMonitorPortable_yyyyMMdd_HHmm.zip` exists.

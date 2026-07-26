@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1 -SkipPublis
 `scripts\build_installer.ps1` requires the Inno Setup compiler:
 
 - `ISCC.exe` in `PATH`, or
-- Inno Setup installed in the default `Program Files` location, or
+- Inno Setup 7, 6, or 5 installed in the default `Program Files` location, or
 - pass an explicit compiler path with `-IsccPath`.
 
 If `ISCC.exe` is not found, the script prints:
@@ -45,6 +45,15 @@ If `ISCC.exe` is not found, the script prints:
 ```text
 Install Inno Setup or add ISCC.exe to PATH.
 ```
+
+### Inno Setup License
+
+The installer build tool has its own license and is not covered by this
+project's MIT license. Inno Setup permits non-commercial use; its publisher
+requests that commercial users purchase an appropriate license. Confirm the
+build user's or CI environment's Inno Setup license before producing a
+commercial release. This does not affect the portable zip, which is built by
+the .NET SDK without Inno Setup.
 
 ## Outputs
 
@@ -58,6 +67,10 @@ Installer output:
 - `release\installer\SerialMonitorSetup_yyyyMMdd_HHmm.exe`
 
 No `.msix`, `.msixbundle`, `.appx`, or `.appxbundle` package should be produced.
+
+The installer recursively includes the portable output, including the bundled
+JetBrains Mono WOFF2 files and `Assets\xterm\fonts\OFL.txt`. It does not install
+the font system-wide.
 
 ## Install Location
 
@@ -103,6 +116,7 @@ instead.
 - [ ] `release\SerialMonitorPortable` exists.
 - [ ] `release\SerialMonitorPortable\SerialMonitor.WinUI.exe` exists.
 - [ ] `release\installer\SerialMonitorSetup_yyyyMMdd_HHmm.exe` exists.
+- [ ] Installed `Assets\xterm\fonts\OFL.txt` exists beside the bundled font files.
 - [ ] Running the installer does not request admin rights by default.
 - [ ] Start Menu shortcut launches Serial Monitor.
 - [ ] Optional desktop shortcut launches Serial Monitor when selected.

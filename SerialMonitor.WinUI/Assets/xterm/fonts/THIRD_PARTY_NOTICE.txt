@@ -1,0 +1,19 @@
+JetBrains Mono
+==============
+
+Version: 2.304
+Copyright 2020 The JetBrains Mono Project Authors
+Source: https://github.com/JetBrains/JetBrainsMono/tree/v2.304
+
+The bundled Regular and Bold WOFF2 font files are unmodified copies from the
+official JetBrains Mono v2.304 release. They are distributed under the SIL Open
+Font License, Version 1.1. The complete license and copyright notice are in
+OFL.txt in this directory.
+
+Bundled file SHA-256 checksums:
+
+JetBrainsMono-Regular.woff2
+A9CB1CD82332B23A47E3A1239D25D13C86D16C4220695E34B243EFFA999F45F2
+
+JetBrainsMono-Bold.woff2
+C503CC5EC5F8B2C7666B7ECDA1ADF44BD45F2E6579B2EBA0FC292150416588A2

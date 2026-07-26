@@ -90,41 +90,6 @@ public sealed class EventNotificationRequest : EventArgs
     public bool ShowPopup { get; }
 }
 
-public sealed class VisibleSearchResult
-{
-    public VisibleSearchResult(
-        int matchIndex,
-        int visibleLineIndex,
-        long lineId,
-        string timeText,
-        string directionText,
-        string messagePreview,
-        string fullText)
-    {
-        MatchIndex = matchIndex;
-        VisibleLineIndex = visibleLineIndex;
-        LineId = lineId;
-        TimeText = timeText;
-        DirectionText = directionText;
-        MessagePreview = messagePreview;
-        FullText = fullText;
-    }
-
-    public int MatchIndex { get; }
-
-    public int VisibleLineIndex { get; }
-
-    public long LineId { get; }
-
-    public string TimeText { get; }
-
-    public string DirectionText { get; }
-
-    public string MessagePreview { get; }
-
-    public string FullText { get; }
-}
-
 internal readonly record struct SearchMatchSnapshot(
     long LineId,
     string FullText);
@@ -293,6 +258,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _xtermAppendedLineCount;
     private long _xtermAppendBatchCount;
     private long _xtermAppendErrorCount;
+    private long _xtermFontLoadWarningCount;
     private long _xtermPendingCharacterCount;
     private long _maxXtermPendingCharacterCount;
     private bool _isWindowMinimized;
@@ -368,6 +334,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _sessionErrorCount;
     private string _lastTxError = string.Empty;
     private string _lastXtermAppendError = string.Empty;
+    private string _lastXtermFontLoadWarning = string.Empty;
     private string _lastXtermCopyError = string.Empty;
     private string _lastXtermSearchError = string.Empty;
     private string _searchText = string.Empty;
@@ -2827,6 +2794,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long XtermAppendErrorCount => Interlocked.Read(ref _xtermAppendErrorCount);
 
+    public long XtermFontLoadWarningCount => Interlocked.Read(ref _xtermFontLoadWarningCount);
+
     public long XtermPendingCharacterCount => Interlocked.Read(ref _xtermPendingCharacterCount);
 
     public long MaxXtermPendingCharacterCount => Interlocked.Read(ref _maxXtermPendingCharacterCount);
@@ -3007,6 +2976,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string LastTxError => _lastTxError;
 
     public string LastXtermAppendError => _lastXtermAppendError;
+
+    public string LastXtermFontLoadWarning => _lastXtermFontLoadWarning;
 
     public string LastXtermCopyError => _lastXtermCopyError;
 
@@ -4920,7 +4891,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 var line = lineIndex >= 0 && lineIndex < lines.Count
                     ? lines[lineIndex]
                     : new VisibleLogSearchLine(0, string.Empty, string.Empty);
-                SearchResults.Add(CreateVisibleSearchResult(i + 1, lineIndex, line.LineId, line.FullText));
+                SearchResults.Add(VisibleSearchResultParser.Create(i + 1, lineIndex, line.LineId, line.FullText));
             }
 
             SearchResultStatusText = matchingLineIndexes.Count > MaxVisibleSearchResults
@@ -5012,64 +4983,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         Interlocked.Increment(ref _searchResultsRebuildCount);
         OnPropertyChanged(nameof(SearchResultsRebuildCount));
-    }
-
-    private static VisibleSearchResult CreateVisibleSearchResult(
-        int matchIndex,
-        int visibleLineIndex,
-        long lineId,
-        string fullText)
-    {
-        var timeText = string.Empty;
-        var directionText = string.Empty;
-        var messagePreview = fullText;
-
-        if (fullText.Length >= 26 && fullText[0] == '[' && fullText[24] == ']')
-        {
-            timeText = fullText.Substring(12, 12);
-            var rest = fullText.Length > 26 ? fullText[26..] : string.Empty;
-            ParseVisibleSearchResultBody(rest, out directionText, out messagePreview);
-        }
-        else
-        {
-            ParseVisibleSearchResultBody(fullText, out directionText, out messagePreview);
-        }
-
-        return new VisibleSearchResult(
-            matchIndex,
-            visibleLineIndex,
-            lineId,
-            timeText,
-            directionText,
-            messagePreview,
-            fullText);
-    }
-
-    private static void ParseVisibleSearchResultBody(string text, out string directionText, out string messagePreview)
-    {
-        directionText = string.Empty;
-        messagePreview = text;
-
-        if (text.StartsWith("RX <", StringComparison.Ordinal) ||
-            text.StartsWith("TX >", StringComparison.Ordinal))
-        {
-            directionText = text[..2];
-            messagePreview = text.Length > 5 ? text[5..] : string.Empty;
-            return;
-        }
-
-        if (text.StartsWith("MARK >", StringComparison.Ordinal))
-        {
-            directionText = "MARK";
-            messagePreview = text.Length > 7 ? text[7..] : string.Empty;
-            return;
-        }
-
-        if (text.StartsWith("SYS", StringComparison.Ordinal))
-        {
-            directionText = "SYS";
-            messagePreview = text.Length > 4 ? text[4..] : string.Empty;
-        }
     }
 
     private static bool IsVisibleMarkLine(string? line)
@@ -8746,6 +8659,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
     }
 
+    public void RecordXtermFontLoadWarning(string message)
+    {
+        Interlocked.Increment(ref _xtermFontLoadWarningCount);
+        _lastXtermFontLoadWarning = message;
+        OnPropertyChanged(nameof(XtermFontLoadWarningCount));
+        OnPropertyChanged(nameof(LastXtermFontLoadWarning));
+        RefreshDiagnostics();
+    }
+
     public void RecordXtermCopySuccess(int copiedCharacterCount)
     {
         Interlocked.Increment(ref _xtermCopyRequestCount);
@@ -11231,6 +11153,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AddWarningIf(warnings, XtermLayoutErrorCount > 0, $"xterm layout errors: {XtermLayoutErrorCount:N0}");
         AddWarningIf(
             warnings,
+            XtermFontLoadWarningCount > 0,
+            $"xterm bundled font fallback active: {XtermFontLoadWarningCount:N0}");
+        AddWarningIf(
+            warnings,
             _hasResourceSnapshot && DiskTotalBytes > 0 &&
             DiskFreeBytes >= DiskErrorFreeBytes &&
             DiskFreePercent >= 2 &&
@@ -12037,6 +11963,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  xterm last append error: {(string.IsNullOrWhiteSpace(LastXtermAppendError) ? "(none)" : LastXtermAppendError)}");
         builder.AppendLine($"  WebView2 append error count: {XtermAppendErrorCount:N0}");
         builder.AppendLine($"  Last WebView2 append error: {(string.IsNullOrWhiteSpace(LastXtermAppendError) ? "(none)" : LastXtermAppendError)}");
+        builder.AppendLine($"  xterm font load warnings: {XtermFontLoadWarningCount:N0}");
+        builder.AppendLine($"  xterm last font load warning: {(string.IsNullOrWhiteSpace(LastXtermFontLoadWarning) ? "(none)" : LastXtermFontLoadWarning)}");
         builder.AppendLine($"  xterm fit/resize count: {XtermFitResizeCount:N0}");
         builder.AppendLine($"  xterm visual/layout errors: {XtermLayoutErrorCount:N0}");
         builder.AppendLine($"  xterm last visual/layout error: {(string.IsNullOrWhiteSpace(LastXtermLayoutError) ? "(none)" : LastXtermLayoutError)}");

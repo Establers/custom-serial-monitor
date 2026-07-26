@@ -4,8 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Serial Monitor xterm Log View</title>
+  <link rel="preload" href="./fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./fonts/JetBrainsMono-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./xterm.css">
   <style>
+    @font-face {
+      font-family: "JetBrains Mono Bundled";
+      src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 400;
+      font-display: block;
+    }
+
+    @font-face {
+      font-family: "JetBrains Mono Bundled";
+      src: url("./fonts/JetBrainsMono-Bold.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 700;
+      font-display: block;
+    }
+
     :root {
       color-scheme: dark light;
       --page-background: #0c0d0e;
@@ -420,13 +438,17 @@
       return colorSchemeQuery.matches ? lightTerminalTheme : darkTerminalTheme;
     };
 
+    const bundledTerminalFontFamily = '"JetBrains Mono Bundled", Consolas, "Cascadia Mono", Menlo, monospace';
+    const fallbackTerminalFontFamily = 'Consolas, "Cascadia Mono", Menlo, monospace';
     const terminal = new Terminal({
       allowTransparency: false,
       convertEol: true,
       cursorBlink: false,
       disableStdin: true,
-      fontFamily: 'Consolas, Cascadia Mono, Menlo, monospace',
-      fontSize: 13,
+      fontFamily: fallbackTerminalFontFamily,
+      fontSize: 12,
+      fontWeight: 400,
+      fontWeightBold: 700,
       minimumContrastRatio: 4.5,
       scrollback: 50000,
       theme: getTerminalTheme()
@@ -438,6 +460,36 @@
     terminal.loadAddon(searchAddon);
     terminal.open(document.getElementById('terminal'));
     fitAddon.fit();
+
+    const applyBundledTerminalFont = async () => {
+      try {
+        await Promise.all([
+          document.fonts.load('400 12px "JetBrains Mono Bundled"'),
+          document.fonts.load('700 12px "JetBrains Mono Bundled"')
+        ]);
+
+        const regularLoaded = document.fonts.check('400 12px "JetBrains Mono Bundled"');
+        const boldLoaded = document.fonts.check('700 12px "JetBrains Mono Bundled"');
+        if (!regularLoaded || !boldLoaded) {
+          throw new Error(`font availability check failed (regular=${regularLoaded}, bold=${boldLoaded})`);
+        }
+
+        terminal.options.fontFamily = bundledTerminalFontFamily;
+        terminal.clearTextureAtlas();
+        fitAddon.fit();
+        terminal.refresh(0, Math.max(0, terminal.rows - 1));
+      } catch (error) {
+        console.error('Bundled JetBrains Mono load failed; using the system monospace fallback.', error);
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage({
+            type: 'xtermFontLoadFailed',
+            error: String(error)
+          });
+        }
+      }
+    };
+
+    void applyBundledTerminalFont();
 
     const applyColorScheme = () => {
       terminal.options.theme = getTerminalTheme();

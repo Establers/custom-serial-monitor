@@ -190,6 +190,10 @@ $requiredAssets = @(
     "SerialMonitor.WinUI.pri",
     "Assets\xterm\index.html",
     "Assets\xterm\xterm.js",
+    "Assets\xterm\fonts\JetBrainsMono-Regular.woff2",
+    "Assets\xterm\fonts\JetBrainsMono-Bold.woff2",
+    "Assets\xterm\fonts\OFL.txt",
+    "Assets\xterm\fonts\THIRD_PARTY_NOTICE.txt",
     "Assets\context\index.html",
     "Assets\FunBackgrounds\default_cute_bg.jpg",
     "Assets\AppIcon\SerialMonitor.ico",
@@ -227,6 +231,8 @@ Notes
 - Default profile: %LOCALAPPDATA%\SerialMonitor\profiles\default.json
 - Runtime diagnostics: %LOCALAPPDATA%\SerialMonitor\diagnostics\last_runtime_error.txt
 - WebView2 Runtime may still be required on the target PC for the xterm log view.
+- JetBrains Mono is bundled for the xterm log view under Assets\xterm\fonts.
+- Its SIL Open Font License is included at Assets\xterm\fonts\OFL.txt.
 
 If the app does not start
 -------------------------

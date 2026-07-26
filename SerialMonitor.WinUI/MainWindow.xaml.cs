@@ -2385,6 +2385,15 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            if (string.Equals(messageType, "xtermFontLoadFailed", StringComparison.Ordinal))
+            {
+                var error = root.TryGetProperty("error", out var errorElement)
+                    ? errorElement.GetString()
+                    : "unknown error";
+                _viewModel.RecordXtermFontLoadWarning($"xterm bundled font load failed; using fallback: {error}");
+                return;
+            }
+
             if (string.Equals(messageType, "shortcut", StringComparison.Ordinal))
             {
                 if (root.TryGetProperty("shortcut", out var shortcutElement))

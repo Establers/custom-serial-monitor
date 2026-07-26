@@ -12,7 +12,7 @@
     <Grid x:Name="Root"
           Background="{ThemeResource AppBackgroundBrush}"
           Padding="4"
-          RowSpacing="3"
+          RowSpacing="4"
           Loaded="Root_Loaded"
           SizeChanged="Root_SizeChanged"
           KeyDown="Root_KeyDown">
@@ -117,6 +117,63 @@
                 </Grid>
             </ControlTemplate>
 
+            <ControlTemplate x:Key="CompactSubtleButtonTemplate"
+                             TargetType="Button">
+                <ContentPresenter x:Name="ButtonContentPresenter"
+                                  Background="{TemplateBinding Background}"
+                                  BackgroundSizing="{TemplateBinding BackgroundSizing}"
+                                  BorderBrush="{TemplateBinding BorderBrush}"
+                                  BorderThickness="{TemplateBinding BorderThickness}"
+                                  CornerRadius="{TemplateBinding CornerRadius}"
+                                  Padding="{TemplateBinding Padding}"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  ContentTransitions="{TemplateBinding ContentTransitions}"
+                                  FontFamily="{TemplateBinding FontFamily}"
+                                  FontSize="{TemplateBinding FontSize}"
+                                  FontWeight="{TemplateBinding FontWeight}"
+                                  Foreground="{TemplateBinding Foreground}"
+                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  Control.IsTemplateFocusTarget="True">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundPointerOver}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundPointerOver}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundPressed}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource ButtonBorderBrushPressed}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundPressed}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundDisabled}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource CompactButtonBorderBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundDisabled}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </ContentPresenter>
+            </ControlTemplate>
+
             <Style TargetType="Button">
                 <Setter Property="Height"
                         Value="24" />
@@ -128,6 +185,18 @@
                         Value="12" />
                 <Setter Property="CornerRadius"
                         Value="4" />
+                <Setter Property="Background"
+                        Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource CompactButtonBorderBrush}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactSubtleButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
                 <Setter Property="VerticalAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -187,6 +256,104 @@
                 <Setter Property="VerticalContentAlignment"
                         Value="Center" />
             </Style>
+            <ControlTemplate x:Key="CompactTabViewItemTemplate"
+                             TargetType="TabViewItem">
+                <Grid x:Name="LayoutRoot"
+                      UseLayoutRounding="True">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundPointerOver}" />
+                                    <Setter Target="TabContainer.BorderBrush"
+                                            Value="{ThemeResource TabViewSelectedItemBorderBrush}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundPointerOver}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundPressed}" />
+                                    <Setter Target="TabContainer.BorderBrush"
+                                            Value="{ThemeResource TabViewSelectedItemBorderBrush}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundPressed}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Selected">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundSelected}" />
+                                    <Setter Target="TabContainer.BorderBrush"
+                                            Value="{ThemeResource TabViewSelectedItemBorderBrush}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundSelected}" />
+                                    <Setter Target="HeaderPresenter.FontWeight"
+                                            Value="SemiBold" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="PointerOverSelected">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundSelected}" />
+                                    <Setter Target="TabContainer.BorderBrush"
+                                            Value="{ThemeResource TabViewSelectedItemBorderBrush}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundSelected}" />
+                                    <Setter Target="HeaderPresenter.FontWeight"
+                                            Value="SemiBold" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="PressedSelected">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundPressed}" />
+                                    <Setter Target="TabContainer.BorderBrush"
+                                            Value="{ThemeResource TabViewSelectedItemBorderBrush}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundSelected}" />
+                                    <Setter Target="HeaderPresenter.FontWeight"
+                                            Value="SemiBold" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                        <VisualStateGroup x:Name="DisabledStates">
+                            <VisualState x:Name="Enabled" />
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="TabContainer.Background"
+                                            Value="{ThemeResource TabViewItemHeaderBackgroundDisabled}" />
+                                    <Setter Target="HeaderPresenter.Foreground"
+                                            Value="{ThemeResource TabViewItemHeaderForegroundDisabled}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+
+                    <Border x:Name="TabContainer"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            BackgroundSizing="InnerBorderEdge"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}"
+                            Control.IsTemplateFocusTarget="True">
+                        <ContentPresenter x:Name="HeaderPresenter"
+                                          Content="{TemplateBinding Header}"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          OpticalMarginAlignment="TrimSideBearings" />
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+
             <Style TargetType="TabViewItem">
                 <Setter Property="FontSize"
                         Value="12" />
@@ -197,9 +364,23 @@
                 <Setter Property="MaxWidth"
                         Value="86" />
                 <Setter Property="Padding"
-                        Value="6,0" />
+                        Value="8,0" />
+                <Setter Property="Margin"
+                        Value="1,0" />
                 <Setter Property="CornerRadius"
                         Value="4" />
+                <Setter Property="Background"
+                        Value="Transparent" />
+                <Setter Property="BorderBrush"
+                        Value="Transparent" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="Foreground"
+                        Value="{ThemeResource TabViewItemHeaderForeground}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactTabViewItemTemplate}" />
                 <Setter Property="HorizontalContentAlignment"
                         Value="Center" />
                 <Setter Property="VerticalContentAlignment"
@@ -219,6 +400,18 @@
                         Value="11" />
                 <Setter Property="CornerRadius"
                         Value="4" />
+                <Setter Property="Background"
+                        Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource CompactButtonBorderBrush}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactSubtleButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
             </Style>
             <ControlTemplate x:Key="NavigationIconButtonTemplate"
                              TargetType="Button">
@@ -333,6 +526,8 @@
                                             Value="{ThemeResource TextControlBackgroundFocused}" />
                                     <Setter Target="BorderElement.BorderBrush"
                                             Value="{ThemeResource TextControlBorderBrushFocused}" />
+                                    <Setter Target="BorderElement.BorderThickness"
+                                            Value="{ThemeResource TextControlBorderThemeThicknessFocused}" />
                                 </VisualState.Setters>
                             </VisualState>
                         </VisualStateGroup>
@@ -350,7 +545,7 @@
                     <Border x:Name="BorderElement"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="1"
+                            BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{TemplateBinding CornerRadius}"
                             Control.IsTemplateFocusTarget="True" />
                     <Grid Margin="1"
@@ -482,7 +677,11 @@
                 <Setter Property="CornerRadius"
                         Value="5" />
                 <Setter Property="Padding"
-                        Value="3" />
+                        Value="3,4" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="UseLayoutRounding"
+                        Value="True" />
             </Style>
             <Style x:Key="RuleHeaderTextStyle"
                    TargetType="TextBlock">
@@ -520,7 +719,7 @@
                 <Setter Property="Padding"
                         Value="4" />
                 <Setter Property="RowSpacing"
-                        Value="2" />
+                        Value="3" />
                 <Setter Property="MinWidth"
                         Value="0" />
             </Style>
@@ -538,6 +737,10 @@
                         Value="2" />
                 <Setter Property="MinHeight"
                         Value="0" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="UseLayoutRounding"
+                        Value="True" />
             </Style>
             <Style x:Key="InspectorTabHeaderBorderStyle"
                    TargetType="Border"
@@ -547,7 +750,7 @@
                 <Setter Property="CornerRadius"
                         Value="4" />
                 <Setter Property="Padding"
-                        Value="4,1" />
+                        Value="4,2" />
                 <Setter Property="MinHeight"
                         Value="24" />
             </Style>
@@ -579,6 +782,8 @@
             </Style>
             <Style x:Key="CompactListViewItemStyle"
                    TargetType="ListViewItem">
+                <Setter Property="HorizontalAlignment"
+                        Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment"
                         Value="Stretch" />
                 <Setter Property="MinHeight"
@@ -602,6 +807,18 @@
                         Value="11" />
                 <Setter Property="CornerRadius"
                         Value="4" />
+                <Setter Property="Background"
+                        Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource CompactButtonBorderBrush}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactSubtleButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
             </Style>
             <Style x:Key="RuleCheckBoxStyle"
                    TargetType="CheckBox">
@@ -636,6 +853,16 @@
                         Value="6" />
                 <Setter Property="Background"
                         Value="{ThemeResource AppAccentTintBrush}" />
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource CompactButtonBorderBrush}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="BackgroundSizing"
+                        Value="InnerBorderEdge" />
+                <Setter Property="Template"
+                        Value="{StaticResource CompactSubtleButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals"
+                        Value="True" />
             </Style>
             <Style x:Key="SettingLabelTextStyle"
                    TargetType="TextBlock">
@@ -855,7 +1082,7 @@
             <Grid x:Name="LogPanel"
                   Grid.Row="0"
                   Grid.Column="0"
-                  RowSpacing="3"
+                  RowSpacing="4"
                   RowDefinitions="Auto,*">
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
@@ -1055,19 +1282,69 @@
                   MinHeight="160">
                 <Border Grid.Row="0"
                         Background="{ThemeResource InspectorBackdropBrush}"
-                        CornerRadius="5"
                         IsHitTestVisible="False" />
                 <TabView x:Name="InspectorTabView"
                          Grid.Row="0"
                          Margin="0"
                          IsAddTabButtonVisible="False"
                          CanDragTabs="False"
+                         CanReorderTabs="False"
+                         AllowDropTabs="False"
                          TabWidthMode="SizeToContent"
                          HorizontalAlignment="Stretch"
                          Loaded="InspectorTabView_Loaded"
                          SelectionChanged="InspectorTabView_SelectionChanged">
                     <TabView.Resources>
-                        <Thickness x:Key="TabViewHeaderPadding">0,2,0,2</Thickness>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Default">
+                                    <StaticResource x:Key="TabViewBackground"
+                                                    ResourceKey="SubtleFillColorTransparentBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundSelected"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorSecondaryBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                    <SolidColorBrush x:Key="TabViewItemSeparator"
+                                                     Color="Transparent" />
+                                    <StaticResource x:Key="TabViewSelectedItemBorderBrush"
+                                                    ResourceKey="CardStrokeColorDefaultBrush" />
+                                    <Thickness x:Key="TabViewSelectedItemBorderThickness">1</Thickness>
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="TabViewBackground"
+                                                    ResourceKey="SubtleFillColorTransparentBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundSelected"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorSecondaryBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"
+                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                    <SolidColorBrush x:Key="TabViewItemSeparator"
+                                                     Color="Transparent" />
+                                    <StaticResource x:Key="TabViewSelectedItemBorderBrush"
+                                                    ResourceKey="CardStrokeColorDefaultBrush" />
+                                    <Thickness x:Key="TabViewSelectedItemBorderThickness">1</Thickness>
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="HighContrast">
+                                    <StaticResource x:Key="TabViewBackground"
+                                                    ResourceKey="SystemColorButtonFaceColorBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundSelected"
+                                                    ResourceKey="SystemColorWindowColorBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver"
+                                                    ResourceKey="SystemColorHighlightColorBrush" />
+                                    <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"
+                                                    ResourceKey="SystemColorHighlightColorBrush" />
+                                    <StaticResource x:Key="TabViewItemSeparator"
+                                                    ResourceKey="SystemColorWindowTextColorBrush" />
+                                    <StaticResource x:Key="TabViewSelectedItemBorderBrush"
+                                                    ResourceKey="SystemColorHighlightColorBrush" />
+                                    <Thickness x:Key="TabViewSelectedItemBorderThickness">1,1,1,0</Thickness>
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                            <Thickness x:Key="TabViewHeaderPadding">0,2,0,2</Thickness>
+                        </ResourceDictionary>
                     </TabView.Resources>
                     <TabViewItem Header="Events"
                                  IsClosable="False"
@@ -1148,8 +1425,6 @@
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               VerticalAlignment="Stretch"
-                              Padding="4"
-                              RowSpacing="2"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="4"
@@ -1194,7 +1469,6 @@
                                  ToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result to jump to it.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinWidth="0"
-                              RowSpacing="2"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="5"
@@ -1232,11 +1506,15 @@
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <ListView x:Name="SearchResultsListView"
                                       MinWidth="0"
+                                      HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Stretch"
                                       ItemsSource="{Binding SearchResults}"
                                       SelectedItem="{Binding SelectedSearchResult, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       SelectionMode="Single"
                                       DoubleTapped="SearchResultsListView_DoubleTapped"
+                                      ScrollViewer.HorizontalScrollMode="Disabled"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      ScrollViewer.IsHorizontalRailEnabled="False"
                                       ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem"
@@ -1246,6 +1524,7 @@
                                     <DataTemplate>
                                         <Grid ColumnSpacing="5"
                                               MinHeight="24"
+                                              HorizontalAlignment="Stretch"
                                               ColumnDefinitions="76,42,*">
                                             <TextBlock Text="{Binding TimeText}"
                                                        FontFamily="Consolas"
@@ -1272,7 +1551,6 @@
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               VerticalAlignment="Stretch"
-                              RowSpacing="3"
                               RowDefinitions="Auto,Auto,*">
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -1839,10 +2117,10 @@
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="3">
+                            <StackPanel Spacing="4">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Log"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -1951,7 +2229,7 @@
                                                          ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name." />
                                                 <TextBlock Grid.Column="1"
                                                            Text="Current:"
-                                                           Style="{StaticResource CompactCellTextStyle}" />
+                                                           Style="{StaticResource SettingValueTextStyle}" />
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding ConfiguredLogFileNameDisplayText}"
                                                            Style="{StaticResource SettingValueTextStyle}"
@@ -2023,10 +2301,10 @@
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="3">
+                            <StackPanel Spacing="4">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Serial"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -2218,8 +2496,8 @@
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="UI / xterm"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -2342,8 +2620,8 @@
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Profile"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -2456,10 +2734,10 @@
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="3">
+                            <StackPanel Spacing="4">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="3">
-                                    <StackPanel Spacing="3">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Mock/Test"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -2605,7 +2883,7 @@
 
                             <Border Grid.Row="1"
                                      Style="{StaticResource InspectorSectionBorderStyle}"
-                                     Padding="3"
+                                     Padding="4"
                                      MaxHeight="74">
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                               VerticalScrollBarVisibility="Disabled">

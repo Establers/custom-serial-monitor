@@ -10,8 +10,10 @@
 
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#E60A0F18" />
-                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="Transparent" />
+                    <StaticResource x:Key="AppSurfaceBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CompactButtonBackgroundBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <SolidColorBrush x:Key="CompactButtonBorderBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="AppAccentTintBrush" Color="#245B8DEF" />
                     <SolidColorBrush x:Key="XtermSurfaceBrush" Color="#FF0C0D0E" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF7A7A7A" />
@@ -25,17 +27,17 @@
                     <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#7FFFFFFF" />
-                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#D9121823" />
-                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#CC121823" />
-                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#F01A2230" />
-                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#B80E141E" />
+                    <StaticResource x:Key="CompactSurfaceBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorSectionBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorHeaderBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorBodyBrush" ResourceKey="LayerFillColorAltBrush" />
                     <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FF0C0D0E" />
                     <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#DD0C0D0E" />
                     <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#D916181A" />
                     <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="#553A3D42" />
                     <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="#FFF2F2F2" />
                     <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="#FFC8CDD2" />
-                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="#700C0D0E" />
+                    <StaticResource x:Key="InspectorBackdropBrush" ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
                     <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="#FF767676" />
                     <SolidColorBrush x:Key="WarningTextBrush" Color="#FFFFC857" />
                     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFFF8A80" />
@@ -51,8 +53,10 @@
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#EAF3F6FA" />
-                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="#180F172A" />
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="Transparent" />
+                    <StaticResource x:Key="AppSurfaceBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CompactButtonBackgroundBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <SolidColorBrush x:Key="CompactButtonBorderBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="AppAccentTintBrush" Color="#160067C0" />
                     <SolidColorBrush x:Key="XtermSurfaceBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="#FF5F5F5F" />
@@ -66,17 +70,17 @@
                     <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#61000000" />
-                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#EFFFFFFF" />
-                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#E8FFFFFF" />
-                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#FAFFFFFF" />
-                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#DFFFFFFF" />
+                    <StaticResource x:Key="CompactSurfaceBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorSectionBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorHeaderBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="InspectorBodyBrush" ResourceKey="LayerFillColorAltBrush" />
                     <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#E6F3F3F3" />
                     <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#FAFFFFFF" />
                     <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="#33000000" />
                     <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="#FF1B1B1B" />
                     <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="#FF5D5D5D" />
-                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="#70FFFFFF" />
+                    <StaticResource x:Key="InspectorBackdropBrush" ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
                     <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="#FF707070" />
                     <SolidColorBrush x:Key="WarningTextBrush" Color="#FF8A4F00" />
                     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFB3261E" />
@@ -94,6 +98,8 @@
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="CompactButtonBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+                    <SolidColorBrush x:Key="CompactButtonBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="AppAccentTintBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="XtermSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="CompactCheckBoxBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />

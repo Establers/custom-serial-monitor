@@ -42,6 +42,7 @@
   <ItemGroup>
     <Content Include="Assets\xterm\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="Assets\context\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
