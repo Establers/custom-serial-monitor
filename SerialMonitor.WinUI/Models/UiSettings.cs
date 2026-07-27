@@ -16,10 +16,23 @@ public enum TimestampDisplayFormat
     TimeSeconds
 }
 
+public enum XtermFontFamily
+{
+    JetBrainsMono,
+    CascadiaMono,
+    Consolas,
+    D2Coding,
+    CourierNew,
+    LucidaConsole
+}
+
 public sealed class UiSettings
 {
     public const int FixedMaxVisibleEventCount = 100;
     public const int DefaultHexGroupTimeoutMs = 40;
+    public const int DefaultXtermFontSize = 13;
+    public const int MinXtermFontSize = 10;
+    public const int MaxXtermFontSize = 15;
 
     public int MaxVisibleLogLines { get; set; } = 50_000;
 
@@ -36,6 +49,10 @@ public sealed class UiSettings
     public bool ShowTimestampInLogView { get; set; } = true;
 
     public TimestampDisplayFormat TimestampDisplayFormat { get; set; } = TimestampDisplayFormat.DateTimeMilliseconds;
+
+    public XtermFontFamily XtermFontFamily { get; set; } = XtermFontFamily.Consolas;
+
+    public int XtermFontSize { get; set; } = DefaultXtermFontSize;
 
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
@@ -81,6 +98,8 @@ public sealed class UiSettings
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
             ShowTimestampInLogView = ShowTimestampInLogView,
             TimestampDisplayFormat = TimestampDisplayFormat,
+            XtermFontFamily = XtermFontFamily,
+            XtermFontSize = XtermFontSize,
             RxDisplayMode = RxDisplayMode,
             HexGroupTimeoutMs = HexGroupTimeoutMs,
             HexGroupTimeoutUserConfigured = HexGroupTimeoutUserConfigured,

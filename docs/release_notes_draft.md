@@ -1,6 +1,6 @@
 # Release Notes Draft
 
-Date: 2026-05-25
+Date: 2026-07-27
 
 ## Feature Summary
 
@@ -8,6 +8,8 @@ Date: 2026-05-25
 - Real serial connection support through `RJCP.SerialPortStream`.
 - `MOCK` port for local development and repeatable testing.
 - WebView2/xterm.js main log view with selectable terminal-style output.
+- Profile-persisted xterm font controls, including a 10–15 px size range, that
+  apply immediately from Settings.
 - Batched log rendering with bounded visible log memory.
 - Plain-text async serial log writing.
 - TX manual commands with configurable line endings.
@@ -31,6 +33,10 @@ Date: 2026-05-25
 - Fixed 40 ms automatic HEX grouping timeout across all baud rates, while
   retaining explicitly saved custom timeout values.
 - Inline FTDI troubleshooting guidance without startup or connection popups.
+- HEX-only rolling one-minute RX BUSY/IDLE estimate using the applied baud,
+  data-bit, parity, and stop-bit framing settings; local TX is excluded. The
+  meter also shows the rolling window's highest fixed one-second peak after a
+  complete minute and restarts when the visible HEX log is cleared.
 
 ## Stability Design Points
 

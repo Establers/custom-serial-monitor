@@ -826,6 +826,18 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Timestamp display format was invalid.");
         }
 
+        if (!Enum.IsDefined(settings.XtermFontFamily))
+        {
+            settings.XtermFontFamily = defaults.XtermFontFamily;
+            warnings.Add("xterm font family was invalid.");
+        }
+
+        if (settings.XtermFontSize is < UiSettings.MinXtermFontSize or > UiSettings.MaxXtermFontSize)
+        {
+            settings.XtermFontSize = defaults.XtermFontSize;
+            warnings.Add("xterm font size was invalid.");
+        }
+
         settings.LastSearchText = settings.LastSearchText?.Trim() ?? string.Empty;
         settings.MarkerText = settings.MarkerText?.Trim() ?? string.Empty;
         settings.CuteBackgroundImagePath = NormalizeCuteBackgroundImagePath(

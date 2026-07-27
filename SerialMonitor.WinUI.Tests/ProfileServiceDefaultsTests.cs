@@ -184,6 +184,29 @@ public sealed class ProfileServiceDefaultsTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task InvalidXtermFontSettings_AreResetToDefaults()
+    {
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        profile.UiSettings.XtermFontFamily = (XtermFontFamily)999;
+        profile.UiSettings.XtermFontSize = 100;
+        var path = CreateTemporaryProfilePath();
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(XtermFontFamily.Consolas, loaded.UiSettings.XtermFontFamily);
+            Assert.Equal(UiSettings.DefaultXtermFontSize, loaded.UiSettings.XtermFontSize);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
     private static string CreateTemporaryProfilePath()
     {
         return Path.Combine(

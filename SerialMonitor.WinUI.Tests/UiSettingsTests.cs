@@ -32,4 +32,29 @@ public sealed class UiSettingsTests
         Assert.NotNull(settings);
         Assert.True(settings.FileLoggingWhileViewPaused);
     }
+
+    [Fact]
+    public void Clone_PreservesXtermFontSettings()
+    {
+        var settings = new UiSettings
+        {
+            XtermFontFamily = XtermFontFamily.D2Coding,
+            XtermFontSize = 15
+        };
+
+        var clone = settings.Clone();
+
+        Assert.Equal(XtermFontFamily.D2Coding, clone.XtermFontFamily);
+        Assert.Equal(15, clone.XtermFontSize);
+    }
+
+    [Fact]
+    public void LegacyJsonWithoutXtermFontSettings_UsesCurrentDefaults()
+    {
+        var settings = JsonSerializer.Deserialize<UiSettings>("{}");
+
+        Assert.NotNull(settings);
+        Assert.Equal(XtermFontFamily.Consolas, settings.XtermFontFamily);
+        Assert.Equal(UiSettings.DefaultXtermFontSize, settings.XtermFontSize);
+    }
 }

@@ -1014,7 +1014,7 @@
                 </Button>
 
                 <Grid Grid.Column="6"
-                      ColumnDefinitions="Auto,Auto,Auto"
+                      ColumnDefinitions="Auto,Auto,Auto,Auto"
                       ColumnSpacing="8"
                       MinWidth="0"
                       HorizontalAlignment="Left"
@@ -1043,6 +1043,13 @@
                                MaxLines="1"
                                TextTrimming="None"
                                ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding SerialBusUtilizationHeaderText}"
+                               Style="{StaticResource CompactLabelTextStyle}"
+                               MinWidth="{Binding SerialBusUtilizationHeaderMinWidth}"
+                               MaxLines="1"
+                               TextTrimming="None"
+                               ToolTipService.ToolTip="{Binding SerialBusUtilizationToolTip}" />
                 </Grid>
             </Grid>
             </ScrollViewer>
@@ -1190,7 +1197,7 @@
                         <Button Grid.Column="12"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ClearScreenCommand}"
-                                ToolTipService.ToolTip="Clear visible log">
+                                ToolTipService.ToolTip="Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       UseLayoutRounding="False"
@@ -2491,6 +2498,52 @@
                                                       Content="Confirm before disconnect"
                                                       IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="Font"
+                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="xterm log text"
+                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="xterm"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding XtermFontOptions}"
+                                                      SelectedItem="{Binding SelectedXtermFontOption, Mode=TwoWay}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      MinWidth="190"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Size (px)"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding XtermFontSizeOptions}"
+                                                      SelectedItem="{Binding XtermFontSize, Mode=TwoWay}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      Width="72"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>

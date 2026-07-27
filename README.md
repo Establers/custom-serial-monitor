@@ -11,7 +11,7 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest"><strong>최신 버전 다운로드</strong></a>
     ·
-    <a href="docs/release_notes_v1.2.1.md">v1.2.1 변경 사항</a>
+    <a href="docs/release_notes_v1.2.2.md">v1.2.2 변경 사항</a>
   </p>
 </div>
 
@@ -79,19 +79,17 @@ Serial Monitor는 임베디드·RTOS 장치를 오래 연결해 두고 로그를
 | 전송 | 수동 TX, 줄 끝 설정, 저장 명령, 단축키, 명령 시퀀스, 사용자 마커 |
 | 재사용 | 설정·규칙·명령·시퀀스를 JSON 프로필로 저장/불러오기/초기화 |
 | 연동 | 물리 COM과 com0com 같은 가상 COM 사이의 선택적 양방향 raw-byte bridge |
-| 진단 | MOCK 포트, 스트레스 생성기, 손실 카운터, 상태 요약, 복사 가능한 진단 정보 |
+| 진단 | MOCK 포트, 스트레스 생성기, HEX RX 1분 BUSY/IDLE 추정, 손실 카운터, 상태 요약, 복사 가능한 진단 정보 |
 
-## v1.2.1
+## v1.2.2
 
-- 촘촘한 엔지니어링 UI에서도 버튼, 입력 필드, 탭의 상태와 경계를 더 분명하게
-  보이도록 다듬었습니다.
-- 검색 결과를 시간·방향·메시지 구조로 정리해 긴 목록을 더 빠르게 훑을 수
+- HEX 화면에서 최근 1분의 RX BUSY/IDLE과 고정 1초 버킷 PEAK를 확인할 수
   있습니다.
-- JetBrains Mono를 앱에 포함해 대상 PC의 설치 글꼴과 관계없이 터미널 정렬과
-  가독성을 일정하게 유지합니다.
-- Debug/Release 빌드와 포터블·설치 파일 생성 절차를 보강했습니다.
+- UART 프레이밍과 baud를 반영해 RS-485 수신 버스 점유율을 추정합니다.
+- xterm 로그 글꼴과 10~15px 크기를 즉시 바꾸고 프로필에 저장할 수 있습니다.
+- Clear, 연결, HEX 모드 전환에 맞춰 측정 창을 예측 가능하게 초기화합니다.
 
-자세한 내용은 [v1.2.1 릴리즈 노트](docs/release_notes_v1.2.1.md)를 참고하세요.
+자세한 내용은 [v1.2.2 릴리즈 노트](docs/release_notes_v1.2.2.md)를 참고하세요.
 
 ## 개발 및 빌드
 
@@ -125,6 +123,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [아키텍처](docs/architecture.md)
 - [로깅 동작](docs/logging.md)
+- [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
 
 ## 라이선스
 

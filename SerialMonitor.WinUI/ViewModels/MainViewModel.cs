@@ -148,6 +148,24 @@ public sealed class TimestampDisplayFormatOption
     public override string ToString() => DisplayName;
 }
 
+public sealed class XtermFontOption
+{
+    public XtermFontOption(XtermFontFamily family, string displayName, string cssFontFamily)
+    {
+        Family = family;
+        DisplayName = displayName;
+        CssFontFamily = cssFontFamily;
+    }
+
+    public XtermFontFamily Family { get; }
+
+    public string DisplayName { get; }
+
+    public string CssFontFamily { get; }
+
+    public override string ToString() => DisplayName;
+}
+
 public sealed class HelpSection
 {
     public HelpSection(string title, string body)
@@ -213,6 +231,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
     private readonly CoalescingAsyncOperation _portRefreshOperation;
     private readonly DispatcherQueueTimer _diagnosticsTimer;
+    private readonly SerialBusUtilizationMeter _serialBusUtilizationMeter = new();
     private readonly object _eventNotificationGate = new();
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
@@ -573,6 +592,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastVisibleFilterError = string.Empty;
     private string _lastVisibleLogRebuildReason = "full re-render";
     private long _visibleFilterErrorCount;
+    private SerialBusUtilizationSnapshot _serialBusUtilizationSnapshot;
+    private string _serialBusFrameFormatText = string.Empty;
+    private DateTimeOffset? _serialBusMeasurementStartedAt;
+    private string _lastSerialBusMeasurementResetReason = "not started";
 
     private enum SettingsApplyBehavior
     {
@@ -1315,6 +1338,39 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         new(TimestampDisplayFormat.TimeSeconds, "HH:mm:ss")
     };
 
+    public ObservableCollection<XtermFontOption> XtermFontOptions { get; } = new()
+    {
+        new(
+            XtermFontFamily.JetBrainsMono,
+            "JetBrains Mono (Bundled)",
+            "\"JetBrains Mono Bundled\", \"JetBrains Mono\", Consolas, \"Cascadia Mono\", monospace"),
+        new(
+            XtermFontFamily.CascadiaMono,
+            "Cascadia Mono",
+            "\"Cascadia Mono\", Consolas, monospace"),
+        new(
+            XtermFontFamily.Consolas,
+            "Consolas",
+            "Consolas, \"Cascadia Mono\", monospace"),
+        new(
+            XtermFontFamily.D2Coding,
+            "D2Coding",
+            "D2Coding, \"D2Coding ligature\", Consolas, monospace"),
+        new(
+            XtermFontFamily.CourierNew,
+            "Courier New",
+            "\"Courier New\", Consolas, monospace"),
+        new(
+            XtermFontFamily.LucidaConsole,
+            "Lucida Console",
+            "\"Lucida Console\", Consolas, monospace")
+    };
+
+    public ObservableCollection<int> XtermFontSizeOptions { get; } = new()
+    {
+        10, 11, 12, 13, 14, 15
+    };
+
     public int BridgePendingChunkCount =>
         BridgePendingDeviceToVirtualChunkCount + BridgePendingVirtualToDeviceChunkCount;
 
@@ -1465,6 +1521,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderMinWidth));
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+            RestartSerialBusUtilizationMeasurement(
+                normalized == RxDisplayMode.Hex ? "HEX mode entered" : "Terminal mode selected");
             OnPropertyChanged(nameof(IsTxLineEndingEffective));
             OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
@@ -1474,6 +1532,69 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     public bool IsHexRxViewSelected => SelectedRxDisplayMode == RxDisplayMode.Hex;
+
+    public string SerialBusUtilizationHeaderText
+    {
+        get
+        {
+            if (!IsHexRxViewSelected)
+            {
+                return string.Empty;
+            }
+
+            if (!_serialBusUtilizationSnapshot.IsAvailable)
+            {
+                return "RX BUSY -- · IDLE -- · PEAK -- · 1m";
+            }
+
+            var windowText = _serialBusUtilizationSnapshot.IsFullWindow
+                ? "1m"
+                : $"{Math.Max(1, (int)Math.Floor(_serialBusUtilizationSnapshot.ObservationSeconds))}s/1m";
+            var peakText = _serialBusUtilizationSnapshot.IsPeakAvailable
+                ? FormattableString.Invariant($"{_serialBusUtilizationSnapshot.PeakBusyPercent:0.0}%")
+                : "--";
+            return FormattableString.Invariant(
+                $"RX BUSY {_serialBusUtilizationSnapshot.BusyPercent:0.0}% · IDLE {_serialBusUtilizationSnapshot.IdlePercent:0.0}% · PEAK {peakText} · {windowText}");
+        }
+    }
+
+    public double SerialBusUtilizationHeaderMinWidth => IsHexRxViewSelected ? 292d : 0d;
+
+    public string SerialBusUtilizationToolTip
+    {
+        get
+        {
+            if (!IsHexRxViewSelected)
+            {
+                return string.Empty;
+            }
+
+            const string limitation =
+                "RX-only estimate; local TX is not added, although adapter echo can reappear as RX. Driver buffering and bytes lost to line errors cannot be measured as wire activity.";
+            if (!IsConnected)
+            {
+                return $"Connect in HEX mode to measure the rolling 60-second RX bus utilization. {limitation}";
+            }
+
+            if (!_serialBusUtilizationSnapshot.IsAvailable)
+            {
+                var startedText = _serialBusMeasurementStartedAt.HasValue
+                    ? $" Started {_serialBusMeasurementStartedAt.Value.LocalDateTime:HH:mm:ss}."
+                    : string.Empty;
+                return $"Collecting the first RX bus sample.{startedText} {_serialBusFrameFormatText} {limitation}";
+            }
+
+            var windowText = _serialBusUtilizationSnapshot.IsFullWindow
+                ? "rolling 60.0 seconds"
+                : FormattableString.Invariant($"{_serialBusUtilizationSnapshot.ObservationSeconds:0.0}-second warm-up window");
+            var peakText = _serialBusUtilizationSnapshot.IsPeakAvailable
+                ? FormattableString.Invariant(
+                    $"Highest fixed one-second bucket in this window: {_serialBusUtilizationSnapshot.PeakBusyPercent:0.0}%.")
+                : "PEAK becomes available after a complete 60-second window.";
+            return FormattableString.Invariant(
+                $"{windowText}: average RX busy {_serialBusUtilizationSnapshot.BusyPercent:0.0}%. {peakText} {_serialBusUtilizationSnapshot.ReceivedBytes:0} RX bytes × {_serialBusUtilizationSnapshot.BitsPerCharacter:0.#} bits/character ÷ {_serialBusUtilizationSnapshot.BaudRate:N0} bps. Started {_serialBusMeasurementStartedAt?.LocalDateTime:HH:mm:ss}; reset reason: {_lastSerialBusMeasurementResetReason}. {_serialBusFrameFormatText} {limitation}");
+        }
+    }
 
     public int HexGroupTimeoutMs
     {
@@ -5382,6 +5503,55 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    public XtermFontOption SelectedXtermFontOption
+    {
+        get => XtermFontOptions.FirstOrDefault(option => option.Family == _currentUiSettings.XtermFontFamily)
+            ?? XtermFontOptions[0];
+        set
+        {
+            if (value is null || _currentUiSettings.XtermFontFamily == value.Family)
+            {
+                return;
+            }
+
+            _currentUiSettings.XtermFontFamily = value.Family;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(EffectiveXtermFontCssFamily));
+            RecordSettingsChange("xterm font", SettingsApplyBehavior.Immediate, value.DisplayName);
+        }
+    }
+
+    public string EffectiveXtermFontCssFamily => SelectedXtermFontOption.CssFontFamily;
+
+    public int XtermFontSize
+    {
+        get => _currentUiSettings.XtermFontSize;
+        set
+        {
+            if (!ValidateIntRange(
+                    "xterm font size",
+                    value,
+                    UiSettings.MinXtermFontSize,
+                    UiSettings.MaxXtermFontSize))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (_currentUiSettings.XtermFontSize == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.XtermFontSize = value;
+            OnPropertyChanged();
+            RecordSettingsChange(
+                "xterm font size",
+                SettingsApplyBehavior.Immediate,
+                $"{value.ToString(CultureInfo.InvariantCulture)} px");
+        }
+    }
+
     private async Task ConnectCoreAsync()
     {
         var requestedSelectedPort = SelectedPort;
@@ -5452,6 +5622,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             ClearPendingReconnectSettings();
             RecordConnectSucceeded(settings);
+            RestartSerialBusUtilizationMeasurement("serial connection started");
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
             SetFooter(CreateFooterStatus());
         }
@@ -5773,6 +5944,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = null;
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
             IsConnected = _serialService.IsConnected;
+            RestartSerialBusUtilizationMeasurement("serial disconnected");
             if (!IsConnected)
             {
                 ApplyRxDisplayRuntime(
@@ -9029,6 +9201,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         InvalidateSearchResultsForCriteriaChange();
         OnPropertyChanged(nameof(PendingVisualLineCount));
         OnPropertyChanged(nameof(RuleChangesSinceClearCount));
+        if (IsHexRxViewSelected)
+        {
+            RestartSerialBusUtilizationMeasurement("visible log cleared");
+        }
         SetFooter(CreateFooterStatus());
         return Task.CompletedTask;
     }
@@ -10595,6 +10771,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
         OnPropertyChanged(nameof(ShowTimestampInLogView));
         OnPropertyChanged(nameof(SelectedTimestampDisplayFormatOption));
+        OnPropertyChanged(nameof(SelectedXtermFontOption));
+        OnPropertyChanged(nameof(EffectiveXtermFontCssFamily));
+        OnPropertyChanged(nameof(XtermFontSize));
         if (includeBackgroundVisualSettings)
         {
             OnPropertyChanged(nameof(CuteBackgroundMode));
@@ -10990,6 +11169,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(CompactConnectionStatusText));
         }
 
+        RefreshSerialBusUtilizationMeasurement();
+
         OnPropertyChanged(nameof(PendingVisualLineCount));
         OnPropertyChanged(nameof(CurrentViewPauseOmittedLineCount));
         OnPropertyChanged(nameof(TotalViewPauseOmittedLineCount));
@@ -11030,6 +11211,90 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshLogFileActionProperties();
         RefreshDiagnostics();
     }
+
+    private void RestartSerialBusUtilizationMeasurement(string reason)
+    {
+        _serialBusUtilizationMeter.Stop();
+        _serialBusUtilizationSnapshot = default;
+        _serialBusFrameFormatText = string.Empty;
+        _serialBusMeasurementStartedAt = null;
+        _lastSerialBusMeasurementResetReason = string.IsNullOrWhiteSpace(reason)
+            ? "measurement restarted"
+            : reason.Trim();
+
+        if (IsConnected && IsHexRxViewSelected)
+        {
+            var settings = (_lastSuccessfulSerialSettings ?? CreateCurrentSettings()).Clone();
+            _serialBusUtilizationMeter.Start(
+                GetMonotonicSeconds(),
+                _serialService.ReceivedByteCount,
+                settings.BaudRate,
+                settings.DataBits,
+                settings.Parity,
+                settings.StopBits);
+            _serialBusMeasurementStartedAt = DateTimeOffset.Now;
+            var bitsPerCharacter = SerialBusUtilizationMeter.CalculateBitsPerCharacter(
+                settings.DataBits,
+                settings.Parity,
+                settings.StopBits);
+            _serialBusFrameFormatText =
+                $"Frame {settings.DataBits}{FormatParityCode(settings.Parity)}{FormatStopBitsCode(settings.StopBits)} " +
+                FormattableString.Invariant($"({bitsPerCharacter:0.#} bits/character).");
+        }
+
+        NotifySerialBusUtilizationChanged();
+    }
+
+    private void RefreshSerialBusUtilizationMeasurement()
+    {
+        if (!IsConnected || !IsHexRxViewSelected)
+        {
+            if (_serialBusUtilizationMeter.IsActive || _serialBusUtilizationSnapshot.IsAvailable)
+            {
+                RestartSerialBusUtilizationMeasurement(
+                    IsHexRxViewSelected ? "serial connection inactive" : "Terminal mode selected");
+            }
+
+            return;
+        }
+
+        if (!_serialBusUtilizationMeter.IsActive)
+        {
+            RestartSerialBusUtilizationMeasurement("HEX measurement synchronized");
+            return;
+        }
+
+        _serialBusUtilizationSnapshot = _serialBusUtilizationMeter.Sample(
+            GetMonotonicSeconds(),
+            _serialService.ReceivedByteCount);
+        NotifySerialBusUtilizationChanged();
+    }
+
+    private void NotifySerialBusUtilizationChanged()
+    {
+        OnPropertyChanged(nameof(SerialBusUtilizationHeaderText));
+        OnPropertyChanged(nameof(SerialBusUtilizationHeaderMinWidth));
+        OnPropertyChanged(nameof(SerialBusUtilizationToolTip));
+    }
+
+    private static double GetMonotonicSeconds() =>
+        Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
+
+    private static string FormatParityCode(SerialParityMode parity) => parity switch
+    {
+        SerialParityMode.Odd => "O",
+        SerialParityMode.Even => "E",
+        SerialParityMode.Mark => "M",
+        SerialParityMode.Space => "S",
+        _ => "N"
+    };
+
+    private static string FormatStopBitsCode(SerialStopBitsMode stopBits) => stopBits switch
+    {
+        SerialStopBitsMode.OnePointFive => "1.5",
+        SerialStopBitsMode.Two => "2",
+        _ => "1"
+    };
 
     private void SetStatus(string message)
     {
@@ -11708,6 +11973,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Selected port available: {SelectedPortAvailable}");
         builder.AppendLine($"  Last successful port: {LastSuccessfulPort}");
         builder.AppendLine($"  Last successful baud: {LastSuccessfulBaudRate:N0}");
+        builder.AppendLine($"  HEX RX bus meter active: {_serialBusUtilizationMeter.IsActive}");
+        builder.AppendLine($"  HEX RX bus meter display: {(IsHexRxViewSelected ? SerialBusUtilizationHeaderText : "(hidden in Terminal mode)")}");
+        builder.AppendLine($"  HEX RX bus meter frame: {(string.IsNullOrWhiteSpace(_serialBusFrameFormatText) ? "(not measuring)" : _serialBusFrameFormatText)}");
+        builder.AppendLine($"  HEX RX bus meter started: {(_serialBusMeasurementStartedAt.HasValue ? FormatDiagnosticTime(_serialBusMeasurementStartedAt.Value) : "(not active)")}");
+        builder.AppendLine($"  HEX RX bus meter last reset reason: {_lastSerialBusMeasurementResetReason}");
+        builder.AppendLine($"  HEX RX bus meter observed bytes/window: {(_serialBusUtilizationSnapshot.IsAvailable ? $"{_serialBusUtilizationSnapshot.ReceivedBytes:0} B / {_serialBusUtilizationSnapshot.ObservationSeconds:0.0} s" : "(warming up or inactive)")}");
+        builder.AppendLine($"  HEX RX bus meter rolling peak: {(_serialBusUtilizationSnapshot.IsPeakAvailable ? $"{_serialBusUtilizationSnapshot.PeakBusyPercent:0.0}%" : "(requires full 60-second window)")}");
+        builder.AppendLine("  HEX RX bus meter does not add local TX; adapter echo may still reappear as observed RX.");
+        builder.AppendLine("  HEX RX bus meter estimates wire time only from successfully observed RX bytes.");
         builder.AppendLine($"  Last port selection change reason: {LastPortSelectionChangeReason}");
         builder.AppendLine($"  Last disconnect preserved port: {LastDisconnectPreservedPort}");
         builder.AppendLine($"  Last port refresh result: {LastPortRefreshResult}");

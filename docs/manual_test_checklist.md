@@ -37,6 +37,26 @@ real hardware when available.
   COM port remains selected and connected while new data uses the active mode.
 - [ ] In HEX mode, change the HEX group timeout and confirm it applies without
   disconnecting the COM port.
+- [ ] Confirm `RX BUSY -- · IDLE -- · PEAK -- · 1m` appears to the right of the HEX timeout
+  while disconnected in HEX mode.
+- [ ] Connect in HEX mode and confirm the bus meter changes to a warm-up duration,
+  then shows `1m` after 60 seconds.
+- [ ] During warm-up, confirm BUSY and IDLE percentages are available after the
+  first sample, PEAK remains `--`, and duration is shown as `<seconds>/1m`.
+- [ ] Reset immediately before a timer tick, inject a short high-rate burst, and
+  confirm it does not become a false full-second PEAK when the first minute
+  completes.
+- [ ] Generate one high-rate RX burst followed by a lower steady rate and confirm
+  PEAK holds the busiest approximately one-second interval, then rolls out 60
+  seconds after that interval.
+- [ ] Press Clear in HEX mode and confirm BUSY/IDLE/PEAK return to the collecting
+  state and start a new warm-up window. Confirm file logging continues normally.
+- [ ] Confirm the bus meter disappears in Terminal mode and restarts its warm-up
+  window when switching back to HEX mode.
+- [ ] With known continuous RX traffic, confirm the BUSY estimate is consistent
+  with `RX bytes × framing bits ÷ baud ÷ observed seconds`.
+- [ ] Send local TX traffic without RX echo and confirm it does not increase the
+  RX BUSY estimate.
 - [ ] Send a harmless command.
 - [ ] Disconnect and reconnect.
 - [ ] Confirm no app crash or stale connection state.
@@ -98,6 +118,10 @@ real hardware when available.
 
 - [ ] Confirm xterm log lines append smoothly.
 - [ ] Resize the app and confirm the xterm area fits the available space.
+- [ ] In Settings > Font, change the xterm font family and size; confirm both
+  apply immediately without clearing or duplicating visible log lines.
+- [ ] Save the profile, restart or reload it, and confirm the selected xterm font
+  family and size are restored.
 - [ ] Drag-select multiple xterm lines.
 - [ ] Press Ctrl+C.
 - [ ] Paste into Notepad and confirm selected text copied.

@@ -440,13 +440,15 @@
 
     const bundledTerminalFontFamily = '"JetBrains Mono Bundled", Consolas, "Cascadia Mono", Menlo, monospace';
     const fallbackTerminalFontFamily = 'Consolas, "Cascadia Mono", Menlo, monospace';
+    let configuredTerminalFontFamily = fallbackTerminalFontFamily;
+    let bundledTerminalFontReady = false;
     const terminal = new Terminal({
       allowTransparency: false,
       convertEol: true,
       cursorBlink: false,
       disableStdin: true,
       fontFamily: fallbackTerminalFontFamily,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: 400,
       fontWeightBold: 700,
       minimumContrastRatio: 4.5,
@@ -474,10 +476,13 @@
           throw new Error(`font availability check failed (regular=${regularLoaded}, bold=${boldLoaded})`);
         }
 
-        terminal.options.fontFamily = bundledTerminalFontFamily;
-        terminal.clearTextureAtlas();
-        fitAddon.fit();
-        terminal.refresh(0, Math.max(0, terminal.rows - 1));
+        bundledTerminalFontReady = true;
+        if (configuredTerminalFontFamily.includes('"JetBrains Mono Bundled"')) {
+          terminal.options.fontFamily = configuredTerminalFontFamily;
+          terminal.clearTextureAtlas();
+          fitAddon.fit();
+          terminal.refresh(0, Math.max(0, terminal.rows - 1));
+        }
       } catch (error) {
         console.error('Bundled JetBrains Mono load failed; using the system monospace fallback.', error);
         if (window.chrome && window.chrome.webview) {
@@ -1119,6 +1124,28 @@
 
       terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
       trimParsedLogLineIds();
+      return true;
+    };
+
+    window.serialMonitorSetFont = function (fontFamily, fontSize) {
+      const normalizedFontFamily = String(fontFamily || '').trim();
+      const parsedFontSize = Number(fontSize);
+      if (!normalizedFontFamily ||
+          !Number.isInteger(parsedFontSize) ||
+          parsedFontSize < 10 ||
+          parsedFontSize > 15) {
+        return false;
+      }
+
+      configuredTerminalFontFamily = normalizedFontFamily;
+      const useBundledFont = normalizedFontFamily.includes('"JetBrains Mono Bundled"');
+      terminal.options.fontFamily = useBundledFont && !bundledTerminalFontReady
+        ? fallbackTerminalFontFamily
+        : normalizedFontFamily;
+      terminal.options.fontSize = parsedFontSize;
+      terminal.clearTextureAtlas();
+      fitAddon.fit();
+      terminal.refresh(0, Math.max(0, terminal.rows - 1));
       return true;
     };
 

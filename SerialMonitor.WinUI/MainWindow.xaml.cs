@@ -282,6 +282,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _ = SyncXtermFontAsync();
+
         if (_xtermNeedsFullRerenderAfterRestore)
         {
             QueueXtermFullRerenderAfterRestore(_pendingXtermFullRerenderReason);
@@ -2092,6 +2094,7 @@ public sealed partial class MainWindow : Window
         _isXtermReady = true;
         _viewModel.SetXtermReady(true);
         await SyncXtermScrollbackSizeAsync();
+        await SyncXtermFontAsync();
         await SyncXtermHexSelectionHintModeAsync();
         QueueXtermFit();
         if (_xtermNeedsFullRerenderAfterRestore)
@@ -2114,6 +2117,12 @@ public sealed partial class MainWindow : Window
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
         {
             _ = SyncXtermScrollbackSizeAsync();
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.EffectiveXtermFontCssFamily) ||
+            args.PropertyName == nameof(MainViewModel.XtermFontSize))
+        {
+            _ = SyncXtermFontAsync();
         }
 
         if (args.PropertyName == nameof(MainViewModel.SelectedRxDisplayMode))
@@ -3052,6 +3061,34 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             _viewModel.RecordXtermLayoutError($"xterm scrollback update failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<bool> SyncXtermFontAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        {
+            return false;
+        }
+
+        try
+        {
+            var fontFamilyJson = JsonSerializer.Serialize(_viewModel.EffectiveXtermFontCssFamily);
+            var fontSize = _viewModel.XtermFontSize;
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorSetFont && window.serialMonitorSetFont({fontFamilyJson}, {fontSize});");
+            if (TryParseScriptBoolean(result) == true)
+            {
+                return true;
+            }
+
+            _viewModel.RecordXtermLayoutError("xterm font update was rejected.");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermLayoutError($"xterm font update failed: {ex.Message}");
             return false;
         }
     }

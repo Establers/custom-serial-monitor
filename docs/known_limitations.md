@@ -29,6 +29,25 @@ This file tracks current intentional limits and validation gaps.
 - Real-device disconnect/reconnect behavior still needs coverage across common
   USB-UART adapters and Windows driver states.
 
+## HEX RX Bus Utilization
+
+- The top `RX BUSY / IDLE` meter is a rolling byte-count-based estimate and is
+  visible only in HEX mode.
+- `PEAK` is the highest fixed one-second bucket inside the same rolling
+  60-second window, not an all-time maximum. It is unavailable during the first
+  minute after a measurement reset.
+- RS-485 does not standardize a utilization averaging window; 60 seconds is the
+  application's monitoring convention.
+- It uses the applied baud, data bits, parity, and stop bits. It does not inspect
+  or decode the proprietary packet protocol.
+- Local TX is intentionally not added, although adapter echo can reappear as RX.
+  `IDLE` therefore means no successfully observed RX character time rather than
+  proven electrical bus idle.
+- Collisions, framing/parity errors, overruns, and bytes lost below the Windows
+  API can make the estimate lower than actual physical wire activity.
+- Clearing the visible log in HEX mode intentionally restarts the measurement
+  window.
+
 ## COM Bridge
 
 - The first bridge implementation supports one app-side virtual COM port and
