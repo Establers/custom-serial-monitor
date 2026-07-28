@@ -51,6 +51,7 @@ public sealed partial class MainWindow : Window
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
     private readonly object _xtermLiveAppendQueueGate = new();
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
+    private readonly XtermClearBarrier _xtermClearBarrier = new();
     private readonly object _xtermAppendAckGate = new();
     private readonly Dictionary<long, TaskCompletionSource<bool>> _xtermAppendAcknowledgements = new();
     private bool _xtermLiveAppendPumpRunning;
@@ -1060,15 +1061,14 @@ public sealed partial class MainWindow : Window
 
         if (!DispatcherQueue.HasThreadAccess)
         {
-            var generation = Interlocked.Read(ref _xtermRenderGeneration);
-            DispatcherQueue.TryEnqueue(() => EnqueueLiveXtermBatch(batch, generation));
+            DispatcherQueue.TryEnqueue(() => EnqueueLiveXtermBatch(batch));
             return;
         }
 
-        EnqueueLiveXtermBatch(batch, Interlocked.Read(ref _xtermRenderGeneration));
+        EnqueueLiveXtermBatch(batch);
     }
 
-    private void EnqueueLiveXtermBatch(LogTextBatch batch, long generation)
+    private void EnqueueLiveXtermBatch(LogTextBatch batch)
     {
         _viewModel.RecordXtermAppendQueued(batch.AppendedText.Length);
         Interlocked.Add(ref _pendingLiveXtermLines, batch.LineCount);
@@ -1076,8 +1076,12 @@ public sealed partial class MainWindow : Window
         var startPump = false;
         lock (_xtermLiveAppendQueueGate)
         {
+            var generation = Interlocked.Read(ref _xtermRenderGeneration);
             _xtermLiveAppendQueue.AddLast((batch, generation));
-            if (!_xtermLiveAppendPumpRunning && !_xtermAppendRecoveryPending)
+            if (_xtermClearBarrier.ShouldStartPump(
+                _xtermLiveAppendPumpRunning,
+                _xtermAppendRecoveryPending,
+                _xtermLiveAppendQueue.Count))
             {
                 _xtermLiveAppendPumpRunning = true;
                 startPump = true;
@@ -1134,8 +1138,10 @@ public sealed partial class MainWindow : Window
             {
                 _xtermLiveAppendPumpRunning = false;
                 if (!IsClosingOrClosed &&
-                    !_xtermAppendRecoveryPending &&
-                    _xtermLiveAppendQueue.Count > 0)
+                    _xtermClearBarrier.ShouldStartPump(
+                        _xtermLiveAppendPumpRunning,
+                        _xtermAppendRecoveryPending,
+                        _xtermLiveAppendQueue.Count))
                 {
                     _xtermLiveAppendPumpRunning = true;
                     restartPump = true;
@@ -1153,7 +1159,7 @@ public sealed partial class MainWindow : Window
     {
         lock (_xtermLiveAppendQueueGate)
         {
-            if (_xtermLiveAppendQueue.Count == 0)
+            if (_xtermClearBarrier.IsPending || _xtermLiveAppendQueue.Count == 0)
             {
                 return null;
             }
@@ -1226,9 +1232,11 @@ public sealed partial class MainWindow : Window
 
             _xtermAppendRecoveryPending = false;
             _xtermAppendRecoveryRetryQueued = false;
-            if (!_xtermLiveAppendPumpRunning &&
-                !IsClosingOrClosed &&
-                _xtermLiveAppendQueue.Count > 0)
+            if (!IsClosingOrClosed &&
+                _xtermClearBarrier.ShouldStartPump(
+                    _xtermLiveAppendPumpRunning,
+                    _xtermAppendRecoveryPending,
+                    _xtermLiveAppendQueue.Count))
             {
                 _xtermLiveAppendPumpRunning = true;
                 startPump = true;
@@ -1291,11 +1299,75 @@ public sealed partial class MainWindow : Window
 
         if (!DispatcherQueue.HasThreadAccess)
         {
-            DispatcherQueue.TryEnqueue(() => _ = ClearXtermAsync());
+            DispatcherQueue.TryEnqueue(BeginXtermClear);
             return;
         }
 
-        _ = ClearXtermAsync();
+        BeginXtermClear();
+    }
+
+    private void BeginXtermClear()
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        var clearedThroughDisplayedLineCount = _viewModel.Log.DisplayedLineCount;
+        long clearGeneration;
+        lock (_xtermLiveAppendQueueGate)
+        {
+            // Publish the clear boundary before advancing the generation. An old
+            // batch that already left the host queue can then observe the new
+            // generation only after its sequence is known to be covered by Clear.
+            Interlocked.Exchange(
+                ref _xtermSyncedThroughDisplayedLineCount,
+                clearedThroughDisplayedLineCount);
+            clearGeneration = Interlocked.Increment(ref _xtermRenderGeneration);
+            _xtermClearBarrier.Begin(clearGeneration);
+        }
+        _xtermNeedsFullRerenderAfterRestore = false;
+        _pendingXtermFullRerenderReason = "full re-render";
+        _restoreRerenderRetryCount = 0;
+        _viewModel.SetXtermNeedsFullRerenderAfterRestore(false);
+        ClearSuspendedXtermBatches();
+        _viewModel.RecordRenderedSequenceState(clearedThroughDisplayedLineCount, pendingDeltaLineCount: 0);
+        _ = ClearXtermAsync(clearGeneration, clearedThroughDisplayedLineCount);
+    }
+
+    private void CompleteXtermClearBarrier(long clearGeneration)
+    {
+        var startPump = false;
+        lock (_xtermLiveAppendQueueGate)
+        {
+            if (!_xtermClearBarrier.TryComplete(clearGeneration))
+            {
+                return;
+            }
+
+            if (!IsClosingOrClosed &&
+                _xtermClearBarrier.ShouldStartPump(
+                    _xtermLiveAppendPumpRunning,
+                    _xtermAppendRecoveryPending,
+                    _xtermLiveAppendQueue.Count))
+            {
+                _xtermLiveAppendPumpRunning = true;
+                startPump = true;
+            }
+        }
+
+        if (startPump)
+        {
+            _ = RunLiveXtermAppendPumpAsync();
+        }
+
+        lock (_fullXtermRerenderGate)
+        {
+            if (_fullXtermRerenderQueued && !_fullXtermRerenderRunning)
+            {
+                ScheduleQueuedFullXtermRerender(debounce: false);
+            }
+        }
     }
 
     private void OnLogTextRebuilt(object? sender, EventArgs args)
@@ -1494,7 +1566,14 @@ public sealed partial class MainWindow : Window
                 return (Array.Empty<LogTextBatch>(), false, 0, 0);
             }
 
-            var batches = _suspendedXtermBatches.ToArray();
+            // The completion acknowledgement protects against dropped or partially
+            // parsed xterm writes, but replaying every original minimized UI batch made
+            // restore time scale with batch count instead of log size. Reuse the live
+            // append bounds so restore needs only a handful of acknowledged writes.
+            var batches = XtermLogTextBatchCoalescer.Coalesce(
+                _suspendedXtermBatches,
+                XtermLiveAppendMaxLines,
+                XtermLiveAppendMaxChars);
             _suspendedXtermBatches.Clear();
             var clearRequested = _suspendedXtermClearRequested;
             _suspendedXtermClearRequested = false;
@@ -1672,6 +1751,7 @@ public sealed partial class MainWindow : Window
         }
 
         var restoreStartedAt = DateTimeOffset.Now;
+        var restoreXtermGeneration = Interlocked.Read(ref _xtermRenderGeneration);
         var drained = DrainSuspendedXtermBatches();
         if (!drained.ClearRequested && drained.Batches.Length == 0)
         {
@@ -1699,6 +1779,11 @@ public sealed partial class MainWindow : Window
         await _xtermAppendGate.WaitAsync();
         try
         {
+            if (restoreXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return;
+            }
+
             if (_isVisualAppendSuspendedForMinimize || _viewModel.IsLogRenderingPaused)
             {
                 RequeueSuspendedXtermBatches(drained.Batches, drained.ClearRequested);
@@ -1743,9 +1828,15 @@ public sealed partial class MainWindow : Window
                     var appendCompleted = await ExecuteXtermAppendScriptAsync(
                         batch.AppendedText,
                         batch.LineCount,
-                        autoScroll: false);
+                        autoScroll: false,
+                        expectedGeneration: restoreXtermGeneration);
                     if (!appendCompleted)
                     {
+                        if (restoreXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+                        {
+                            return;
+                        }
+
                         MarkXtermFullRerenderNeeded("restore delta append interrupted");
                         return;
                     }
@@ -1763,6 +1854,12 @@ public sealed partial class MainWindow : Window
                 MarkXtermFullRerenderNeeded("restore delta append completion timed out");
                 return;
             }
+
+            if (restoreXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return;
+            }
+
             if (_viewModel.IsEffectiveXtermAutoScrollEnabled)
             {
                 await ScrollXtermToBottomAsync("Restore delta final scroll");
@@ -1937,6 +2034,11 @@ public sealed partial class MainWindow : Window
 
     private async Task DrainQueuedFullXtermRerenderAsync()
     {
+        if (_xtermClearBarrier.IsPending)
+        {
+            return;
+        }
+
         string reason;
         bool isRestoreRender;
         lock (_fullXtermRerenderGate)
@@ -2615,6 +2717,7 @@ public sealed partial class MainWindow : Window
 
         var restoreStartedAt = DateTimeOffset.Now;
         var renderStartedAt = restoreStartedAt;
+        var renderEntryXtermGeneration = Interlocked.Read(ref _xtermRenderGeneration);
         XtermScrollState? previousScrollState = null;
         var finalScrollAction = "unchanged";
         var scrollRestoreAttempted = false;
@@ -2645,6 +2748,16 @@ public sealed partial class MainWindow : Window
         await _xtermAppendGate.WaitAsync();
         try
         {
+            if (renderEntryXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                _viewModel.RecordFullXtermRerenderEndedAfterError(
+                    "superseded",
+                    "xterm full re-render superseded before it started",
+                    renderGeneration,
+                    canceled: true);
+                return;
+            }
+
             if (IsXtermVisualAppendSuspended() ||
                 _viewModel.IsLogRenderingPaused)
             {
@@ -2672,6 +2785,16 @@ public sealed partial class MainWindow : Window
                 !_viewModel.IsXtermAppendBackpressureActive &&
                 (_viewModel.IsAutoScrollEnabled || previousScrollState?.AtBottom == true);
 
+            if (renderEntryXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                _viewModel.RecordFullXtermRerenderEndedAfterError(
+                    "superseded",
+                    "xterm full re-render superseded before snapshot",
+                    renderGeneration,
+                    canceled: true);
+                return;
+            }
+
             var xtermRenderGeneration = Interlocked.Increment(ref _xtermRenderGeneration);
             var text = _viewModel.Log.GetXtermTextSnapshot();
             var currentVisibleLineCount = _viewModel.Log.CurrentVisibleLineCount;
@@ -2696,6 +2819,16 @@ public sealed partial class MainWindow : Window
 
             if (!appendCompleted)
             {
+                if (xtermRenderGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+                {
+                    _viewModel.RecordFullXtermRerenderEndedAfterError(
+                        "superseded",
+                        "xterm full re-render superseded by clear or a newer render",
+                        renderGeneration,
+                        canceled: true);
+                    return;
+                }
+
                 MarkXtermFullRerenderNeeded("xterm sync append interrupted");
                 _viewModel.RecordFullXtermRerenderEndedAfterError(
                     "interrupted",
@@ -2710,6 +2843,16 @@ public sealed partial class MainWindow : Window
                 _viewModel.RecordFullXtermRerenderEndedAfterError(
                     "timeout",
                     "xterm full re-render completion timed out",
+                    renderGeneration,
+                    canceled: true);
+                return;
+            }
+
+            if (xtermRenderGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                _viewModel.RecordFullXtermRerenderEndedAfterError(
+                    "superseded",
+                    "xterm full re-render superseded by clear or a newer render",
                     renderGeneration,
                     canceled: true);
                 return;
@@ -2786,7 +2929,16 @@ public sealed partial class MainWindow : Window
             return string.IsNullOrEmpty(batch.AppendedText) || IsClosingOrClosed;
         }
 
-        if (IsXtermVisualAppendSuspended())
+        var route = XtermAppendRoutingPolicy.GetRoute(
+            batch.EndDisplayedLineCount,
+            Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
+            IsXtermVisualAppendSuspended());
+        if (route == XtermAppendRoute.AlreadyCovered)
+        {
+            return true;
+        }
+
+        if (route == XtermAppendRoute.Suspend)
         {
             EnqueueSuspendedXtermBatch(batch);
             return true;
@@ -2795,7 +2947,16 @@ public sealed partial class MainWindow : Window
         await _xtermAppendGate.WaitAsync();
         try
         {
-            if (IsXtermVisualAppendSuspended())
+            route = XtermAppendRoutingPolicy.GetRoute(
+                batch.EndDisplayedLineCount,
+                Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
+                IsXtermVisualAppendSuspended());
+            if (route == XtermAppendRoute.AlreadyCovered)
+            {
+                return true;
+            }
+
+            if (route == XtermAppendRoute.Suspend)
             {
                 EnqueueSuspendedXtermBatch(batch);
                 return true;
@@ -2803,12 +2964,8 @@ public sealed partial class MainWindow : Window
 
             if (generation != Interlocked.Read(ref _xtermRenderGeneration))
             {
-                return batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount;
-            }
-
-            if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount)
-            {
-                return true;
+                return batch.EndDisplayedLineCount <=
+                    Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount);
             }
 
             var autoScroll = _viewModel.IsEffectiveXtermAutoScrollEnabled;
@@ -2820,7 +2977,13 @@ public sealed partial class MainWindow : Window
             var appendCompleted = await ExecuteXtermAppendScriptAsync(batch.AppendedText, batch.LineCount, autoScroll);
             if (!appendCompleted)
             {
-                return false;
+                return generation != Interlocked.Read(ref _xtermRenderGeneration) &&
+                    batch.EndDisplayedLineCount <= Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount);
+            }
+
+            if (generation != Interlocked.Read(ref _xtermRenderGeneration))
+            {
+                return batch.EndDisplayedLineCount <= Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount);
             }
 
             _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
@@ -2886,9 +3049,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> ExecuteXtermAppendScriptAsync(string text, int lineCount, bool autoScroll)
+    private async Task<bool> ExecuteXtermAppendScriptAsync(
+        string text,
+        int lineCount,
+        bool autoScroll,
+        long? expectedGeneration = null)
     {
-        return await ExecuteXtermAppendChunksAsync(SplitXtermAppendText(text, lineCount), autoScroll);
+        return await ExecuteXtermAppendChunksAsync(
+            SplitXtermAppendText(text, lineCount),
+            autoScroll,
+            expectedGeneration);
     }
 
     private async Task<bool> ReplaceXtermLogAsync(string text, bool autoScroll, long expectedGeneration)
@@ -2982,6 +3152,12 @@ public sealed partial class MainWindow : Window
                 }
 
                 _viewModel.RecordXtermAppendSuccess(chunk.LineCount, chunk.Text.Length);
+
+                if (expectedGeneration.HasValue &&
+                    expectedGeneration.Value != Interlocked.Read(ref _xtermRenderGeneration))
+                {
+                    return false;
+                }
             }
             finally
             {
@@ -3371,38 +3547,77 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task ClearXtermAsync()
+    private async Task<bool> CancelPendingXtermWritesAsync()
     {
-        if (!_isXtermReady || IsClosingOrClosed || IsXtermVisualAppendSuspended())
+        if (!_isXtermReady || IsClosingOrClosed)
         {
-            if (IsXtermVisualAppendSuspended())
-            {
-                MarkXtermClearNeededAfterRestore();
-            }
-
-            return;
+            return false;
         }
 
-        await _xtermAppendGate.WaitAsync();
         try
         {
-            if (IsXtermVisualAppendSuspended())
-            {
-                MarkXtermClearNeededAfterRestore();
-                return;
-            }
-
-            Interlocked.Increment(ref _xtermRenderGeneration);
-            await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
-            _xtermSyncedThroughDisplayedLineCount = _viewModel.Log.DisplayedLineCount;
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                "window.serialMonitorCancelPendingWrites ? window.serialMonitorCancelPendingWrites() : false;");
+            return TryParseScriptBoolean(result) == true;
         }
         catch (Exception ex)
         {
-            _viewModel.RecordXtermAppendError($"xterm clear failed: {ex.Message}");
+            _viewModel.RecordXtermLayoutError($"xterm pending write cancellation failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task ClearXtermAsync(long clearGeneration, long clearedThroughDisplayedLineCount)
+    {
+        try
+        {
+            if (!_isXtermReady || IsClosingOrClosed || IsXtermVisualAppendSuspended())
+            {
+                if (IsXtermVisualAppendSuspended())
+                {
+                    MarkXtermClearNeededAfterRestore();
+                }
+
+                return;
+            }
+
+            // Ask JavaScript to stop queuing restore chunks before waiting for the
+            // append gate. The in-flight xterm write is allowed to finish so no stale
+            // parser callback can append text after the clear is applied.
+            await CancelPendingXtermWritesAsync();
+            await _xtermAppendGate.WaitAsync();
+            try
+            {
+                if (IsXtermVisualAppendSuspended())
+                {
+                    MarkXtermClearNeededAfterRestore();
+                    return;
+                }
+
+                if (clearGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+                {
+                    return;
+                }
+
+                await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
+                _xtermSyncedThroughDisplayedLineCount = clearedThroughDisplayedLineCount;
+                _viewModel.RecordRenderedSequenceState(
+                    clearedThroughDisplayedLineCount,
+                    Math.Max(0, _viewModel.Log.DisplayedLineCount - clearedThroughDisplayedLineCount));
+            }
+            catch (Exception ex)
+            {
+                _viewModel.RecordXtermAppendError($"xterm clear failed: {ex.Message}");
+                QueueFullXtermRerender("xterm clear failed", debounce: false);
+            }
+            finally
+            {
+                _xtermAppendGate.Release();
+            }
         }
         finally
         {
-            _xtermAppendGate.Release();
+            CompleteXtermClearBarrier(clearGeneration);
         }
     }
 

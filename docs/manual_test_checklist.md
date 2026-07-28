@@ -141,6 +141,15 @@ real hardware when available.
 - [ ] Clear `Keep saving file log`, repeat the pause, and confirm RX/events continue
   while pause-period records are omitted from the file and the gap is marked.
 - [ ] Click Clear and confirm only the visible terminal clears.
+- [ ] Minimize under sustained traffic, restore with at least 5,000 one-line
+  records pending, and click Clear while the restore overlay is visible. Confirm
+  the overlay closes promptly, no pre-Clear lines reappear, and RX lines received
+  after the click appear after the cleared boundary without requiring a full
+  re-render.
+- [ ] Repeat while deliberately delaying restore cancellation if using a debug
+  hook, then minimize again before Clear completes. Confirm the latest Clear owns
+  the barrier, no pre-Clear live batch reappears, and live appends resume exactly
+  once after the window is restored.
 
 ## TX Manual Command
 

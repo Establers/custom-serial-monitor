@@ -1,6 +1,37 @@
 # Release Notes Draft
 
-Date: 2026-07-27
+Date: 2026-07-28
+
+## Fixes Since v1.2.2
+
+- Fixed a minimize/restore regression where roughly 5,000 queued log lines could
+  take 30 seconds or longer to become visible again.
+- Root cause: the xterm append acknowledgement added for reliability made the
+  native host wait until xterm had parsed each host batch. The live path already
+  coalesced small batches, but the minimize/restore path retained every original
+  UI batch and replayed them sequentially. A long minimized session could
+  therefore cause thousands of WebView2 script calls and acknowledgement
+  round trips even when the retained log itself was small.
+- The v1.2.2 restore-time font synchronization also refreshed xterm's texture
+  atlas and layout even when the selected font had not changed, adding avoidable
+  work at the same point in the restore sequence.
+- Restore now coalesces pending batches to the same 2,000-line/256-KiB bounds as
+  live rendering before sending them to xterm. For example, 5,000 one-line host
+  batches are reduced to three acknowledged writes while preserving order and
+  the final displayed-line sequence.
+- Reapplying an unchanged xterm font is now a no-op. Serial RX, parsing, and
+  asynchronous disk logging were not blocked by this issue; the regression was
+  isolated to rebuilding the visible WebView2/xterm log after restore.
+- Clear now supersedes an active delta or full restore. A generation-scoped
+  barrier holds RX batches received after the clear boundary until
+  `terminal.clear()` completes, then resumes the live append pump so those new
+  batches cannot be displayed early and erased by the delayed clear.
+- The clear boundary is checked before either minimized-window routing point, so
+  a pre-Clear live batch left behind the barrier cannot enter the suspended queue
+  and reappear on the next restore if the window is minimized again during Clear.
+- Pending JavaScript appends receive a canceled acknowledgement, and full
+  restores stop after the current bounded 64-KiB transport chunk instead of
+  continuing through all queued chunks.
 
 ## Feature Summary
 

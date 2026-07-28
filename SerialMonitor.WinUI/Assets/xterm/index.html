@@ -521,6 +521,7 @@
     let appendDrainScheduled = false;
     let appendWriting = false;
     let replaceWriting = false;
+    let replaceOperationId = 0;
     let contextMenuSelection = '';
     let hexSelectionHintEnabled = false;
     let pointerSelectionGesture = false;
@@ -639,7 +640,13 @@
       }
     }
 
-    function finishReplace(autoScroll) {
+    function finishReplace(autoScroll, operationId) {
+      if (operationId !== replaceOperationId) {
+        replaceWriting = false;
+        queueAppendDrain();
+        return;
+      }
+
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
@@ -649,24 +656,24 @@
       queueAppendDrain();
     }
 
-    function commitReplaceQueue(autoScroll) {
+    function commitReplaceQueue(autoScroll, operationId) {
+      if (operationId !== replaceOperationId) {
+        finishReplace(false, operationId);
+        return;
+      }
+
       if (replaceQueueHead >= replaceQueue.length) {
-        finishReplace(autoScroll);
+        finishReplace(autoScroll, operationId);
         return;
       }
 
       try {
         // Full restores are already covered by the native loading overlay. Avoid
-        // both the normal frame pacing and a callback gap between transport
-        // chunks. xterm keeps write ordering and invokes the last callback only
-        // after every previously queued chunk has been parsed.
-        const lastIndex = replaceQueue.length - 1;
-        for (let index = replaceQueueHead; index <= lastIndex; index += 1) {
-          terminal.write(
-            replaceQueue[index],
-            index === lastIndex ? () => finishReplace(autoScroll) : undefined);
-        }
-        replaceQueueHead = replaceQueue.length;
+        // normal frame pacing, but submit only one transport chunk at a time.
+        // Clear can then stop a long restore after the current bounded chunk
+        // instead of waiting for every chunk already queued inside xterm.
+        const chunk = replaceQueue[replaceQueueHead++];
+        terminal.write(chunk, () => commitReplaceQueue(autoScroll, operationId));
       } catch (error) {
         replaceWriting = false;
         replaceQueue.length = 0;
@@ -1041,6 +1048,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
+      replaceOperationId += 1;
       resetParsedLogLineIds();
       terminal.clear();
       return true;
@@ -1061,7 +1069,22 @@
       }
 
       replaceWriting = true;
-      commitReplaceQueue(!!autoScroll);
+      commitReplaceQueue(!!autoScroll, replaceOperationId);
+      return true;
+    };
+
+    window.serialMonitorCancelPendingWrites = function () {
+      for (let index = appendQueueHead; index < appendQueue.length; index += 1) {
+        postAppendResult(appendQueue[index], false, 'canceled by clear');
+      }
+      appendQueue.length = 0;
+      appendQueueHead = 0;
+      replaceQueue.length = 0;
+      replaceQueueHead = 0;
+      replaceOperationId += 1;
+      if (!appendWriting && !replaceWriting) {
+        queueAppendDrain();
+      }
       return true;
     };
 
@@ -1111,6 +1134,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
+      replaceOperationId += 1;
       resetParsedLogLineIds();
       terminal.clear();
       return true;
@@ -1139,9 +1163,15 @@
 
       configuredTerminalFontFamily = normalizedFontFamily;
       const useBundledFont = normalizedFontFamily.includes('"JetBrains Mono Bundled"');
-      terminal.options.fontFamily = useBundledFont && !bundledTerminalFontReady
+      const resolvedFontFamily = useBundledFont && !bundledTerminalFontReady
         ? fallbackTerminalFontFamily
         : normalizedFontFamily;
+      if (terminal.options.fontFamily === resolvedFontFamily &&
+          Number(terminal.options.fontSize) === parsedFontSize) {
+        return true;
+      }
+
+      terminal.options.fontFamily = resolvedFontFamily;
       terminal.options.fontSize = parsedFontSize;
       terminal.clearTextureAtlas();
       fitAddon.fit();
