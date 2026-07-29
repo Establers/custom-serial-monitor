@@ -11,7 +11,7 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest"><strong>최신 버전 다운로드</strong></a>
     ·
-    <a href="docs/release_notes_v1.2.3.md">v1.2.3 변경 사항</a>
+    <a href="docs/release_notes_v1.2.4.md">v1.2.4 변경 사항</a>
   </p>
 </div>
 
@@ -81,17 +81,17 @@ Serial Monitor는 임베디드·RTOS 장치를 오래 연결해 두고 로그를
 | 연동 | 물리 COM과 com0com 같은 가상 COM 사이의 선택적 양방향 raw-byte bridge |
 | 진단 | MOCK 포트, 스트레스 생성기, HEX RX 1분 BUSY/IDLE 추정, 손실 카운터, 상태 요약, 복사 가능한 진단 정보 |
 
-## v1.2.3
+## v1.2.4
 
-- 한 줄에 같은 단어가 여러 번 있어도 모든 occurrence를 정확히 세고
-  Next/Previous와 검색 결과에서 각각 이동할 수 있습니다.
-- 20만 줄 규모에서도 검색 결과 메모리를 제한하고 취소 가능한 백그라운드
-  검색으로 UI 응답성을 유지합니다.
-- 탭, 연속 탭, CJK/이모지 줄바꿈, 우측 마진의 0폭 탭이 포함된 로그도 xterm의
-  실제 렌더링 위치로 이동합니다.
-- RX/TX 접두사를 화면에서 숨길 수 있으며 원본 방향과 저장 로그는 유지됩니다.
+- Search와 Event 결과에서 일치한 문자열을 색으로 구분하고, Search Results를
+  일치 로그 줄 기준 1,000개씩 페이지로 탐색할 수 있습니다.
+- 룰 행을 더블 클릭해 바로 편집할 수 있고, RX 룰 감지 시 선택한 명령 시퀀스를
+  안전하게 한 번 실행할 수 있습니다.
+- 명령 시퀀스는 1~99회 반복할 수 있으며 실행 중 중복 트리거는 병합됩니다.
+- 새 환경에서는 기본 프로필을 자동으로 생성하고 잘못된 시퀀스 참조를
+  정규화합니다.
 
-자세한 내용은 [v1.2.3 릴리즈 노트](docs/release_notes_v1.2.3.md)를 참고하세요.
+자세한 내용은 [v1.2.4 릴리즈 노트](docs/release_notes_v1.2.4.md)를 참고하세요.
 
 ## 개발 및 빌드
 

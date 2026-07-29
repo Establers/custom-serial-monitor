@@ -18,6 +18,7 @@
           KeyDown="Root_KeyDown">
         <Grid.Resources>
             <infra:HighlightColorBrushConverter x:Key="HighlightColorBrushConverter" />
+            <infra:EventTextSegmentBrushConverter x:Key="EventTextSegmentBrushConverter" />
             <infra:DisplayModeNameConverter x:Key="DisplayModeNameConverter" />
             <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
                 <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}" />
@@ -1413,10 +1414,30 @@
                                                        Text="{Binding CompactDirectionText}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
-                                            <TextBlock Grid.Column="3"
-                                                       Text="{Binding MessagePreview}"
-                                                       FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <ItemsControl Grid.Column="3"
+                                                          ItemsSource="{Binding MessageSegments}"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"
+                                                          IsHitTestVisible="False"
+                                                          ToolTipService.ToolTip="{Binding MessagePreview}"
+                                                          AutomationProperties.Name="{Binding MessagePreview}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{Binding Converter={StaticResource EventTextSegmentBrushConverter}, ConverterParameter=Background}"
+                                                                CornerRadius="1">
+                                                            <TextBlock Text="{Binding Text}"
+                                                                       Foreground="{Binding Converter={StaticResource EventTextSegmentBrushConverter}, ConverterParameter=Foreground}"
+                                                                       FontFamily="Consolas"
+                                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
@@ -1480,7 +1501,7 @@
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="5"
                                       MinWidth="0"
-                                      ColumnDefinitions="Auto,96,Auto,Auto,*">
+                                      ColumnDefinitions="Auto,96,Auto,Auto,Auto,Auto,*">
                                     <TextBlock Text="Search"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
                                                Margin="0,0,6,0" />
@@ -1497,10 +1518,20 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding RefreshSearchResultsCommand}"
                                             ToolTipService.ToolTip="Refresh search results" />
-                                    <TextBlock Grid.Column="3"
+                                    <Button Grid.Column="3"
+                                            Content="Prev"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Command="{Binding PreviousSearchResultsPageCommand}"
+                                            ToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
+                                    <Button Grid.Column="4"
+                                            Content="Next"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Command="{Binding NextSearchResultsPageCommand}"
+                                            ToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
+                                    <TextBlock Grid.Column="5"
                                                Text="{Binding SearchSummaryText}"
                                                Style="{StaticResource CompactCellTextStyle}" />
-                                    <TextBlock Grid.Column="4"
+                                    <TextBlock Grid.Column="6"
                                                Text="{Binding SearchResultStatusText}"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                MinWidth="0"
@@ -1541,13 +1572,16 @@
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Grid.Column="2"
-                                                       Text="{Binding OccurrenceText}"
+                                                        Text="{Binding MatchCountText}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding MessagePreview}"
+                                                       infra:SearchTextHighlightBehavior.Segments="{Binding MessageSegments}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       ToolTipService.ToolTip="{Binding MessagePreview}"
+                                                       AutomationProperties.Name="{Binding MessagePreview}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
@@ -1566,7 +1600,7 @@
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="4"
-                                      ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto">
+                                      ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                                     <TextBlock Text="Sequence"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                     <ComboBox Grid.Column="1"
@@ -1577,30 +1611,46 @@
                                               DisplayMemberPath="Name"
                                               Style="{StaticResource CompactComboBoxStyle}"
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
-                                    <Button Grid.Column="2"
+                                    <TextBox x:Name="SequenceRepeatCountTextBox"
+                                             Grid.Column="2"
+                                             Width="32"
+                                             MaxLength="2"
+                                             InputScope="Number"
+                                             Text="{Binding SelectedCommandSequence.RepeatCount, Mode=OneWay}"
+                                             Style="{StaticResource CompactTextBoxStyle}"
+                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
+                                             BeforeTextChanging="SequenceRepeatCountTextBox_BeforeTextChanging"
+                                             TextChanged="SequenceRepeatCountTextBox_TextChanged"
+                                             LostFocus="SequenceRepeatCountTextBox_LostFocus"
+                                             ToolTipService.ToolTip="Repeat the selected sequence 1 to 99 times" />
+                                    <TextBlock Grid.Column="3"
+                                               Text="times"
+                                               VerticalAlignment="Center"
+                                               Style="{StaticResource CompactCellTextStyle}" />
+                                    <Button Grid.Column="4"
                                             Content="+"
                                             IsEnabled="{Binding CanEditCommandSequences}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddCommandSequence_Click"
                                             ToolTipService.ToolTip="Add sequence" />
-                                    <Button Grid.Column="3"
+                                    <Button Grid.Column="5"
                                             Content="Edit"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="EditCommandSequence_Click"
                                             ToolTipService.ToolTip="Edit sequence" />
-                                    <Button Grid.Column="4"
+                                    <Button Grid.Column="6"
                                             Content="Del"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DeleteCommandSequence_Click"
                                             ToolTipService.ToolTip="Delete sequence" />
-                                    <Button Grid.Column="5"
+                                    <Button Grid.Column="7"
                                             Content="Run"
                                             Command="{Binding RunCommandSequenceCommand}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             ToolTipService.ToolTip="Run sequence" />
-                                    <Button Grid.Column="6"
+                                    <Button Grid.Column="8"
                                             Content="Stop"
                                             Command="{Binding StopCommandSequenceCommand}"
                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1843,6 +1893,8 @@
                                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                                                   ScrollViewer.VerticalScrollMode="Enabled"
+                                                  IsDoubleTapEnabled="True"
+                                                  DoubleTapped="LogRuleListView_DoubleTapped"
                                                   MinHeight="0">
                                             <ListView.ItemContainerStyle>
                                                 <Style TargetType="ListViewItem"

@@ -440,10 +440,13 @@ public static class LogRuleMatcher
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
+            BackgroundColor = rule.BackgroundColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
             SoundNotificationEnabled = rule.SoundNotificationEnabled,
             PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds,
+            ShowInEventList = rule.ShowInEventList,
+            TriggerSequenceName = rule.TriggerSequenceName
         };
     }
 }

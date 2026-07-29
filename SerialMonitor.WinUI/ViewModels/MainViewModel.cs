@@ -206,7 +206,7 @@ public sealed class HelpSection
 public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private const int MaxRetainedEventContexts = 5_000;
-    private const int MaxVisibleSearchResults = 1_000;
+    private const int SearchResultPageSize = 1_000;
     private const int MaxSearchHistoryCount = 50;
     private const int PendingVisualWarningThreshold = 5_000;
     private const long Boundary64KWarningThreshold = 65_000;
@@ -258,6 +258,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly SerialBusUtilizationMeter _serialBusUtilizationMeter = new();
     private readonly object _eventNotificationGate = new();
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
+    private readonly SinglePendingGate _triggeredSequenceGate = new();
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
     private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
@@ -269,9 +270,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private CancellationTokenSource? _connectionCancellation;
     private Task? _observeLogsTask;
     private Task? _observeEventsTask;
+    private Task? _observeSequenceTriggersTask;
     private Task? _observeBridgeVisualLogsTask;
     private Task? _observeBridgeProcessedLogsTask;
     private Task? _observeEventContextsTask;
+    private Task? _startupProfileTask;
     private int _bridgeStopForSerialDisconnectRunning;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
@@ -407,6 +410,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastSearchResultJumpError = string.Empty;
     private VisibleSearchResult? _selectedSearchResult;
     private bool _areSearchResultsStale;
+    private int _searchResultPageIndex;
     private string _lastSearchShortcutAction = "No search shortcut used.";
     private string _lastSearchShortcutSource = "(none)";
     private DateTimeOffset? _lastSearchShortcutTime;
@@ -428,6 +432,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _runningSequenceName = "(none)";
     private string _currentSequenceStepText = "(none)";
     private int _completedSequenceSteps;
+    private int _runningSequenceTotalSteps;
     private string _lastSequenceActionStatus = "No sequence action yet.";
     private string _lastSequenceError = string.Empty;
     private long _sequenceRunCount;
@@ -672,6 +677,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         public int CooldownSeconds { get; set; } = 30;
     }
 
+    private sealed record SequenceRunRequest(CommandSequence Sequence, string Source);
+
     public MainViewModel(
         ISerialService serialService,
         ILogPipeline logPipeline,
@@ -742,13 +749,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
         RefreshSearchResultsCommand = new AsyncRelayCommand(RefreshSearchResultsAsync, CanSearch);
+        PreviousSearchResultsPageCommand = new AsyncRelayCommand(
+            ShowPreviousSearchResultsPageAsync,
+            CanShowPreviousSearchResultsPage);
+        NextSearchResultsPageCommand = new AsyncRelayCommand(
+            ShowNextSearchResultsPageAsync,
+            CanShowNextSearchResultsPage);
         CopyEventContextCommand = new AsyncRelayCommand(CopyEventContextAsync, CanCopyEventContext);
         SelectLatestEventCommand = new AsyncRelayCommand(SelectLatestEventAsync, CanSelectLatestEvent);
         StartMockStressCommand = new AsyncRelayCommand(StartMockStressAsync, () => CanStartMockStress);
         StopMockStressCommand = new AsyncRelayCommand(StopMockStressAsync, () => CanStopMockStress);
         ResetMockStressCountersCommand = new AsyncRelayCommand(ResetMockStressCountersAsync);
         SendMockCrlfCommand = new AsyncRelayCommand(SendMockCrlfAsync, () => IsConnected && CurrentPortIsMock);
-        RunCommandSequenceCommand = new AsyncRelayCommand(RunSelectedCommandSequenceAsync, CanRunSelectedCommandSequence);
+        RunCommandSequenceCommand = new AsyncRelayCommand(
+            RunCommandSequenceAsync,
+            CanRunCommandSequence);
         StopCommandSequenceCommand = new AsyncRelayCommand(StopCommandSequenceAsync, () => IsSequenceRunning);
         SetSessionCommand = new AsyncRelayCommand(SetSessionAsync, () => !IsBusy && !FileLoggingEnabled);
         EndSessionCommand = new AsyncRelayCommand(EndSessionAsync, () => !IsBusy && !FileLoggingEnabled && !string.IsNullOrWhiteSpace(CurrentSessionName));
@@ -802,8 +817,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _diagnosticsTimer.Start();
         RefreshDiagnostics();
 
-        _ = LoadStartupProfileAsync();
         _ = RefreshPortsAsync();
+    }
+
+    public Task InitializeAsync()
+    {
+        return _startupProfileTask ??= LoadStartupProfileAsync();
     }
 
     public event EventHandler<XtermSearchRequest>? XtermSearchRequested;
@@ -1189,7 +1208,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string SequenceCurrentStepDisplayText => IsSequenceRunning ? CurrentSequenceStepText : "(none)";
 
-    public string SequenceCompletedStepsText => $"{CompletedSequenceSteps:N0}/{SelectedCommandSequenceStepCount:N0}";
+    public string SequenceCompletedStepsText
+    {
+        get
+        {
+            var total = IsSequenceRunning
+                ? _runningSequenceTotalSteps
+                : (SelectedCommandSequence?.Steps.Count ?? 0) * (SelectedCommandSequence?.RepeatCount ?? 1);
+            return $"{CompletedSequenceSteps:N0}/{total:N0}";
+        }
+    }
 
     public string SequenceStatusText => IsSequenceRunning
         ? $"Running {RunningSequenceName}: step {CompletedSequenceSteps + 1:N0}, {CurrentSequenceStepText}"
@@ -1240,6 +1268,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public AsyncRelayCommand FindPreviousCommand { get; }
 
     public AsyncRelayCommand RefreshSearchResultsCommand { get; }
+
+    public AsyncRelayCommand PreviousSearchResultsPageCommand { get; }
+
+    public AsyncRelayCommand NextSearchResultsPageCommand { get; }
 
     public AsyncRelayCommand CopyEventContextCommand { get; }
 
@@ -3248,6 +3280,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public int SearchResultVisibleCount => SearchResults.Count;
 
+    public int SearchResultPageNumber => _activeSearchSnapshot is { MatchedLines.Length: > 0 }
+        ? _searchResultPageIndex + 1
+        : 0;
+
+    public int SearchResultPageCount => _activeSearchSnapshot is { } snapshot
+        ? snapshot.GetMatchedLinePage(_searchResultPageIndex, SearchResultPageSize).PageCount
+        : 0;
+
+    public int SearchResultMatchedLineCount => _activeSearchSnapshot?.MatchedLines.Length ?? 0;
+
     public VisibleSearchResult? SelectedSearchResult
     {
         get => _selectedSearchResult;
@@ -3637,6 +3679,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public int ActiveLogObserverTaskCount => _observeLogsTask is { IsCompleted: false } ? 1 : 0;
 
     public int ActiveEventObserverTaskCount => _observeEventsTask is { IsCompleted: false } ? 1 : 0;
+
+    public int ActiveSequenceTriggerObserverTaskCount => _observeSequenceTriggersTask is { IsCompleted: false } ? 1 : 0;
 
     public int ActiveEventContextObserverTaskCount => _observeEventContextsTask is { IsCompleted: false } ? 1 : 0;
 
@@ -4600,6 +4644,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task LoadStartupProfileAsync()
     {
+        RunOnUiThread(() => IsBusy = true);
         try
         {
             var profile = await _profileService.LoadAsync(CurrentProfilePath, CancellationToken.None);
@@ -4625,6 +4670,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 RefreshProfileProperties();
                 RefreshDiagnostics();
             });
+        }
+        finally
+        {
+            RunOnUiThread(() => IsBusy = false);
         }
     }
 
@@ -4745,6 +4794,46 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (CanSearch())
         {
             SetStatus($"Search results refreshed: {SearchText}");
+        }
+    }
+
+    private Task ShowPreviousSearchResultsPageAsync()
+    {
+        var snapshot = _activeSearchSnapshot;
+        if (snapshot is null || _searchResultPageIndex <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        _searchResultPageIndex--;
+        UpdateSearchResults(snapshot, snapshotIsFresh: false);
+        SetStatus($"Search results page {SearchResultPageNumber:N0} of {SearchResultPageCount:N0}.");
+        NotifySearchCommandStates();
+        return Task.CompletedTask;
+    }
+
+    private async Task ShowNextSearchResultsPageAsync()
+    {
+        var snapshot = _activeSearchSnapshot;
+        if (snapshot is null || snapshot.MatchedLines.Length == 0)
+        {
+            return;
+        }
+
+        var page = snapshot.GetMatchedLinePage(_searchResultPageIndex, SearchResultPageSize);
+        if (page.PageIndex + 1 < page.PageCount)
+        {
+            _searchResultPageIndex = page.PageIndex + 1;
+            UpdateSearchResults(snapshot, snapshotIsFresh: false);
+            SetStatus($"Search results page {SearchResultPageNumber:N0} of {SearchResultPageCount:N0}.");
+            NotifySearchCommandStates();
+            return;
+        }
+
+        await RunManualVisibleLogSearchAsync(SearchMove.None, showLatestResultsPage: true);
+        if (CanSearch())
+        {
+            SetStatus($"Latest search results refreshed: {SearchText}");
         }
     }
 
@@ -4894,6 +4983,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _activeSearchSnapshot is { TotalMatchCount: > 0 };
     }
 
+    private bool CanShowPreviousSearchResultsPage() =>
+        !_isSearchRunning &&
+        _activeSearchSnapshot is { MatchedLines.Length: > 0 } &&
+        _searchResultPageIndex > 0;
+
+    private bool CanShowNextSearchResultsPage() =>
+        !string.IsNullOrWhiteSpace(SearchText) &&
+        !_isSearchRunning &&
+        _activeSearchSnapshot is { MatchedLines.Length: > 0 };
+
     private void NavigateSearchSnapshot(SearchMove move)
     {
         var snapshot = _activeSearchSnapshot;
@@ -4937,18 +5036,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CurrentSearchMatchIndex = position.GlobalMatchIndex + 1;
         CurrentSearchMatchedLine = line.FullText;
         _currentSearchLineId = line.LineId;
-        SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
+        SelectSearchResultForCurrentLine();
     }
 
-    private async Task RunManualVisibleLogSearchAsync(SearchMove move)
+    private async Task RunManualVisibleLogSearchAsync(
+        SearchMove move,
+        bool showLatestResultsPage = false)
     {
         if (string.IsNullOrWhiteSpace(SearchText))
         {
             CancelActiveSearch();
             _activeSearchSnapshot = null;
+            _searchResultPageIndex = 0;
             SearchMatchCount = 0;
             ClearCurrentSearchMatch();
-            UpdateSearchResults(null);
+            UpdateSearchResults(null, snapshotIsFresh: true);
             NotifySearchCommandStates();
             return;
         }
@@ -4979,7 +5081,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     searchLines,
                     searchText,
                     comparison,
-                    MaxVisibleSearchResults,
                     cancellation.Token),
                 cancellation.Token);
             engineStopwatch.Stop();
@@ -4991,9 +5092,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _activeSearchSnapshot = snapshot;
+            if (showLatestResultsPage && snapshot.MatchedLines.Length > 0)
+            {
+                _searchResultPageIndex = snapshot
+                    .GetMatchedLinePage(int.MaxValue, SearchResultPageSize)
+                    .PageIndex;
+            }
+
             SearchMatchCount = snapshot.TotalMatchCount;
             var resultApplyStopwatch = Stopwatch.StartNew();
-            UpdateSearchResults(snapshot);
+            UpdateSearchResults(snapshot, snapshotIsFresh: true);
             resultApplyStopwatch.Stop();
             Interlocked.Exchange(ref _lastSearchResultApplyMs, resultApplyStopwatch.ElapsedMilliseconds);
 
@@ -5048,11 +5156,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastSearchError = $"Search failed: {ex.Message}";
             SearchMatchCount = 0;
             _activeSearchSnapshot = null;
+            _searchResultPageIndex = 0;
             ClearCurrentSearchMatch();
             SearchResults.Clear();
             SearchResultStatusText = $"Search failed: {ex.Message}";
             SelectedSearchResult = null;
-            OnPropertyChanged(nameof(SearchResultVisibleCount));
+            NotifySearchResultPageProperties();
             OnPropertyChanged(nameof(SearchErrorCount));
             OnPropertyChanged(nameof(LastSearchError));
             SetStatus(_lastSearchError);
@@ -5071,56 +5180,67 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private void UpdateSearchResults(VisibleLogSearchSnapshot? snapshot)
+    private void UpdateSearchResults(
+        VisibleLogSearchSnapshot? snapshot,
+        bool snapshotIsFresh)
     {
         try
         {
             var previousSelection = SelectedSearchResult;
-            AreSearchResultsStale = false;
+            AreSearchResultsStale = SearchResultFreshnessPolicy.AfterRendering(
+                AreSearchResultsStale,
+                snapshotIsFresh);
 
             if (string.IsNullOrWhiteSpace(SearchText))
             {
+                _searchResultPageIndex = 0;
                 SearchResults.Clear();
                 SearchResultStatusText = "Enter search text.";
                 SelectedSearchResult = null;
-                OnPropertyChanged(nameof(SearchResultVisibleCount));
+                NotifySearchResultPageProperties();
                 RecordSearchResultsRebuild();
                 return;
             }
 
             if (snapshot is null || snapshot.TotalMatchCount == 0)
             {
+                _searchResultPageIndex = 0;
                 SearchResults.Clear();
                 SearchResultStatusText = "Manual · No matches";
                 SelectedSearchResult = null;
-                OnPropertyChanged(nameof(SearchResultVisibleCount));
+                NotifySearchResultPageProperties();
                 RecordSearchResultsRebuild();
                 return;
             }
 
-            var visibleCount = snapshot.VisibleResults.Length;
-            var results = new List<VisibleSearchResult>(visibleCount);
-            for (var i = 0; i < visibleCount; i++)
+            var page = snapshot.GetMatchedLinePage(_searchResultPageIndex, SearchResultPageSize);
+            _searchResultPageIndex = page.PageIndex;
+            var results = new List<VisibleSearchResult>(page.Count);
+            for (var i = 0; i < page.Count; i++)
             {
-                var position = snapshot.VisibleResults[i];
-                var line = snapshot.GetLine(position);
+                var line = snapshot.MatchedLines[page.StartIndex + i];
                 results.Add(VisibleSearchResultParser.Create(
-                    position.GlobalMatchIndex + 1,
+                    line.FirstGlobalMatchIndex + 1,
                     line.VisibleLineIndex,
                     line.LineId,
-                    position.PayloadOffset,
-                    position.OccurrenceInLine,
+                    line.FirstPayloadOffset,
                     line.MatchCount,
                     line.FullText,
-                    line.Direction));
+                    line.Direction,
+                    snapshot.SearchText,
+                    snapshot.Comparison));
             }
 
             SearchResults.ReplaceAll(results);
 
-            SearchResultStatusText = snapshot.TotalMatchCount > MaxVisibleSearchResults
-                ? $"Manual · {visibleCount:N0}/{snapshot.TotalMatchCount:N0} shown"
-                : $"Manual · {visibleCount:N0} shown";
-            OnPropertyChanged(nameof(SearchResultVisibleCount));
+            var firstLineNumber = page.StartIndex + 1;
+            var lastLineNumber = page.StartIndex + page.Count;
+            SearchResultStatusText = AreSearchResultsStale
+                ? $"Stale · page {page.PageIndex + 1:N0}/{page.PageCount:N0} · lines {firstLineNumber:N0}–{lastLineNumber:N0}/{snapshot.MatchedLines.Length:N0} · Refresh or use Next on the newest page"
+                : page.PageCount > 1
+                    ? $"Manual · page {page.PageIndex + 1:N0}/{page.PageCount:N0} · lines {firstLineNumber:N0}–{lastLineNumber:N0}/{snapshot.MatchedLines.Length:N0}"
+                    : $"Manual · {page.Count:N0} matching lines";
+            NotifySearchResultPageProperties();
             RestoreSearchResultSelection(previousSelection);
             RecordSearchResultsRebuild();
             _lastSearchResultBuildError = string.Empty;
@@ -5156,8 +5276,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (previousSelection is not null)
         {
             restored = SearchResults.FirstOrDefault(result =>
-                    result.LineId == previousSelection.LineId &&
-                    result.PayloadOffset == previousSelection.PayloadOffset)
+                    result.LineId == previousSelection.LineId)
                 ?? SearchResults.FirstOrDefault(result =>
                     result.VisibleLineIndex == previousSelection.VisibleLineIndex &&
                     string.Equals(result.FullText, previousSelection.FullText, StringComparison.Ordinal))
@@ -5165,7 +5284,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     string.Equals(result.FullText, previousSelection.FullText, StringComparison.Ordinal));
         }
 
-        restored ??= SearchResults.FirstOrDefault(result => result.MatchIndex == CurrentSearchMatchIndex);
+        restored ??= SearchResults.FirstOrDefault(result =>
+            result.LineId == _currentSearchLineId);
         SelectedSearchResult = restored;
         if (previousSelection is not null && restored is null)
         {
@@ -5186,7 +5306,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AreSearchResultsStale = true;
         SearchResultStatusText = SearchResults.Count == 0
             ? "Manual · Refresh to update"
-            : $"Stale · Refresh to update ({SearchResults.Count:N0} shown)";
+            : $"Stale · page {SearchResultPageNumber:N0}/{SearchResultPageCount:N0} · Refresh or use Next on the newest page";
     }
 
     private void InvalidateSearchResultsForCriteriaChange()
@@ -5195,10 +5315,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CancelActiveSearch();
         SearchMatchCount = 0;
         _activeSearchSnapshot = null;
+        _searchResultPageIndex = 0;
         ClearCurrentSearchMatch();
         SearchResults.Clear();
         SelectedSearchResult = null;
-        OnPropertyChanged(nameof(SearchResultVisibleCount));
+        NotifySearchResultPageProperties();
         MarkSearchResultsStale();
         NotifySearchCommandStates();
     }
@@ -5215,15 +5336,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             line.Contains("MARK >", StringComparison.Ordinal);
     }
 
-    private void SelectSearchResultByMatchIndex(long matchIndex)
+    private void SelectSearchResultForCurrentLine()
     {
-        if (matchIndex <= 0)
+        if (!_currentSearchLineId.HasValue)
         {
             SelectedSearchResult = null;
             return;
         }
 
-        SelectedSearchResult = SearchResults.FirstOrDefault(result => result.MatchIndex == matchIndex);
+        SelectedSearchResult = SearchResults.FirstOrDefault(result =>
+            result.LineId == _currentSearchLineId);
+    }
+
+    private void NotifySearchResultPageProperties()
+    {
+        OnPropertyChanged(nameof(SearchResultVisibleCount));
+        OnPropertyChanged(nameof(SearchResultPageNumber));
+        OnPropertyChanged(nameof(SearchResultPageCount));
+        OnPropertyChanged(nameof(SearchResultMatchedLineCount));
     }
 
     private void ClearSearchError()
@@ -5780,6 +5910,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
+            _observeSequenceTriggersTask = Task.Run(() => ObserveSequenceTriggersAsync(CancellationToken.None), CancellationToken.None);
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
             IsConnected = true;
@@ -6097,6 +6228,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 await RunDisconnectCleanupAsync("Event observer stop", () => _observeEventsTask.WaitAsync(cancellationToken), cleanupErrors);
             }
 
+            if (_observeSequenceTriggersTask is not null)
+            {
+                await RunDisconnectCleanupAsync(
+                    "Sequence trigger observer stop",
+                    () => _observeSequenceTriggersTask.WaitAsync(cancellationToken),
+                    cleanupErrors);
+            }
+
             if (_observeEventContextsTask is not null)
             {
                 await RunDisconnectCleanupAsync("Event context observer stop", () => _observeEventContextsTask.WaitAsync(cancellationToken), cleanupErrors);
@@ -6106,6 +6245,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _connectionCancellation = null;
             _observeLogsTask = null;
             _observeEventsTask = null;
+            _observeSequenceTriggersTask = null;
             _observeEventContextsTask = null;
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
             IsConnected = _serialService.IsConnected;
@@ -6220,8 +6360,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var detectedEvent in _eventDetector.DetectedEvents.ReadAllAsync(cancellationToken))
             {
-                _eventBatchDispatcher.Post(detectedEvent);
-                QueueEventNotification(detectedEvent);
+                var routing = DetectedEventRoutingPolicy.Decide(detectedEvent);
+                if (routing.ShowInEventList)
+                {
+                    _eventBatchDispatcher.Post(detectedEvent);
+                }
+
+                if (routing.QueueNotification)
+                {
+                    QueueEventNotification(detectedEvent);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -6233,6 +6381,99 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveEventsAsync", ex);
             SetStatus(_lastBackgroundError);
             RefreshDiagnostics();
+        }
+    }
+
+    private async Task ObserveSequenceTriggersAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var detectedEvent in _eventDetector.SequenceTriggerEvents.ReadAllAsync(cancellationToken))
+            {
+                QueueTriggeredSequence(detectedEvent);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _lastBackgroundError = $"Sequence trigger observer failed: {ex.Message}";
+            RuntimeDiagnostics.RecordError("MainViewModel.ObserveSequenceTriggersAsync", ex);
+            SetStatus(_lastBackgroundError);
+            RefreshDiagnostics();
+        }
+    }
+
+    private void QueueTriggeredSequence(DetectedEvent detectedEvent)
+    {
+        if (!DetectedEventRoutingPolicy.ShouldQueueTriggeredSequence(
+                detectedEvent,
+                Volatile.Read(ref _isSequenceRunning)) ||
+            !_triggeredSequenceGate.TryEnter())
+        {
+            return;
+        }
+
+        var sequenceName = detectedEvent.TriggerSequenceName!;
+        var ruleName = detectedEvent.RuleName;
+
+        if (_dispatcherQueue.HasThreadAccess)
+        {
+            _ = RunTriggeredSequenceAsync(sequenceName, ruleName);
+            return;
+        }
+
+        if (_dispatcherQueue.TryEnqueue(() =>
+                _ = RunTriggeredSequenceAsync(sequenceName, ruleName)))
+        {
+            return;
+        }
+
+        _triggeredSequenceGate.Exit();
+        RecordStatusChangedThreadMarshalErrorWithoutUi("DispatcherQueue rejected sequence trigger update.");
+    }
+
+    private async Task RunTriggeredSequenceAsync(string sequenceName, string ruleName)
+    {
+        try
+        {
+            if (IsSequenceRunning)
+            {
+                return;
+            }
+
+            var sequence = CommandSequences.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, sequenceName, StringComparison.OrdinalIgnoreCase));
+            if (sequence is null)
+            {
+                RecordSequenceError(
+                    $"Rule '{ruleName}' trigger skipped: sequence '{sequenceName}' was not found.");
+                return;
+            }
+
+            if (!CommandSequenceTriggerPolicy.CanUseAsTrigger(sequence))
+            {
+                RecordSequenceError(
+                    $"Rule '{ruleName}' trigger skipped: sequence '{sequenceName}' has no steps.");
+                return;
+            }
+
+            var request = new SequenceRunRequest(sequence, $"rule '{ruleName}'");
+            if (!CanRunCommandSequence(request))
+            {
+                return;
+            }
+
+            await RunCommandSequenceAsync(request);
+        }
+        catch (Exception ex)
+        {
+            RecordSequenceError($"Rule '{ruleName}' trigger failed: {ex.Message}");
+        }
+        finally
+        {
+            _triggeredSequenceGate.Exit();
         }
     }
 
@@ -6841,19 +7082,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    private bool CanRunSelectedCommandSequence()
+    private bool CanRunCommandSequence(object? parameter)
     {
+        var sequence = parameter is SequenceRunRequest request
+            ? request.Sequence
+            : SelectedCommandSequence;
         return IsConnected &&
             !IsBusy &&
             !IsBridgeActive &&
             !IsSequenceRunning &&
-            SelectedCommandSequence is { } sequence &&
+            sequence is not null &&
             sequence.Steps.Count > 0;
     }
 
-    private async Task RunSelectedCommandSequenceAsync()
+    private async Task RunCommandSequenceAsync(object? parameter)
     {
-        if (!CanRunSelectedCommandSequence() || SelectedCommandSequence is null)
+        var request = parameter as SequenceRunRequest;
+        var sourceSequence = request?.Sequence ?? SelectedCommandSequence;
+        if (!CanRunCommandSequence(parameter) || sourceSequence is null)
         {
             RecordSequenceError(IsConnected
                 ? "Sequence run failed: select a sequence with at least one step."
@@ -6861,7 +7107,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var sequence = CloneCommandSequence(SelectedCommandSequence);
+        var sequence = CloneCommandSequence(sourceSequence);
+        var runSource = request?.Source ?? "manual run";
         var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
         if (sequenceSendMode == TxSendMode.Hex &&
             !TryValidateHexSequenceSteps(sequence.Steps, out var validationError))
@@ -6878,47 +7125,53 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RunningSequenceName = sequence.Name;
         CurrentSequenceStepText = "(starting)";
         CompletedSequenceSteps = 0;
+        _runningSequenceTotalSteps = sequence.Steps.Count * sequence.RepeatCount;
         _lastSequenceError = string.Empty;
-        _lastSequenceActionStatus = $"Running sequence: {sequence.Name}";
+        _lastSequenceActionStatus = $"Running sequence: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})";
         Interlocked.Increment(ref _sequenceRunCount);
         OnPropertyChanged(nameof(SequenceRunCount));
         OnPropertyChanged(nameof(LastSequenceError));
         OnPropertyChanged(nameof(LastSequenceActionStatus));
-        SetStatus($"Running sequence: {sequence.Name}");
+        SetStatus(_lastSequenceActionStatus);
         RefreshDiagnostics();
 
         try
         {
-            for (var index = 0; index < sequence.Steps.Count; index++)
+            for (var repeatIndex = 0; repeatIndex < sequence.RepeatCount; repeatIndex++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!IsConnected)
+                for (var index = 0; index < sequence.Steps.Count; index++)
                 {
-                    RecordSequenceError("Sequence stopped: serial port is disconnected.");
-                    return;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!IsConnected)
+                    {
+                        RecordSequenceError("Sequence stopped: serial port is disconnected.");
+                        return;
+                    }
 
-                var step = sequence.Steps[index];
-                CurrentSequenceStepText = $"{index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}";
-                var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
-                {
-                    LineEndingMode = step.LineEndingMode
-                }, addToHistory: false, modeOverride: sequenceSendMode);
+                    var step = sequence.Steps[index];
+                    CurrentSequenceStepText = sequence.RepeatCount == 1
+                        ? $"{index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}"
+                        : $"repeat {repeatIndex + 1:N0}/{sequence.RepeatCount:N0}, step {index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}";
+                    var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
+                    {
+                        LineEndingMode = step.LineEndingMode
+                    }, addToHistory: false, modeOverride: sequenceSendMode);
 
-                if (!sent)
-                {
-                    RecordSequenceError($"Sequence stopped: step failed ({step.DisplayName}).");
-                    return;
-                }
+                    if (!sent)
+                    {
+                        RecordSequenceError($"Sequence stopped: step failed ({step.DisplayName}).");
+                        return;
+                    }
 
-                CompletedSequenceSteps = index + 1;
-                if (step.DelayAfterMs > 0)
-                {
-                    await Task.Delay(step.DelayAfterMs, cancellationToken);
+                    CompletedSequenceSteps = (repeatIndex * sequence.Steps.Count) + index + 1;
+                    if (step.DelayAfterMs > 0)
+                    {
+                        await Task.Delay(step.DelayAfterMs, cancellationToken);
+                    }
                 }
             }
 
-            RecordSequenceStatus($"Sequence completed: {sequence.Name}");
+            RecordSequenceStatus($"Sequence completed: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})");
         }
         catch (OperationCanceledException)
         {
@@ -6933,6 +7186,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             IsSequenceRunning = false;
             RunningSequenceName = "(none)";
             CurrentSequenceStepText = "(none)";
+            _runningSequenceTotalSteps = 0;
             _sequenceCancellation?.Dispose();
             _sequenceCancellation = null;
             NotifyCommandStates();
@@ -7519,6 +7773,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        if (CommandSequences.Any(existing =>
+                string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            RecordSequenceError($"A sequence named '{normalized.Name}' already exists.");
+            return false;
+        }
+
         CommandSequences.Add(normalized);
         SelectedCommandSequence = normalized;
         SelectedCommandSequenceStep = normalized.Steps.FirstOrDefault();
@@ -7545,6 +7806,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        if (CommandSequences.Any(existing =>
+                !ReferenceEquals(existing, SelectedCommandSequence) &&
+                string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            RecordSequenceError($"A sequence named '{normalized.Name}' already exists.");
+            return false;
+        }
+
         var index = CommandSequences.IndexOf(SelectedCommandSequence);
         if (index < 0)
         {
@@ -7552,7 +7821,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        var previousName = SelectedCommandSequence.Name;
         CommandSequences[index] = normalized;
+        UpdateRuleSequenceReferences(previousName, normalized.Name);
         SelectedCommandSequence = normalized;
         SelectedCommandSequenceStep = normalized.Steps.FirstOrDefault();
         ApplyCommandSequenceChanges($"Updated sequence: {normalized.Name}");
@@ -7581,11 +7852,32 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         CommandSequences.RemoveAt(index);
+        UpdateRuleSequenceReferences(deletedName, null);
         SelectedCommandSequence = CommandSequences.Count == 0
             ? null
             : CommandSequences[Math.Min(index, CommandSequences.Count - 1)];
         ApplyCommandSequenceChanges($"Deleted sequence: {deletedName}");
         return true;
+    }
+
+    private void UpdateRuleSequenceReferences(string previousName, string? replacementName)
+    {
+        var changed = false;
+        foreach (var rule in LogRules.Where(rule =>
+                     string.Equals(rule.TriggerSequenceName, previousName, StringComparison.OrdinalIgnoreCase)))
+        {
+            rule.TriggerSequenceName = replacementName;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        RebuildProjectedRulesFromLogRules();
+        _eventDetector.UpdateRules(EventRules.Select(CloneEventRule).ToArray());
+        NotifyRuleEditorStateChanged();
     }
 
     public bool AddCommandSequenceStep(CommandSequenceStep step)
@@ -7664,6 +7956,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RecordSequenceError("Selected sequence step was not found.");
             return false;
+        }
+
+        if (SelectedCommandSequence.Steps.Count == 1)
+        {
+            var referencingRules = CommandSequenceTriggerPolicy.FindReferencingRuleNames(
+                SelectedCommandSequence.Name,
+                LogRules);
+            if (referencingRules.Count > 0)
+            {
+                RecordSequenceError(
+                    $"Cannot delete the last step from sequence '{SelectedCommandSequence.Name}' because it is used by rule(s): {string.Join(", ", referencingRules)}.");
+                return false;
+            }
         }
 
         SelectedCommandSequence.Steps.RemoveAt(index);
@@ -7961,7 +8266,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         foreach (var rule in LogRules)
         {
-            if (rule.UseForEvent && !string.IsNullOrWhiteSpace(rule.Keyword))
+            if ((rule.UseForEvent || !string.IsNullOrWhiteSpace(rule.TriggerSequenceName)) &&
+                !string.IsNullOrWhiteSpace(rule.Keyword))
             {
                 EventRules.Add(CreateEventRuleFromLogRule(rule));
             }
@@ -8326,6 +8632,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         normalized.NotificationCooldownSeconds = Math.Clamp(normalized.NotificationCooldownSeconds, 5, 3_600);
+        normalized.TriggerSequenceName = string.IsNullOrWhiteSpace(normalized.TriggerSequenceName)
+            ? null
+            : normalized.TriggerSequenceName.Trim();
+        if (!CommandSequenceTriggerPolicy.SupportsRxTrigger(normalized.MatchDirection))
+        {
+            normalized.TriggerSequenceName = null;
+        }
 
         if (foregroundFallback || backgroundFallback)
         {
@@ -8507,6 +8820,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         normalized = CloneCommandSequence(sequence);
         normalized.Name = normalized.Name.Trim();
+        if (normalized.RepeatCount is < CommandSequence.MinRepeatCount or > CommandSequence.MaxRepeatCount)
+        {
+            error = $"Sequence repeat count must be between {CommandSequence.MinRepeatCount:N0} and {CommandSequence.MaxRepeatCount:N0}.";
+            return false;
+        }
+
         normalized.Steps.Clear();
         for (var index = 0; index < sequence.Steps.Count; index++)
         {
@@ -11041,34 +11360,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
+            BackgroundColor = rule.BackgroundColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
             SoundNotificationEnabled = rule.SoundNotificationEnabled,
             PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds,
+            ShowInEventList = rule.ShowInEventList,
+            TriggerSequenceName = rule.TriggerSequenceName
         };
     }
 
     private static LogRule CloneLogRule(LogRule rule)
     {
-        return new LogRule
-        {
-            Name = rule.Name,
-            Keyword = rule.Keyword,
-            Enabled = rule.Enabled,
-            UseForEvent = rule.UseForEvent,
-            UseForHighlight = rule.UseForHighlight,
-            UseAsViewFilter = rule.UseAsViewFilter,
-            CaseSensitive = rule.CaseSensitive,
-            Mode = rule.Mode,
-            MatchDirection = rule.MatchDirection,
-            ForegroundColor = rule.ForegroundColor,
-            BackgroundColor = rule.BackgroundColor,
-            Priority = rule.Priority,
-            TrayNotificationEnabled = rule.TrayNotificationEnabled,
-            SoundNotificationEnabled = rule.SoundNotificationEnabled,
-            PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
-        };
+        return rule.Clone();
     }
 
     private static EventRule CreateEventRuleFromLogRule(LogRule rule)
@@ -11082,10 +11386,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Mode = rule.Mode,
             MatchDirection = ConvertDirection(rule.MatchDirection),
             HighlightColor = rule.ForegroundColor,
+            BackgroundColor = rule.BackgroundColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
             SoundNotificationEnabled = rule.SoundNotificationEnabled,
             PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds,
+            ShowInEventList = rule.UseForEvent,
+            TriggerSequenceName = rule.TriggerSequenceName
         };
     }
 
@@ -11147,6 +11454,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return new CommandSequence
         {
             Name = sequence.Name,
+            RepeatCount = sequence.RepeatCount,
             Steps = new ObservableCollection<CommandSequenceStep>(
                 sequence.Steps.Select(CloneCommandSequenceStep))
         };
@@ -12162,6 +12470,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Received chunks: {_serialService.ReceivedChunkCount:N0}");
         builder.AppendLine($"  Active log observer task count: {ActiveLogObserverTaskCount:N0}");
         builder.AppendLine($"  Active event observer task count: {ActiveEventObserverTaskCount:N0}");
+        builder.AppendLine($"  Active sequence trigger observer task count: {ActiveSequenceTriggerObserverTaskCount:N0}");
         builder.AppendLine($"  Active event context observer task count: {ActiveEventContextObserverTaskCount:N0}");
         builder.AppendLine($"  Connection errors: {_serialService.ConnectionErrorCount:N0}");
         builder.AppendLine($"  Serial last error: {_serialService.LastError ?? "(none)"}");
@@ -12458,7 +12767,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Search errors: {SearchErrorCount:N0}");
         builder.AppendLine($"  Last search error: {(string.IsNullOrWhiteSpace(LastSearchError) ? "(none)" : LastSearchError)}");
         builder.AppendLine($"  Search result count: {SearchMatchCount:N0}");
+        builder.AppendLine($"  Search matching line count: {SearchResultMatchedLineCount:N0}");
         builder.AppendLine($"  Search result visible count: {SearchResultVisibleCount:N0}");
+        builder.AppendLine($"  Search results page: {SearchResultPageNumber:N0}/{SearchResultPageCount:N0}");
         builder.AppendLine($"  Selected search result index: {SelectedSearchResultIndex:N0}");
         builder.AppendLine($"  Search result status: {SearchResultStatusText}");
         builder.AppendLine($"  Search results rebuild count: {SearchResultsRebuildCount:N0}");
@@ -12538,6 +12849,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Event list scroll errors: {EventListScrollErrorCount:N0}");
         builder.AppendLine($"  Last event list scroll error: {(string.IsNullOrWhiteSpace(LastEventListScrollError) ? "(none)" : LastEventListScrollError)}");
         builder.AppendLine($"  Event detector error count: {_eventDetector.ErrorCount:N0}");
+        builder.AppendLine($"  Coalesced sequence trigger count: {_eventDetector.CoalescedSequenceTriggerCount:N0}");
         builder.AppendLine($"  Event context captures started: {_eventDetector.ContextCapturesStartedCount:N0}");
         builder.AppendLine($"  Event context captures completed: {_eventDetector.ContextCapturesCompletedCount:N0}");
         builder.AppendLine($"  Active pending event contexts: {_eventDetector.ActivePendingContextCount:N0}");
@@ -12865,6 +13177,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         FindNextCommand.NotifyCanExecuteChanged();
         FindPreviousCommand.NotifyCanExecuteChanged();
         RefreshSearchResultsCommand.NotifyCanExecuteChanged();
+        PreviousSearchResultsPageCommand.NotifyCanExecuteChanged();
+        NextSearchResultsPageCommand.NotifyCanExecuteChanged();
     }
 
     private enum SearchMove

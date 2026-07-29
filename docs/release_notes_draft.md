@@ -1,6 +1,20 @@
 # Release Notes Draft
 
-Date: 2026-07-28
+Date: 2026-07-30
+
+## Released in v1.2.4
+
+- Added colored match segments to the Search and Event tabs.
+- Search Results now groups matches by log line and pages through up to 1,000
+  matching lines at a time while F3/Shift+F3 retains occurrence-level navigation.
+- Double-clicking a rule row opens its editor; double-clicks outside a rule row
+  or on inline controls are ignored.
+- RX rules can trigger one selected non-empty command sequence through a bounded,
+  dedicated control channel independent of the display event queue.
+- Command sequences support a profile-persisted repeat count from 1 to 99.
+- Duplicate or invalid sequence references, TX-only trigger assignments, and
+  empty target sequences are normalized safely with diagnostics.
+- A missing default profile is created automatically on first startup.
 
 ## Released in v1.2.3
 
@@ -54,8 +68,9 @@ Date: 2026-07-28
 - Visible-buffer search with xterm search/jump integration.
 - Occurrence-based search counts and navigates every non-overlapping match,
   including repeated matches on one logical line and terms with leading spaces.
-- Asynchronous, cancelable search keeps a compact per-line index and caps the
-  Search Results list at 1,000 rows for large retained buffers.
+- Asynchronous, cancelable search keeps a compact per-line index. The Search
+  Results tab groups repeated occurrences into one row per matching log line
+  and pages chronologically through at most 1,000 rows at a time.
 - Search Results tab with manual refresh by default.
 - JSON profile save/load/reset.
 - Settings validation and apply-behavior hints.

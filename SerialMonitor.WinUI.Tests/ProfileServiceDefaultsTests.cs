@@ -115,6 +115,187 @@ public sealed class ProfileServiceDefaultsTests
     }
 
     [Fact]
+    public async Task SequenceRepeatAndRuleTrigger_ArePersistedAndProjected()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var profile = service.CreateDefaultProfile();
+        profile.CommandSequences =
+        [
+            new CommandSequence
+            {
+                Name = "Recover",
+                RepeatCount = 3,
+                Steps = [new CommandSequenceStep { CommandText = "reset" }]
+            }
+        ];
+        profile.LogRules =
+        [
+            new LogRule
+            {
+                Name = "FAULT",
+                Keyword = "FAULT",
+                UseForEvent = false,
+                ForegroundColor = "Red",
+                BackgroundColor = "Yellow",
+                TriggerSequenceName = "Recover"
+            }
+        ];
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(3, Assert.Single(loaded.CommandSequences).RepeatCount);
+            Assert.Equal("Recover", Assert.Single(loaded.LogRules).TriggerSequenceName);
+            var projectedRule = Assert.Single(loaded.EventRules);
+            Assert.False(projectedRule.ShowInEventList);
+            Assert.Equal("Recover", projectedRule.TriggerSequenceName);
+            Assert.Equal("Red", projectedRule.HighlightColor);
+            Assert.Equal("Yellow", projectedRule.BackgroundColor);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task SequenceRepeatCount_IsClampedToSharedUiMaximum()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var profile = service.CreateDefaultProfile();
+        profile.CommandSequences =
+        [
+            new CommandSequence
+            {
+                Name = "Recover",
+                RepeatCount = CommandSequence.MaxRepeatCount + 1,
+                Steps = [new CommandSequenceStep { CommandText = "reset" }]
+            }
+        ];
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(CommandSequence.MaxRepeatCount, Assert.Single(loaded.CommandSequences).RepeatCount);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task MissingTriggeredSequence_IsClearedDuringProfileNormalization()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var profile = service.CreateDefaultProfile();
+        profile.LogRules[0].TriggerSequenceName = "Does not exist";
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Null(loaded.LogRules[0].TriggerSequenceName);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidTxOnlyAndEmptySequenceTriggers_AreClearedDuringProfileNormalization()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var profile = service.CreateDefaultProfile();
+        profile.CommandSequences =
+        [
+            new CommandSequence
+            {
+                Name = "Recover",
+                Steps = [new CommandSequenceStep { CommandText = "reset" }]
+            },
+            new CommandSequence { Name = "Empty" }
+        ];
+        profile.LogRules =
+        [
+            new LogRule
+            {
+                Name = "TX",
+                Keyword = "TX",
+                MatchDirection = HighlightMatchDirection.TxOnly,
+                TriggerSequenceName = "Recover"
+            },
+            new LogRule
+            {
+                Name = "EMPTY",
+                Keyword = "EMPTY",
+                MatchDirection = HighlightMatchDirection.RxOnly,
+                TriggerSequenceName = "Empty"
+            }
+        ];
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(profile));
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.All(loaded.LogRules, rule => Assert.Null(rule.TriggerSequenceName));
+            Assert.DoesNotContain(loaded.EventRules, rule => !string.IsNullOrWhiteSpace(rule.TriggerSequenceName));
+            Assert.Contains("TX-only", service.LastError, StringComparison.Ordinal);
+            Assert.Contains("empty command sequence", service.LastError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateSequenceNames_AreRenamedWithoutRetargetingExistingRules()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var profile = service.CreateDefaultProfile();
+        profile.CommandSequences =
+        [
+            new CommandSequence { Name = "Recover", Steps = [new CommandSequenceStep { CommandText = "first" }] },
+            new CommandSequence { Name = "recover", Steps = [new CommandSequenceStep { CommandText = "duplicate" }] },
+            new CommandSequence { Name = "Recover (2)", Steps = [new CommandSequenceStep { CommandText = "reserved" }] }
+        ];
+        profile.LogRules[0].TriggerSequenceName = "Recover";
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(profile));
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(
+                ["Recover", "recover (3)", "Recover (2)"],
+                loaded.CommandSequences.Select(sequence => sequence.Name));
+            Assert.Equal("Recover", loaded.LogRules[0].TriggerSequenceName);
+            Assert.Equal("first", loaded.CommandSequences[0].Steps[0].CommandText);
+            Assert.Contains("Duplicate command sequence", service.LastError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
     public async Task AutomaticDefault_RemainsFortyMillisecondsAcrossBaudRates()
     {
         var service = new ProfileService();

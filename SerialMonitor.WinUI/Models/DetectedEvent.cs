@@ -17,7 +17,13 @@ public sealed class DetectedEvent
         bool soundNotificationEnabled = false,
         bool popupNotificationEnabled = false,
         int notificationCooldownSeconds = 30,
-        Guid? id = null)
+        bool showInEventList = true,
+        string? triggerSequenceName = null,
+        IReadOnlyList<TextMatchRange>? matchRanges = null,
+        string? matchForegroundColor = null,
+        string? matchBackgroundColor = null,
+        Guid? id = null,
+        bool buildMessageSegments = true)
     {
         Id = id ?? Guid.NewGuid();
         Timestamp = timestamp;
@@ -32,6 +38,17 @@ public sealed class DetectedEvent
         SoundNotificationEnabled = soundNotificationEnabled;
         PopupNotificationEnabled = popupNotificationEnabled;
         NotificationCooldownSeconds = Math.Clamp(notificationCooldownSeconds, 5, 3_600);
+        ShowInEventList = showInEventList;
+        TriggerSequenceName = string.IsNullOrWhiteSpace(triggerSequenceName)
+            ? null
+            : triggerSequenceName.Trim();
+        MessageSegments = buildMessageSegments
+            ? CreateMessageSegments(
+                Message,
+                matchRanges,
+                matchForegroundColor,
+                matchBackgroundColor)
+            : Array.Empty<EventTextSegment>();
     }
 
     public Guid Id { get; }
@@ -70,6 +87,12 @@ public sealed class DetectedEvent
 
     public int NotificationCooldownSeconds { get; }
 
+    public bool ShowInEventList { get; }
+
+    public string? TriggerSequenceName { get; }
+
+    public IReadOnlyList<EventTextSegment> MessageSegments { get; }
+
     public string DirectionText => Direction switch
     {
         LogDirection.Tx => "TX >",
@@ -85,4 +108,47 @@ public sealed class DetectedEvent
     };
 
     public string Formatted => $"[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] {RuleName} {DirectionText} {Message}";
+
+    private static IReadOnlyList<EventTextSegment> CreateMessageSegments(
+        string message,
+        IReadOnlyList<TextMatchRange>? matchRanges,
+        string? foregroundColor,
+        string? backgroundColor)
+    {
+        if (string.IsNullOrEmpty(message) || matchRanges is not { Count: > 0 })
+        {
+            return [new EventTextSegment(message, isMatch: false)];
+        }
+
+        var segments = new List<EventTextSegment>((matchRanges.Count * 2) + 1);
+        var position = 0;
+        foreach (var range in matchRanges.OrderBy(range => range.Start))
+        {
+            if (range.Start < position || range.Length <= 0 || range.Start + range.Length > message.Length)
+            {
+                continue;
+            }
+
+            if (range.Start > position)
+            {
+                segments.Add(new EventTextSegment(message[position..range.Start], isMatch: false));
+            }
+
+            segments.Add(new EventTextSegment(
+                message.Substring(range.Start, range.Length),
+                isMatch: true,
+                foregroundColor,
+                backgroundColor));
+            position = range.Start + range.Length;
+        }
+
+        if (position < message.Length)
+        {
+            segments.Add(new EventTextSegment(message[position..], isMatch: false));
+        }
+
+        return segments.Count == 0
+            ? [new EventTextSegment(message, isMatch: false)]
+            : segments;
+    }
 }

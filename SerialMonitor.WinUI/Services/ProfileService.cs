@@ -595,6 +595,9 @@ public sealed class ProfileService : IProfileService
             NormalizeCommandSequences(profile.CommandSequences, warnings);
         }
 
+        NormalizeRuleSequenceTriggers(profile.LogRules, profile.CommandSequences, warnings);
+        profile.EventRules = CreateEventRulesFromLogRules(profile.LogRules);
+
         if (profile.CommandHistory is null)
         {
             profile.CommandHistory = defaults.CommandHistory;
@@ -1058,7 +1061,7 @@ public sealed class ProfileService : IProfileService
         }
     }
 
-    private static void NormalizeEventRules(IList<EventRule> rules, ICollection<string> warnings)
+    private void NormalizeEventRules(IList<EventRule> rules, ICollection<string> warnings)
     {
         foreach (var rule in rules)
         {
@@ -1087,7 +1090,14 @@ public sealed class ProfileService : IProfileService
             }
 
             rule.HighlightColor = string.IsNullOrWhiteSpace(rule.HighlightColor) ? null : rule.HighlightColor.Trim();
+            rule.BackgroundColor = NormalizeOptionalHighlightColorName(
+                rule.BackgroundColor,
+                "event rule background",
+                warnings);
             rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
+            rule.TriggerSequenceName = string.IsNullOrWhiteSpace(rule.TriggerSequenceName)
+                ? null
+                : rule.TriggerSequenceName.Trim();
         }
     }
 
@@ -1159,6 +1169,9 @@ public sealed class ProfileService : IProfileService
             }
 
             rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
+            rule.TriggerSequenceName = string.IsNullOrWhiteSpace(rule.TriggerSequenceName)
+                ? null
+                : rule.TriggerSequenceName.Trim();
         }
     }
 
@@ -1262,10 +1275,12 @@ public sealed class ProfileService : IProfileService
                 Mode = eventRule.Mode,
                 MatchDirection = ConvertDirection(eventRule.MatchDirection),
                 ForegroundColor = string.IsNullOrWhiteSpace(eventRule.HighlightColor) ? "Default" : eventRule.HighlightColor.Trim(),
+                BackgroundColor = eventRule.BackgroundColor,
                 TrayNotificationEnabled = eventRule.TrayNotificationEnabled,
                 SoundNotificationEnabled = eventRule.SoundNotificationEnabled,
                 PopupNotificationEnabled = eventRule.PopupNotificationEnabled,
                 NotificationCooldownSeconds = eventRule.NotificationCooldownSeconds,
+                TriggerSequenceName = eventRule.TriggerSequenceName,
                 Priority = 0
             });
         }
@@ -1325,7 +1340,9 @@ public sealed class ProfileService : IProfileService
     private static List<EventRule> CreateEventRulesFromLogRules(IEnumerable<LogRule> rules)
     {
         return rules
-            .Where(rule => rule.UseForEvent && !string.IsNullOrWhiteSpace(rule.Keyword))
+            .Where(rule =>
+                (rule.UseForEvent || !string.IsNullOrWhiteSpace(rule.TriggerSequenceName)) &&
+                !string.IsNullOrWhiteSpace(rule.Keyword))
             .Select(rule => new EventRule
             {
                 Name = rule.Name,
@@ -1335,10 +1352,13 @@ public sealed class ProfileService : IProfileService
                 Mode = rule.Mode,
                 MatchDirection = ConvertDirection(rule.MatchDirection),
                 HighlightColor = rule.ForegroundColor,
+                BackgroundColor = rule.BackgroundColor,
                 TrayNotificationEnabled = rule.TrayNotificationEnabled,
                 SoundNotificationEnabled = rule.SoundNotificationEnabled,
                 PopupNotificationEnabled = rule.PopupNotificationEnabled,
-                NotificationCooldownSeconds = rule.NotificationCooldownSeconds
+                NotificationCooldownSeconds = rule.NotificationCooldownSeconds,
+                ShowInEventList = rule.UseForEvent,
+                TriggerSequenceName = rule.TriggerSequenceName
             })
             .ToList();
     }
@@ -1405,6 +1425,15 @@ public sealed class ProfileService : IProfileService
                 sequence.Name = sequence.Name.Trim();
             }
 
+            if (sequence.RepeatCount is < CommandSequence.MinRepeatCount or > CommandSequence.MaxRepeatCount)
+            {
+                sequence.RepeatCount = Math.Clamp(
+                    sequence.RepeatCount,
+                    CommandSequence.MinRepeatCount,
+                    CommandSequence.MaxRepeatCount);
+                warnings.Add("A command sequence repeat count was outside the safe range.");
+            }
+
             sequence.Steps ??= new ObservableCollection<CommandSequenceStep>();
             for (var stepIndex = sequence.Steps.Count - 1; stepIndex >= 0; stepIndex--)
             {
@@ -1431,6 +1460,83 @@ public sealed class ProfileService : IProfileService
                     warnings.Add("A command sequence line ending was invalid.");
                 }
             }
+        }
+
+        NormalizeDuplicateCommandSequenceNames(sequences, warnings);
+    }
+
+    private static void NormalizeDuplicateCommandSequenceNames(
+        IEnumerable<CommandSequence> sequences,
+        ICollection<string> warnings)
+    {
+        var sequenceList = sequences.ToArray();
+        var reservedNames = sequenceList
+            .Select(sequence => sequence.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sequence in sequenceList)
+        {
+            if (usedNames.Add(sequence.Name))
+            {
+                continue;
+            }
+
+            var originalName = sequence.Name;
+            var suffix = 2;
+            string uniqueName;
+            do
+            {
+                uniqueName = $"{originalName} ({suffix++})";
+            }
+            while (reservedNames.Contains(uniqueName) || usedNames.Contains(uniqueName));
+
+            sequence.Name = uniqueName;
+            reservedNames.Add(uniqueName);
+            usedNames.Add(uniqueName);
+            warnings.Add($"Duplicate command sequence '{originalName}' was renamed to '{uniqueName}'.");
+        }
+    }
+
+    private static void NormalizeRuleSequenceTriggers(
+        IEnumerable<LogRule> rules,
+        IReadOnlyCollection<CommandSequence> sequences,
+        ICollection<string> warnings)
+    {
+        var triggerableSequences = sequences
+            .Where(CommandSequenceTriggerPolicy.CanUseAsTrigger)
+            .ToArray();
+
+        foreach (var rule in rules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.TriggerSequenceName))
+            {
+                rule.TriggerSequenceName = null;
+                continue;
+            }
+
+            if (!CommandSequenceTriggerPolicy.SupportsRxTrigger(rule.MatchDirection))
+            {
+                rule.TriggerSequenceName = null;
+                warnings.Add($"TX-only rule '{rule.Name}' cannot reference an RX trigger sequence.");
+                continue;
+            }
+
+            var requestedName = rule.TriggerSequenceName.Trim();
+            var matchingSequence = triggerableSequences.FirstOrDefault(sequence =>
+                string.Equals(sequence.Name, requestedName, StringComparison.OrdinalIgnoreCase));
+            if (matchingSequence is null)
+            {
+                rule.TriggerSequenceName = null;
+                var referencedSequenceExists = sequences.Any(sequence =>
+                    string.Equals(sequence.Name, requestedName, StringComparison.OrdinalIgnoreCase));
+                warnings.Add(referencedSequenceExists
+                    ? $"Rule '{rule.Name}' referenced an empty command sequence."
+                    : $"Rule '{rule.Name}' referenced a missing command sequence.");
+                continue;
+            }
+
+            rule.TriggerSequenceName = matchingSequence.Name;
         }
     }
 

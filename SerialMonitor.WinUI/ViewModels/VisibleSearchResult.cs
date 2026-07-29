@@ -1,4 +1,5 @@
 using System.Globalization;
+using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.ViewModels;
@@ -10,23 +11,23 @@ public sealed class VisibleSearchResult
         int visibleLineIndex,
         long lineId,
         int payloadOffset,
-        int occurrenceInLine,
-        int occurrenceCountInLine,
+        int matchCountInLine,
         string timeText,
         string directionText,
         string messagePreview,
-        string fullText)
+        string fullText,
+        IReadOnlyList<EventTextSegment>? messageSegments = null)
     {
         MatchIndex = matchIndex;
         VisibleLineIndex = visibleLineIndex;
         LineId = lineId;
         PayloadOffset = payloadOffset;
-        OccurrenceInLine = occurrenceInLine;
-        OccurrenceCountInLine = occurrenceCountInLine;
+        MatchCountInLine = matchCountInLine;
         TimeText = timeText;
         DirectionText = directionText;
         MessagePreview = messagePreview;
         FullText = fullText;
+        MessageSegments = messageSegments ?? [new EventTextSegment(messagePreview, isMatch: false)];
     }
 
     public long MatchIndex { get; }
@@ -37,12 +38,10 @@ public sealed class VisibleSearchResult
 
     public int PayloadOffset { get; }
 
-    public int OccurrenceInLine { get; }
+    public int MatchCountInLine { get; }
 
-    public int OccurrenceCountInLine { get; }
-
-    public string OccurrenceText => OccurrenceCountInLine > 1
-        ? $"{OccurrenceInLine + 1}/{OccurrenceCountInLine}"
+    public string MatchCountText => MatchCountInLine > 1
+        ? $"×{MatchCountInLine}"
         : string.Empty;
 
     public string TimeText { get; }
@@ -50,6 +49,8 @@ public sealed class VisibleSearchResult
     public string DirectionText { get; }
 
     public string MessagePreview { get; }
+
+    public IReadOnlyList<EventTextSegment> MessageSegments { get; }
 
     public string FullText { get; }
 }
@@ -61,10 +62,11 @@ internal static class VisibleSearchResultParser
         int visibleLineIndex,
         long lineId,
         int payloadOffset,
-        int occurrenceInLine,
-        int occurrenceCountInLine,
+        int matchCountInLine,
         string fullText,
-        LogDirection direction = LogDirection.System)
+        LogDirection direction = LogDirection.System,
+        string? searchText = null,
+        StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
         var timeText = string.Empty;
         var bodyText = fullText;
@@ -81,17 +83,22 @@ internal static class VisibleSearchResultParser
             };
         }
 
+        var messageSegments = SearchResultMatchSegmentResolver.Resolve(
+            messagePreview,
+            searchText,
+            comparison);
+
         return new VisibleSearchResult(
             matchIndex,
             visibleLineIndex,
             lineId,
             payloadOffset,
-            occurrenceInLine,
-            occurrenceCountInLine,
+            matchCountInLine,
             timeText,
             directionText,
             messagePreview,
-            fullText);
+            fullText,
+            messageSegments);
     }
 
     private static bool TrySplitTimestamp(

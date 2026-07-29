@@ -16,15 +16,15 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             "rx_mq",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         Assert.Equal(2, snapshot.TotalMatchCount);
         Assert.Single(snapshot.MatchedLines);
         Assert.Equal(2, snapshot.MatchedLines[0].MatchCount);
-        Assert.Equal(2, snapshot.VisibleResults.Length);
-        Assert.Equal(5, snapshot.VisibleResults[0].PayloadOffset);
-        Assert.True(snapshot.VisibleResults[1].PayloadOffset > snapshot.VisibleResults[0].PayloadOffset);
+        Assert.True(snapshot.TryGetFirst(out var first));
+        Assert.True(snapshot.TryGetNext(first, out var second));
+        Assert.Equal(5, first.PayloadOffset);
+        Assert.True(second.PayloadOffset > first.PayloadOffset);
     }
 
     [Fact]
@@ -38,10 +38,9 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             " rx_mq",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
-        var result = Assert.Single(snapshot.VisibleResults);
+        Assert.True(snapshot.TryGetFirst(out var result));
         Assert.Equal(1, snapshot.TotalMatchCount);
         Assert.True(result.PayloadOffset > 5);
     }
@@ -52,17 +51,18 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             [new VisibleLogSearchLine(1, "RX < \t\tREADY", 5)],
             "\t",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         Assert.Equal(2, snapshot.TotalMatchCount);
-        Assert.Equal([0, 1], snapshot.VisibleResults.Select(result => result.PayloadOffset));
+        Assert.True(snapshot.TryGetFirst(out var first));
+        Assert.True(snapshot.TryGetNext(first, out var second));
+        Assert.Equal([0, 1], new[] { first.PayloadOffset, second.PayloadOffset });
         var line = Assert.Single(snapshot.MatchedLines);
         Assert.Null(line.OccurrenceCheckpoints);
-        Assert.Equal(0, snapshot.VisibleResults[0].TabsBeforeMatch);
-        Assert.Equal(1, snapshot.VisibleResults[0].TabsBeforeMatchEnd);
-        Assert.Equal(1, snapshot.VisibleResults[1].TabsBeforeMatch);
-        Assert.Equal(2, snapshot.VisibleResults[1].TabsBeforeMatchEnd);
+        Assert.Equal(0, first.TabsBeforeMatch);
+        Assert.Equal(1, first.TabsBeforeMatchEnd);
+        Assert.Equal(1, second.TabsBeforeMatch);
+        Assert.Equal(2, second.TabsBeforeMatchEnd);
     }
 
     [Fact]
@@ -71,10 +71,9 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             [new VisibleLogSearchLine(1, "RX < \tſ S K K ß ẞ", 5)],
             "S",
-            StringComparison.OrdinalIgnoreCase,
-            maxVisibleResults: 1000);
+            StringComparison.OrdinalIgnoreCase);
 
-        var result = Assert.Single(snapshot.VisibleResults);
+        Assert.True(snapshot.TryGetFirst(out var result));
         Assert.Equal(1, snapshot.TotalMatchCount);
         Assert.Equal(3, result.PayloadOffset);
         Assert.Equal(1, result.TabsBeforeMatch);
@@ -92,8 +91,7 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             "rx_mq",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         Assert.True(snapshot.TryGetFirst(out var first));
         Assert.True(snapshot.TryGetNext(first, out var second));
@@ -116,8 +114,7 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             [new VisibleLogSearchLine(1, "RX < abababa", 5)],
             "aba",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         Assert.True(snapshot.TryGetLast(out var last));
         Assert.Equal(4, last.PayloadOffset);
@@ -132,8 +129,7 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             [new VisibleLogSearchLine(1, $"RX < {new string('a', occurrenceCount)}", 5)],
             "a",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         var line = Assert.Single(snapshot.MatchedLines);
         var checkpoints = Assert.IsType<VisibleLogSearchCheckpoint[]>(line.OccurrenceCheckpoints);
@@ -155,7 +151,7 @@ public sealed class VisibleLogSearchEngineTests
     }
 
     [Fact]
-    public void Build_DenseMatchesKeepOnlyVisibleResultLimit()
+    public void MatchedLinePages_StayBoundedByLinesRatherThanOccurrences()
     {
         var lines = Enumerable.Range(0, 20_000)
             .Select(index => new VisibleLogSearchLine(index + 1, "RX < a a a a a a a a a a", 5))
@@ -164,12 +160,35 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             "a",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
         Assert.Equal(200_000, snapshot.TotalMatchCount);
         Assert.Equal(20_000, snapshot.MatchedLines.Length);
-        Assert.Equal(1000, snapshot.VisibleResults.Length);
+        var firstPage = snapshot.GetMatchedLinePage(0, 1000);
+        var lastPage = snapshot.GetMatchedLinePage(int.MaxValue, 1000);
+        Assert.Equal(new VisibleLogSearchPage(0, 20, 0, 1000), firstPage);
+        Assert.Equal(new VisibleLogSearchPage(19, 20, 19_000, 1000), lastPage);
+    }
+
+    [Fact]
+    public void MatchedLinePages_ClampToPartialNewestPage()
+    {
+        var lines = Enumerable.Range(0, 2_001)
+            .Select(index => new VisibleLogSearchLine(index + 1, "RX < READY READY", 5))
+            .ToArray();
+        var snapshot = VisibleLogSearchEngine.Build(
+            lines,
+            "READY",
+            StringComparison.Ordinal);
+
+        Assert.Equal(4_002, snapshot.TotalMatchCount);
+        Assert.Equal(2_001, snapshot.MatchedLines.Length);
+        Assert.Equal(
+            new VisibleLogSearchPage(2, 3, 2_000, 1),
+            snapshot.GetMatchedLinePage(int.MaxValue, 1_000));
+        Assert.Equal(
+            new VisibleLogSearchPage(0, 3, 0, 1_000),
+            snapshot.GetMatchedLinePage(-1, 1_000));
     }
 
     [Fact]
@@ -186,8 +205,7 @@ public sealed class VisibleLogSearchEngineTests
                 lines,
                 "READY",
                 StringComparison.Ordinal,
-                maxVisibleResults: 1000,
-                cancellation.Token));
+                cancellationToken: cancellation.Token));
     }
 
     [Fact]
@@ -203,8 +221,7 @@ public sealed class VisibleLogSearchEngineTests
                 lines,
                 "a",
                 StringComparison.Ordinal,
-                maxVisibleResults: 1000,
-                cancellation.Token));
+                cancellationToken: cancellation.Token));
     }
 
     [Fact]
@@ -214,10 +231,9 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             [new VisibleLogSearchLine(1, $"RX < {prefix}READY", 5)],
             "READY",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
 
-        var result = Assert.Single(snapshot.VisibleResults);
+        Assert.True(snapshot.TryGetFirst(out var result));
         Assert.Equal(prefix.Length, result.PayloadOffset);
     }
 
@@ -235,13 +251,11 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             "rx_mq",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
         var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
         Assert.Equal(400_000, snapshot.TotalMatchCount);
         Assert.Equal(lineCount, snapshot.MatchedLines.Length);
-        Assert.Equal(1000, snapshot.VisibleResults.Length);
         Assert.True(
             allocatedBytes < 64L * 1024 * 1024,
             $"Search engine allocated {allocatedBytes:N0} bytes.");
@@ -262,8 +276,7 @@ public sealed class VisibleLogSearchEngineTests
         var snapshot = VisibleLogSearchEngine.Build(
             lines,
             "READY",
-            StringComparison.Ordinal,
-            maxVisibleResults: 1000);
+            StringComparison.Ordinal);
         var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
         Assert.Equal(lineCount, snapshot.TotalMatchCount);

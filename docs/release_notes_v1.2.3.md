@@ -4,8 +4,9 @@
 
 ## 로그 검색 정확도
 
-- 한 논리 줄에 검색어가 여러 번 등장하면 각 occurrence를 별도 결과로 세고,
-  `F3`/`Shift+F3`, Next/Previous, 검색 결과 더블 클릭으로 각각 이동합니다.
+- 한 논리 줄에 검색어가 여러 번 등장하면 각 occurrence를 별도로 세고
+  `F3`/`Shift+F3`로 각각 이동합니다. Search Results에서는 같은 줄을 한 행으로
+  묶어 `×N`으로 표시하며, 더블 클릭하면 해당 줄의 첫 occurrence로 이동합니다.
 - 앞 공백을 포함한 검색어도 보존하며, C#의 `OrdinalIgnoreCase` 결과를 xterm
   선택 위치와 동일하게 유지합니다.
 - 실제 탭, 연속 탭, 후행 공백, CJK/이모지의 wide-character soft wrap을 포함한
@@ -16,8 +17,9 @@
 ## 대용량 검색 안정성
 
 - 검색을 UI 스레드 밖에서 수행하고 검색어 변경·종료 시 취소를 관찰합니다.
-- 20만 줄처럼 큰 retained buffer에서도 전체 occurrence를 세되 검색 결과 UI에는
-  최대 1,000개 행만 물질화합니다. Next/Previous는 전체 snapshot을 탐색합니다.
+- 20만 줄처럼 큰 retained buffer에서도 전체 occurrence를 세되 Search Results에는
+  일치한 로그 줄을 과거부터 최대 1,000개씩 표시합니다. Prev는 과거 방향,
+  Next는 최신 방향으로 페이지를 이동하고 최신 페이지의 Next는 검색을 갱신합니다.
 - 한 줄에 occurrence가 많은 경우 checkpoint를 사용해 Previous 반복 탐색이
   제곱 시간으로 증가하지 않도록 제한합니다.
 - 탭 위치 배열을 모든 결과 줄에 저장하지 않고 매치 주변 누적 개수만 보존해

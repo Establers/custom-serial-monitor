@@ -446,8 +446,9 @@ public sealed partial class MainWindow : Window
         ExecuteDisconnectCommand();
     }
 
-    private void Root_Loaded(object sender, RoutedEventArgs args)
+    private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
+        await _viewModel.InitializeAsync();
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
         UpdateFileLoggingTextColor();
@@ -4310,6 +4311,64 @@ public sealed partial class MainWindow : Window
         await EditSelectedLogRuleAsync();
     }
 
+    private async void LogRuleListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    {
+        try
+        {
+            if (IsRuleInlineActionSource(args.OriginalSource as DependencyObject))
+            {
+                return;
+            }
+
+            var rule = FindLogRuleListItem(args.OriginalSource as DependencyObject);
+            if (rule is null)
+            {
+                return;
+            }
+
+            _viewModel.SelectedLogRule = rule;
+            LogRuleListView.SelectedItem = rule;
+            args.Handled = true;
+            await EditSelectedLogRuleAsync();
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.LogRuleListView_DoubleTapped", ex);
+        }
+    }
+
+    private LogRule? FindLogRuleListItem(DependencyObject? source)
+    {
+        var current = source;
+        while (current is not null && current != LogRuleListView)
+        {
+            if (current is ListViewItem item)
+            {
+                return item.Content as LogRule ?? item.DataContext as LogRule;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private bool IsRuleInlineActionSource(DependencyObject? source)
+    {
+        var current = source;
+        while (current is not null && current != LogRuleListView)
+        {
+            if (current is Button or CheckBox)
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
     private async void DeleteLogRuleRow_Click(object sender, RoutedEventArgs args)
     {
         SelectLogRuleFromSender(sender);
@@ -4440,6 +4499,45 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SequenceRepeatCountTextBox_BeforeTextChanging(
+        TextBox sender,
+        TextBoxBeforeTextChangingEventArgs args)
+    {
+        args.Cancel = args.NewText.Length > 0 &&
+            (!int.TryParse(args.NewText, NumberStyles.None, CultureInfo.InvariantCulture, out var repeatCount) ||
+             repeatCount is < CommandSequence.MinRepeatCount or > CommandSequence.MaxRepeatCount);
+    }
+
+    private void SequenceRepeatCountTextBox_TextChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender is TextBox textBox &&
+            _viewModel.SelectedCommandSequence is { } sequence &&
+            int.TryParse(textBox.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var repeatCount) &&
+            repeatCount is >= CommandSequence.MinRepeatCount and <= CommandSequence.MaxRepeatCount)
+        {
+            sequence.RepeatCount = repeatCount;
+        }
+    }
+
+    private void SequenceRepeatCountTextBox_LostFocus(object sender, RoutedEventArgs args)
+    {
+        if (sender is not TextBox textBox ||
+            _viewModel.SelectedCommandSequence is not { } sequence)
+        {
+            return;
+        }
+
+        if (!int.TryParse(textBox.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var repeatCount) ||
+            repeatCount is < CommandSequence.MinRepeatCount or > CommandSequence.MaxRepeatCount)
+        {
+            textBox.Text = Math.Clamp(
+                    sequence.RepeatCount,
+                    CommandSequence.MinRepeatCount,
+                    CommandSequence.MaxRepeatCount)
+                .ToString(CultureInfo.InvariantCulture);
+        }
+    }
+
     private async void EditCommandSequence_Click(object sender, RoutedEventArgs args)
     {
         if (_viewModel.SelectedCommandSequence is null)
@@ -4558,7 +4656,31 @@ public sealed partial class MainWindow : Window
         var notificationCooldownBox = CreateDialogTextBox(
             Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
             "30");
+        var triggerSequenceOptions = new[] { "(none)" }
+            .Concat(_viewModel.CommandSequences
+                .Where(CommandSequenceTriggerPolicy.CanUseAsTrigger)
+                .Select(sequence => sequence.Name))
+            .ToArray();
+        var triggerSequenceBox = CreateStringComboBox(
+            triggerSequenceOptions,
+            string.IsNullOrWhiteSpace(source.TriggerSequenceName) ? "(none)" : source.TriggerSequenceName);
         var errorText = CreateDialogErrorText();
+
+        void UpdateTriggerSequenceAvailability()
+        {
+            var direction = directionBox.SelectedItem is HighlightMatchDirection selectedDirection
+                ? selectedDirection
+                : HighlightMatchDirection.Both;
+            var isAvailable = CommandSequenceTriggerPolicy.SupportsRxTrigger(direction);
+            triggerSequenceBox.IsEnabled = isAvailable;
+            if (!isAvailable)
+            {
+                triggerSequenceBox.SelectedItem = triggerSequenceOptions[0];
+            }
+        }
+
+        directionBox.SelectionChanged += (_, _) => UpdateTriggerSequenceAvailability();
+        UpdateTriggerSequenceAvailability();
 
         ToolTipService.SetToolTip(eventBox, "Event: add matching lines to Events.");
         ToolTipService.SetToolTip(highlightBox, "Highlight: color matching lines in the log view.");
@@ -4569,11 +4691,12 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(soundNotificationBox, "Play one Windows alert sound per grouped notification. OFF by default.");
         ToolTipService.SetToolTip(popupNotificationBox, "Show a non-blocking in-app popup for 8 seconds. OFF by default.");
         ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
+        ToolTipService.SetToolTip(triggerSequenceBox, "Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running.");
 
         foreach (var input in new FrameworkElement[]
                  {
                      nameBox, keywordBox, modeBox, directionBox, foregroundBox,
-                     backgroundBox, priorityBox, notificationCooldownBox
+                     backgroundBox, priorityBox, notificationCooldownBox, triggerSequenceBox
                  })
         {
             input.MinWidth = 0;
@@ -4591,7 +4714,7 @@ public sealed partial class MainWindow : Window
             panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
 
-        for (var row = 0; row < 6; row++)
+        for (var row = 0; row < 7; row++)
         {
             panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
@@ -4617,11 +4740,17 @@ public sealed partial class MainWindow : Window
             columnSpan: 2);
         AddDialogGridChild(
             panel,
-            CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox),
+            CreateDialogField("RX trigger sequence", triggerSequenceBox),
             row: 4,
             column: 0,
             columnSpan: 4);
-        AddDialogGridChild(panel, errorText, row: 5, column: 0, columnSpan: 4);
+        AddDialogGridChild(
+            panel,
+            CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox),
+            row: 5,
+            column: 0,
+            columnSpan: 4);
+        AddDialogGridChild(panel, errorText, row: 6, column: 0, columnSpan: 4);
 
         var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
         {
@@ -4650,6 +4779,10 @@ public sealed partial class MainWindow : Window
             ? parsedPriority
             : source.Priority;
         var background = GetSelectedString(backgroundBox, "(none)");
+        var triggerSequenceName = GetSelectedString(triggerSequenceBox, "(none)");
+        var matchDirection = directionBox.SelectedItem is HighlightMatchDirection direction
+            ? direction
+            : HighlightMatchDirection.Both;
 
         return new LogRule
         {
@@ -4661,14 +4794,18 @@ public sealed partial class MainWindow : Window
             UseAsViewFilter = filterBox.IsChecked == true,
             CaseSensitive = caseBox.IsChecked == true,
             Mode = GetSelectedLogRuleMode(modeBox),
-            MatchDirection = directionBox.SelectedItem is HighlightMatchDirection direction ? direction : HighlightMatchDirection.Both,
+            MatchDirection = matchDirection,
             ForegroundColor = GetSelectedString(foregroundBox, "Default"),
             BackgroundColor = background == "(none)" ? null : background,
             Priority = priority,
             TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
             SoundNotificationEnabled = soundNotificationBox.IsChecked == true,
             PopupNotificationEnabled = popupNotificationBox.IsChecked == true,
-            NotificationCooldownSeconds = int.Parse(notificationCooldownBox.Text, CultureInfo.InvariantCulture)
+            NotificationCooldownSeconds = int.Parse(notificationCooldownBox.Text, CultureInfo.InvariantCulture),
+            TriggerSequenceName = CommandSequenceTriggerPolicy.SupportsRxTrigger(matchDirection) &&
+                triggerSequenceName != "(none)"
+                ? triggerSequenceName
+                : null
         };
     }
 
@@ -4733,6 +4870,7 @@ public sealed partial class MainWindow : Window
             Mode = GetSelectedLogRuleMode(modeBox),
             MatchDirection = directionBox.SelectedItem is EventMatchDirection direction ? direction : EventMatchDirection.RxOnly,
             HighlightColor = source.HighlightColor,
+            BackgroundColor = source.BackgroundColor,
             TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
             SoundNotificationEnabled = soundNotificationBox.IsChecked == true,
             PopupNotificationEnabled = popupNotificationBox.IsChecked == true,
@@ -4905,6 +5043,7 @@ public sealed partial class MainWindow : Window
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
+
         };
 
         var result = await dialog.ShowAsync();
@@ -5356,34 +5495,18 @@ public sealed partial class MainWindow : Window
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
+            BackgroundColor = rule.BackgroundColor,
             TrayNotificationEnabled = rule.TrayNotificationEnabled,
             SoundNotificationEnabled = rule.SoundNotificationEnabled,
             PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
+            NotificationCooldownSeconds = rule.NotificationCooldownSeconds,
+            TriggerSequenceName = rule.TriggerSequenceName
         };
     }
 
     private static LogRule CloneLogRule(LogRule rule)
     {
-        return new LogRule
-        {
-            Name = rule.Name,
-            Keyword = rule.Keyword,
-            Enabled = rule.Enabled,
-            UseForEvent = rule.UseForEvent,
-            UseForHighlight = rule.UseForHighlight,
-            UseAsViewFilter = rule.UseAsViewFilter,
-            CaseSensitive = rule.CaseSensitive,
-            Mode = rule.Mode,
-            MatchDirection = rule.MatchDirection,
-            ForegroundColor = rule.ForegroundColor,
-            BackgroundColor = rule.BackgroundColor,
-            Priority = rule.Priority,
-            TrayNotificationEnabled = rule.TrayNotificationEnabled,
-            SoundNotificationEnabled = rule.SoundNotificationEnabled,
-            PopupNotificationEnabled = rule.PopupNotificationEnabled,
-            NotificationCooldownSeconds = rule.NotificationCooldownSeconds
-        };
+        return rule.Clone();
     }
 
     private static HighlightRule CloneHighlightRule(HighlightRule rule)
@@ -5417,6 +5540,7 @@ public sealed partial class MainWindow : Window
         return new CommandSequence
         {
             Name = sequence.Name,
+            RepeatCount = sequence.RepeatCount,
             Steps = new System.Collections.ObjectModel.ObservableCollection<CommandSequenceStep>(
                 sequence.Steps.Select(CloneCommandSequenceStep))
         };

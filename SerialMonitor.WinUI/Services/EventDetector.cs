@@ -8,6 +8,7 @@ public sealed class EventDetector : IEventDetector
 {
     private const int InputQueueCapacity = 100_000;
     private const int OutputQueueCapacity = 20_000;
+    private const int SequenceTriggerQueueCapacity = 1;
     private const int MaxPendingContextCaptures = 1_000;
     private const int ContextCaptureOverloadHighWatermarkValue = 200;
     private const int ContextCaptureOverloadLowWatermarkValue = 100;
@@ -15,6 +16,7 @@ public sealed class EventDetector : IEventDetector
     private readonly object _stateGate = new();
     private Channel<LogLine> _input = CreateInputQueue();
     private Channel<DetectedEvent> _events = CreateEventQueue();
+    private Channel<DetectedEvent> _sequenceTriggerEvents = CreateSequenceTriggerQueue();
     private Channel<DetectedEventContext> _completedContexts = CreateEventContextQueue();
     private CancellationTokenSource? _cancellation;
     private Task? _detectorTask;
@@ -22,7 +24,7 @@ public sealed class EventDetector : IEventDetector
     private EventContextSettings _contextSettings = new();
     private readonly Queue<LogLine> _beforeContextBuffer = new();
     private readonly List<EventContextCapture> _pendingContextCaptures = new();
-    private string? _lastDetectedEventText;
+    private DetectedEvent? _lastDetectedEvent;
     private string? _lastError;
     private string? _lastRuleEvaluationError;
     private string? _lastHexRuleMatchName;
@@ -32,6 +34,7 @@ public sealed class EventDetector : IEventDetector
     private long _droppedInputLineCount;
     private int _pendingInputLineCount;
     private long _droppedOutputEventCount;
+    private long _coalescedSequenceTriggerCount;
     private long _contextCapturesStartedCount;
     private long _contextCapturesCompletedCount;
     private long _contextCaptureDroppedCount;
@@ -57,6 +60,8 @@ public sealed class EventDetector : IEventDetector
     public event EventHandler? StatusChanged;
 
     public ChannelReader<DetectedEvent> DetectedEvents => _events.Reader;
+
+    public ChannelReader<DetectedEvent> SequenceTriggerEvents => _sequenceTriggerEvents.Reader;
 
     public ChannelReader<DetectedEventContext> CompletedEventContexts => _completedContexts.Reader;
 
@@ -93,6 +98,8 @@ public sealed class EventDetector : IEventDetector
     public int PendingInputLineCount => Volatile.Read(ref _pendingInputLineCount);
 
     public long DroppedOutputEventCount => Interlocked.Read(ref _droppedOutputEventCount);
+
+    public long CoalescedSequenceTriggerCount => Interlocked.Read(ref _coalescedSequenceTriggerCount);
 
     public long ContextCapturesStartedCount => Interlocked.Read(ref _contextCapturesStartedCount);
 
@@ -170,7 +177,7 @@ public sealed class EventDetector : IEventDetector
         {
             lock (_stateGate)
             {
-                return _lastDetectedEventText;
+                return _lastDetectedEvent?.Formatted;
             }
         }
     }
@@ -210,6 +217,7 @@ public sealed class EventDetector : IEventDetector
             _input = CreateInputQueue();
             Volatile.Write(ref _pendingInputLineCount, 0);
             _events = CreateEventQueue();
+            _sequenceTriggerEvents = CreateSequenceTriggerQueue();
             _completedContexts = CreateEventContextQueue();
             _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             SetRunning(true, clearLastError: true);
@@ -347,6 +355,7 @@ public sealed class EventDetector : IEventDetector
         }
 
         _events.Writer.TryComplete();
+        _sequenceTriggerEvents.Writer.TryComplete();
         _completedContexts.Writer.TryComplete();
         _cancellation?.Dispose();
         _cancellation = null;
@@ -368,12 +377,25 @@ public sealed class EventDetector : IEventDetector
                 {
                     RecordDetectedEvent(detectedEvent);
 
-                    if (!_events.Writer.TryWrite(detectedEvent))
+                    if (DetectedEventRoutingPolicy.RequiresGeneralEventDelivery(detectedEvent) &&
+                        !_events.Writer.TryWrite(detectedEvent))
                     {
                         Interlocked.Increment(ref _droppedOutputEventCount);
                     }
 
-                    StartContextCapture(detectedEvent);
+                    if (detectedEvent.Direction == LogDirection.Rx &&
+                        !string.IsNullOrWhiteSpace(detectedEvent.TriggerSequenceName) &&
+                        !_sequenceTriggerEvents.Writer.TryWrite(detectedEvent))
+                    {
+                        // Preserve the first pending control request. Further matches are intentionally
+                        // coalesced until the trigger observer accepts it.
+                        Interlocked.Increment(ref _coalescedSequenceTriggerCount);
+                    }
+
+                    if (detectedEvent.ShowInEventList)
+                    {
+                        StartContextCapture(detectedEvent);
+                    }
                 }
 
                 AddBeforeContext(line);
@@ -425,14 +447,25 @@ public sealed class EventDetector : IEventDetector
 
             if (isMatch)
             {
-                beforeContext ??= captureContextForNewEvents
-                    ? _beforeContextBuffer.ToArray()
-                    : Array.Empty<LogLine>();
                 var sourceRule = rule.Rule;
+                IReadOnlyList<LogLine> eventBeforeContext = Array.Empty<LogLine>();
+                if (sourceRule.ShowInEventList)
+                {
+                    beforeContext ??= captureContextForNewEvents
+                        ? _beforeContextBuffer.ToArray()
+                        : Array.Empty<LogLine>();
+                    eventBeforeContext = beforeContext;
+                }
+
                 if (sourceRule.Mode == LogRuleMatchMode.Hex)
                 {
                     RecordHexRuleMatch(sourceRule, line);
                 }
+
+                var buildMessageSegments = sourceRule.ShowInEventList;
+                var matchRanges = buildMessageSegments
+                    ? EventMatchRangeResolver.Resolve(line, sourceRule)
+                    : Array.Empty<TextMatchRange>();
 
                 yield return new DetectedEvent(
                     DateTimeOffset.Now,
@@ -441,11 +474,17 @@ public sealed class EventDetector : IEventDetector
                     line.Direction,
                     line.DisplayText,
                     line,
-                    beforeContext,
+                    eventBeforeContext,
                     trayNotificationEnabled: sourceRule.TrayNotificationEnabled,
                     soundNotificationEnabled: sourceRule.SoundNotificationEnabled,
                     popupNotificationEnabled: sourceRule.PopupNotificationEnabled,
-                    notificationCooldownSeconds: sourceRule.NotificationCooldownSeconds);
+                    notificationCooldownSeconds: sourceRule.NotificationCooldownSeconds,
+                    showInEventList: sourceRule.ShowInEventList,
+                    triggerSequenceName: sourceRule.TriggerSequenceName,
+                    matchRanges: matchRanges,
+                    matchForegroundColor: sourceRule.HighlightColor,
+                    matchBackgroundColor: sourceRule.BackgroundColor,
+                    buildMessageSegments: buildMessageSegments);
             }
         }
     }
@@ -638,7 +677,7 @@ public sealed class EventDetector : IEventDetector
         Interlocked.Increment(ref _detectedEventCount);
         lock (_stateGate)
         {
-            _lastDetectedEventText = detectedEvent.Formatted;
+            _lastDetectedEvent = detectedEvent;
         }
     }
 
@@ -780,6 +819,16 @@ public sealed class EventDetector : IEventDetector
     private static Channel<DetectedEvent> CreateEventQueue()
     {
         return Channel.CreateBounded<DetectedEvent>(new BoundedChannelOptions(OutputQueueCapacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = true
+        });
+    }
+
+    private static Channel<DetectedEvent> CreateSequenceTriggerQueue()
+    {
+        return Channel.CreateBounded<DetectedEvent>(new BoundedChannelOptions(SequenceTriggerQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,

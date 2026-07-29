@@ -13,7 +13,6 @@ public sealed class VisibleSearchResultTests
             0,
             42,
             0,
-            0,
             1,
             "[16:30:55.091] INFO mock serial sample",
             LogDirection.Rx);
@@ -67,11 +66,29 @@ public sealed class VisibleSearchResultTests
         string expectedDirection,
         string expectedMessage)
     {
-        var result = VisibleSearchResultParser.Create(1, 2, 3, 0, 0, 1, fullText);
+        var result = VisibleSearchResultParser.Create(1, 2, 3, 0, 1, fullText);
 
         Assert.Equal(expectedTime, result.TimeText);
         Assert.Equal(expectedDirection, result.DirectionText);
         Assert.Equal(expectedMessage, result.MessagePreview);
         Assert.Equal(fullText, result.FullText);
+    }
+
+    [Fact]
+    public void MultipleMatchesOnOneLine_CreateOneRowWithMatchCount()
+    {
+        var result = VisibleSearchResultParser.Create(
+            11,
+            4,
+            42,
+            7,
+            3,
+            "RX < READY READY READY",
+            LogDirection.Rx);
+
+        Assert.Equal(11, result.MatchIndex);
+        Assert.Equal(7, result.PayloadOffset);
+        Assert.Equal(3, result.MatchCountInLine);
+        Assert.Equal("×3", result.MatchCountText);
     }
 }

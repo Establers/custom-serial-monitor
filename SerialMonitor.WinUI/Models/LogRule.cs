@@ -51,4 +51,30 @@ public sealed class LogRule
     public bool PopupNotificationEnabled { get; set; }
 
     public int NotificationCooldownSeconds { get; set; } = 30;
+
+    public string? TriggerSequenceName { get; set; }
+
+    public LogRule Clone()
+    {
+        return new LogRule
+        {
+            Name = Name,
+            Keyword = Keyword,
+            Enabled = Enabled,
+            UseForEvent = UseForEvent,
+            UseForHighlight = UseForHighlight,
+            UseAsViewFilter = UseAsViewFilter,
+            CaseSensitive = CaseSensitive,
+            Mode = Mode,
+            MatchDirection = MatchDirection,
+            ForegroundColor = ForegroundColor,
+            BackgroundColor = BackgroundColor,
+            Priority = Priority,
+            TrayNotificationEnabled = TrayNotificationEnabled,
+            SoundNotificationEnabled = SoundNotificationEnabled,
+            PopupNotificationEnabled = PopupNotificationEnabled,
+            NotificationCooldownSeconds = NotificationCooldownSeconds,
+            TriggerSequenceName = TriggerSequenceName
+        };
+    }
 }

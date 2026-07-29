@@ -11,6 +11,8 @@ public interface IEventDetector : IAsyncDisposable
 
     ChannelReader<DetectedEvent> DetectedEvents { get; }
 
+    ChannelReader<DetectedEvent> SequenceTriggerEvents { get; }
+
     ChannelReader<DetectedEventContext> CompletedEventContexts { get; }
 
     bool IsRunning { get; }
@@ -34,6 +36,8 @@ public interface IEventDetector : IAsyncDisposable
     int PendingInputLineCount { get; }
 
     long DroppedOutputEventCount { get; }
+
+    long CoalescedSequenceTriggerCount { get; }
 
     long ContextCapturesStartedCount { get; }
 

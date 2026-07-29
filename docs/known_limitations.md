@@ -10,8 +10,9 @@ This file tracks current intentional limits and validation gaps.
   selection while logs are appending.
 - Each search is a snapshot of the retained buffer. Newly appended lines appear
   after Enter or Refresh, and very old results can become stale after trimming.
-- Search Results materializes at most 1,000 occurrence rows even when the total
-  occurrence count is larger. Next/Previous still navigates the full snapshot.
+- Search Results groups repeated occurrences into one row per matching log line
+  and materializes at most 1,000 lines per page. Prev/Next pages through the
+  full snapshot while F3/Shift+F3 still navigates every occurrence.
 
 ## Settings Apply Behavior
 

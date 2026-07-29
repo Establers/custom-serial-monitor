@@ -32,6 +32,12 @@ internal readonly record struct VisibleLogSearchPosition(
     int TabsBeforeMatch,
     int TabsBeforeMatchEnd);
 
+internal readonly record struct VisibleLogSearchPage(
+    int PageIndex,
+    int PageCount,
+    int StartIndex,
+    int Count);
+
 internal sealed class VisibleLogSearchSnapshot
 {
     private const int OffsetCheckpointInterval = VisibleLogSearchEngine.OffsetCheckpointInterval;
@@ -40,13 +46,11 @@ internal sealed class VisibleLogSearchSnapshot
         string searchText,
         StringComparison comparison,
         VisibleLogMatchedLine[] matchedLines,
-        VisibleLogSearchPosition[] visibleResults,
         long totalMatchCount)
     {
         SearchText = searchText;
         Comparison = comparison;
         MatchedLines = matchedLines;
-        VisibleResults = visibleResults;
         TotalMatchCount = totalMatchCount;
     }
 
@@ -56,9 +60,26 @@ internal sealed class VisibleLogSearchSnapshot
 
     public VisibleLogMatchedLine[] MatchedLines { get; }
 
-    public VisibleLogSearchPosition[] VisibleResults { get; }
-
     public long TotalMatchCount { get; }
+
+    public VisibleLogSearchPage GetMatchedLinePage(int requestedPageIndex, int pageSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+
+        if (MatchedLines.Length == 0)
+        {
+            return new VisibleLogSearchPage(0, 0, 0, 0);
+        }
+
+        var pageCount = ((MatchedLines.Length - 1) / pageSize) + 1;
+        var pageIndex = Math.Clamp(requestedPageIndex, 0, pageCount - 1);
+        var startIndex = pageIndex * pageSize;
+        return new VisibleLogSearchPage(
+            pageIndex,
+            pageCount,
+            startIndex,
+            Math.Min(pageSize, MatchedLines.Length - startIndex));
+    }
 
     public bool TryGetFirst(out VisibleLogSearchPosition position)
     {
@@ -395,14 +416,11 @@ internal static class VisibleLogSearchEngine
         IReadOnlyList<VisibleLogSearchLine> lines,
         string searchText,
         StringComparison comparison,
-        int maxVisibleResults,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(searchText);
-        ArgumentOutOfRangeException.ThrowIfNegative(maxVisibleResults);
 
         var matchedLines = new List<VisibleLogMatchedLine>();
-        var visibleResults = new List<VisibleLogSearchPosition>(Math.Min(maxVisibleResults, lines.Count));
         long totalMatchCount = 0;
 
         for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
@@ -484,17 +502,6 @@ internal static class VisibleLogSearchEngine
                         tabsBeforeMatchEnd));
                 }
 
-                if (visibleResults.Count < maxVisibleResults)
-                {
-                    visibleResults.Add(new VisibleLogSearchPosition(
-                        matchedLines.Count,
-                        matchCount,
-                        payloadOffset,
-                        totalMatchCount,
-                        tabsBeforeMatch,
-                        tabsBeforeMatchEnd));
-                }
-
                 matchCount++;
                 totalMatchCount++;
                 searchStart = absoluteOffset + searchText.Length;
@@ -527,7 +534,6 @@ internal static class VisibleLogSearchEngine
             searchText,
             comparison,
             matchedLines.ToArray(),
-            visibleResults.ToArray(),
             totalMatchCount);
     }
 

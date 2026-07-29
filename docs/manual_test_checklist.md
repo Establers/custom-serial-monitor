@@ -330,15 +330,24 @@ real hardware when available.
   the same logical line or reports no hit after that line leaves scrollback.
 - [ ] Confirm logs continue appending during search.
 - [ ] With 200,000 retained lines containing two matches each, confirm the
-  total is 400,000, only the first 1,000 result rows are materialized, search
-  can be canceled by changing the term, and the UI remains responsive.
+  total is 400,000, each matching line appears once, only 1,000 result rows
+  are materialized per page, search can be canceled by changing the term, and
+  the UI remains responsive.
 
 ## Search Results Tab
 
 - [ ] Open Search tab.
 - [ ] Confirm result rows are compact and stable.
-- [ ] Confirm repeated matches on one line appear as separate rows labeled
-  `1/N`, `2/N`, and jump to their respective offsets.
+- [ ] Confirm repeated matches on one line appear as one row labeled `×N` and
+  double-clicking the row jumps to the first occurrence on that line.
+- [ ] With more than 1,000 matching lines, confirm `Prev` moves toward older
+  pages and `Next` moves toward newer pages while each page stays at or below
+  1,000 rows.
+- [ ] After new logs mark a multi-page result snapshot stale, move between its
+  existing pages and confirm the stale indicator remains until a refresh builds
+  a new snapshot.
+- [ ] On the newest results page, append more matching logs and click `Next`;
+  confirm the search refreshes and moves to the newest available page.
 - [ ] Confirm status appears in the toolbar, not as a result row.
 - [ ] Confirm there is no Auto refresh control and Search results update only after Refresh.
 - [ ] Click Refresh and confirm results rebuild.
