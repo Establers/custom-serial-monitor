@@ -20,7 +20,14 @@ public sealed class XtermSearchRequest
         bool isCaseSensitive,
         string direction,
         int? resultIndex = null,
-        long? targetLineId = null)
+        long? targetLineId = null,
+        int? targetPayloadOffset = null,
+        int? targetPayloadStart = null,
+        int? matchLength = null,
+        string? expectedText = null,
+        int? occurrenceInLine = null,
+        int? tabsBeforeMatch = null,
+        int? tabsBeforeMatchEnd = null)
     {
         RequestId = requestId;
         SearchText = searchText;
@@ -28,6 +35,13 @@ public sealed class XtermSearchRequest
         Direction = direction;
         ResultIndex = resultIndex;
         TargetLineId = targetLineId;
+        TargetPayloadOffset = targetPayloadOffset;
+        TargetPayloadStart = targetPayloadStart;
+        MatchLength = matchLength;
+        ExpectedText = expectedText ?? string.Empty;
+        OccurrenceInLine = occurrenceInLine;
+        TabsBeforeMatch = tabsBeforeMatch;
+        TabsBeforeMatchEnd = tabsBeforeMatchEnd;
     }
 
     public long RequestId { get; }
@@ -41,6 +55,20 @@ public sealed class XtermSearchRequest
     public int? ResultIndex { get; }
 
     public long? TargetLineId { get; }
+
+    public int? TargetPayloadOffset { get; }
+
+    public int? TargetPayloadStart { get; }
+
+    public int? MatchLength { get; }
+
+    public string ExpectedText { get; }
+
+    public int? OccurrenceInLine { get; }
+
+    public int? TabsBeforeMatch { get; }
+
+    public int? TabsBeforeMatchEnd { get; }
 }
 
 public sealed class ConnectFailureDialogRequest
@@ -89,10 +117,6 @@ public sealed class EventNotificationRequest : EventArgs
 
     public bool ShowPopup { get; }
 }
-
-internal readonly record struct SearchMatchSnapshot(
-    long LineId,
-    string FullText);
 
 public sealed class VisibleLogFilterOption
 {
@@ -323,6 +347,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _xtermSearchHitCount;
     private long _xtermSearchErrorCount;
     private long _xtermSearchRequestId;
+    private long _lastXtermSearchDurationMs;
     private int _lastVisualAppendLineCount;
     private int _maxVisualAppendLineCount;
     private long _visualAppendBatchCount;
@@ -358,10 +383,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastXtermSearchError = string.Empty;
     private string _searchText = string.Empty;
     private bool _isSearchCaseSensitive;
-    private int _searchMatchCount;
-    private int _currentSearchMatchIndex;
+    private long _searchMatchCount;
+    private long _currentSearchMatchIndex;
     private long? _currentSearchLineId;
-    private readonly List<SearchMatchSnapshot> _activeSearchMatches = new();
+    private VisibleLogSearchSnapshot? _activeSearchSnapshot;
+    private VisibleLogSearchPosition? _currentSearchPosition;
+    private CancellationTokenSource? _searchCancellation;
+    private long _searchGeneration;
+    private bool _isSearchRunning;
+    private int _lastSearchSnapshotLineCount;
+    private long _lastSearchSnapshotCaptureMs;
+    private long _lastSearchEngineDurationMs;
+    private long _lastSearchResultApplyMs;
     private long _searchErrorCount;
     private long _searchResultBuildErrorCount;
     private long _searchResultJumpErrorCount;
@@ -914,7 +947,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public EventViewModel Events { get; } = new(DefaultVisibleEventCount);
 
-    public ObservableCollection<VisibleSearchResult> SearchResults { get; } = new();
+    public BulkObservableCollection<VisibleSearchResult> SearchResults { get; } = new();
 
     public ObservableCollection<EventRule> EventRules { get; } = new();
 
@@ -2507,6 +2540,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    public bool ShowRxTxDirectionPrefixInLogView
+    {
+        get => _currentUiSettings.ShowRxTxDirectionPrefixInLogView;
+        set
+        {
+            if (_currentUiSettings.ShowRxTxDirectionPrefixInLogView == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.ShowRxTxDirectionPrefixInLogView = value;
+            SetVisibleLogRebuildReason("RX/TX direction prefix display change");
+            Log.SetShowRxTxDirectionPrefixInLogView(value);
+            OnPropertyChanged();
+            MarkSearchResultsStale();
+            RecordSettingsChange(
+                "Show RX/TX direction prefixes in log view",
+                SettingsApplyBehavior.Immediate,
+                value ? "shown" : "hidden");
+        }
+    }
+
     public bool CuteBackgroundMode
     {
         get => _currentUiSettings.CuteBackgroundMode;
@@ -3120,7 +3175,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     ResetSearchHistoryNavigation();
                 }
 
-                _currentUiSettings.LastSearchText = value?.Trim() ?? string.Empty;
+                _currentUiSettings.LastSearchText = value ?? string.Empty;
                 InvalidateSearchResultsForCriteriaChange();
                 RecordSettingsChange("Search text", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(empty)" : value.Trim());
             }
@@ -3147,7 +3202,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         private set => SetProperty(ref _areSearchResultsStale, value);
     }
 
-    public int SearchMatchCount
+    public long SearchMatchCount
     {
         get => _searchMatchCount;
         private set
@@ -3159,7 +3214,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public int CurrentSearchMatchIndex
+    public long CurrentSearchMatchIndex
     {
         get => _currentSearchMatchIndex;
         private set
@@ -3205,7 +3260,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public int SelectedSearchResultIndex => SelectedSearchResult?.MatchIndex ?? 0;
+    public long SelectedSearchResultIndex => SelectedSearchResult?.MatchIndex ?? 0;
 
     public long SearchResultBuildErrorCount => Interlocked.Read(ref _searchResultBuildErrorCount);
 
@@ -4145,6 +4200,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Interlocked.Increment(ref _searchGeneration);
+        CancelActiveSearch();
         _eventNotificationCancellation.Cancel();
         _bridgeVisualLogCancellation.Cancel();
         _bridgeVisualLogQueue.Writer.TryComplete();
@@ -4664,13 +4721,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public Task SearchFromInputAsync(bool previous, string source)
+    public async Task SearchFromInputAsync(bool previous, string source)
     {
         try
         {
             AddCurrentSearchTextToHistory();
             var move = previous ? SearchMove.Previous : SearchMove.Next;
-            RunManualVisibleLogSearch(move);
+            await RunManualVisibleLogSearchAsync(move);
             RequestXtermSearch(move);
             RecordSearchShortcutAction(previous ? "Search and select previous" : "Search and select next", source);
         }
@@ -4679,19 +4736,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RecordSearchShortcutError($"Search from input failed: {ex.Message}", source);
         }
 
-        return Task.CompletedTask;
     }
 
-    private Task RefreshSearchResultsAsync()
+    private async Task RefreshSearchResultsAsync()
     {
         AddCurrentSearchTextToHistory();
-        RunManualVisibleLogSearch(SearchMove.None);
+        await RunManualVisibleLogSearchAsync(SearchMove.None);
         if (CanSearch())
         {
             SetStatus($"Search results refreshed: {SearchText}");
         }
-
-        return Task.CompletedTask;
     }
 
     public async Task FindNextFromShortcutAsync(string source)
@@ -4781,7 +4835,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void AddCurrentSearchTextToHistory()
     {
-        var term = SearchText.Trim();
+        var term = SearchText;
         if (string.IsNullOrWhiteSpace(term))
         {
             return;
@@ -4835,116 +4889,143 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool CanNavigateSearchSnapshot()
     {
-        return !string.IsNullOrWhiteSpace(SearchText) && _activeSearchMatches.Count > 0;
+        return !string.IsNullOrWhiteSpace(SearchText) &&
+            !_isSearchRunning &&
+            _activeSearchSnapshot is { TotalMatchCount: > 0 };
     }
 
     private void NavigateSearchSnapshot(SearchMove move)
     {
-        if (_activeSearchMatches.Count == 0)
+        var snapshot = _activeSearchSnapshot;
+        if (snapshot is null || snapshot.TotalMatchCount == 0)
         {
             SetStatus("Press Enter in the search box to search first.");
             return;
         }
 
-        var currentIndex = CurrentSearchMatchIndex > 0
-            ? CurrentSearchMatchIndex - 1
-            : move == SearchMove.Previous ? 0 : -1;
-        currentIndex = move == SearchMove.Previous
-            ? (currentIndex - 1 + _activeSearchMatches.Count) % _activeSearchMatches.Count
-            : (currentIndex + 1) % _activeSearchMatches.Count;
+        VisibleLogSearchPosition position;
+        var found = _currentSearchPosition.HasValue
+            ? move == SearchMove.Previous
+                ? snapshot.TryGetPrevious(_currentSearchPosition.Value, out position)
+                : snapshot.TryGetNext(_currentSearchPosition.Value, out position)
+            : move == SearchMove.Previous
+                ? snapshot.TryGetLast(out position)
+                : snapshot.TryGetFirst(out position);
+        if (!found)
+        {
+            return;
+        }
 
-        ApplySearchSnapshotMatch(currentIndex);
+        ApplySearchSnapshotMatch(position);
         RequestXtermSearch(move);
         SetStatus($"Search match {CurrentSearchMatchIndex:N0} of {SearchMatchCount:N0}: {SearchText}");
     }
 
-    private void ApplySearchSnapshotMatch(int zeroBasedIndex)
+    private void ApplySearchSnapshotMatch(VisibleLogSearchPosition position)
     {
-        if (zeroBasedIndex < 0 || zeroBasedIndex >= _activeSearchMatches.Count)
+        var snapshot = _activeSearchSnapshot;
+        if (snapshot is null ||
+            position.MatchedLineIndex < 0 ||
+            position.MatchedLineIndex >= snapshot.MatchedLines.Length)
         {
-            CurrentSearchMatchIndex = 0;
-            CurrentSearchMatchedLine = string.Empty;
-            _currentSearchLineId = null;
-            SelectedSearchResult = null;
+            ClearCurrentSearchMatch();
             return;
         }
 
-        var match = _activeSearchMatches[zeroBasedIndex];
-        CurrentSearchMatchIndex = zeroBasedIndex + 1;
-        CurrentSearchMatchedLine = match.FullText;
-        _currentSearchLineId = match.LineId;
+        var line = snapshot.GetLine(position);
+        _currentSearchPosition = position;
+        CurrentSearchMatchIndex = position.GlobalMatchIndex + 1;
+        CurrentSearchMatchedLine = line.FullText;
+        _currentSearchLineId = line.LineId;
         SelectSearchResultByMatchIndex(CurrentSearchMatchIndex);
     }
 
-    private void RunManualVisibleLogSearch(SearchMove move)
+    private async Task RunManualVisibleLogSearchAsync(SearchMove move)
     {
         if (string.IsNullOrWhiteSpace(SearchText))
         {
-            _activeSearchMatches.Clear();
+            CancelActiveSearch();
+            _activeSearchSnapshot = null;
             SearchMatchCount = 0;
-            CurrentSearchMatchIndex = 0;
-            CurrentSearchMatchedLine = string.Empty;
-            _currentSearchLineId = null;
-            UpdateSearchResults(Array.Empty<VisibleLogSearchLine>(), Array.Empty<int>());
+            ClearCurrentSearchMatch();
+            UpdateSearchResults(null);
             NotifySearchCommandStates();
-
             return;
         }
+
+        var generation = Interlocked.Increment(ref _searchGeneration);
+        CancelActiveSearch();
+        var cancellation = new CancellationTokenSource();
+        _searchCancellation = cancellation;
+        _isSearchRunning = true;
+        NotifySearchCommandStates();
 
         try
         {
             var previousLineId = _currentSearchLineId;
+            var previousPayloadOffset = _currentSearchPosition?.PayloadOffset;
+            var searchText = SearchText;
+            var captureStopwatch = Stopwatch.StartNew();
             var searchLines = Log.GetVisibleSearchContentSnapshot();
+            captureStopwatch.Stop();
+            Volatile.Write(ref _lastSearchSnapshotLineCount, searchLines.Count);
+            Interlocked.Exchange(ref _lastSearchSnapshotCaptureMs, captureStopwatch.ElapsedMilliseconds);
             var comparison = IsSearchCaseSensitive
                 ? StringComparison.Ordinal
                 : StringComparison.OrdinalIgnoreCase;
-            var matchingLineIndexes = new List<int>();
-            _activeSearchMatches.Clear();
+            var engineStopwatch = Stopwatch.StartNew();
+            var snapshot = await Task.Run(
+                () => VisibleLogSearchEngine.Build(
+                    searchLines,
+                    searchText,
+                    comparison,
+                    MaxVisibleSearchResults,
+                    cancellation.Token),
+                cancellation.Token);
+            engineStopwatch.Stop();
+            Interlocked.Exchange(ref _lastSearchEngineDurationMs, engineStopwatch.ElapsedMilliseconds);
 
-            for (var i = 0; i < searchLines.Count; i++)
+            if (generation != Interlocked.Read(ref _searchGeneration) || cancellation.IsCancellationRequested)
             {
-                if (searchLines[i].PayloadText.Contains(SearchText, comparison))
-                {
-                    matchingLineIndexes.Add(i);
-                    _activeSearchMatches.Add(new SearchMatchSnapshot(
-                        searchLines[i].LineId,
-                        searchLines[i].FullText));
-                }
+                return;
             }
 
-            SearchMatchCount = matchingLineIndexes.Count;
-            UpdateSearchResults(searchLines, matchingLineIndexes);
+            _activeSearchSnapshot = snapshot;
+            SearchMatchCount = snapshot.TotalMatchCount;
+            var resultApplyStopwatch = Stopwatch.StartNew();
+            UpdateSearchResults(snapshot);
+            resultApplyStopwatch.Stop();
+            Interlocked.Exchange(ref _lastSearchResultApplyMs, resultApplyStopwatch.ElapsedMilliseconds);
 
-            if (matchingLineIndexes.Count == 0)
+            if (snapshot.TotalMatchCount == 0)
             {
-                CurrentSearchMatchIndex = 0;
-                CurrentSearchMatchedLine = string.Empty;
-                _currentSearchLineId = null;
-                SelectedSearchResult = null;
+                ClearCurrentSearchMatch();
 
                 if (move is SearchMove.Next or SearchMove.Previous)
                 {
-                    SetStatus($"Search found no matches: {SearchText}");
+                    SetStatus($"Search found no matches: {searchText}");
                 }
 
                 ClearSearchError();
                 return;
             }
 
-            var currentIndex = previousLineId.HasValue
-                ? _activeSearchMatches.FindIndex(match => match.LineId == previousLineId.Value)
-                : CurrentSearchMatchIndex > 0
-                    ? CurrentSearchMatchIndex - 1
-                    : -1;
-
-            currentIndex = move switch
+            var restoredPosition = default(VisibleLogSearchPosition);
+            var restored = previousLineId.HasValue && previousPayloadOffset.HasValue &&
+                snapshot.TryFind(previousLineId.Value, previousPayloadOffset.Value, out restoredPosition);
+            VisibleLogSearchPosition selectedPosition;
+            var selected = move switch
             {
-                SearchMove.Next => currentIndex < 0 ? 0 : (currentIndex + 1) % matchingLineIndexes.Count,
-                SearchMove.Previous => currentIndex < 0 ? matchingLineIndexes.Count - 1 : (currentIndex - 1 + matchingLineIndexes.Count) % matchingLineIndexes.Count,
-                _ => Math.Clamp(currentIndex < 0 ? 0 : currentIndex, 0, matchingLineIndexes.Count - 1)
+                SearchMove.Next when restored => snapshot.TryGetNext(restoredPosition, out selectedPosition),
+                SearchMove.Previous when restored => snapshot.TryGetPrevious(restoredPosition, out selectedPosition),
+                SearchMove.Previous => snapshot.TryGetLast(out selectedPosition),
+                _ when restored => Assign(restoredPosition, out selectedPosition),
+                _ => snapshot.TryGetFirst(out selectedPosition)
             };
-
-            ApplySearchSnapshotMatch(currentIndex);
+            if (selected)
+            {
+                ApplySearchSnapshotMatch(selectedPosition);
+            }
 
             ClearSearchError();
 
@@ -4953,15 +5034,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 SetStatus($"Search match {CurrentSearchMatchIndex:N0} of {SearchMatchCount:N0}: {SearchText}");
             }
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
+            if (generation != Interlocked.Read(ref _searchGeneration) || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
             Interlocked.Increment(ref _searchErrorCount);
             _lastSearchError = $"Search failed: {ex.Message}";
             SearchMatchCount = 0;
-            _activeSearchMatches.Clear();
-            CurrentSearchMatchIndex = 0;
-            CurrentSearchMatchedLine = string.Empty;
-            _currentSearchLineId = null;
+            _activeSearchSnapshot = null;
+            ClearCurrentSearchMatch();
             SearchResults.Clear();
             SearchResultStatusText = $"Search failed: {ex.Message}";
             SelectedSearchResult = null;
@@ -4973,22 +5060,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
+            if (ReferenceEquals(_searchCancellation, cancellation))
+            {
+                _searchCancellation = null;
+                _isSearchRunning = false;
+            }
+
+            cancellation.Dispose();
             NotifySearchCommandStates();
         }
     }
 
-    private void UpdateSearchResults(
-        IReadOnlyList<VisibleLogSearchLine> lines,
-        IReadOnlyList<int> matchingLineIndexes)
+    private void UpdateSearchResults(VisibleLogSearchSnapshot? snapshot)
     {
         try
         {
             var previousSelection = SelectedSearchResult;
-            SearchResults.Clear();
             AreSearchResultsStale = false;
 
             if (string.IsNullOrWhiteSpace(SearchText))
             {
+                SearchResults.Clear();
                 SearchResultStatusText = "Enter search text.";
                 SelectedSearchResult = null;
                 OnPropertyChanged(nameof(SearchResultVisibleCount));
@@ -4996,8 +5088,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            if (matchingLineIndexes.Count == 0)
+            if (snapshot is null || snapshot.TotalMatchCount == 0)
             {
+                SearchResults.Clear();
                 SearchResultStatusText = "Manual · No matches";
                 SelectedSearchResult = null;
                 OnPropertyChanged(nameof(SearchResultVisibleCount));
@@ -5005,18 +5098,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            var visibleCount = Math.Min(MaxVisibleSearchResults, matchingLineIndexes.Count);
+            var visibleCount = snapshot.VisibleResults.Length;
+            var results = new List<VisibleSearchResult>(visibleCount);
             for (var i = 0; i < visibleCount; i++)
             {
-                var lineIndex = matchingLineIndexes[i];
-                var line = lineIndex >= 0 && lineIndex < lines.Count
-                    ? lines[lineIndex]
-                    : new VisibleLogSearchLine(0, string.Empty, string.Empty);
-                SearchResults.Add(VisibleSearchResultParser.Create(i + 1, lineIndex, line.LineId, line.FullText));
+                var position = snapshot.VisibleResults[i];
+                var line = snapshot.GetLine(position);
+                results.Add(VisibleSearchResultParser.Create(
+                    position.GlobalMatchIndex + 1,
+                    line.VisibleLineIndex,
+                    line.LineId,
+                    position.PayloadOffset,
+                    position.OccurrenceInLine,
+                    line.MatchCount,
+                    line.FullText,
+                    line.Direction));
             }
 
-            SearchResultStatusText = matchingLineIndexes.Count > MaxVisibleSearchResults
-                ? $"Manual · {visibleCount:N0}/{matchingLineIndexes.Count:N0} shown"
+            SearchResults.ReplaceAll(results);
+
+            SearchResultStatusText = snapshot.TotalMatchCount > MaxVisibleSearchResults
+                ? $"Manual · {visibleCount:N0}/{snapshot.TotalMatchCount:N0} shown"
                 : $"Manual · {visibleCount:N0} shown";
             OnPropertyChanged(nameof(SearchResultVisibleCount));
             RestoreSearchResultSelection(previousSelection);
@@ -5054,7 +5156,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (previousSelection is not null)
         {
             restored = SearchResults.FirstOrDefault(result =>
-                    result.LineId == previousSelection.LineId)
+                    result.LineId == previousSelection.LineId &&
+                    result.PayloadOffset == previousSelection.PayloadOffset)
                 ?? SearchResults.FirstOrDefault(result =>
                     result.VisibleLineIndex == previousSelection.VisibleLineIndex &&
                     string.Equals(result.FullText, previousSelection.FullText, StringComparison.Ordinal))
@@ -5088,11 +5191,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void InvalidateSearchResultsForCriteriaChange()
     {
+        Interlocked.Increment(ref _searchGeneration);
+        CancelActiveSearch();
         SearchMatchCount = 0;
-        _activeSearchMatches.Clear();
-        CurrentSearchMatchIndex = 0;
-        CurrentSearchMatchedLine = string.Empty;
-        _currentSearchLineId = null;
+        _activeSearchSnapshot = null;
+        ClearCurrentSearchMatch();
         SearchResults.Clear();
         SelectedSearchResult = null;
         OnPropertyChanged(nameof(SearchResultVisibleCount));
@@ -5112,13 +5215,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             line.Contains("MARK >", StringComparison.Ordinal);
     }
 
-    private static bool IsVisibleTxLine(string? line)
-    {
-        return !string.IsNullOrEmpty(line) &&
-            line.Contains("TX >", StringComparison.Ordinal);
-    }
-
-    private void SelectSearchResultByMatchIndex(int matchIndex)
+    private void SelectSearchResultByMatchIndex(long matchIndex)
     {
         if (matchIndex <= 0)
         {
@@ -5149,6 +5246,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            if (!TryGetCurrentSearchTarget(out var line, out var position, out var expectedText))
+            {
+                return;
+            }
+
             var requestId = Interlocked.Increment(ref _xtermSearchRequestId);
             var direction = move == SearchMove.Previous ? "previous" : "next";
             XtermSearchRequested?.Invoke(
@@ -5158,8 +5260,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     SearchText,
                     IsSearchCaseSensitive,
                     direction,
-                    CurrentSearchMatchIndex > 0 ? CurrentSearchMatchIndex - 1 : -1,
-                    _currentSearchLineId));
+                    targetLineId: line.LineId,
+                    targetPayloadOffset: position.PayloadOffset,
+                    targetPayloadStart: line.PayloadStart,
+                    matchLength: SearchText.Length,
+                    expectedText: expectedText,
+                    occurrenceInLine: position.OccurrenceInLine,
+                    tabsBeforeMatch: position.TabsBeforeMatch,
+                    tabsBeforeMatchEnd: position.TabsBeforeMatchEnd));
         }
         catch (Exception ex)
         {
@@ -5183,20 +5291,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             SelectedSearchResult = result;
-            CurrentSearchMatchIndex = result.MatchIndex;
-            CurrentSearchMatchedLine = result.FullText;
-            _currentSearchLineId = result.LineId;
+            var snapshot = _activeSearchSnapshot;
+            if (snapshot is null || !snapshot.TryFind(result.LineId, result.PayloadOffset, out var position))
+            {
+                RecordSearchResultJumpError("Search result jump failed: the search snapshot is no longer available.");
+                return Task.CompletedTask;
+            }
 
-            var requestId = Interlocked.Increment(ref _xtermSearchRequestId);
-            XtermSearchRequested?.Invoke(
-                this,
-                new XtermSearchRequest(
-                    requestId,
-                    SearchText,
-                    IsSearchCaseSensitive,
-                    "indexed",
-                    Math.Max(0, result.MatchIndex - 1),
-                    result.LineId));
+            ApplySearchSnapshotMatch(position);
+            RequestXtermSearch(SearchMove.None);
             SetStatus($"Search result {result.MatchIndex:N0} selected: {SearchText}");
             RefreshDiagnostics();
         }
@@ -5206,6 +5309,68 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         return Task.CompletedTask;
+    }
+
+    private bool TryGetCurrentSearchTarget(
+        out VisibleLogMatchedLine line,
+        out VisibleLogSearchPosition position,
+        out string expectedText)
+    {
+        var snapshot = _activeSearchSnapshot;
+        if (snapshot is null || !_currentSearchPosition.HasValue)
+        {
+            line = default;
+            position = default;
+            expectedText = string.Empty;
+            return false;
+        }
+
+        position = _currentSearchPosition.Value;
+        line = snapshot.GetLine(position);
+        expectedText = GetExpectedSearchText(line.FullText, line.PayloadStart, position.PayloadOffset);
+        return expectedText.Length == SearchText.Length;
+    }
+
+    private string GetExpectedSearchText(string fullText, int payloadStart, int payloadOffset)
+    {
+        var start = payloadStart + payloadOffset;
+        return start >= 0 && start <= fullText.Length - SearchText.Length
+            ? fullText.Substring(start, SearchText.Length)
+            : string.Empty;
+    }
+
+    private void ClearCurrentSearchMatch()
+    {
+        _currentSearchPosition = null;
+        CurrentSearchMatchIndex = 0;
+        CurrentSearchMatchedLine = string.Empty;
+        _currentSearchLineId = null;
+        SelectedSearchResult = null;
+    }
+
+    private void CancelActiveSearch()
+    {
+        var cancellation = _searchCancellation;
+        _searchCancellation = null;
+        _isSearchRunning = false;
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            cancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private static bool Assign<T>(T value, out T assigned)
+    {
+        assigned = value;
+        return true;
     }
 
     private void RecordSearchResultJumpError(string message)
@@ -6264,15 +6429,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         out int lineCount,
         out int characterCount)
     {
-        var lines = Log.GetVisibleSearchLinesSnapshot();
+        var lines = Log.GetVisibleSearchContentSnapshot();
         for (var index = lines.Count - 1; index >= 0; index--)
         {
-            if (!IsVisibleTxLine(lines[index]))
+            if (lines[index].Direction != LogDirection.Tx)
             {
                 continue;
             }
 
-            var segment = lines.Skip(index).ToArray();
+            var segment = lines.Skip(index).Select(line => line.FullText).ToArray();
             text = string.Join(Environment.NewLine, segment);
             lineCount = segment.Length;
             characterCount = text.Length;
@@ -6317,7 +6482,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return ClearScreenAsync();
     }
 
-    public void SearchSelectedTextFromXterm(string? selectedText)
+    public async Task SearchSelectedTextFromXtermAsync(string? selectedText)
     {
         try
         {
@@ -6332,7 +6497,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(LastSearchSelectedTextLength));
             SearchText = searchText;
             AddCurrentSearchTextToHistory();
-            RunManualVisibleLogSearch(SearchMove.Next);
+            await RunManualVisibleLogSearchAsync(SearchMove.Next);
             RequestXtermSearch(SearchMove.Next);
             RecordXtermContextMenuAction($"Search selected text ({searchText.Length:N0} chars)");
             RefreshDiagnostics();
@@ -8871,7 +9036,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshDiagnostics();
     }
 
-    public void RecordXtermSearchResult(bool found)
+    public void RecordXtermSearchResult(bool found, long durationMs)
     {
         if (found)
         {
@@ -8880,6 +9045,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         _lastXtermSearchError = string.Empty;
         _lastSearchError = string.Empty;
+        Interlocked.Exchange(ref _lastXtermSearchDurationMs, Math.Max(0, durationMs));
         OnPropertyChanged(nameof(XtermSearchHitCount));
         OnPropertyChanged(nameof(LastXtermSearchError));
         OnPropertyChanged(nameof(LastSearchError));
@@ -10589,6 +10755,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             SetVisibleLogRebuildReason("profile timestamp display restore");
             Log.SetShowTimestampInLogView(_currentUiSettings.ShowTimestampInLogView);
+            SetVisibleLogRebuildReason("profile RX/TX direction prefix restore");
+            Log.SetShowRxTxDirectionPrefixInLogView(_currentUiSettings.ShowRxTxDirectionPrefixInLogView);
             Log.SetTimestampDisplayFormat(_currentUiSettings.TimestampDisplayFormat);
             SetVisibleLogRebuildReason("profile RX view restore");
             Log.SetRxDisplayMode(_currentUiSettings.RxDisplayMode);
@@ -10664,7 +10832,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyProfileUiRuntimeSettings(UiSettings settings)
     {
         _markerText = settings.MarkerText?.Trim() ?? string.Empty;
-        _searchText = settings.LastSearchText?.Trim() ?? string.Empty;
+        _searchText = settings.LastSearchText ?? string.Empty;
         _isSearchCaseSensitive = settings.SearchCaseSensitive;
         _isEventAutoScrollEnabled = settings.EventAutoScrollEnabled;
         _selectedMockStressLinesPerSecond = settings.MockStressLinesPerSecond;
@@ -10770,6 +10938,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ConfirmBeforeDisconnect));
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
         OnPropertyChanged(nameof(ShowTimestampInLogView));
+        OnPropertyChanged(nameof(ShowRxTxDirectionPrefixInLogView));
         OnPropertyChanged(nameof(SelectedTimestampDisplayFormatOption));
         OnPropertyChanged(nameof(SelectedXtermFontOption));
         OnPropertyChanged(nameof(EffectiveXtermFontCssFamily));
@@ -11882,6 +12051,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Profile file logging while view paused: {_currentUiSettings.FileLoggingWhileViewPaused}");
         builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
         builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
+        builder.AppendLine($"  Profile show RX/TX direction prefixes in log view: {_currentUiSettings.ShowRxTxDirectionPrefixInLogView}");
         builder.AppendLine($"  Profile timestamp display format: {LogLine.GetTimestampFormatPattern(_currentUiSettings.TimestampDisplayFormat)}");
         builder.AppendLine("  Rule changes apply to new logs only: True (fixed)");
         builder.AppendLine($"  Profile RX display mode: {FormatRxDisplayModeName(_currentUiSettings.RxDisplayMode)}");
@@ -12112,6 +12282,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Visual drain batch size: {VisualDrainBatchSize:N0}");
         builder.AppendLine($"  Visual drain max chars: {VisualDrainMaxChars:N0}");
         builder.AppendLine($"  Show timestamp in log view: {ShowTimestampInLogView}");
+        builder.AppendLine($"  Show RX/TX direction prefixes in log view: {ShowRxTxDirectionPrefixInLogView}");
         builder.AppendLine($"  RX display mode: {FormatRxDisplayModeName(SelectedRxDisplayMode)}");
         builder.AppendLine($"  HEX group timeout profile/app/native: {HexGroupTimeoutMs:N0}/{_logPipeline.HexGroupTimeoutMs:N0}/{(_serialService.UsesNativeReceiveIdleTimeout ? _serialService.AppliedReceiveIdleTimeoutMs : 0):N0} ms");
         builder.AppendLine($"  HEX timeout recommendation: {HexGroupTimeoutRecommendationText}");
@@ -12280,6 +12451,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Search match count: {SearchMatchCount:N0}");
         builder.AppendLine($"  Current search match index: {CurrentSearchMatchIndex:N0}");
         builder.AppendLine($"  Current matched line: {(string.IsNullOrWhiteSpace(CurrentSearchMatchedLine) ? "(none)" : CurrentSearchMatchedLine)}");
+        builder.AppendLine($"  Last search snapshot lines: {Volatile.Read(ref _lastSearchSnapshotLineCount):N0}");
+        builder.AppendLine($"  Last search snapshot capture: {Interlocked.Read(ref _lastSearchSnapshotCaptureMs):N0} ms");
+        builder.AppendLine($"  Last search engine duration: {Interlocked.Read(ref _lastSearchEngineDurationMs):N0} ms");
+        builder.AppendLine($"  Last search result apply: {Interlocked.Read(ref _lastSearchResultApplyMs):N0} ms");
         builder.AppendLine($"  Search errors: {SearchErrorCount:N0}");
         builder.AppendLine($"  Last search error: {(string.IsNullOrWhiteSpace(LastSearchError) ? "(none)" : LastSearchError)}");
         builder.AppendLine($"  Search result count: {SearchMatchCount:N0}");
@@ -12311,6 +12486,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  xterm search requests: {XtermSearchRequestCount:N0}");
         builder.AppendLine($"  xterm search hits: {XtermSearchHitCount:N0}");
         builder.AppendLine($"  xterm search errors: {XtermSearchErrorCount:N0}");
+        builder.AppendLine($"  xterm last search duration: {Interlocked.Read(ref _lastXtermSearchDurationMs):N0} ms");
         builder.AppendLine($"  xterm last search error: {(string.IsNullOrWhiteSpace(LastXtermSearchError) ? "(none)" : LastXtermSearchError)}");
         builder.AppendLine();
         builder.AppendLine("File Writer");

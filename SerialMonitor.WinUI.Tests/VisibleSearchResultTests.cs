@@ -1,9 +1,28 @@
+using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI.Tests;
 
 public sealed class VisibleSearchResultTests
 {
+    [Fact]
+    public void PrefixFreeRxResult_PreservesStructuredDirection()
+    {
+        var result = VisibleSearchResultParser.Create(
+            1,
+            0,
+            42,
+            0,
+            0,
+            1,
+            "[16:30:55.091] INFO mock serial sample",
+            LogDirection.Rx);
+
+        Assert.Equal("16:30:55.091", result.TimeText);
+        Assert.Equal("RX", result.DirectionText);
+        Assert.Equal("INFO mock serial sample", result.MessagePreview);
+    }
+
     [Theory]
     [InlineData(
         "[16:30:55.091] RX < INFO mock serial sample",
@@ -48,7 +67,7 @@ public sealed class VisibleSearchResultTests
         string expectedDirection,
         string expectedMessage)
     {
-        var result = VisibleSearchResultParser.Create(1, 2, 3, fullText);
+        var result = VisibleSearchResultParser.Create(1, 2, 3, 0, 0, 1, fullText);
 
         Assert.Equal(expectedTime, result.TimeText);
         Assert.Equal(expectedDirection, result.DirectionText);

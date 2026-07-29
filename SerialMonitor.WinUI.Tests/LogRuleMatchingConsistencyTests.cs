@@ -114,6 +114,33 @@ public sealed class LogRuleMatchingConsistencyTests
         Assert.Equal(0, filteredView.CurrentVisibleLineCount);
     }
 
+    [Fact]
+    public void HiddenDirectionPrefix_DoesNotChangeHighlightOrViewFilterMatching()
+    {
+        var rule = new HighlightRule
+        {
+            Name = "terminal-error",
+            Keyword = "ERROR",
+            Enabled = true,
+            Mode = LogRuleMatchMode.Terminal,
+            MatchDirection = HighlightMatchDirection.RxOnly,
+            ForegroundColor = "Red",
+            UseAsViewFilter = true
+        };
+        var viewModel = new LogViewModel(capacity: 100);
+        viewModel.SetShowRxTxDirectionPrefixInLogView(false);
+        viewModel.SetHighlightRules([rule]);
+        viewModel.SetViewFilter(rule);
+
+        viewModel.AddRange([LogLine.Rx("ERROR"), LogLine.Tx("ERROR"), LogLine.Rx("OK")]);
+
+        Assert.Equal(3, viewModel.TotalRetainedLineCount);
+        Assert.Equal(1, viewModel.CurrentVisibleLineCount);
+        Assert.Equal(1, viewModel.HighlightedLineCount);
+        Assert.Contains("ERROR", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.DoesNotContain("RX <", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+    }
+
     private static EventRule CreateEventRule() => new()
     {
         Name = "consistent-hex",

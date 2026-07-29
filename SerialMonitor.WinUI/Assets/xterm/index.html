@@ -555,9 +555,43 @@
       }
     }
 
-    function getParsedLogLineIdsSnapshot() {
+    function getParsedLogLineIdCount() {
       trimParsedLogLineIds();
-      return parsedLogLineIds.slice(parsedLogLineIdHead);
+      return parsedLogLineIds.length - parsedLogLineIdHead;
+    }
+
+    function compareDecimalIds(left, right) {
+      if (left.length !== right.length) {
+        return left.length < right.length ? -1 : 1;
+      }
+
+      if (left === right) {
+        return 0;
+      }
+
+      return left < right ? -1 : 1;
+    }
+
+    function findParsedLogLineIdIndex(targetLineId) {
+      trimParsedLogLineIds();
+      let low = parsedLogLineIdHead;
+      let high = parsedLogLineIds.length - 1;
+
+      while (low <= high) {
+        const middle = low + Math.floor((high - low) / 2);
+        const comparison = compareDecimalIds(parsedLogLineIds[middle], targetLineId);
+        if (comparison === 0) {
+          return middle - parsedLogLineIdHead;
+        }
+
+        if (comparison < 0) {
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      return -1;
     }
 
     terminal.parser.registerOscHandler(777, data => {
@@ -882,6 +916,10 @@
       if (packetMetadata) {
         candidate = candidate.slice(packetMetadata.index + packetMetadata[0].length);
       } else {
+        // RX/TX prefixes can be hidden in Settings. Strip a complete timestamp,
+        // or the selected remainder of one, before validating a plain HEX payload.
+        candidate = candidate.replace(/^\s*(?:\[[^\]\r\n]*\]|[^\]\r\n]*\])\s*/, '');
+
         // A drag can begin inside the short RX/TX prefix rather than at the
         // start of the row (for example "X < AA 55").
         candidate = candidate.replace(
@@ -1033,6 +1071,7 @@
 
       // C# already coalesces and bounds live batches. Keep one acknowledgement
       // boundary per host batch so completion means xterm parsed all its text.
+      invalidateLogicalLineStartRows();
       appendQueue.push({ text: normalized, autoScroll: !!autoScroll, requestId });
 
       queueAppendDrain();
@@ -1049,6 +1088,7 @@
       replaceQueueHead = 0;
       replaceWriting = false;
       replaceOperationId += 1;
+      invalidateLogicalLineStartRows();
       resetParsedLogLineIds();
       terminal.clear();
       return true;
@@ -1135,6 +1175,7 @@
       replaceQueueHead = 0;
       replaceWriting = false;
       replaceOperationId += 1;
+      invalidateLogicalLineStartRows();
       resetParsedLogLineIds();
       terminal.clear();
       return true;
@@ -1147,6 +1188,7 @@
       }
 
       terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
+      invalidateLogicalLineStartRows();
       trimParsedLogLineIds();
       return true;
     };
@@ -1203,83 +1245,382 @@
       return true;
     };
 
-    let payloadSearchStateKey = '';
-    let payloadSearchStateIndex = -1;
+    let logicalLineStartRowsCache = null;
+    let renderedLogicalLineCache = null;
+    let renderedTabExpansionCache = null;
 
-    function getPayloadStart(text) {
-      const metadata = /^(?:\[[^\]\r\n]*\]\s+)?(?:RX <|TX >|MARK >|SYS)(?: |$)/.exec(text);
-      return metadata ? metadata[0].length : -1;
+    function invalidateLogicalLineStartRows() {
+      logicalLineStartRowsCache = null;
+      renderedLogicalLineCache = null;
+      renderedTabExpansionCache = null;
     }
 
-    function collectPayloadSearchMatches(searchText, caseSensitive) {
-      const matches = [];
+    terminal.onResize(invalidateLogicalLineStartRows);
+
+    function getLogicalLineStartRows() {
+      if (logicalLineStartRowsCache) {
+        return logicalLineStartRowsCache;
+      }
+
       const buffer = terminal.buffer.active;
-      const needle = caseSensitive ? searchText : searchText.toLocaleLowerCase();
-      let applicationLineCount = 0;
-
-      for (let row = 0; row < buffer.length;) {
-        const firstLine = buffer.getLine(row);
-        if (!firstLine) {
+      const starts = new Int32Array(buffer.length);
+      const usedLength = Math.min(buffer.length, buffer.baseY + buffer.cursorY + 1);
+      let count = 0;
+      for (let row = 0; row < usedLength;) {
+        const line = buffer.getLine(row);
+        if (!line || line.isWrapped) {
           row++;
           continue;
         }
 
-        // A wrapped row at the beginning of scrollback may have lost its logical
-        // first row. It cannot be mapped reliably to a retained application line.
-        if (firstLine.isWrapped) {
+        const startRow = row++;
+        starts[count++] = startRow;
+        while (row < usedLength && buffer.getLine(row)?.isWrapped) {
           row++;
-          continue;
-        }
-
-        const rows = [];
-        const stringStarts = [];
-        let logicalText = '';
-        do {
-          const line = buffer.getLine(row);
-          if (!line) {
-            break;
-          }
-
-          rows.push(row);
-          stringStarts.push(logicalText.length);
-          const nextLine = buffer.getLine(row + 1);
-          const continues = !!nextLine && nextLine.isWrapped;
-          logicalText += line.translateToString(!continues);
-          row++;
-          if (!continues) {
-            break;
-          }
-        } while (row < buffer.length);
-
-        const payloadStart = getPayloadStart(logicalText);
-        if (payloadStart < 0) {
-          continue;
-        }
-
-        const applicationLineIndex = applicationLineCount++;
-        const haystack = caseSensitive ? logicalText : logicalText.toLocaleLowerCase();
-        const matchOffset = haystack.indexOf(needle, payloadStart);
-        if (matchOffset >= payloadStart) {
-          matches.push({
-            applicationLineIndex,
-            rows,
-            stringStarts,
-            startOffset: matchOffset,
-            endOffset: matchOffset + searchText.length
-          });
         }
       }
 
-      const retainedLineIds = getParsedLogLineIdsSnapshot();
-      const retainedIdStart = retainedLineIds.length - applicationLineCount;
-      for (const match of matches) {
-        const retainedIdIndex = retainedIdStart + match.applicationLineIndex;
-        match.lineId = retainedIdIndex >= 0 && retainedIdIndex < retainedLineIds.length
-          ? retainedLineIds[retainedIdIndex]
-          : '';
+      if (count > 0 && buffer.getLine(starts[count - 1])?.translateToString(true).length === 0) {
+        count--;
       }
 
-      return matches;
+      logicalLineStartRowsCache = starts.subarray(0, count);
+      return logicalLineStartRowsCache;
+    }
+
+    const emptyCellSearchMarker = '\uE000';
+
+    function readBufferLineForSearch(line, omitWideWrapPlaceholder) {
+      let text = '';
+      const columnLimit = omitWideWrapPlaceholder
+        ? Math.max(0, terminal.cols - 1)
+        : terminal.cols;
+      for (let col = 0; col < columnLimit; col++) {
+        const cell = line.getCell(col);
+        if (!cell || cell.getWidth() === 0) {
+          continue;
+        }
+
+        if (cell.getCode() === 0) {
+          text += emptyCellSearchMarker;
+          continue;
+        }
+
+        text += cell.getChars() || ' ';
+      }
+
+      return text;
+    }
+
+    function readLogicalLine(startRow) {
+      const buffer = terminal.buffer.active;
+      const rows = [];
+      const stringStarts = [];
+      let logicalText = '';
+      let row = startRow;
+      do {
+        const line = buffer.getLine(row);
+        if (!line) {
+          break;
+        }
+
+        rows.push(row);
+        stringStarts.push(logicalText.length);
+        const nextLine = buffer.getLine(row + 1);
+        const continues = !!nextLine && nextLine.isWrapped;
+        const lastCell = line.getCell(terminal.cols - 1);
+        const omitWideWrapPlaceholder = continues &&
+          !!nextLine &&
+          lastCell?.getCode() === 0 &&
+          lastCell.getWidth() === 1 &&
+          nextLine.getCell(0)?.getWidth() === 2;
+        // Keep the final row's empty cells too. A trailing tab moves the cursor
+        // through cells that are otherwise indistinguishable from row padding;
+        // host-provided tab counts determine how many of those cells belong to
+        // the searched source text.
+        logicalText += readBufferLineForSearch(line, omitWideWrapPlaceholder);
+        row++;
+        if (!continues) {
+          break;
+        }
+      } while (row < buffer.length);
+
+      return { rows, stringStarts, logicalText };
+    }
+
+    function collectTabExpansionLengths(logicalLine, payloadStart) {
+      const expansions = [];
+      for (let rowIndex = 0; rowIndex < logicalLine.rows.length; rowIndex++) {
+        const row = logicalLine.rows[rowIndex];
+        const line = terminal.buffer.active.getLine(row);
+        if (!line) {
+          continue;
+        }
+
+        const rowTextStart = logicalLine.stringStarts[rowIndex];
+        const rowTextEnd = rowIndex + 1 < logicalLine.stringStarts.length
+          ? logicalLine.stringStarts[rowIndex + 1]
+          : logicalLine.logicalText.length;
+        const rowTextLength = rowTextEnd - rowTextStart;
+        let rowTextOffset = 0;
+        let emptyRunStartCol = -1;
+        let emptyRunEndCol = -1;
+        let emptyRunLogicalOffset = -1;
+
+        const flushEmptyRun = () => {
+          if (emptyRunStartCol < 0 || emptyRunLogicalOffset < payloadStart) {
+            emptyRunStartCol = -1;
+            emptyRunEndCol = -1;
+            emptyRunLogicalOffset = -1;
+            return;
+          }
+
+          let cursorCol = emptyRunStartCol;
+          while (cursorCol < emptyRunEndCol) {
+            const distanceToTabStop = 8 - (cursorCol % 8);
+            const tabEndCol = Math.min(emptyRunEndCol, cursorCol + distanceToTabStop);
+            expansions.push(tabEndCol - cursorCol);
+            cursorCol = tabEndCol;
+          }
+
+          emptyRunStartCol = -1;
+          emptyRunEndCol = -1;
+          emptyRunLogicalOffset = -1;
+        };
+
+        for (let col = 0; col < terminal.cols && rowTextOffset < rowTextLength; col++) {
+          const cell = line.getCell(col);
+          if (!cell || cell.getWidth() === 0) {
+            continue;
+          }
+
+          const isEmptyCell = cell.getCode() === 0;
+          const cellTextLength = isEmptyCell
+            ? 1
+            : Math.max(1, (cell.getChars() || ' ').length);
+          const logicalOffset = rowTextStart + rowTextOffset;
+          if (isEmptyCell) {
+            if (emptyRunStartCol < 0) {
+              emptyRunStartCol = col;
+              emptyRunLogicalOffset = logicalOffset;
+            }
+
+            emptyRunEndCol = col + 1;
+          } else {
+            flushEmptyRun();
+          }
+
+          rowTextOffset += cellTextLength;
+        }
+
+        flushEmptyRun();
+      }
+
+      return expansions;
+    }
+
+    function sumTabExpansionExtra(expansions, tabCount) {
+      if (!Number.isInteger(tabCount) || tabCount < 0 || tabCount > expansions.length) {
+        return null;
+      }
+
+      let extra = 0;
+      for (let index = 0; index < tabCount; index++) {
+        extra += expansions[index] - 1;
+      }
+
+      return extra;
+    }
+
+    function expandExpectedText(expectedText, expansions, firstTabIndex) {
+      let expanded = '';
+      let tabIndex = firstTabIndex;
+      for (const character of expectedText) {
+        if (character !== '\t') {
+          expanded += character;
+          continue;
+        }
+
+        if (tabIndex >= expansions.length) {
+          return null;
+        }
+
+        expanded += emptyCellSearchMarker.repeat(expansions[tabIndex]);
+        tabIndex++;
+      }
+
+      return expanded;
+    }
+
+    function renderedOffsetFromVisibleOffset(logicalText, visibleOffset, skipEmptyCells) {
+      if (!Number.isInteger(visibleOffset) || visibleOffset < 0) {
+        return null;
+      }
+
+      let renderedOffset = 0;
+      let consumedVisibleCharacters = 0;
+      while (renderedOffset < logicalText.length && consumedVisibleCharacters < visibleOffset) {
+        if (logicalText[renderedOffset] !== emptyCellSearchMarker) {
+          consumedVisibleCharacters++;
+        }
+
+        renderedOffset++;
+      }
+
+      if (consumedVisibleCharacters !== visibleOffset) {
+        return null;
+      }
+
+      if (skipEmptyCells) {
+        while (renderedOffset < logicalText.length &&
+               logicalText[renderedOffset] === emptyCellSearchMarker) {
+          renderedOffset++;
+        }
+      }
+
+      return renderedOffset;
+    }
+
+    function findVisibleCharacterFallback(
+      logicalLine,
+      payloadStart,
+      payloadOffset,
+      matchLength,
+      tabsBeforeMatch,
+      tabsBeforeMatchEnd,
+      expectedText) {
+      const expectedVisibleText = expectedText.split('\t').join('');
+      if (expectedVisibleText.length === 0) {
+        // A zero-width tab has no buffer cell to select. Keep the strict path for
+        // tab-only searches so positive-width consecutive tabs remain distinct.
+        return null;
+      }
+
+      const startVisibleOffset = payloadStart + payloadOffset - tabsBeforeMatch;
+      const endVisibleOffset = payloadStart + payloadOffset + matchLength - tabsBeforeMatchEnd;
+      const startOffset = renderedOffsetFromVisibleOffset(
+        logicalLine.logicalText,
+        startVisibleOffset,
+        true);
+      const endOffset = renderedOffsetFromVisibleOffset(
+        logicalLine.logicalText,
+        endVisibleOffset,
+        false);
+      if (startOffset === null || endOffset === null || endOffset < startOffset) {
+        return null;
+      }
+
+      const renderedVisibleText = logicalLine.logicalText
+        .slice(startOffset, endOffset)
+        .split(emptyCellSearchMarker)
+        .join('');
+      if (renderedVisibleText !== expectedVisibleText) {
+        return null;
+      }
+
+      return {
+        rows: logicalLine.rows,
+        stringStarts: logicalLine.stringStarts,
+        startOffset,
+        endOffset
+      };
+    }
+
+    function findPayloadSearchTarget(
+      targetLineId,
+      payloadStart,
+      payloadOffset,
+      matchLength,
+      tabsBeforeMatch,
+      tabsBeforeMatchEnd,
+      expectedText) {
+      if (!/^\d+$/.test(targetLineId) ||
+          !Number.isInteger(payloadStart) || payloadStart < 0 ||
+          !Number.isInteger(payloadOffset) || payloadOffset < 0 ||
+          !Number.isInteger(matchLength) || matchLength <= 0 ||
+          !Number.isInteger(tabsBeforeMatch) || tabsBeforeMatch < 0 ||
+          !Number.isInteger(tabsBeforeMatchEnd) || tabsBeforeMatchEnd < tabsBeforeMatch) {
+        return null;
+      }
+
+      const lineStarts = getLogicalLineStartRows();
+      const retainedIdCount = getParsedLogLineIdCount();
+      const retainedIdIndex = findParsedLogLineIdIndex(targetLineId);
+      const retainedIdStart = retainedIdCount - lineStarts.length;
+      const logicalLineIndex = retainedIdIndex - retainedIdStart;
+      if (retainedIdIndex < 0 || logicalLineIndex < 0 || logicalLineIndex >= lineStarts.length) {
+        return null;
+      }
+
+      const logicalLineCacheKey = `${targetLineId}\u0000${lineStarts[logicalLineIndex]}`;
+      if (!renderedLogicalLineCache || renderedLogicalLineCache.key !== logicalLineCacheKey) {
+        renderedLogicalLineCache = {
+          key: logicalLineCacheKey,
+          value: readLogicalLine(lineStarts[logicalLineIndex])
+        };
+        renderedTabExpansionCache = null;
+      }
+
+      const logicalLine = renderedLogicalLineCache.value;
+      if (payloadStart > logicalLine.logicalText.length) {
+        return null;
+      }
+
+      const tabCacheKey = `${logicalLineCacheKey}\u0000${payloadStart}`;
+      if (!renderedTabExpansionCache || renderedTabExpansionCache.key !== tabCacheKey) {
+        renderedTabExpansionCache = {
+          key: tabCacheKey,
+          value: collectTabExpansionLengths(logicalLine, payloadStart)
+        };
+      }
+
+      const tabExpansions = renderedTabExpansionCache.value;
+      const startTabExtra = sumTabExpansionExtra(tabExpansions, tabsBeforeMatch);
+      const endTabExtra = sumTabExpansionExtra(tabExpansions, tabsBeforeMatchEnd);
+      if (startTabExtra === null || endTabExtra === null) {
+        const fallback = findVisibleCharacterFallback(
+          logicalLine,
+          payloadStart,
+          payloadOffset,
+          matchLength,
+          tabsBeforeMatch,
+          tabsBeforeMatchEnd,
+          expectedText);
+        if (!fallback) {
+          invalidateLogicalLineStartRows();
+        }
+
+        return fallback;
+      }
+
+      const startOffset = payloadStart + payloadOffset + startTabExtra;
+      const endOffset = payloadStart + payloadOffset + matchLength + endTabExtra;
+      const expandedExpectedText = expandExpectedText(expectedText, tabExpansions, tabsBeforeMatch);
+      if (startOffset < payloadStart ||
+          endOffset > logicalLine.logicalText.length ||
+          expandedExpectedText === null ||
+          logicalLine.logicalText.slice(startOffset, endOffset) !== expandedExpectedText) {
+        const fallback = findVisibleCharacterFallback(
+          logicalLine,
+          payloadStart,
+          payloadOffset,
+          matchLength,
+          tabsBeforeMatch,
+          tabsBeforeMatchEnd,
+          expectedText);
+        if (!fallback) {
+          invalidateLogicalLineStartRows();
+        }
+
+        return fallback;
+      }
+
+      return {
+        rows: logicalLine.rows,
+        stringStarts: logicalLine.stringStarts,
+        startOffset,
+        endOffset
+      };
     }
 
     function stringOffsetToBufferPosition(match, stringOffset) {
@@ -1331,64 +1672,36 @@
         if (!searchText) {
           terminal.clearSelection();
           searchAddon.clearDecorations();
-          payloadSearchStateKey = '';
-          payloadSearchStateIndex = -1;
           return { ok: true, found: false };
         }
 
-        const caseSensitive = !!request?.caseSensitive;
-        const matches = collectPayloadSearchMatches(searchText, caseSensitive);
         searchAddon.clearDecorations();
-        if (Number.isInteger(request?.resultIndex) && request.resultIndex < 0) {
-          terminal.clearSelection();
-          payloadSearchStateIndex = -1;
-          return { ok: true, found: false };
-        }
-
-        if (matches.length === 0) {
-          terminal.clearSelection();
-          payloadSearchStateIndex = -1;
-          return { ok: true, found: false };
-        }
-
         const targetLineId = String(request?.targetLineId ?? '');
-        if (targetLineId) {
-          const retainedResultIndex = matches.findIndex(match => match.lineId === targetLineId);
-          if (retainedResultIndex < 0) {
+        if (targetLineId &&
+            Number.isInteger(request?.targetPayloadStart) &&
+            Number.isInteger(request?.targetPayloadOffset) &&
+            Number.isInteger(request?.matchLength) &&
+            Number.isInteger(request?.tabsBeforeMatch) &&
+            Number.isInteger(request?.tabsBeforeMatchEnd)) {
+          const target = findPayloadSearchTarget(
+            targetLineId,
+            request.targetPayloadStart,
+            request.targetPayloadOffset,
+            request.matchLength,
+            request.tabsBeforeMatch,
+            request.tabsBeforeMatchEnd,
+            String(request?.expectedText ?? ''));
+          if (!target) {
             terminal.clearSelection();
             return { ok: true, found: false };
           }
 
-          payloadSearchStateIndex = retainedResultIndex;
-          payloadSearchStateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
-          selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
+          selectPayloadSearchMatch(target);
           return { ok: true, found: true };
         }
 
-        if (Number.isInteger(request?.resultIndex) && request.resultIndex >= 0) {
-          if (request.resultIndex >= matches.length) {
-            terminal.clearSelection();
-            return { ok: true, found: false };
-          }
-
-          payloadSearchStateIndex = request.resultIndex;
-          payloadSearchStateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
-          selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
-          return { ok: true, found: true };
-        }
-
-        const stateKey = `${caseSensitive ? '1' : '0'}:${searchText}`;
-        if (payloadSearchStateKey !== stateKey) {
-          payloadSearchStateKey = stateKey;
-          payloadSearchStateIndex = request?.direction === 'previous' ? 0 : -1;
-        }
-
-        const direction = request?.direction === 'previous' ? 'previous' : 'next';
-        payloadSearchStateIndex = direction === 'previous'
-          ? (payloadSearchStateIndex - 1 + matches.length) % matches.length
-          : (payloadSearchStateIndex + 1) % matches.length;
-        selectPayloadSearchMatch(matches[payloadSearchStateIndex]);
-        return { ok: true, found: true };
+        terminal.clearSelection();
+        return { ok: true, found: false };
       } catch (error) {
         return {
           ok: false,

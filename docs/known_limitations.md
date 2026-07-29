@@ -8,8 +8,10 @@ This file tracks current intentional limits and validation gaps.
 - Search does not scan full serial log files yet.
 - Search Results uses manual refresh by default to avoid flicker and unstable
   selection while logs are appending.
-- Search result jumps are based on visible-buffer order and xterm search
-  behavior; very old results can become stale after visible-buffer trimming.
+- Each search is a snapshot of the retained buffer. Newly appended lines appear
+  after Enter or Refresh, and very old results can become stale after trimming.
+- Search Results materializes at most 1,000 occurrence rows even when the total
+  occurrence count is larger. Next/Previous still navigates the full snapshot.
 
 ## Settings Apply Behavior
 

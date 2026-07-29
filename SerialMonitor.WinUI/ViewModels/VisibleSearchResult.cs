@@ -1,13 +1,17 @@
 using System.Globalization;
+using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed class VisibleSearchResult
 {
     public VisibleSearchResult(
-        int matchIndex,
+        long matchIndex,
         int visibleLineIndex,
         long lineId,
+        int payloadOffset,
+        int occurrenceInLine,
+        int occurrenceCountInLine,
         string timeText,
         string directionText,
         string messagePreview,
@@ -16,17 +20,30 @@ public sealed class VisibleSearchResult
         MatchIndex = matchIndex;
         VisibleLineIndex = visibleLineIndex;
         LineId = lineId;
+        PayloadOffset = payloadOffset;
+        OccurrenceInLine = occurrenceInLine;
+        OccurrenceCountInLine = occurrenceCountInLine;
         TimeText = timeText;
         DirectionText = directionText;
         MessagePreview = messagePreview;
         FullText = fullText;
     }
 
-    public int MatchIndex { get; }
+    public long MatchIndex { get; }
 
     public int VisibleLineIndex { get; }
 
     public long LineId { get; }
+
+    public int PayloadOffset { get; }
+
+    public int OccurrenceInLine { get; }
+
+    public int OccurrenceCountInLine { get; }
+
+    public string OccurrenceText => OccurrenceCountInLine > 1
+        ? $"{OccurrenceInLine + 1}/{OccurrenceCountInLine}"
+        : string.Empty;
 
     public string TimeText { get; }
 
@@ -40,21 +57,37 @@ public sealed class VisibleSearchResult
 internal static class VisibleSearchResultParser
 {
     public static VisibleSearchResult Create(
-        int matchIndex,
+        long matchIndex,
         int visibleLineIndex,
         long lineId,
-        string fullText)
+        int payloadOffset,
+        int occurrenceInLine,
+        int occurrenceCountInLine,
+        string fullText,
+        LogDirection direction = LogDirection.System)
     {
         var timeText = string.Empty;
         var bodyText = fullText;
 
         TrySplitTimestamp(fullText, out timeText, out bodyText);
         ParseBody(bodyText, out var directionText, out var messagePreview);
+        if (string.IsNullOrEmpty(directionText))
+        {
+            directionText = direction switch
+            {
+                LogDirection.Rx => "RX",
+                LogDirection.Tx => "TX",
+                _ => directionText
+            };
+        }
 
         return new VisibleSearchResult(
             matchIndex,
             visibleLineIndex,
             lineId,
+            payloadOffset,
+            occurrenceInLine,
+            occurrenceCountInLine,
             timeText,
             directionText,
             messagePreview,

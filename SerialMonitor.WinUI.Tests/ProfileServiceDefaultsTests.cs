@@ -7,6 +7,27 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class ProfileServiceDefaultsTests
 {
     [Fact]
+    public async Task SearchText_PreservesMeaningfulLeadingWhitespace()
+    {
+        var profilePath = CreateTemporaryProfilePath();
+        try
+        {
+            var service = new ProfileService();
+            var profile = service.CreateDefaultProfile();
+            profile.UiSettings.LastSearchText = " rx_mq";
+
+            await service.SaveAsync(profilePath, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(profilePath, CancellationToken.None);
+
+            Assert.Equal(" rx_mq", loaded.UiSettings.LastSearchText);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(profilePath);
+        }
+    }
+
+    [Fact]
     public void DefaultProfile_UsesFixedFortyMillisecondHexTimeout()
     {
         var service = new ProfileService();
@@ -15,6 +36,57 @@ public sealed class ProfileServiceDefaultsTests
 
         Assert.Equal(40, profile.UiSettings.HexGroupTimeoutMs);
         Assert.False(profile.UiSettings.HexGroupTimeoutUserConfigured);
+    }
+
+    [Fact]
+    public async Task DirectionPrefixDisplay_DefaultsToShownAndPersistsHiddenChoice()
+    {
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        var path = CreateTemporaryProfilePath();
+
+        Assert.True(profile.UiSettings.ShowRxTxDirectionPrefixInLogView);
+        profile.UiSettings.ShowRxTxDirectionPrefixInLogView = false;
+
+        try
+        {
+            await service.SaveAsync(path, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.False(loaded.UiSettings.ShowRxTxDirectionPrefixInLogView);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyProfileWithoutDirectionPrefixSetting_DefaultsToShown()
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var json = """
+            {
+              "ProfileSchemaVersion": 1,
+              "Name": "Legacy profile",
+              "UiSettings": {}
+            }
+            """;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json);
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.True(loaded.UiSettings.ShowRxTxDirectionPrefixInLogView);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
     }
 
     [Fact]

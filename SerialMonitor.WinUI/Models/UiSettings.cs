@@ -48,6 +48,8 @@ public sealed class UiSettings
 
     public bool ShowTimestampInLogView { get; set; } = true;
 
+    public bool ShowRxTxDirectionPrefixInLogView { get; set; } = true;
+
     public TimestampDisplayFormat TimestampDisplayFormat { get; set; } = TimestampDisplayFormat.DateTimeMilliseconds;
 
     public XtermFontFamily XtermFontFamily { get; set; } = XtermFontFamily.Consolas;
@@ -97,6 +99,7 @@ public sealed class UiSettings
             EventAutoScrollEnabled = EventAutoScrollEnabled,
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
             ShowTimestampInLogView = ShowTimestampInLogView,
+            ShowRxTxDirectionPrefixInLogView = ShowRxTxDirectionPrefixInLogView,
             TimestampDisplayFormat = TimestampDisplayFormat,
             XtermFontFamily = XtermFontFamily,
             XtermFontSize = XtermFontSize,

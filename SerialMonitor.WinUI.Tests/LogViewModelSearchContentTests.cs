@@ -14,6 +14,48 @@ public sealed class LogViewModelSearchContentTests
     }
 
     [Fact]
+    public void XtermSearchRequest_PreservesPayloadRelativeTarget()
+    {
+        var request = new XtermSearchRequest(
+            1,
+            "rx_mq",
+            false,
+            "next",
+            targetLineId: 42,
+            targetPayloadOffset: 17,
+            matchLength: 5,
+            expectedText: "RX_MQ",
+            occurrenceInLine: 3,
+            tabsBeforeMatch: 2,
+            tabsBeforeMatchEnd: 3);
+
+        Assert.Equal(42, request.TargetLineId);
+        Assert.Equal(17, request.TargetPayloadOffset);
+        Assert.Equal(5, request.MatchLength);
+        Assert.Equal("RX_MQ", request.ExpectedText);
+        Assert.Equal(3, request.OccurrenceInLine);
+        Assert.Equal(2, request.TabsBeforeMatch);
+        Assert.Equal(3, request.TabsBeforeMatchEnd);
+    }
+
+    [Fact]
+    public void XtermSearchRequest_PreservesPayloadStartForPrefixFreeDisplay()
+    {
+        var request = new XtermSearchRequest(
+            1,
+            "READY",
+            false,
+            "next",
+            targetLineId: 42,
+            targetPayloadOffset: 0,
+            targetPayloadStart: 23,
+            matchLength: 5,
+            expectedText: "READY");
+
+        Assert.Equal(23, request.TargetPayloadStart);
+    }
+
+    [Fact]
     public void SearchContent_ExcludesTimestampAndDirectionMetadata()
     {
         var viewModel = new LogViewModel(100);
@@ -50,6 +92,49 @@ public sealed class LogViewModelSearchContentTests
 
         Assert.Equal("RX < READY", line.FullText);
         Assert.Equal("READY", line.PayloadText);
+    }
+
+    [Fact]
+    public void DirectionPrefixSetting_RebuildsRetainedRxAndTxWithoutChangingPayloadOrDirection()
+    {
+        var timestamp = new DateTimeOffset(2026, 7, 28, 20, 30, 0, TimeSpan.FromHours(9));
+        var viewModel = new LogViewModel(100);
+        viewModel.AddRange(
+        [
+            new LogLine(timestamp, LogDirection.Rx, "READY"),
+            new LogLine(timestamp, LogDirection.Tx, "PING"),
+            new LogLine(timestamp, LogDirection.Mark, "checkpoint"),
+            new LogLine(timestamp, LogDirection.System, "connected")
+        ]);
+
+        viewModel.SetShowRxTxDirectionPrefixInLogView(false);
+
+        var lines = viewModel.GetVisibleSearchContentSnapshot();
+        Assert.Equal("[2026-07-28 20:30:00.000] READY", lines[0].FullText);
+        Assert.Equal("[2026-07-28 20:30:00.000] PING", lines[1].FullText);
+        Assert.Equal("[2026-07-28 20:30:00.000] MARK > checkpoint", lines[2].FullText);
+        Assert.Equal("[2026-07-28 20:30:00.000] SYS connected", lines[3].FullText);
+        Assert.Equal("READY", lines[0].PayloadText);
+        Assert.Equal("PING", lines[1].PayloadText);
+        Assert.Equal(LogDirection.Rx, lines[0].Direction);
+        Assert.Equal(LogDirection.Tx, lines[1].Direction);
+        Assert.DoesNotContain("RX <", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.DoesNotContain("TX >", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DirectionPrefixSetting_WithTimestampHidden_LeavesOnlyRxAndTxPayload()
+    {
+        var viewModel = new LogViewModel(100);
+        viewModel.SetShowTimestampInLogView(false);
+        viewModel.SetShowRxTxDirectionPrefixInLogView(false);
+        viewModel.AddRange([LogLine.Rx("READY"), LogLine.Tx("PING")]);
+
+        var lines = viewModel.GetVisibleSearchContentSnapshot();
+        Assert.Equal("READY", lines[0].FullText);
+        Assert.Equal("PING", lines[1].FullText);
+        Assert.Equal(0, lines[0].PayloadStart);
+        Assert.Equal(0, lines[1].PayloadStart);
     }
 
     [Fact]

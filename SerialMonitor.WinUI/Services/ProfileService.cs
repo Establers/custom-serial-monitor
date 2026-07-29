@@ -838,7 +838,7 @@ public sealed class ProfileService : IProfileService
             warnings.Add("xterm font size was invalid.");
         }
 
-        settings.LastSearchText = settings.LastSearchText?.Trim() ?? string.Empty;
+        settings.LastSearchText ??= string.Empty;
         settings.MarkerText = settings.MarkerText?.Trim() ?? string.Empty;
         settings.CuteBackgroundImagePath = NormalizeCuteBackgroundImagePath(
             settings.CuteBackgroundImagePath,

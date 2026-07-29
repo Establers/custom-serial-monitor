@@ -290,6 +290,29 @@ real hardware when available.
 
 - [ ] Search for `WARN`.
 - [ ] Confirm match count updates.
+- [ ] Receive `RX < \tREADY` with a real tab, search for `READY`, and confirm
+  the rendered word is selected even though the tab expands to multiple cells.
+- [ ] Search for a term that includes a literal tab and confirm the expanded
+  tab cells on the target occurrence are selected.
+- [ ] Receive `\t\tREADY`, search for a literal tab, and confirm the first and
+  second tab remain separate results and select separate tab-stop ranges.
+- [ ] Size the terminal so its cursor reaches the right margin, receive
+  `\tREADY` (and then `\t\tREADY`) from that position, and confirm searching
+  for `READY` selects the word even though the preceding tabs render no cells.
+- [ ] Size the terminal so a CJK character or emoji soft-wraps from the final
+  column, place a real tab and `READY` after it, and confirm `READY` jumps to
+  the correct rendered cells rather than counting the wide-wrap placeholder
+  as another tab.
+- [ ] With a tab before the payload text, case-insensitively search Unicode
+  pairs such as `ſ`/`S`, `K`/`K`, and `ß`/`ẞ`; confirm result count and jumps
+  follow .NET `OrdinalIgnoreCase` rather than JavaScript case folding.
+- [ ] Receive a payload ending in `READY ` and confirm a search including the
+  trailing space both counts and jumps to the match.
+- [ ] Send `open_rx_mq() ...  rx_mq`, search for `rx_mq`, and confirm both
+  occurrences on the same logical line are counted and selected in order.
+- [ ] Search for ` rx_mq` (including the leading space) and confirm only the
+  right-hand occurrence is counted; save/reload the profile and confirm the
+  leading space is preserved.
 - [ ] Click Next and Prev.
 - [ ] Confirm xterm jumps/selects matches.
 - [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3;
@@ -306,11 +329,16 @@ real hardware when available.
   results stale while newer matches append, and confirm an old result jumps to
   the same logical line or reports no hit after that line leaves scrollback.
 - [ ] Confirm logs continue appending during search.
+- [ ] With 200,000 retained lines containing two matches each, confirm the
+  total is 400,000, only the first 1,000 result rows are materialized, search
+  can be canceled by changing the term, and the UI remains responsive.
 
 ## Search Results Tab
 
 - [ ] Open Search tab.
 - [ ] Confirm result rows are compact and stable.
+- [ ] Confirm repeated matches on one line appear as separate rows labeled
+  `1/N`, `2/N`, and jump to their respective offsets.
 - [ ] Confirm status appears in the toolbar, not as a result row.
 - [ ] Confirm there is no Auto refresh control and Search results update only after Refresh.
 - [ ] Click Refresh and confirm results rebuild.

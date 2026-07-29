@@ -1532,7 +1532,7 @@
                                         <Grid ColumnSpacing="5"
                                               MinHeight="24"
                                               HorizontalAlignment="Stretch"
-                                              ColumnDefinitions="76,42,*">
+                                              ColumnDefinitions="76,42,42,*">
                                             <TextBlock Text="{Binding TimeText}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
@@ -1541,6 +1541,10 @@
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Grid.Column="2"
+                                                       Text="{Binding OccurrenceText}"
+                                                       FontFamily="Consolas"
+                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                            <TextBlock Grid.Column="3"
                                                        Text="{Binding MessagePreview}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}" />
@@ -2600,6 +2604,19 @@
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to newly displayed lines." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="RX/TX prefix"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      Content="Show RX &lt; and TX &gt;"
+                                                      IsChecked="{Binding ShowRxTxDirectionPrefixInLogView, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload." />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">

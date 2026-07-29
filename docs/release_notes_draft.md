@@ -52,6 +52,10 @@ Date: 2026-07-28
 - Event context capture with before/matched/after lines.
 - WebView2 event context viewer.
 - Visible-buffer search with xterm search/jump integration.
+- Occurrence-based search counts and navigates every non-overlapping match,
+  including repeated matches on one logical line and terms with leading spaces.
+- Asynchronous, cancelable search keeps a compact per-line index and caps the
+  Search Results list at 1,000 rows for large retained buffers.
 - Search Results tab with manual refresh by default.
 - JSON profile save/load/reset.
 - Settings validation and apply-behavior hints.

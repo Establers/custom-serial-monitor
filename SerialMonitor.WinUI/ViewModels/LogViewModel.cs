@@ -24,7 +24,14 @@ public sealed class LogTextBatch
     public long EndDisplayedLineCount { get; }
 }
 
-public sealed record VisibleLogSearchLine(long LineId, string FullText, string PayloadText);
+public readonly record struct VisibleLogSearchLine(
+    long LineId,
+    string FullText,
+    int PayloadStart,
+    LogDirection Direction = LogDirection.System)
+{
+    public string PayloadText => FullText[PayloadStart..];
+}
 
 public sealed class LogViewModel : ViewModelBase
 {
@@ -55,9 +62,11 @@ public sealed class LogViewModel : ViewModelBase
     private readonly LinkedList<string> _visibleLines = new();
     private readonly LinkedList<string> _searchableVisibleLines = new();
     private readonly LinkedList<long> _visibleLineIds = new();
+    private readonly LinkedList<LogDirection> _visibleLineDirections = new();
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule? _viewFilter;
     private bool _showTimestampInLogView = true;
+    private bool _showRxTxDirectionPrefixInLogView = true;
     private TimestampDisplayFormat _timestampDisplayFormat = TimestampDisplayFormat.DateTimeMilliseconds;
     private RxDisplayMode _rxDisplayMode = RxDisplayMode.Terminal;
     private bool _partialRxVisualLineActive;
@@ -203,6 +212,18 @@ public sealed class LogViewModel : ViewModelBase
         _showTimestampInLogView = showTimestamp;
     }
 
+    public void SetShowRxTxDirectionPrefixInLogView(bool showDirectionPrefix)
+    {
+        if (_showRxTxDirectionPrefixInLogView == showDirectionPrefix)
+        {
+            return;
+        }
+
+        _showRxTxDirectionPrefixInLogView = showDirectionPrefix;
+        RebuildVisibleLinesFromRetained();
+        TextRebuilt?.Invoke(this, EventArgs.Empty);
+    }
+
     public void SetTimestampDisplayFormat(TimestampDisplayFormat timestampDisplayFormat)
     {
         timestampDisplayFormat = NormalizeTimestampDisplayFormat(timestampDisplayFormat);
@@ -300,7 +321,8 @@ public sealed class LogViewModel : ViewModelBase
                     var appendedPartialDisplayText = AppendPartialRxVisualSegment(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
-                        retainedLine.LineId);
+                        retainedLine.LineId,
+                        line.Direction);
                     builder.Append(appendedPartialDisplayText);
                     Interlocked.Increment(ref _partialRxAppendInPlaceCount);
                 }
@@ -309,7 +331,8 @@ public sealed class LogViewModel : ViewModelBase
                     var taggedPartialDisplayLine = AddVisibleLine(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
-                        retainedLine.LineId);
+                        retainedLine.LineId,
+                        line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     builder.Append(taggedPartialDisplayLine);
                     _partialRxVisualLength = formattedPartial.RawTextLength;
@@ -335,7 +358,8 @@ public sealed class LogViewModel : ViewModelBase
             var taggedDisplayLine = AddVisibleLine(
                 formatted.DisplayLine,
                 formatted.SearchableLine,
-                retainedLine.LineId);
+                retainedLine.LineId,
+                line.Direction);
             builder.Append(taggedDisplayLine);
             appendedVisibleLineCount++;
             visibleContribution = 1;
@@ -433,20 +457,25 @@ public sealed class LogViewModel : ViewModelBase
         var results = new VisibleLogSearchLine[_searchableVisibleLines.Count];
         var textNode = _searchableVisibleLines.First;
         var idNode = _visibleLineIds.First;
-        for (var index = 0; index < results.Length && textNode is not null && idNode is not null; index++)
+        var directionNode = _visibleLineDirections.First;
+        for (var index = 0;
+             index < results.Length && textNode is not null && idNode is not null && directionNode is not null;
+             index++)
         {
             results[index] = new VisibleLogSearchLine(
                 idNode.Value,
                 textNode.Value,
-                ExtractPayloadText(textNode.Value));
+                FindPayloadStart(textNode.Value),
+                directionNode.Value);
             textNode = textNode.Next;
             idNode = idNode.Next;
+            directionNode = directionNode.Next;
         }
 
         return results;
     }
 
-    private static string ExtractPayloadText(string visibleLine)
+    private static int FindPayloadStart(string visibleLine)
     {
         var contentStart = 0;
         if (visibleLine.StartsWith("[", StringComparison.Ordinal))
@@ -472,10 +501,10 @@ public sealed class LogViewModel : ViewModelBase
                 payloadStart++;
             }
 
-            return content[payloadStart..].ToString();
+            return contentStart + payloadStart;
         }
 
-        return content.ToString();
+        return contentStart;
     }
 
     public void AddPendingDropCount(int droppedCount)
@@ -502,6 +531,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
         _visibleLineIds.Clear();
+        _visibleLineDirections.Clear();
         _visibleCharacterCount = 0;
         _partialRxVisualLineActive = false;
         _partialRxVisualLength = 0;
@@ -516,6 +546,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
         _visibleLineIds.Clear();
+        _visibleLineDirections.Clear();
         _retainedVisibleLineContributions.Clear();
         _visibleCharacterCount = 0;
         _partialRxVisualLineActive = false;
@@ -553,14 +584,16 @@ public sealed class LogViewModel : ViewModelBase
                     AppendPartialRxVisualSegment(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
-                        retainedLine.LineId);
+                        retainedLine.LineId,
+                        line.Direction);
                 }
                 else
                 {
                     AddVisibleLine(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
-                        retainedLine.LineId);
+                        retainedLine.LineId,
+                        line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     _partialRxVisualLineActive = true;
                     _partialRxVisualLength = formattedPartial.RawTextLength;
@@ -578,7 +611,7 @@ public sealed class LogViewModel : ViewModelBase
                 formattingErrors++;
             }
 
-            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine, retainedLine.LineId);
+            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine, retainedLine.LineId, line.Direction);
             _retainedVisibleLineContributions.Enqueue(1);
         }
 
@@ -639,7 +672,8 @@ public sealed class LogViewModel : ViewModelBase
         if (_visibleLineLengths.First is null ||
             _visibleLines.First is null ||
             _searchableVisibleLines.First is null ||
-            _visibleLineIds.First is null)
+            _visibleLineIds.First is null ||
+            _visibleLineDirections.First is null)
         {
             return false;
         }
@@ -651,6 +685,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.RemoveFirst();
         _searchableVisibleLines.RemoveFirst();
         _visibleLineIds.RemoveFirst();
+        _visibleLineDirections.RemoveFirst();
         if (ReferenceEquals(removedDisplayNode, _partialRxDisplayNode) ||
             ReferenceEquals(removedSearchableNode, _partialRxSearchableNode))
         {
@@ -673,13 +708,18 @@ public sealed class LogViewModel : ViewModelBase
         OnPropertyChanged(nameof(PartialRxAppendInPlaceCount));
     }
 
-    private string AddVisibleLine(string displayLine, string searchableLine, long lineId)
+    private string AddVisibleLine(
+        string displayLine,
+        string searchableLine,
+        long lineId,
+        LogDirection direction)
     {
         var taggedDisplayLine = FormatXtermLineIdentity(lineId) + displayLine;
         _visibleLineLengths.AddLast(displayLine.Length);
         _visibleLines.AddLast(displayLine);
         _searchableVisibleLines.AddLast(searchableLine);
         _visibleLineIds.AddLast(lineId);
+        _visibleLineDirections.AddLast(direction);
         _visibleCharacterCount += displayLine.Length;
         return taggedDisplayLine;
     }
@@ -763,14 +803,18 @@ public sealed class LogViewModel : ViewModelBase
         _partialRxLineDirty = false;
     }
 
-    private string AppendPartialRxVisualSegment(string displayText, string searchableText, long lineId)
+    private string AppendPartialRxVisualSegment(
+        string displayText,
+        string searchableText,
+        long lineId,
+        LogDirection direction)
     {
         if (_visibleLines.Last is null ||
             _searchableVisibleLines.Last is null ||
             _visibleLineLengths.Last is null ||
             _visibleLineIds.Last is null)
         {
-            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId);
+            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId, direction);
             BeginActivePartialRxVisualLine(displayText, searchableText);
             _partialRxVisualLength = searchableText.Length;
             return taggedDisplayLine;
@@ -858,6 +902,7 @@ public sealed class LogViewModel : ViewModelBase
             var searchableLine = FormatPlainSafeDisplayLine(
                 line,
                 _showTimestampInLogView,
+                _showRxTxDirectionPrefixInLogView,
                 _timestampDisplayFormat,
                 _rxDisplayMode,
                 out var payloadStart);
@@ -873,9 +918,13 @@ public sealed class LogViewModel : ViewModelBase
         {
             var fallback = _partialRxVisualLineActive
                 ? line.Text
-                : _showTimestampInLogView
-                    ? line.Format(_timestampDisplayFormat)
-                    : $"{line.DirectionText} {line.Text}";
+                : FormatPlainSafeDisplayLine(
+                    line,
+                    _showTimestampInLogView,
+                    _showRxTxDirectionPrefixInLogView,
+                    _timestampDisplayFormat,
+                    _rxDisplayMode,
+                    out _);
             return (fallback, fallback, line.Text.Length, true);
         }
     }
@@ -893,6 +942,7 @@ public sealed class LogViewModel : ViewModelBase
             searchableLine = FormatPlainSafeDisplayLine(
                 line,
                 _showTimestampInLogView,
+                _showRxTxDirectionPrefixInLogView,
                 _timestampDisplayFormat,
                 _rxDisplayMode,
                 out var payloadStart);
@@ -905,9 +955,13 @@ public sealed class LogViewModel : ViewModelBase
         }
         catch
         {
-            searchableLine = _showTimestampInLogView
-                ? line.Format(_timestampDisplayFormat)
-                : $"{line.DirectionText} {line.Text}";
+            searchableLine = FormatPlainSafeDisplayLine(
+                line,
+                _showTimestampInLogView,
+                _showRxTxDirectionPrefixInLogView,
+                _timestampDisplayFormat,
+                _rxDisplayMode,
+                out _);
             displayLine = searchableLine;
             isHighlighted = false;
             hasFormattingError = true;
@@ -997,14 +1051,19 @@ public sealed class LogViewModel : ViewModelBase
     private static string FormatPlainSafeDisplayLine(
         LogLine line,
         bool showTimestamp,
+        bool showRxTxDirectionPrefix,
         TimestampDisplayFormat timestampDisplayFormat,
         RxDisplayMode rxDisplayMode,
         out int payloadStart)
     {
         var text = FormatDisplayText(line, rxDisplayMode);
+        var directionText = showRxTxDirectionPrefix ||
+            line.Direction is not (LogDirection.Rx or LogDirection.Tx)
+                ? $"{line.DirectionText} "
+                : string.Empty;
         var plainLine = !showTimestamp
-            ? $"{line.DirectionText} {text}"
-            : $"[{line.FormatTimestamp(timestampDisplayFormat)}] {line.DirectionText} {text}";
+            ? $"{directionText}{text}"
+            : $"[{line.FormatTimestamp(timestampDisplayFormat)}] {directionText}{text}";
         payloadStart = plainLine.Length - text.Length;
         return plainLine;
     }

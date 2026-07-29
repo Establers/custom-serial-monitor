@@ -2646,7 +2646,7 @@ public sealed partial class MainWindow : Window
                     break;
 
                 case "searchSelected":
-                    _viewModel.SearchSelectedTextFromXterm(selectedText);
+                    await _viewModel.SearchSelectedTextFromXtermAsync(selectedText);
                     break;
 
                 default:
@@ -3685,10 +3685,19 @@ public sealed partial class MainWindow : Window
                 caseSensitive = request.IsCaseSensitive,
                 direction = request.Direction,
                 resultIndex = request.ResultIndex,
-                targetLineId = request.TargetLineId?.ToString(CultureInfo.InvariantCulture)
+                targetLineId = request.TargetLineId?.ToString(CultureInfo.InvariantCulture),
+                targetPayloadOffset = request.TargetPayloadOffset,
+                targetPayloadStart = request.TargetPayloadStart,
+                matchLength = request.MatchLength,
+                expectedText = request.ExpectedText,
+                occurrenceInLine = request.OccurrenceInLine,
+                tabsBeforeMatch = request.TabsBeforeMatch,
+                tabsBeforeMatchEnd = request.TabsBeforeMatchEnd
             });
+            var searchStopwatch = Stopwatch.StartNew();
             var resultJson = await XtermLogWebView.ExecuteScriptAsync(
                 $"window.serialMonitorSearch ? window.serialMonitorSearch({payload}) : {{ ok: false, found: false, error: 'xterm search bridge is not available' }};");
+            searchStopwatch.Stop();
 
             if (string.IsNullOrWhiteSpace(resultJson))
             {
@@ -3712,7 +3721,7 @@ public sealed partial class MainWindow : Window
 
             var found = root.TryGetProperty("found", out var foundElement) &&
                 foundElement.ValueKind == JsonValueKind.True;
-            _viewModel.RecordXtermSearchResult(found);
+            _viewModel.RecordXtermSearchResult(found, searchStopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
