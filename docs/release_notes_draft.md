@@ -2,7 +2,7 @@
 
 Date: 2026-07-28
 
-## Fixes Since v1.2.2
+## Released in v1.2.3
 
 - Fixed a minimize/restore regression where roughly 5,000 queued log lines could
   take 30 seconds or longer to become visible again.

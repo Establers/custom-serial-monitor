@@ -11,7 +11,7 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest"><strong>최신 버전 다운로드</strong></a>
     ·
-    <a href="docs/release_notes_v1.2.2.md">v1.2.2 변경 사항</a>
+    <a href="docs/release_notes_v1.2.3.md">v1.2.3 변경 사항</a>
   </p>
 </div>
 
@@ -81,15 +81,17 @@ Serial Monitor는 임베디드·RTOS 장치를 오래 연결해 두고 로그를
 | 연동 | 물리 COM과 com0com 같은 가상 COM 사이의 선택적 양방향 raw-byte bridge |
 | 진단 | MOCK 포트, 스트레스 생성기, HEX RX 1분 BUSY/IDLE 추정, 손실 카운터, 상태 요약, 복사 가능한 진단 정보 |
 
-## v1.2.2
+## v1.2.3
 
-- HEX 화면에서 최근 1분의 RX BUSY/IDLE과 고정 1초 버킷 PEAK를 확인할 수
-  있습니다.
-- UART 프레이밍과 baud를 반영해 RS-485 수신 버스 점유율을 추정합니다.
-- xterm 로그 글꼴과 10~15px 크기를 즉시 바꾸고 프로필에 저장할 수 있습니다.
-- Clear, 연결, HEX 모드 전환에 맞춰 측정 창을 예측 가능하게 초기화합니다.
+- 한 줄에 같은 단어가 여러 번 있어도 모든 occurrence를 정확히 세고
+  Next/Previous와 검색 결과에서 각각 이동할 수 있습니다.
+- 20만 줄 규모에서도 검색 결과 메모리를 제한하고 취소 가능한 백그라운드
+  검색으로 UI 응답성을 유지합니다.
+- 탭, 연속 탭, CJK/이모지 줄바꿈, 우측 마진의 0폭 탭이 포함된 로그도 xterm의
+  실제 렌더링 위치로 이동합니다.
+- RX/TX 접두사를 화면에서 숨길 수 있으며 원본 방향과 저장 로그는 유지됩니다.
 
-자세한 내용은 [v1.2.2 릴리즈 노트](docs/release_notes_v1.2.2.md)를 참고하세요.
+자세한 내용은 [v1.2.3 릴리즈 노트](docs/release_notes_v1.2.3.md)를 참고하세요.
 
 ## 개발 및 빌드
 
