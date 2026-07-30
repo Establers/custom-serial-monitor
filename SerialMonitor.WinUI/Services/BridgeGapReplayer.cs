@@ -30,12 +30,20 @@ internal sealed class BridgeGapReplayer
     private long _firstSourceTimestamp;
     private long _firstActualWriteTimestamp;
     private long _previousActualWriteTimestamp;
-    private bool _previousEndsAtIdleBoundary;
-    private int _previousIdleTimeoutMs;
+    private int _previousReplayIdleGapMs;
 
     public BridgeGapReplayer(IBridgeClock clock)
     {
         _clock = clock;
+    }
+
+    public void Reset()
+    {
+        _hasFirstChunk = false;
+        _firstSourceTimestamp = 0;
+        _firstActualWriteTimestamp = 0;
+        _previousActualWriteTimestamp = 0;
+        _previousReplayIdleGapMs = 0;
     }
 
     public async ValueTask<BridgeReplayTiming> WaitUntilDueAsync(
@@ -53,10 +61,10 @@ internal sealed class BridgeGapReplayer
 
         var sourceDelta = Math.Max(0, chunk.ReceivedTimestamp - _firstSourceTimestamp);
         var target = _firstActualWriteTimestamp + sourceDelta;
-        if (_previousEndsAtIdleBoundary && _previousIdleTimeoutMs > 0)
+        if (_previousReplayIdleGapMs > 0)
         {
             var minimumBoundaryTarget = _previousActualWriteTimestamp +
-                MillisecondsToTicks(_previousIdleTimeoutMs);
+                MillisecondsToTicks(_previousReplayIdleGapMs);
             target = Math.Max(target, minimumBoundaryTarget);
         }
 
@@ -73,8 +81,13 @@ internal sealed class BridgeGapReplayer
     public void RecordWriteCompleted(BridgeRxChunk chunk, long actualWriteTimestamp)
     {
         _previousActualWriteTimestamp = actualWriteTimestamp;
-        _previousEndsAtIdleBoundary = chunk.EndsAtNativeIdleBoundary;
-        _previousIdleTimeoutMs = Math.Max(0, chunk.AppliedIdleTimeoutMs);
+        _previousReplayIdleGapMs = Math.Max(
+            0,
+            chunk.ReplayIdleGapMs > 0
+                ? chunk.ReplayIdleGapMs
+                : chunk.EndsAtNativeIdleBoundary
+                    ? chunk.AppliedIdleTimeoutMs
+                    : 0);
     }
 
     private long MillisecondsToTicks(double milliseconds) =>

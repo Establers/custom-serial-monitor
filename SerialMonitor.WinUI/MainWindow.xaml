@@ -952,7 +952,7 @@
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-            <Button x:Name="ConnectionToolbarScrollBackButton"
+            <Button x:Uid="StaticUi002" x:Name="ConnectionToolbarScrollBackButton"
                     Grid.Column="0"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
@@ -1037,7 +1037,8 @@
                                MaxWidth="170"
                                MaxLines="1"
                                ToolTipService.ToolTip="{Binding BridgeStatusText}" />
-                    <TextBlock Grid.Column="2"
+                    <TextBlock x:Uid="StaticUi261"
+                               Grid.Column="2"
                                Text="{Binding HexGroupTimeoutHeaderText}"
                                Style="{StaticResource CompactLabelTextStyle}"
                                MinWidth="{Binding HexGroupTimeoutHeaderMinWidth}"
@@ -1054,7 +1055,7 @@
                 </Grid>
             </Grid>
             </ScrollViewer>
-            <Button x:Name="ConnectionToolbarScrollForwardButton"
+            <Button x:Uid="StaticUi005" x:Name="ConnectionToolbarScrollForwardButton"
                     Grid.Column="2"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
@@ -1095,7 +1096,7 @@
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
                     <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Button x:Name="LogToolbarScrollBackButton"
+                    <Button x:Uid="StaticUi006" x:Name="LogToolbarScrollBackButton"
                             Grid.Column="0"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
@@ -1118,7 +1119,7 @@
                           MinWidth="1040"
                           ColumnSpacing="5"
                           ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
-                        <TextBox x:Name="SearchTextBox"
+                        <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
                                  Grid.Column="0"
                                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  PlaceholderText="Search visible log"
@@ -1128,7 +1129,7 @@
                                  VerticalAlignment="Center"
                                  KeyDown="SearchTextBox_KeyDown"
                                  ToolTipService.ToolTip="Search visible log (Enter refreshes and moves next, Up/Down history)" />
-                        <Button Grid.Column="1"
+                        <Button x:Uid="StaticUi008" Grid.Column="1"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
                                 ToolTipService.ToolTip="Previous result from the last search (Shift+F3)">
@@ -1137,7 +1138,7 @@
                                       UseLayoutRounding="False"
                                       Glyph="&#xE76B;" />
                         </Button>
-                        <Button Grid.Column="2"
+                        <Button x:Uid="StaticUi009" Grid.Column="2"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindNextCommand}"
                                 ToolTipService.ToolTip="Next result from the last search (F3)">
@@ -1158,7 +1159,7 @@
                         <TextBlock Grid.Column="5"
                                    Text="Mode"
                                    Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox Grid.Column="6"
+                        <ComboBox x:Uid="StaticUi012" Grid.Column="6"
                                   ItemsSource="{Binding RxDisplayModes}"
                                   SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
                                   ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
@@ -1168,7 +1169,7 @@
                         <TextBlock Grid.Column="7"
                                    Text="Filter"
                                    Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox Grid.Column="8"
+                        <ComboBox x:Uid="StaticUi014" Grid.Column="8"
                                   ItemsSource="{Binding VisibleLogFilterOptions}"
                                   SelectedItem="{Binding SelectedViewFilterOption, Mode=TwoWay}"
                                   DisplayMemberPath="DisplayName"
@@ -1181,7 +1182,7 @@
                                    FontSize="11"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center" />
-                        <CheckBox Grid.Column="10"
+                        <CheckBox x:Uid="StaticUi015" Grid.Column="10"
                                   Content="Auto"
                                   IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                   VerticalAlignment="Center"
@@ -1195,7 +1196,7 @@
                                       UseLayoutRounding="False"
                                       Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
                         </Button>
-                        <Button Grid.Column="12"
+                        <Button x:Uid="StaticUi016" Grid.Column="12"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ClearScreenCommand}"
                                 ToolTipService.ToolTip="Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
@@ -1204,13 +1205,13 @@
                                       UseLayoutRounding="False"
                                       Glyph="&#xE711;" />
                         </Button>
-                        <Button Grid.Column="13"
+                        <Button x:Uid="StaticUi017" Grid.Column="13"
                                 Content="Mark"
                                 Command="{Binding AddDefaultMarkerCommand}"
                                 ToolTipService.ToolTip="Quick marker inserts current MARK TIME" />
                     </Grid>
                     </ScrollViewer>
-                    <Button x:Name="LogToolbarScrollForwardButton"
+                    <Button x:Uid="StaticUi018" x:Name="LogToolbarScrollForwardButton"
                             Grid.Column="2"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
@@ -1263,14 +1264,14 @@
                                    Height="140"
                                    Stretch="Uniform"
                                    Opacity="0.96" />
-                            <TextBlock x:Name="LogRestoreOverlayTitle"
-                                       Text="로그 화면 복원 중..."
+                            <TextBlock x:Uid="StaticUi001" x:Name="LogRestoreOverlayTitle"
+                                       Text="Restoring log view..."
                                        Foreground="{ThemeResource LogRestorePrimaryTextBrush}"
                                        FontSize="13"
                                        FontWeight="SemiBold"
                                        TextAlignment="Center"
                                        HorizontalAlignment="Center" />
-                            <TextBlock x:Name="LogRestoreOverlayDetail"
+                            <TextBlock x:Uid="StaticUi019" x:Name="LogRestoreOverlayDetail"
                                        Text="Preparing log view"
                                        Foreground="{ThemeResource LogRestoreSecondaryTextBrush}"
                                        FontSize="11"
@@ -1354,7 +1355,7 @@
                             <Thickness x:Key="TabViewHeaderPadding">0,2,0,2</Thickness>
                         </ResourceDictionary>
                     </TabView.Resources>
-                    <TabViewItem Header="Events"
+                    <TabViewItem x:Uid="StaticUi020" Header="Events"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Review log events detected by enabled rules.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -1370,12 +1371,12 @@
                                         <TextBlock Text="{Binding DetectedEventUiCountText}"
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                     </StackPanel>
-                                    <CheckBox Grid.Column="1"
+                                    <CheckBox x:Uid="StaticUi022" Grid.Column="1"
                                               Content="Auto"
                                               IsChecked="{Binding IsEventAutoScrollEnabled, Mode=TwoWay}"
                                               ToolTipService.ToolTip="Auto-scroll events"
                                               VerticalAlignment="Center" />
-                                    <Button Grid.Column="2"
+                                    <Button x:Uid="StaticUi023" Grid.Column="2"
                                             Content="Latest"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             ToolTipService.ToolTip="Select latest event"
@@ -1446,7 +1447,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem x:Name="ContextTabViewItem"
+                    <TabViewItem x:Uid="StaticUi024" x:Name="ContextTabViewItem"
                                  Header="Context"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Inspect the log lines before and after the selected event.">
@@ -1465,7 +1466,7 @@
                                                FontFamily="Consolas"
                                                Style="{StaticResource CompactCellTextStyle}" />
 
-                                    <Button Grid.Column="2"
+                                    <Button x:Uid="StaticUi026" Grid.Column="2"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Command="{Binding CopyEventContextCommand}"
                                             ToolTipService.ToolTip="Copy event context">
@@ -1492,7 +1493,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="Search"
+                    <TabViewItem x:Uid="StaticUi027" Header="Search"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result to jump to it.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -1513,17 +1514,17 @@
                                                MaxWidth="96"
                                                MinWidth="0"
                                                VerticalAlignment="Center" />
-                                    <Button Grid.Column="2"
+                                    <Button x:Uid="StaticUi029" Grid.Column="2"
                                             Content="Refresh"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding RefreshSearchResultsCommand}"
                                             ToolTipService.ToolTip="Refresh search results" />
-                                    <Button Grid.Column="3"
+                                    <Button x:Uid="StaticUi030" Grid.Column="3"
                                             Content="Prev"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding PreviousSearchResultsPageCommand}"
                                             ToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
-                                    <Button Grid.Column="4"
+                                    <Button x:Uid="StaticUi031" Grid.Column="4"
                                             Content="Next"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding NextSearchResultsPageCommand}"
@@ -1590,7 +1591,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="Sequences"
+                    <TabViewItem x:Uid="StaticUi032" Header="Sequences"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Create and run ordered command sequences with per-step delays.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -1611,7 +1612,7 @@
                                               DisplayMemberPath="Name"
                                               Style="{StaticResource CompactComboBoxStyle}"
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
-                                    <TextBox x:Name="SequenceRepeatCountTextBox"
+                                    <TextBox x:Uid="StaticUi034" x:Name="SequenceRepeatCountTextBox"
                                              Grid.Column="2"
                                              Width="32"
                                              MaxLength="2"
@@ -1627,30 +1628,30 @@
                                                Text="times"
                                                VerticalAlignment="Center"
                                                Style="{StaticResource CompactCellTextStyle}" />
-                                    <Button Grid.Column="4"
+                                    <Button x:Uid="StaticUi036" Grid.Column="4"
                                             Content="+"
                                             IsEnabled="{Binding CanEditCommandSequences}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddCommandSequence_Click"
                                             ToolTipService.ToolTip="Add sequence" />
-                                    <Button Grid.Column="5"
+                                    <Button x:Uid="StaticUi037" Grid.Column="5"
                                             Content="Edit"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="EditCommandSequence_Click"
                                             ToolTipService.ToolTip="Edit sequence" />
-                                    <Button Grid.Column="6"
+                                    <Button x:Uid="StaticUi038" Grid.Column="6"
                                             Content="Del"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DeleteCommandSequence_Click"
                                             ToolTipService.ToolTip="Delete sequence" />
-                                    <Button Grid.Column="7"
+                                    <Button x:Uid="StaticUi039" Grid.Column="7"
                                             Content="Run"
                                             Command="{Binding RunCommandSequenceCommand}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             ToolTipService.ToolTip="Run sequence" />
-                                    <Button Grid.Column="8"
+                                    <Button x:Uid="StaticUi040" Grid.Column="8"
                                             Content="Stop"
                                             Command="{Binding StopCommandSequenceCommand}"
                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1671,36 +1672,36 @@
                                                Text="{Binding SequenceRuntimeStateText}"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                ToolTipService.ToolTip="{Binding SequenceStatusText}" />
-                                    <TextBlock Grid.Column="2"
+                                    <TextBlock x:Uid="StaticUi041" Grid.Column="2"
                                                Text="{Binding SelectedCommandSequenceStepCountText}"
                                                FontFamily="Consolas"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                ToolTipService.ToolTip="Selected sequence step count" />
-                                    <Button Grid.Column="3"
+                                    <Button x:Uid="StaticUi042" Grid.Column="3"
                                             Content="+"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Add step" />
-                                    <Button Grid.Column="4"
+                                    <Button x:Uid="StaticUi043" Grid.Column="4"
                                             Content="Edit"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="EditCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Edit step" />
-                                    <Button Grid.Column="5"
+                                    <Button x:Uid="StaticUi044" Grid.Column="5"
                                             Content="Del"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DeleteCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Delete step" />
-                                    <Button Grid.Column="6"
+                                    <Button x:Uid="StaticUi045" Grid.Column="6"
                                             Content="Up"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepUp_Click"
                                             ToolTipService.ToolTip="Move step up" />
-                                    <Button Grid.Column="7"
+                                    <Button x:Uid="StaticUi046" Grid.Column="7"
                                             Content="Dn"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1723,7 +1724,7 @@
                                         <TextBlock Grid.Column="1"
                                                    Text="Command"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
-                                        <TextBlock Grid.Column="2"
+                                        <TextBlock x:Uid="StaticUi048" Grid.Column="2"
                                                    Text="Ending"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}"
                                                    ToolTipService.ToolTip="Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n" />
@@ -1776,11 +1777,11 @@
                                                                 Orientation="Horizontal"
                                                                 Spacing="2"
                                                                 VerticalAlignment="Center">
-                                                        <Button Content="Edit"
+                                                        <Button x:Uid="StaticUi051" Content="Edit"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="EditCommandSequenceStepRow_Click"
                                                                 ToolTipService.ToolTip="Edit step" />
-                                                        <Button Content="Del"
+                                                        <Button x:Uid="StaticUi052" Content="Del"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="DeleteCommandSequenceStepRow_Click"
                                                                 ToolTipService.ToolTip="Delete step" />
@@ -1794,7 +1795,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem x:Name="RulesTabViewItem"
+                    <TabViewItem x:Uid="StaticUi053" x:Name="RulesTabViewItem"
                                  Header="Rules"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
@@ -1808,12 +1809,12 @@
                                       ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Text="Log Rules"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <TextBlock Grid.Column="1"
+                                    <TextBlock x:Uid="StaticUi055" Grid.Column="1"
                                                Text="New logs only"
                                                Style="{StaticResource SettingApplyHintTextStyle}"
                                                VerticalAlignment="Center"
                                                ToolTipService.ToolTip="Rule changes always affect only new incoming logs and do not reprocess existing visible logs." />
-                                    <Button Grid.Column="2"
+                                    <Button x:Uid="StaticUi056" Grid.Column="2"
                                             Content="+"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             Click="AddLogRule_Click"
@@ -1914,19 +1915,19 @@
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Enabled"
                                                                   Click="LogRuleInlineClicked" />
-                                                        <CheckBox Grid.Column="1"
+                                                        <CheckBox x:Uid="StaticUi068" Grid.Column="1"
                                                                   IsChecked="{Binding UseForEvent, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Event"
                                                                   Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Event: add matching lines to Events" />
-                                                        <CheckBox Grid.Column="2"
+                                                        <CheckBox x:Uid="StaticUi069" Grid.Column="2"
                                                                   IsChecked="{Binding UseForHighlight, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Highlight"
                                                                   Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Highlight: color matching lines in the log view" />
-                                                        <CheckBox Grid.Column="3"
+                                                        <CheckBox x:Uid="StaticUi070" Grid.Column="3"
                                                                   IsChecked="{Binding UseAsViewFilter, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Filter"
@@ -1939,20 +1940,20 @@
                                                                    Text="{Binding Keyword}"
                                                                    FontFamily="Consolas"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
-                                                        <TextBlock Grid.Column="6"
+                                                        <TextBlock x:Uid="StaticUi071" Grid.Column="6"
                                                                    Text="{Binding Mode, Converter={StaticResource DisplayModeNameConverter}}"
                                                                    Style="{StaticResource RuleCellTextStyle}"
                                                                    ToolTipService.ToolTip="The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes." />
                                                         <TextBlock Grid.Column="7"
                                                                    Text="{Binding MatchDirection}"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
-                                                        <CheckBox Grid.Column="8"
+                                                        <CheckBox x:Uid="StaticUi072" Grid.Column="8"
                                                                   IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Case"
                                                                   Click="LogRuleInlineClicked"
                                                                   ToolTipService.ToolTip="Case-sensitive Terminal matching. Ignored for HEX rules." />
-                                                        <Button Grid.Column="9"
+                                                        <Button x:Uid="StaticUi073" Grid.Column="9"
                                                                 Width="56"
                                                                 Height="22"
                                                                 MinHeight="22"
@@ -1984,11 +1985,11 @@
                                                                     Orientation="Horizontal"
                                                                     Spacing="2"
                                                                     VerticalAlignment="Center">
-                                                            <Button Content="Edit"
+                                                            <Button x:Uid="StaticUi074" Content="Edit"
                                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                                     Click="EditLogRuleRow_Click"
                                                                     ToolTipService.ToolTip="Edit log rule" />
-                                                            <Button Content="Del"
+                                                            <Button x:Uid="StaticUi075" Content="Del"
                                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                                     Click="DeleteLogRuleRow_Click"
                                                                     ToolTipService.ToolTip="Delete log rule" />
@@ -2003,7 +2004,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="Bridge"
+                    <TabViewItem x:Uid="StaticUi076" Header="Bridge"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
                         <ScrollViewer Padding="4"
@@ -2041,7 +2042,7 @@
                                         <Grid ColumnDefinitions="Auto,130,*"
                                               RowDefinitions="Auto,Auto"
                                               ColumnSpacing="5">
-                                            <TextBlock Text="Port"
+                                            <TextBlock x:Uid="StaticUi079" Text="Port"
                                                        Grid.Column="0"
                                                        Style="{StaticResource CompactLabelTextStyle}"
                                                        ToolTipService.ToolTip="Virtual app-side COM port opened by Serial Monitor" />
@@ -2051,7 +2052,7 @@
                                                       IsEnabled="{Binding CanEditBridgePort}"
                                                       MinWidth="110"
                                                       HorizontalAlignment="Stretch" />
-                                            <Button Grid.Column="2"
+                                            <Button x:Uid="StaticUi080" Grid.Column="2"
                                                     Content="Refresh"
                                                     Command="{Binding RefreshBridgePortsCommand}"
                                                     Style="{StaticResource RuleActionButtonStyle}"
@@ -2069,7 +2070,7 @@
                                                         Command="{Binding StopBridgeCommand}" />
                                             </StackPanel>
                                         </Grid>
-                                        <TextBlock Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
+                                        <TextBlock x:Uid="StaticUi083" Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
                                                    TextWrapping="WrapWholeWords"
                                                    Opacity="0.82"
                                                    Style="{StaticResource CompactCellTextStyle}" />
@@ -2153,10 +2154,10 @@
                                                    Foreground="{ThemeResource ErrorTextBrush}"
                                                    TextWrapping="WrapWholeWords"
                                                    Style="{StaticResource CompactCellTextStyle}" />
-                                        <TextBlock Text="{Binding BridgeVisualLogStatusText}"
+                                        <TextBlock x:Uid="StaticUi092" Text="{Binding BridgeVisualLogStatusText}"
                                                    ToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
                                                    Style="{StaticResource CompactCellTextStyle}" />
-                                        <TextBlock Text="{Binding BridgePriorityPipelineStatusText}"
+                                        <TextBlock x:Uid="StaticUi093" Text="{Binding BridgePriorityPipelineStatusText}"
                                                    TextWrapping="WrapWholeWords"
                                                    ToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
                                                    Style="{StaticResource CompactCellTextStyle}" />
@@ -2165,7 +2166,7 @@
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
                                         Padding="6">
-                                    <TextBlock Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
+                                    <TextBlock x:Uid="StaticUi094" Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
                                                TextWrapping="WrapWholeWords"
                                                Style="{StaticResource CompactCellTextStyle}" />
                                 </Border>
@@ -2173,7 +2174,7 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem x:Name="LogTabViewItem"
+                    <TabViewItem x:Uid="StaticUi095" x:Name="LogTabViewItem"
                                  Header="Log"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
@@ -2187,7 +2188,7 @@
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Log"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi097" Grid.Column="1"
                                                        Text="Actions and current paths"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right" />
@@ -2201,21 +2202,21 @@
                                                           VerticalScrollBarVisibility="Disabled">
                                                 <StackPanel Orientation="Horizontal"
                                                             Spacing="4">
-                                                    <Button Content="Open"
+                                                    <Button x:Uid="StaticUi099" Content="Open"
                                                             Command="{Binding OpenCurrentSerialLogCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
                                                             ToolTipService.ToolTip="Open the active or most recently completed log file" />
-                                                    <Button Content="Folder"
+                                                    <Button x:Uid="StaticUi100" Content="Folder"
                                                             Command="{Binding OpenLogFolderCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
                                                             ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
-                                                    <Button Content="Copy path"
+                                                    <Button x:Uid="StaticUi101" Content="Copy path"
                                                             Command="{Binding CopySerialLogPathCommand}"
                                                             Style="{StaticResource RuleActionButtonStyle}"
                                                             ToolTipService.ToolTip="Copy the active or most recently completed log file path" />
                                                 </StackPanel>
                                             </ScrollViewer>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi102" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
@@ -2234,7 +2235,7 @@
                                                            FontWeight="Bold"
                                                            Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
                                             </Button>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi104" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
@@ -2243,12 +2244,12 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="View pause"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi106" Grid.Column="1"
                                                       Content="Keep saving file log"
                                                       IsChecked="{Binding FileLoggingWhileViewPaused, Mode=TwoWay}"
                                                       VerticalAlignment="Center"
                                                       ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi107" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately, including during an active view pause." />
@@ -2265,14 +2266,14 @@
                                                          IsEnabled="{Binding CanEditConnectionSettings}"
                                                          HorizontalAlignment="Stretch"
                                                          ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
-                                                <Button Grid.Column="1"
+                                                <Button x:Uid="StaticUi109" Grid.Column="1"
                                                         Content="Browse"
                                                         Click="BrowseLogFolder_Click"
                                                         IsEnabled="{Binding CanEditConnectionSettings}"
                                                         Style="{StaticResource RuleActionButtonStyle}"
                                                         ToolTipService.ToolTip="Browse log folder" />
                                             </Grid>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi110" Grid.Column="2"
                                                        Text="Reconn"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies after reconnect." />
@@ -2284,7 +2285,7 @@
                                             <Grid Grid.Column="1"
                                                   ColumnDefinitions="2*,Auto,3*"
                                                   ColumnSpacing="6">
-                                                <TextBox Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                <TextBox x:Uid="StaticUi112" Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
                                                          HorizontalAlignment="Stretch"
                                                          IsEnabled="{Binding CanEditLogFileName}"
@@ -2299,7 +2300,7 @@
                                                            TextTrimming="CharacterEllipsis"
                                                            ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}" />
                                             </Grid>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi114" Grid.Column="2"
                                                        Text="OFF only"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
@@ -2308,11 +2309,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Rotation"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi116" Grid.Column="1"
                                                        Text="New file per LOG ON; no date-based split"
                                                        Style="{StaticResource SettingValueTextStyle}"
                                                        ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until LOG OFF unless optional size rotation is enabled." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi117" Grid.Column="2"
                                                        Text="Always"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Every LOG ON creates a new file instead of appending to an earlier run." />
@@ -2335,7 +2336,7 @@
                                                            VerticalAlignment="Center"
                                                            Style="{StaticResource SettingValueTextStyle}" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi121" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to future writes." />
@@ -2358,7 +2359,7 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem Header="Settings"
+                    <TabViewItem x:Uid="StaticUi124" Header="Settings"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure serial, display, and profile options.">
                         <ScrollViewer Padding="4"
@@ -2371,7 +2372,7 @@
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Serial"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi126" Grid.Column="1"
                                                        Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
@@ -2483,7 +2484,7 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Mode"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi139" Grid.Column="1"
                                                       ItemsSource="{Binding RxDisplayModes}"
                                                       SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
                                                       ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
@@ -2491,7 +2492,7 @@
                                                       Width="96"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi140" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
@@ -2505,7 +2506,7 @@
                                                   ColumnSpacing="4"
                                                   HorizontalAlignment="Stretch"
                                                   VerticalAlignment="Center">
-                                                <TextBox x:Name="HexGroupTimeoutTextBox"
+                                                <TextBox x:Uid="StaticUi142" x:Name="HexGroupTimeoutTextBox"
                                                          Text="{Binding HexGroupTimeoutDraftText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
@@ -2513,12 +2514,12 @@
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
                                                          ToolTipService.ToolTip="The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
-                                                <TextBlock Grid.Column="1"
+                                                <TextBlock x:Uid="StaticUi143" Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
                                                            VerticalAlignment="Center"
                                                            ToolTipService.ToolTip="Milliseconds" />
-                                                <Button Grid.Column="2"
+                                                <Button x:Uid="StaticUi144" Grid.Column="2"
                                                         Content="Set"
                                                         Style="{StaticResource RuleActionButtonStyle}"
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
@@ -2529,7 +2530,7 @@
                                                            Text="{Binding HexGroupTimeoutAppliedText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="4"
+                                                <TextBlock x:Uid="StaticUi145" Grid.Column="4"
                                                            Margin="8,0,0,0"
                                                            Text="{Binding HexGroupTimeoutRecommendationText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
@@ -2540,7 +2541,7 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi146" Grid.Column="1"
                                                        Text="Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms)."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
@@ -2550,7 +2551,7 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Disconnect"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi148" Grid.Column="1"
                                                       Content="Confirm before disconnect"
                                                       IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection." />
@@ -2573,14 +2574,14 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="xterm"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi152" Grid.Column="1"
                                                       ItemsSource="{Binding XtermFontOptions}"
                                                       SelectedItem="{Binding SelectedXtermFontOption, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       MinWidth="190"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi153" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
@@ -2589,14 +2590,14 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Size (px)"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi155" Grid.Column="1"
                                                       ItemsSource="{Binding XtermFontSizeOptions}"
                                                       SelectedItem="{Binding XtermFontSize, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       Width="72"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi156" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
@@ -2619,14 +2620,14 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Line scrollback"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi160" Grid.Column="1"
                                                       ItemsSource="{Binding VisibleLogLineCapOptions}"
                                                       SelectedItem="{Binding MaxVisibleLogLines, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       Width="102"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi161" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
@@ -2635,11 +2636,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Auto-scroll"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi163" Grid.Column="1"
                                                       Content="xterm auto-scroll"
                                                       IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Applies immediately to xterm visual scrolling." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi164" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately." />
@@ -2648,11 +2649,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Timestamp"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi166" Grid.Column="1"
                                                       Content="Show timestamp in log view"
                                                       IsChecked="{Binding ShowTimestampInLogView, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi167" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to newly displayed lines." />
@@ -2661,11 +2662,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="RX/TX prefix"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi169" Grid.Column="1"
                                                       Content="Show RX &lt; and TX &gt;"
                                                       IsChecked="{Binding ShowRxTxDirectionPrefixInLogView, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi170" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
@@ -2674,14 +2675,14 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Time format"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi172" Grid.Column="1"
                                                       ItemsSource="{Binding TimestampDisplayFormatOptions}"
                                                       SelectedItem="{Binding SelectedTimestampDisplayFormatOption, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       MinWidth="186"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi173" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
@@ -2690,11 +2691,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Fun"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi175" Grid.Column="1"
                                                       Content="Cute background mode"
                                                       IsChecked="{Binding CuteBackgroundMode, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi176" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Visual only." />
@@ -2703,22 +2704,22 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Custom bg"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBox Grid.Column="1"
+                                            <TextBox x:Uid="StaticUi178" Grid.Column="1"
                                                      Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                                      Style="{StaticResource CompactTextBoxStyle}"
                                                      TextWrapping="NoWrap"
                                                      ToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default." />
-                                            <Button Grid.Column="2"
+                                            <Button x:Uid="StaticUi179" Grid.Column="2"
                                                     Content="..."
                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                     Click="BrowseCuteBackgroundImage_Click"
                                                     ToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
-                                            <Button Grid.Column="3"
+                                            <Button x:Uid="StaticUi180" Grid.Column="3"
                                                     Content="Def"
                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                     Command="{Binding ResetCuteBackgroundCommand}"
                                                     ToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background." />
-                                            <TextBlock Grid.Column="4"
+                                            <TextBlock x:Uid="StaticUi181" Grid.Column="4"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
@@ -2727,13 +2728,13 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Bg opacity"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi183" Grid.Column="1"
                                                       ItemsSource="{Binding CuteBackgroundOpacityOptions}"
                                                       SelectedItem="{Binding CuteBackgroundOpacityText, Mode=TwoWay}"
                                                       Width="72"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="Higher values make the background more visible but may reduce readability." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi184" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
@@ -2747,7 +2748,7 @@
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Profile"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi186" Grid.Column="1"
                                                        Text="Load/reset disabled while connected"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right" />
@@ -2769,7 +2770,7 @@
                                                         Command="{Binding ResetProfileCommand}"
                                                         Style="{StaticResource RuleActionButtonStyle}" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi191" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Profile actions run immediately when enabled." />
@@ -2849,7 +2850,7 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem x:Name="TestTabViewItem"
+                    <TabViewItem x:Uid="StaticUi204" x:Name="TestTabViewItem"
                                  Header="Test"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
@@ -2863,7 +2864,7 @@
                                         <Grid ColumnDefinitions="Auto,*">
                                             <TextBlock Text="Mock/Test"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock x:Uid="StaticUi206" Grid.Column="1"
                                                        Text="Mock generator"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
@@ -2873,11 +2874,11 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Test port"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox Grid.Column="1"
+                                            <CheckBox x:Uid="StaticUi208" Grid.Column="1"
                                                       Content="Show MOCK test port"
                                                       IsChecked="{Binding ShowMockTestPort, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Show the built-in MOCK port for testing without hardware." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi209" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Updates the port selector immediately. An active MOCK connection stays connected until disconnect." />
@@ -2886,13 +2887,13 @@
                                               ColumnSpacing="4">
                                             <TextBlock Text="Pattern"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox Grid.Column="1"
+                                            <ComboBox x:Uid="StaticUi211" Grid.Column="1"
                                                       ItemsSource="{Binding MockGeneratorPatternOptions}"
                                                       SelectedItem="{Binding SelectedMockGeneratorPatternOption, Mode=TwoWay}"
                                                       Width="170"
                                                       HorizontalAlignment="Left"
                                                       ToolTipService.ToolTip="Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms." />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi212" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to the MOCK generator." />
@@ -2906,7 +2907,7 @@
                                                       SelectedItem="{Binding SelectedMockStressLinesPerSecond, Mode=TwoWay}"
                                                       Width="82"
                                                       HorizontalAlignment="Left" />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi214" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately." />
@@ -2920,7 +2921,7 @@
                                                       SelectedItem="{Binding SelectedMockStressBurstSize, Mode=TwoWay}"
                                                       Width="72"
                                                       HorizontalAlignment="Left" />
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi216" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately." />
@@ -2937,7 +2938,7 @@
                                                 <CheckBox Content="Bad bytes"
                                                           IsChecked="{Binding IsMockStressInvalidByteInjectionEnabled, Mode=TwoWay}" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi220" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately." />
@@ -2958,12 +2959,12 @@
                                                 <Button Content="Reset"
                                                         Command="{Binding ResetMockStressCountersCommand}"
                                                         Style="{StaticResource RuleActionButtonStyle}" />
-                                                <Button Content="CRLF"
+                                                <Button x:Uid="StaticUi225" Content="CRLF"
                                                         Command="{Binding SendMockCrlfCommand}"
                                                         Style="{StaticResource RuleActionButtonStyle}"
                                                         ToolTipService.ToolTip="MOCK only: send CRLF to finish the current no-newline partial RX line." />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi226" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Runs immediately." />
@@ -2985,7 +2986,7 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem Header="Diag"
+                    <TabViewItem x:Uid="StaticUi229" Header="Diag"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Inspect runtime counters, queue state, drops, and recent errors.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -2995,7 +2996,7 @@
                                       ColumnSpacing="4">
                                     <TextBlock Text="Diagnostics"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button Grid.Column="1"
+                                    <Button x:Uid="StaticUi231" Grid.Column="1"
                                             Content="Copy"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding CopyDiagnosticsCommand}"
@@ -3030,7 +3031,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="Help"
+                    <TabViewItem x:Uid="StaticUi232" Header="Help"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Read quick instructions for events, sequences, the COM bridge, and shortcuts.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
@@ -3040,7 +3041,7 @@
                                       ColumnSpacing="4">
                                     <TextBlock Text="Help"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button Grid.Column="1"
+                                    <Button x:Uid="StaticUi234" Grid.Column="1"
                                             Content="Copy"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding CopyHelpCommand}"
@@ -3108,7 +3109,7 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem Header="About"
+                    <TabViewItem x:Uid="StaticUi236" Header="About"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="View the app version, author, and GitHub repository.">
                         <ScrollViewer Padding="4"
@@ -3129,7 +3130,7 @@
                                             <TextBlock Text="Serial Monitor"
                                                        FontSize="20"
                                                        FontWeight="SemiBold" />
-                                            <TextBlock Text="Windows serial monitor for embedded-device debugging"
+                                            <TextBlock x:Uid="StaticUi238" Text="Windows serial monitor for embedded-device debugging"
                                                        TextWrapping="WrapWholeWords"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Text="{Binding AboutVersionText}"
@@ -3145,7 +3146,7 @@
                                           RowDefinitions="Auto,Auto"
                                           ColumnSpacing="8"
                                           RowSpacing="4">
-                                        <TextBlock Text="제작자"
+                                        <TextBlock Text="Author"
                                                    FontWeight="SemiBold" />
                                         <TextBlock Grid.Column="1"
                                                    Text="박재환" />
@@ -3182,7 +3183,7 @@
                         VerticalAlignment="Center" />
             </Grid>
 
-            <infra:ResizeHandleControl x:Name="InspectorResizeHandle"
+            <infra:ResizeHandleControl x:Uid="StaticUi241" x:Name="InspectorResizeHandle"
                                        Grid.Row="1"
                                        Grid.Column="0"
                                        Height="20"
@@ -3211,7 +3212,7 @@
         <Border Grid.Row="2"
                 Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-            <Button x:Name="TxToolbarScrollBackButton"
+            <Button x:Uid="StaticUi242" x:Name="TxToolbarScrollBackButton"
                     Grid.Column="0"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
@@ -3257,7 +3258,7 @@
                 <Button Grid.Column="4"
                         Content="Send"
                         Command="{Binding SendCommand}" />
-                <Button Grid.Column="5"
+                <Button x:Uid="StaticUi247" Grid.Column="5"
                         Content="Hist"
                         ToolTipService.ToolTip="Show recently sent TX commands">
                     <Button.Flyout>
@@ -3271,19 +3272,19 @@
                                       ColumnSpacing="4">
                                     <TextBlock Text="History"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button Grid.Column="1"
+                                    <Button x:Uid="StaticUi249" Grid.Column="1"
                                             Content="Send"
                                             IsEnabled="{Binding CanSendManualTx}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="SendSelectedHistoryCommand_Click"
                                             ToolTipService.ToolTip="Send selected history command" />
-                                    <Button Grid.Column="2"
+                                    <Button x:Uid="StaticUi250" Grid.Column="2"
                                             Content="Clear"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="ClearCommandHistory_Click"
                                             ToolTipService.ToolTip="Clear command history" />
                                 </Grid>
-                                <TextBlock x:Name="CommandHistoryEmptyText"
+                                <TextBlock x:Uid="StaticUi251" x:Name="CommandHistoryEmptyText"
                                            Text="No command history."
                                            Style="{StaticResource CompactCellTextStyle}" />
                                 <ListView x:Name="CommandHistoryListView"
@@ -3324,7 +3325,7 @@
                 </Button>
             </Grid>
             </ScrollViewer>
-            <Button x:Name="TxToolbarScrollForwardButton"
+            <Button x:Uid="StaticUi252" x:Name="TxToolbarScrollForwardButton"
                     Grid.Column="2"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
@@ -3351,17 +3352,17 @@
                           DisplayMemberPath="Name"
                           MinWidth="100"
                           HorizontalAlignment="Stretch" />
-                <Button Grid.Column="2"
+                <Button x:Uid="StaticUi254" Grid.Column="2"
                         Content="+"
                         Style="{StaticResource ToolbarIconButtonStyle}"
                         Click="AddSavedCommand_Click"
                         ToolTipService.ToolTip="Add saved command" />
-                <Button Grid.Column="3"
+                <Button x:Uid="StaticUi255" Grid.Column="3"
                         Content="Edit"
                         IsEnabled="{Binding HasSelectedSavedCommand}"
                         Click="EditSavedCommand_Click"
                         ToolTipService.ToolTip="Edit selected saved command" />
-                <Button Grid.Column="4"
+                <Button x:Uid="StaticUi256" Grid.Column="4"
                         Content="Del"
                         IsEnabled="{Binding HasSelectedSavedCommand}"
                         Click="DeleteSavedCommand_Click"
@@ -3374,7 +3375,7 @@
 
                 <Grid Grid.Column="6"
                       ColumnDefinitions="Auto,*,Auto">
-                    <Button x:Name="QuickToolbarScrollBackButton"
+                    <Button x:Uid="StaticUi257" x:Name="QuickToolbarScrollBackButton"
                             Grid.Column="0"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
@@ -3418,7 +3419,7 @@
                             </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
-                    <Button x:Name="QuickToolbarScrollForwardButton"
+                    <Button x:Uid="StaticUi259" x:Name="QuickToolbarScrollForwardButton"
                             Grid.Column="2"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
@@ -3438,7 +3439,7 @@
                 Padding="2">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Disabled">
-                <TextBlock Text="{Binding FooterStatusText}"
+                <TextBlock x:Uid="StaticUi260" Text="{Binding FooterStatusText}"
                            FontSize="11"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"

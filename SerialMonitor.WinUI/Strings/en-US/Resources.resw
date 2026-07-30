@@ -1,0 +1,767 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="StaticUi001.Text" xml:space="preserve">
+    <value>Restoring log view...</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi002.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll connection controls left</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi005.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll connection controls right</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi006.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll log controls left</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi007.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Search visible log (Enter refreshes and moves next, Up/Down history)</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi008.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Previous result from the last search (Shift+F3)</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi009.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Next result from the last search (F3)</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi012.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi014.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Filter the visible xterm log using rules marked as Filter. Log files still keep all lines.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi015.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi016.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi017.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Quick marker inserts current MARK TIME</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll log controls right</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi019.Text" xml:space="preserve">
+    <value>Preparing log view</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi020.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Review log events detected by enabled rules.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi022.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Auto-scroll events</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi023.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Select latest event</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi024.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Inspect the log lines before and after the selected event.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi026.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy event context</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi027.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Review matches from the retained in-memory log. Double-click a result to jump to it.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi029.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Refresh search results</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi030.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show the previous 1,000 matching lines (older)</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi031.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi032.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Create and run ordered command sequences with per-step delays.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi034.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Repeat the selected sequence 1 to 99 times</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi036.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Add sequence</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi037.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Edit sequence</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi038.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete sequence</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi039.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Run sequence</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi040.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Stop sequence</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi041.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Selected sequence step count</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi042.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Add step</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi043.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Edit step</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi044.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete step</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi045.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Move step up</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi046.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Move step down</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi048.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi051.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Edit step</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi052.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete step</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi053.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Create matching rules for events, highlights, filters, and optional notifications.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi055.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rule changes always affect only new incoming logs and do not reprocess existing visible logs.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi056.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Add log rule</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi068.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Event: add matching lines to Events</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi069.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Highlight: color matching lines in the log view</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi070.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Filter: make this rule available in the Filter dropdown</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi071.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi072.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Case-sensitive Terminal matching. Ignored for HEX rules.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi073.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Color used when Highlight is enabled.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi074.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Edit log rule</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi075.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete log rule</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi076.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Forward raw bytes bidirectionally between the connected device and a virtual COM port.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi079.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Virtual app-side COM port opened by Serial Monitor</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi080.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Refresh available virtual COM port candidates.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi083.Text" xml:space="preserve">
+    <value>Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi092.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>UI-only drops do not affect device ↔ virtual COM transport.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi093.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi094.Text" xml:space="preserve">
+    <value>Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi095.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Configure file logging, log paths, file names, and rotation.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi097.Text" xml:space="preserve">
+    <value>Actions and current paths</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi099.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open the active or most recently completed log file</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi100.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open the configured Save dir folder (available while LOG is OFF or ON)</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi101.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy the active or most recently completed log file path</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi102.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open/copy actions run immediately and do not stop logging.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi104.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately. OFF keeps the terminal and event detection live without saving serial logs.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi106.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi107.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately, including during an active view pause.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi109.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Browse log folder</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi110.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies after reconnect.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi112.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi114.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>The log file name can be changed only while LOG is OFF.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi116.Text" xml:space="preserve">
+    <value>New file per LOG ON; no date-based split</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi116.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until LOG OFF unless optional size rotation is enabled.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi117.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Every LOG ON creates a new file instead of appending to an earlier run.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi121.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to future writes.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi124.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Configure serial, display, and profile options.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi126.Text" xml:space="preserve">
+    <value>Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi126.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately without disconnecting the active port.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi139.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi140.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to RX display and the next TX send.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi142.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi143.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Milliseconds</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi144.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save and apply the entered timeout immediately without disconnecting the active port.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi145.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi146.Text" xml:space="preserve">
+    <value>Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms).</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi148.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Ask before manual disconnecting an active serial connection.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi152.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi153.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately and is saved with the profile.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi155.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi156.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately and is saved with the profile.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi160.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi161.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi163.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to xterm visual scrolling.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi164.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi166.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show or hide timestamps in the main xterm display. Log files still keep timestamps.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi167.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to newly displayed lines.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi169.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi170.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately and re-renders retained visible logs.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi172.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi173.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately and re-renders retained visible logs.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi175.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi176.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately. Visual only.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi178.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi179.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Browse for an optional custom background image (.png, .jpg, .jpeg, .webp).</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi180.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Reset bg to default. Clears the custom path and uses the bundled background.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi181.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies after the image path field loses focus or after Browse.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Higher values make the background more visible but may reduce readability.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately. Keep the value subtle for dense logs.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi186.Text" xml:space="preserve">
+    <value>Load/reset disabled while connected</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi191.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Profile actions run immediately when enabled.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi204.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Configure and run the built-in MOCK generator and stress tests.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi206.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Mock stress settings apply to the mock generator without touching real serial settings.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi208.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show the built-in MOCK port for testing without hardware.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi209.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Updates the port selector immediately. An active MOCK connection stays connected until disconnect.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi211.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi212.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately to the MOCK generator.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi214.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi216.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi220.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi225.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>MOCK only: send CRLF to finish the current no-newline partial RX line.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi226.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Runs immediately.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi229.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Inspect runtime counters, queue state, drops, and recent errors.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi231.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy diagnostics</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi232.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Read quick instructions for events, sequences, the COM bridge, and shortcuts.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi234.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy help text</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi236.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>View the app version, author, and GitHub repository.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi238.Text" xml:space="preserve">
+    <value>Windows serial monitor for embedded-device debugging</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi241.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Resize inspector panel</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi241.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Drag to resize. Double-click to collapse or restore.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi241.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Drag to resize. Double-click to collapse or restore.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi242.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll TX controls left</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi247.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show recently sent TX commands</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi249.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Send selected history command</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi250.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Clear command history</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi251.Text" xml:space="preserve">
+    <value>No command history.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi252.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll TX controls right</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi254.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Add saved command</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi255.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Edit selected saved command</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi256.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delete selected saved command</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi257.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll quick commands left</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi259.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Scroll quick commands right</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi260.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>DRV F/P/O/RX shows Windows driver-reported Frame, Parity, hardware Overrun, and RX-buffer warnings. Q F/E/U shows pending File, Event, and UI queues. Drop UI counts only overload losses. PS counts lines intentionally skipped by Pause View. B means bytes and l means lines.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi261.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Currently applied HEX idle-grouping timeout. Change it in Settings &gt; Serial.</value>
+    <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="LineEndingHelpText" xml:space="preserve">
+    <value>Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.</value>
+    <comment>Explanation shown in command editor dialogs.</comment>
+  </data>
+  <data name="InspectorRestoreToolTip" xml:space="preserve">
+    <value>Drag upward or double-click to restore the inspector.</value>
+    <comment>Inspector resize handle tooltip.</comment>
+  </data>
+  <data name="InspectorResizeToolTip" xml:space="preserve">
+    <value>Drag to resize the inspector. Double-click to collapse it.</value>
+    <comment>Inspector resize handle tooltip.</comment>
+  </data>
+  <data name="DisconnectDontAskAgainToolTip" xml:space="preserve">
+    <value>Turn off manual disconnect confirmation.</value>
+    <comment>Disconnect confirmation tooltip.</comment>
+  </data>
+  <data name="DisconnectConfirmationMessage" xml:space="preserve">
+    <value>The serial connection is currently active. Disconnect now?</value>
+    <comment>Disconnect confirmation message.</comment>
+  </data>
+  <data name="DisconnectConfirmationTitle" xml:space="preserve">
+    <value>Disconnect serial port?</value>
+    <comment>Disconnect confirmation title.</comment>
+  </data>
+  <data name="ConnectFailureTitle" xml:space="preserve">
+    <value>Failed to connect</value>
+    <comment>Connection failure dialog title.</comment>
+  </data>
+  <data name="RuleEventToolTip" xml:space="preserve">
+    <value>Event: add matching lines to Events.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleHighlightToolTip" xml:space="preserve">
+    <value>Highlight: color matching lines in the log view.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleFilterToolTip" xml:space="preserve">
+    <value>Filter: make this rule available in the Filter dropdown.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleModeToolTip" xml:space="preserve">
+    <value>The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleCaseToolTip" xml:space="preserve">
+    <value>Case-sensitive Terminal matching. Ignored when Mode is HEX.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleTrayNotificationToolTip" xml:space="preserve">
+    <value>Windows tray balloon. OFF by default. Events are grouped per rule.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleSoundNotificationToolTip" xml:space="preserve">
+    <value>Play one Windows alert sound per grouped notification. OFF by default.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RulePopupNotificationToolTip" xml:space="preserve">
+    <value>Show a non-blocking in-app popup for 8 seconds. OFF by default.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleNotificationCooldownToolTip" xml:space="preserve">
+    <value>Seconds between notifications for this rule (5-3600). Default: 30 seconds.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleTriggerSequenceToolTip" xml:space="preserve">
+    <value>Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="RuleViewFilterToolTip" xml:space="preserve">
+    <value>Make this rule available in the xterm visible filter selector.</value>
+    <comment>Rule editor tooltip.</comment>
+  </data>
+  <data name="ValidationKeywordRequired" xml:space="preserve">
+    <value>Keyword is required.</value>
+    <comment>Rule editor validation message.</comment>
+  </data>
+  <data name="ValidationNotificationCooldownRange" xml:space="preserve">
+    <value>Notify cooldown must be between 5 and 3600 seconds.</value>
+    <comment>Rule editor validation message.</comment>
+  </data>
+  <data name="ValidationNameRequired" xml:space="preserve">
+    <value>Name is required.</value>
+    <comment>Editor validation message.</comment>
+  </data>
+  <data name="ValidationCommandRequired" xml:space="preserve">
+    <value>Command text is required.</value>
+    <comment>Editor validation message.</comment>
+  </data>
+  <data name="ValidationDelayRange" xml:space="preserve">
+    <value>Delay must be between 0 and 600,000 ms.</value>
+    <comment>Sequence step validation message.</comment>
+  </data>
+  <data name="DeleteLogRuleConfirmation" xml:space="preserve">
+    <value>Delete log rule '{0}'?</value>
+    <comment>Log rule deletion confirmation format.</comment>
+  </data>
+  <data name="DeleteSavedCommandConfirmation" xml:space="preserve">
+    <value>Delete saved command '{0}'?</value>
+    <comment>Saved command deletion confirmation format.</comment>
+  </data>
+  <data name="DeleteSequenceConfirmation" xml:space="preserve">
+    <value>Delete sequence '{0}'?</value>
+    <comment>Sequence deletion confirmation format.</comment>
+  </data>
+  <data name="DeleteSequenceStepConfirmation" xml:space="preserve">
+    <value>Delete sequence step '{0}'?</value>
+    <comment>Sequence step deletion confirmation format.</comment>
+  </data>
+  <data name="LogRestoreTitle" xml:space="preserve">
+    <value>Restoring log view...</value>
+    <comment>Log restore overlay title.</comment>
+  </data>
+  <data name="LogRedrawTitle" xml:space="preserve">
+    <value>Redrawing log view...</value>
+    <comment>Log redraw overlay title.</comment>
+  </data>
+  <data name="LogRestorePreparing" xml:space="preserve">
+    <value>Preparing log view</value>
+    <comment>Log restore overlay detail.</comment>
+  </data>
+  <data name="LogRestoreLineCountFormat" xml:space="preserve">
+    <value>{0:N0} lines</value>
+    <comment>Log restore overlay line-count format.</comment>
+  </data>
+  <data name="HexFtdiHelpNotice" xml:space="preserve">
+    <value>The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. If packets are split, consider setting the FTDI Latency Timer to 2 ms.</value>
+    <comment>Help tab HEX timeout notice.</comment>
+  </data>
+  <data name="HelpQuickStartTitle" xml:space="preserve">
+    <value>Quick Start</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpQuickStartBody" xml:space="preserve">
+    <value>1. Select Port and Baud, then press Connect.&#x0A;2. For normal text commands, keep Mode set to Terminal.&#x0A;3. For binary packets, switch Mode to HEX and enter bytes such as A0 A6 E5.&#x0A;4. If file logging is needed, verify that Log is ON.&#x0A;5. Press Save Profile to keep the settings.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpCreateEventsTitle" xml:space="preserve">
+    <value>Create Events</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpCreateEventsBody" xml:space="preserve">
+    <value>1. Press + on the Rules tab.&#x0A;2. Enter Name and Keyword.&#x0A;3. Enable Enabled and Event.&#x0A;4. Select Mode = Terminal for Terminal rules or Mode = HEX for HEX rules.&#x0A;5. Direction = RxOnly is recommended for typical device events.&#x0A;6. Press Save and verify the rule with newly received logs.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpReviewEventsTitle" xml:space="preserve">
+    <value>Review Events</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpReviewEventsBody" xml:space="preserve">
+    <value>Review the event time and message in Events.&#x0A;Double-click an event to inspect the surrounding logs in Context.&#x0A;Enable only the Tray, Sound, and Popup notifications you need in the rule editor.&#x0A;All notifications default to OFF, and the default cooldown is 30 seconds.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpCommandSequencesTitle" xml:space="preserve">
+    <value>Command Sequences</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpCommandSequencesBody" xml:space="preserve">
+    <value>1. Press the upper + on the Sequences tab to create a sequence.&#x0A;2. Press the lower + to add command steps.&#x0A;3. Set Command, Line ending, and Delay after ms.&#x0A;4. Use Up and Dn to change the order.&#x0A;5. After connecting the device, press Run to start or Stop to cancel.&#x0A;&#x0A;A sequence uses the current Mode (Terminal/HEX) for every step.&#x0A;Per-step modes, device-response checks, and conditional branches are not supported.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpComBridgeTitle" xml:space="preserve">
+    <value>COM Bridge</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpComBridgeBody" xml:space="preserve">
+    <value>Connect to the physical device first.&#x0A;On the Bridge tab, select the app-side port from a com0com pair and press Start bridge.&#x0A;The external program must open the opposite port in the virtual pair.&#x0A;BRIDGE ON means raw bytes are being forwarded in both directions.&#x0A;Logs sent from the external program to the device use the current Mode.&#x0A;Terminal uses the selected encoding and Terminal RxOnly/Both rules.&#x0A;HEX displays raw bytes and uses HEX RxOnly/Both rules.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpModeAndLogsTitle" xml:space="preserve">
+    <value>Mode and Logs</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpModeAndLogsBody" xml:space="preserve">
+    <value>The main Mode setting controls both RX display and TX input interpretation.&#x0A;Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.&#x0A;HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.&#x0A;Mode and HEX timeout apply immediately without disconnecting.&#x0A;HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.&#x0A;Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.&#x0A;RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.&#x0A;Clear affects only the screen and does not delete saved files.&#x0A;If Drop or Error increases in Health, inspect the cause on the Diag tab.</value>
+    <comment>Help section body.</comment>
+  </data>
+  <data name="HelpShortcutsTitle" xml:space="preserve">
+    <value>Shortcuts</value>
+    <comment>Help section title.</comment>
+  </data>
+  <data name="HelpShortcutsBody" xml:space="preserve">
+    <value>Ctrl+F  Focus search&#x0A;Enter / Shift+Enter  Refresh search and select next / previous&#x0A;F3 / Shift+F3  Move to next / previous result in the last search&#x0A;Ctrl+C  Copy selected log text&#x0A;Ctrl+M  Insert MARK&#x0A;↑ / ↓ in TX input  Move through command history</value>
+    <comment>Help section body.</comment>
+  </data>
+</root>

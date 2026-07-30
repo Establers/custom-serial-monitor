@@ -25,7 +25,9 @@ namespace SerialMonitor.WinUI;
 
 public sealed partial class MainWindow : Window
 {
-    private const string LineEndingHelpText = @"Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.";
+    private static string LineEndingHelpText => UiText.Get(
+        "LineEndingHelpText",
+        @"Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.");
     private const int LogRestoreOverlayLineThreshold = 1_000;
     private const int XtermFullRenderTransportMaxChars = 64 * 1024;
     private const int XtermLiveAppendMaxLines = 2_000;
@@ -925,8 +927,12 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(
             InspectorResizeHandle,
             _isInspectorCollapsed
-                ? "Drag upward or double-click to restore the inspector."
-                : "Drag to resize the inspector. Double-click to collapse it.");
+                ? UiText.Get(
+                    "InspectorRestoreToolTip",
+                    "Drag upward or double-click to restore the inspector.")
+                : UiText.Get(
+                    "InspectorResizeToolTip",
+                    "Drag to resize the inspector. Double-click to collapse it."));
 
         if (_isInspectorCollapsed)
         {
@@ -980,12 +986,18 @@ public sealed partial class MainWindow : Window
             Content = "Don't ask again",
             IsChecked = false
         };
-        ToolTipService.SetToolTip(dontAskAgainBox, "Turn off manual disconnect confirmation.");
+        ToolTipService.SetToolTip(
+            dontAskAgainBox,
+            UiText.Get(
+                "DisconnectDontAskAgainToolTip",
+                "Turn off manual disconnect confirmation."));
 
         var panel = CreateDialogPanel();
         panel.Children.Add(new TextBlock
         {
-            Text = "The serial connection is currently active. Disconnect now?",
+            Text = UiText.Get(
+                "DisconnectConfirmationMessage",
+                "The serial connection is currently active. Disconnect now?"),
             TextWrapping = TextWrapping.WrapWholeWords
         });
         panel.Children.Add(dontAskAgainBox);
@@ -993,7 +1005,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
-            Title = "Disconnect serial port?",
+            Title = UiText.Get("DisconnectConfirmationTitle", "Disconnect serial port?"),
             Content = panel,
             PrimaryButtonText = "Disconnect",
             CloseButtonText = "Cancel",
@@ -1033,7 +1045,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
-            Title = "Failed to connect",
+            Title = UiText.Get("ConnectFailureTitle", "Failed to connect"),
             Content = new TextBlock
             {
                 Text = request.Message,
@@ -1676,11 +1688,11 @@ public sealed partial class MainWindow : Window
         }
 
         LogRestoreOverlayTitle.Text = string.IsNullOrWhiteSpace(title)
-            ? "로그 화면 복원 중..."
+            ? UiText.Get("LogRestoreTitle", "Restoring log view...")
             : title.Trim();
         LogRestoreOverlayDetail.Text = lineCount > 0
-            ? $"{lineCount:N0} lines"
-            : "Preparing log view";
+            ? UiText.Format("LogRestoreLineCountFormat", "{0:N0} lines", lineCount)
+            : UiText.Get("LogRestorePreparing", "Preparing log view");
         LogRestoreOverlay.Visibility = Visibility.Visible;
 
         if (_isXtermReady)
@@ -1766,7 +1778,9 @@ public sealed partial class MainWindow : Window
         var showRestoreOverlay = ShouldShowLogRestoreOverlay(isFullRender: false, drained.LineCount);
         if (showRestoreOverlay)
         {
-            await ShowLogRestoreOverlayAsync("로그 화면 복원 중...", drained.LineCount);
+            await ShowLogRestoreOverlayAsync(
+                UiText.Get("LogRestoreTitle", "Restoring log view..."),
+                drained.LineCount);
         }
 
         _viewModel.RecordRestoreFullRerenderSuppressed(
@@ -2730,7 +2744,9 @@ public sealed partial class MainWindow : Window
         if (showRestoreOverlay)
         {
             await ShowLogRestoreOverlayAsync(
-                isRestoreRender ? "로그 화면 복원 중..." : "로그 화면 다시 그리는 중...",
+                isRestoreRender
+                    ? UiText.Get("LogRestoreTitle", "Restoring log view...")
+                    : UiText.Get("LogRedrawTitle", "Redrawing log view..."),
                 overlayLineCount);
         }
 
@@ -4299,7 +4315,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (await ConfirmDeleteAsync("Delete log rule", $"Delete log rule '{_viewModel.SelectedLogRule.Name}'?"))
+        if (await ConfirmDeleteAsync(
+                "Delete log rule",
+                UiText.Format(
+                    "DeleteLogRuleConfirmation",
+                    "Delete log rule '{0}'?",
+                    _viewModel.SelectedLogRule.Name)))
         {
             _viewModel.DeleteSelectedLogRule();
         }
@@ -4484,7 +4505,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (await ConfirmDeleteAsync("Delete saved command", $"Delete saved command '{_viewModel.SelectedSavedCommand.Name}'?"))
+        if (await ConfirmDeleteAsync(
+                "Delete saved command",
+                UiText.Format(
+                    "DeleteSavedCommandConfirmation",
+                    "Delete saved command '{0}'?",
+                    _viewModel.SelectedSavedCommand.Name)))
         {
             _viewModel.DeleteSelectedSavedCommand();
         }
@@ -4559,7 +4585,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (await ConfirmDeleteAsync("Delete sequence", $"Delete sequence '{_viewModel.SelectedCommandSequence.Name}'?"))
+        if (await ConfirmDeleteAsync(
+                "Delete sequence",
+                UiText.Format(
+                    "DeleteSequenceConfirmation",
+                    "Delete sequence '{0}'?",
+                    _viewModel.SelectedCommandSequence.Name)))
         {
             _viewModel.DeleteSelectedCommandSequence();
         }
@@ -4608,7 +4639,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (await ConfirmDeleteAsync("Delete sequence step", $"Delete sequence step '{_viewModel.SelectedCommandSequenceStep.DisplayName}'?"))
+        if (await ConfirmDeleteAsync(
+                "Delete sequence step",
+                UiText.Format(
+                    "DeleteSequenceStepConfirmation",
+                    "Delete sequence step '{0}'?",
+                    _viewModel.SelectedCommandSequenceStep.DisplayName)))
         {
             _viewModel.DeleteSelectedCommandSequenceStep();
         }
@@ -4682,16 +4718,36 @@ public sealed partial class MainWindow : Window
         directionBox.SelectionChanged += (_, _) => UpdateTriggerSequenceAvailability();
         UpdateTriggerSequenceAvailability();
 
-        ToolTipService.SetToolTip(eventBox, "Event: add matching lines to Events.");
-        ToolTipService.SetToolTip(highlightBox, "Highlight: color matching lines in the log view.");
-        ToolTipService.SetToolTip(filterBox, "Filter: make this rule available in the Filter dropdown.");
-        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
-        ToolTipService.SetToolTip(trayNotificationBox, "Windows tray balloon. OFF by default. Events are grouped per rule.");
-        ToolTipService.SetToolTip(soundNotificationBox, "Play one Windows alert sound per grouped notification. OFF by default.");
-        ToolTipService.SetToolTip(popupNotificationBox, "Show a non-blocking in-app popup for 8 seconds. OFF by default.");
-        ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
-        ToolTipService.SetToolTip(triggerSequenceBox, "Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running.");
+        ToolTipService.SetToolTip(eventBox, UiText.Get(
+            "RuleEventToolTip",
+            "Event: add matching lines to Events."));
+        ToolTipService.SetToolTip(highlightBox, UiText.Get(
+            "RuleHighlightToolTip",
+            "Highlight: color matching lines in the log view."));
+        ToolTipService.SetToolTip(filterBox, UiText.Get(
+            "RuleFilterToolTip",
+            "Filter: make this rule available in the Filter dropdown."));
+        ToolTipService.SetToolTip(modeBox, UiText.Get(
+            "RuleModeToolTip",
+            "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
+        ToolTipService.SetToolTip(caseBox, UiText.Get(
+            "RuleCaseToolTip",
+            "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
+        ToolTipService.SetToolTip(trayNotificationBox, UiText.Get(
+            "RuleTrayNotificationToolTip",
+            "Windows tray balloon. OFF by default. Events are grouped per rule."));
+        ToolTipService.SetToolTip(soundNotificationBox, UiText.Get(
+            "RuleSoundNotificationToolTip",
+            "Play one Windows alert sound per grouped notification. OFF by default."));
+        ToolTipService.SetToolTip(popupNotificationBox, UiText.Get(
+            "RulePopupNotificationToolTip",
+            "Show a non-blocking in-app popup for 8 seconds. OFF by default."));
+        ToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
+            "RuleNotificationCooldownToolTip",
+            "Seconds between notifications for this rule (5-3600). Default: 30 seconds."));
+        ToolTipService.SetToolTip(triggerSequenceBox, UiText.Get(
+            "RuleTriggerSequenceToolTip",
+            "Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running."));
 
         foreach (var input in new FrameworkElement[]
                  {
@@ -4756,7 +4812,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(keywordBox.Text))
             {
-                errorText.Text = "Keyword is required.";
+                errorText.Text = UiText.Get("ValidationKeywordRequired", "Keyword is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -4765,7 +4821,9 @@ public sealed partial class MainWindow : Window
             if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
                 cooldown is < 5 or > 3_600)
             {
-                errorText.Text = "Notify cooldown must be between 5 and 3600 seconds.";
+                errorText.Text = UiText.Get(
+                    "ValidationNotificationCooldownRange",
+                    "Notify cooldown must be between 5 and 3600 seconds.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -4824,9 +4882,15 @@ public sealed partial class MainWindow : Window
             Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
             "30");
         var errorText = CreateDialogErrorText();
-        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
-        ToolTipService.SetToolTip(notificationCooldownBox, "Seconds between notifications for this rule (5-3600). Default: 30 seconds.");
+        ToolTipService.SetToolTip(modeBox, UiText.Get(
+            "RuleModeToolTip",
+            "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
+        ToolTipService.SetToolTip(caseBox, UiText.Get(
+            "RuleCaseToolTip",
+            "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
+        ToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
+            "RuleNotificationCooldownToolTip",
+            "Seconds between notifications for this rule (5-3600). Default: 30 seconds."));
 
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
@@ -4842,7 +4906,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(keywordBox.Text))
             {
-                errorText.Text = "Keyword is required.";
+                errorText.Text = UiText.Get("ValidationKeywordRequired", "Keyword is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -4851,7 +4915,9 @@ public sealed partial class MainWindow : Window
             if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
                 cooldown is < 5 or > 3_600)
             {
-                errorText.Text = "Notify cooldown must be between 5 and 3600 seconds.";
+                errorText.Text = UiText.Get(
+                    "ValidationNotificationCooldownRange",
+                    "Notify cooldown must be between 5 and 3600 seconds.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -4885,14 +4951,20 @@ public sealed partial class MainWindow : Window
         var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
         var filterBox = new CheckBox { Content = "View filter", IsChecked = source.UseAsViewFilter };
-        ToolTipService.SetToolTip(filterBox, "Make this rule available in the xterm visible filter selector.");
-        ToolTipService.SetToolTip(caseBox, "Case-sensitive Terminal matching. Ignored when Mode is HEX.");
+        ToolTipService.SetToolTip(filterBox, UiText.Get(
+            "RuleViewFilterToolTip",
+            "Make this rule available in the xterm visible filter selector."));
+        ToolTipService.SetToolTip(caseBox, UiText.Get(
+            "RuleCaseToolTip",
+            "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
         var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
         var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
         var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
         var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
         var modeBox = CreateLogRuleModeComboBox(source.Mode);
-        ToolTipService.SetToolTip(modeBox, "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes.");
+        ToolTipService.SetToolTip(modeBox, UiText.Get(
+            "RuleModeToolTip",
+            "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
         var directionBox = CreateEnumComboBox(source.MatchDirection);
         var errorText = CreateDialogErrorText();
         var panel = CreateDialogPanel();
@@ -4910,7 +4982,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(keywordBox.Text))
             {
-                errorText.Text = "Keyword is required.";
+                errorText.Text = UiText.Get("ValidationKeywordRequired", "Keyword is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -4976,7 +5048,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(nameBox.Text))
             {
-                errorText.Text = "Name is required.";
+                errorText.Text = UiText.Get("ValidationNameRequired", "Name is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -4984,7 +5056,7 @@ public sealed partial class MainWindow : Window
 
             if (string.IsNullOrWhiteSpace(commandBox.Text))
             {
-                errorText.Text = "Command text is required.";
+                errorText.Text = UiText.Get("ValidationCommandRequired", "Command text is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -5039,7 +5111,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(nameBox.Text))
             {
-                errorText.Text = "Name is required.";
+                errorText.Text = UiText.Get("ValidationNameRequired", "Name is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -5095,7 +5167,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(commandBox.Text))
             {
-                errorText.Text = "Command text is required.";
+                errorText.Text = UiText.Get("ValidationCommandRequired", "Command text is required.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -5104,7 +5176,9 @@ public sealed partial class MainWindow : Window
             if (!int.TryParse(delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delay) ||
                 delay is < 0 or > 600_000)
             {
-                errorText.Text = "Delay must be between 0 and 600,000 ms.";
+                errorText.Text = UiText.Get(
+                    "ValidationDelayRange",
+                    "Delay must be between 0 and 600,000 ms.");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }

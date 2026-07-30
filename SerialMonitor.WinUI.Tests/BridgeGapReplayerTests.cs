@@ -58,6 +58,67 @@ public sealed class BridgeGapReplayerTests
         Assert.Equal(new[] { 25d }, clock.DelaysMilliseconds);
     }
 
+    [Fact]
+    public async Task ApplicationIdleBoundary_PreservesReplayGapWithoutClaimingNativeBoundary()
+    {
+        var clock = new FakeBridgeClock();
+        var replayer = new BridgeGapReplayer(clock);
+        var boundary = new BridgeRxChunk(new byte[] { 1 }, 0, false, 0)
+        {
+            ReplayIdleGapMs = 40
+        };
+        await replayer.WaitUntilDueAsync(boundary, CancellationToken.None);
+        replayer.RecordWriteCompleted(boundary, clock.GetTimestamp());
+
+        var next = new BridgeRxChunk(new byte[] { 2 }, 5, false, 0);
+        var timing = await replayer.WaitUntilDueAsync(next, CancellationToken.None);
+
+        Assert.Equal(40, clock.GetTimestamp());
+        Assert.Equal(40, timing.TargetTimestamp);
+        Assert.Equal(new[] { 40d }, clock.DelaysMilliseconds);
+    }
+
+    [Fact]
+    public async Task NonIdleFlush_DoesNotInsertConfiguredGroupTimeout()
+    {
+        var clock = new FakeBridgeClock();
+        var replayer = new BridgeGapReplayer(clock);
+        var segmented = new BridgeRxChunk(new byte[] { 1 }, 0, false, 0)
+        {
+            DeviceToVirtualGroupTimeoutMs = 5_000
+        };
+        await replayer.WaitUntilDueAsync(segmented, CancellationToken.None);
+        replayer.RecordWriteCompleted(segmented, clock.GetTimestamp());
+
+        var next = new BridgeRxChunk(new byte[] { 2 }, 1, false, 0);
+        await replayer.WaitUntilDueAsync(next, CancellationToken.None);
+
+        Assert.Equal(new[] { 1d }, clock.DelaysMilliseconds);
+    }
+
+    [Fact]
+    public async Task Reset_RemovesGroupingWaitOffsetBeforeRawForwarding()
+    {
+        var clock = new FakeBridgeClock();
+        var replayer = new BridgeGapReplayer(clock);
+        clock.Advance(100);
+        var delayedFirstGroup = new BridgeRxChunk(new byte[] { 1 }, 0, false, 0)
+        {
+            DeviceToVirtualGroupTimeoutMs = 5_000
+        };
+        await replayer.WaitUntilDueAsync(delayedFirstGroup, CancellationToken.None);
+        replayer.RecordWriteCompleted(delayedFirstGroup, clock.GetTimestamp());
+
+        replayer.Reset();
+        clock.Advance(1);
+        var raw = new BridgeRxChunk(new byte[] { 2 }, 101, false, 0);
+        var timing = await replayer.WaitUntilDueAsync(raw, CancellationToken.None);
+
+        Assert.Equal(101, timing.TargetTimestamp);
+        Assert.Equal(101, clock.GetTimestamp());
+        Assert.Empty(clock.DelaysMilliseconds);
+    }
+
     private sealed class FakeBridgeClock : IBridgeClock
     {
         private long _timestamp;

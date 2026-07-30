@@ -19,7 +19,7 @@ SerialService
 
 SerialService raw RX notification
   -> non-blocking bounded SerialBridgeService queue (chunks + bytes)
-  -> timing-aware virtual writer
+  -> HEX idle-group coalescer / timing-aware virtual writer
   -> app-side virtual COM port
 
 app-side virtual COM RX
@@ -45,9 +45,12 @@ the xterm view only; persisted logs remain plain text.
 - `SerialBridgeService` owns the optional second COM port and forwards raw byte
   chunks in both directions through queues bounded by both chunk and byte count.
   Physical RX uses only a non-blocking offer; overflow faults and stops the
-  bridge without disconnecting the device. The virtual writer replays observed
-  monotonic receive gaps best-effort, while the physical writer is the sole
-  scheduler for bridge traffic and one pending manual TX.
+  bridge without disconnecting the device. In HEX mode, the virtual writer uses
+  the active HEX idle timeout to coalesce adjacent RX chunks and normally match
+  one xterm packet line with one write. A 100 ms maximum latency segments a
+  longer continuous group. Terminal mode keeps immediate raw-chunk forwarding.
+  The physical writer is the sole scheduler for bridge traffic and one pending
+  manual TX.
 - `BridgeLogProcessor` owns the optional virtual-to-device RX log representation
   for data received from the virtual port.
   Its bounded background pipeline uses a bridge-dedicated streaming decoder in
@@ -67,8 +70,14 @@ the xterm view only; persisted logs remain plain text.
   disk work.
 - Cross-component queues and channels are bounded. Non-blocking handoffs expose
   drop counters so overload is diagnosable.
-- The optional bridge is a raw-byte side path. RX encoding, line framing,
-  display mode, filtering, and highlighting never transform bridged packets.
+- The optional bridge is a byte-exact side path. RX encoding, line framing,
+  filtering, and highlighting never transform bridged bytes. HEX display mode
+  changes only device-to-virtual write grouping and latency: adjacent chunks
+  inside the active HEX idle timeout are emitted in one write. A continuous
+  group is emitted after at most 100 ms or 1 MiB so delivery latency and bridge
+  memory remain bounded. Switching between raw and grouped forwarding, or
+  changing the group timeout, resets the gap-replay epoch so coalescing latency
+  is not carried into the new mode.
 - Raw bridge priority mode exists only while a bridge is active. In normal
   operation, SerialService retains its original awaited/lossless handoff to the
   parser. While bridging, raw bytes are offered to the bridge first and the

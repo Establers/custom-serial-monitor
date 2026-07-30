@@ -64,6 +64,8 @@ public interface ISerialBridgeService : IAsyncDisposable
 
     double ManualTxIdleGuardRemainingMs { get; }
 
+    int DeviceToVirtualGroupTimeoutMs { get; }
+
     Task StartAsync(
         BridgeSettings settings,
         SerialSettings deviceSettings,
@@ -71,6 +73,8 @@ public interface ISerialBridgeService : IAsyncDisposable
         CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);
+
+    void ConfigureDeviceToVirtualGrouping(int idleTimeoutMs);
 
     bool TryEnqueueDeviceChunk(BridgeRxChunk chunk);
 

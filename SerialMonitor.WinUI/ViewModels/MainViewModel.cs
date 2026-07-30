@@ -1692,6 +1692,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings.HexGroupTimeoutMs = value;
             _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, value);
             _appliedHexGroupTimeoutMs = value;
+            ConfigureBridgeDeviceGrouping(_appliedRxDisplayMode, value);
 
             RecordSettingsChange(
                 "HEX group timeout",
@@ -1900,6 +1901,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _currentUiSettings.HexGroupTimeoutMs = defaultTimeoutMs;
         _logPipeline.ConfigureRxDisplay(_appliedRxDisplayMode, defaultTimeoutMs);
         _appliedHexGroupTimeoutMs = defaultTimeoutMs;
+        ConfigureBridgeDeviceGrouping(_appliedRxDisplayMode, defaultTimeoutMs);
         _hexGroupTimeoutDraftText = defaultTimeoutMs.ToString(CultureInfo.InvariantCulture);
         OnPropertyChanged(nameof(HexGroupTimeoutMs));
         OnPropertyChanged(nameof(HexGroupTimeoutMsText));
@@ -1918,6 +1920,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         MarkSearchResultsStale();
         _appliedRxDisplayMode = normalizedMode;
         _appliedHexGroupTimeoutMs = hexGroupTimeoutMs;
+        ConfigureBridgeDeviceGrouping(normalizedMode, hexGroupTimeoutMs);
+    }
+
+    private void ConfigureBridgeDeviceGrouping(RxDisplayMode mode, int hexGroupTimeoutMs)
+    {
+        _bridgeService.ConfigureDeviceToVirtualGrouping(
+            NormalizeRxDisplayMode(mode) == RxDisplayMode.Hex
+                ? Math.Clamp(hexGroupTimeoutMs, MinHexGroupTimeoutMs, MaxHexGroupTimeoutMs)
+                : 0);
     }
 
     internal static SerialReceiveOptions CreateLiveModeReceiveOptions(int hexGroupTimeoutMs)
@@ -3728,281 +3739,111 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         private set => SetProperty(ref _diagnosticsText, value);
     }
 
-    public string HexFtdiHelpNoticeText =>
-        "HEX TIMEOUT 기본값은 baud와 무관하게 40 ms입니다. 필요 시 수정하세요. " +
-        "패킷이 분리되는 현상이 있으면 FTDI Latency Timer 2 ms 설정을 검토하세요.";
+    public string HexFtdiHelpNoticeText => UiText.Get(
+        "HexFtdiHelpNotice",
+        "The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. " +
+        "If packets are split, consider setting the FTDI Latency Timer to 2 ms.");
 
-    public IReadOnlyList<HelpSection> HelpSections { get; } =
-    [
-        new HelpSection(
-            "빠른 시작",
-            """
-        1. Port와 Baud를 선택하고 Connect를 누릅니다.
-        2. 일반 텍스트 명령은 Mode를 Terminal로 두고 전송합니다.
-        3. 바이너리 패킷은 Mode를 HEX로 바꾸고 A0 A6 E5처럼 입력합니다.
-        4. 로그 파일 저장이 필요하면 Log ON을 확인합니다.
-        5. 설정을 유지하려면 Save Profile을 누릅니다.
-        """),
-        new HelpSection(
-            "이벤트 만들기",
-            """
-        1. Rules 탭에서 +를 누릅니다.
-        2. Name과 Keyword를 입력합니다.
-        3. Enabled와 Event를 켭니다.
-        4. 현재 Terminal 모드에서 쓸 룰은 Mode = Terminal, HEX 모드에서 쓸 룰은 Mode = HEX를 선택합니다.
-        5. 일반적인 장비 이벤트는 Direction = RxOnly를 권장합니다.
-        6. Save 후 새로 들어오는 로그에서 동작을 확인합니다.
-        """),
-        new HelpSection(
-            "이벤트 확인",
-            """
-        Events에서 발생 시간과 메시지를 확인합니다.
-        이벤트를 더블클릭하면 Context에서 전후 로그를 볼 수 있습니다.
-        Tray, Sound, Popup 알림은 규칙 편집창에서 필요한 것만 켭니다.
-        알림 기본값은 모두 OFF이며 기본 쿨다운은 30초입니다.
-        """),
-        new HelpSection(
-            "명령 시퀀스",
-            """
-        1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.
-        2. 아래쪽 +로 명령 Step을 추가합니다.
-        3. Command, Line ending, Delay after ms를 설정합니다.
-        4. Up과 Dn으로 순서를 조정합니다.
-        5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.
+    public IReadOnlyList<HelpSection> HelpSections { get; } = CreateHelpSections();
 
-        시퀀스는 실행 시 현재 Mode(Terminal/HEX)를 모든 Step에 공통 적용합니다.
-        Step별 Mode 선택, 장비 응답 판정, 조건 분기는 지원하지 않습니다.
-        """),
-        new HelpSection(
-            "COM Bridge",
-            """
-        실제 장비에 먼저 Connect합니다.
-        Bridge 탭에서 com0com 쌍 중 앱이 사용할 포트를 선택하고 Start bridge를 누릅니다.
-        외부 프로그램은 반드시 가상 포트 쌍의 반대편을 엽니다.
-        BRIDGE ON 표시가 보이면 원본 바이트가 양방향으로 전달됩니다.
-        외부 프로그램에서 장비로 보내는 로그는 현재 Mode를 따릅니다.
-        Terminal은 선택한 인코딩으로 디코딩하고 Terminal RxOnly/Both 규칙을 사용합니다.
-        HEX는 원본 바이트를 표시하고 HEX RxOnly/Both 규칙을 사용합니다.
-        """),
-        new HelpSection(
-            "Mode와 로그",
-            """
-        상단 Mode 하나가 RX 표시와 TX 입력 해석을 함께 바꿉니다.
-        Terminal은 RX를 선택한 Encoding으로 줄 단위 표시하고, TX에 선택한 line ending을 붙입니다.
-        HEX는 RX 원본 바이트를 16진수로 표시하고, TX 입력을 실제 바이트로 전송합니다. TX line ending은 붙지 않습니다.
-        Mode와 HEX timeout은 연결을 끊지 않고 즉시 적용됩니다.
-        HEX timeout은 마지막 수신 바이트 이후 한 줄로 묶어 기다리는 시간입니다. 너무 짧으면 패킷이 나뉘고 너무 길면 이웃 패킷이 합쳐질 수 있습니다.
-        Pause View는 현재 화면을 고정하고 Pause 중 수신 로그를 화면에서 생략합니다. Resume Live 이후 새 로그부터 표시됩니다.
-        Pause 중에도 RX, 파싱, 이벤트 검출은 계속되며 파일 저장 여부는 Log 탭의 View pause 옵션을 따릅니다.
-        Clear는 화면만 지우며 저장 파일은 삭제하지 않습니다.
-        Health의 Drop 또는 Error가 증가하면 Diag 탭에서 원인을 확인합니다.
-        """),
-        new HelpSection(
-            "단축키",
-            """
-        Ctrl+F  검색
-        Enter / Shift+Enter  검색 갱신 후 다음 / 이전 결과
-        F3 / Shift+F3  마지막 검색의 다음 / 이전 결과
-        Ctrl+C  선택 로그 복사
-        Ctrl+M  MARK 삽입
-        TX 입력창 ↑ / ↓  전송 기록 이동
-        """)
-    ];
+    private static IReadOnlyList<HelpSection> CreateHelpSections()
+    {
+        return
+        [
+            new HelpSection(
+                UiText.Get("HelpQuickStartTitle", "Quick Start"),
+                UiText.Get(
+                    "HelpQuickStartBody",
+                    """
+                    1. Select Port and Baud, then press Connect.
+                    2. For normal text commands, keep Mode set to Terminal.
+                    3. For binary packets, switch Mode to HEX and enter bytes such as A0 A6 E5.
+                    4. If file logging is needed, verify that Log is ON.
+                    5. Press Save Profile to keep the settings.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpCreateEventsTitle", "Create Events"),
+                UiText.Get(
+                    "HelpCreateEventsBody",
+                    """
+                    1. Press + on the Rules tab.
+                    2. Enter Name and Keyword.
+                    3. Enable Enabled and Event.
+                    4. Select Mode = Terminal for Terminal rules or Mode = HEX for HEX rules.
+                    5. Direction = RxOnly is recommended for typical device events.
+                    6. Press Save and verify the rule with newly received logs.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpReviewEventsTitle", "Review Events"),
+                UiText.Get(
+                    "HelpReviewEventsBody",
+                    """
+                    Review the event time and message in Events.
+                    Double-click an event to inspect the surrounding logs in Context.
+                    Enable only the Tray, Sound, and Popup notifications you need in the rule editor.
+                    All notifications default to OFF, and the default cooldown is 30 seconds.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpCommandSequencesTitle", "Command Sequences"),
+                UiText.Get(
+                    "HelpCommandSequencesBody",
+                    """
+                    1. Press the upper + on the Sequences tab to create a sequence.
+                    2. Press the lower + to add command steps.
+                    3. Set Command, Line ending, and Delay after ms.
+                    4. Use Up and Dn to change the order.
+                    5. After connecting the device, press Run to start or Stop to cancel.
+
+                    A sequence uses the current Mode (Terminal/HEX) for every step.
+                    Per-step modes, device-response checks, and conditional branches are not supported.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpComBridgeTitle", "COM Bridge"),
+                UiText.Get(
+                    "HelpComBridgeBody",
+                    """
+                    Connect to the physical device first.
+                    On the Bridge tab, select the app-side port from a com0com pair and press Start bridge.
+                    The external program must open the opposite port in the virtual pair.
+                    BRIDGE ON means raw bytes are being forwarded in both directions.
+                    Logs sent from the external program to the device use the current Mode.
+                    Terminal uses the selected encoding and Terminal RxOnly/Both rules.
+                    HEX displays raw bytes and uses HEX RxOnly/Both rules.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpModeAndLogsTitle", "Mode and Logs"),
+                UiText.Get(
+                    "HelpModeAndLogsBody",
+                    """
+                    The main Mode setting controls both RX display and TX input interpretation.
+                    Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.
+                    HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.
+                    Mode and HEX timeout apply immediately without disconnecting.
+                    HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.
+                    Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.
+                    RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.
+                    Clear affects only the screen and does not delete saved files.
+                    If Drop or Error increases in Health, inspect the cause on the Diag tab.
+                    """)),
+            new HelpSection(
+                UiText.Get("HelpShortcutsTitle", "Shortcuts"),
+                UiText.Get(
+                    "HelpShortcutsBody",
+                    """
+                    Ctrl+F  Focus search
+                    Enter / Shift+Enter  Refresh search and select next / previous
+                    F3 / Shift+F3  Move to next / previous result in the last search
+                    Ctrl+C  Copy selected log text
+                    Ctrl+M  Insert MARK
+                    ↑ / ↓ in TX input  Move through command history
+                    """))
+        ];
+    }
 
     public string HelpGuideText => string.Join(
         $"{Environment.NewLine}{Environment.NewLine}",
         HelpSections.Select(section =>
             $"{section.Title}{Environment.NewLine}{Environment.NewLine}{section.Body}"));
-
-    private string LegacyHelpGuideText => """
-        빠른 시작
-
-        * Port와 Baud를 선택한 뒤 Connect를 누릅니다.
-        * TX 입력창에 명령어를 입력하고 Send를 누르면 전송됩니다.
-        * 일반 RTOS 쉘 명령은 TX Mode = Terminal, RX View = Terminal을 사용합니다.
-        * raw 패킷을 보고 보내려면 RX View = HEX, TX Mode = HEX를 사용합니다.
-        * 설정을 바꾼 뒤 필요하면 Profile을 저장합니다.
-
-        주요 단축키
-
-        * Ctrl+F: 검색창으로 이동
-        * Enter: 현재 로그를 새로 검색하고 다음 결과 선택
-        * Shift+Enter: 현재 로그를 새로 검색하고 이전 결과 선택
-        * F3: 마지막 검색 스냅샷의 다음 결과
-        * Shift+F3: 마지막 검색 스냅샷의 이전 결과
-        * Esc: 검색창 포커스 해제 또는 로그창으로 복귀
-        * Ctrl+C: 로그에서 선택한 텍스트 복사
-        * Ctrl+M: 기본 MARK 삽입
-        * TX 입력창에서 ↑ / ↓: 이전/다음 전송 기록 불러오기
-
-        로그 화면
-
-        * RX는 수신 데이터, TX는 전송 데이터, MARK는 사용자가 찍은 구분선입니다.
-        * Auto Scroll ON: 새 로그가 오면 자동으로 맨 아래로 따라갑니다.
-        * Auto Scroll OFF: 과거 로그를 보는 중에 화면이 아래로 끌려가지 않습니다.
-        * Pause View: 현재 화면을 고정하고 Pause 중 수신 로그는 화면에 보관하지 않습니다. Resume Live 이후 새 로그부터 표시합니다.
-        * 수신, 파싱, 이벤트 검출은 Pause 중에도 계속되며 파일 저장은 View pause의 Keep saving file log 옵션을 따릅니다.
-        * 최소화 중에도 수신, 저장, 이벤트 감지는 계속 동작합니다.
-        * 최소화 중에는 화면 렌더링만 일시 중지될 수 있고, 복원하면 최신 화면 버퍼를 다시 그립니다.
-        * Clear는 화면만 지웁니다. 저장된 로그 파일이나 카운터는 삭제하지 않습니다.
-        * Copy since last TX: 마지막 TX 이후의 화면 로그를 복사합니다.
-        * Copy since last MARK: 마지막 MARK 이후의 화면 로그를 복사합니다.
-
-        Log Save
-
-        * Log ON: RX/TX/MARK와 이벤트 로그를 파일로 저장합니다.
-        * Log OFF: 화면 표시, 검색, 이벤트, 필터, TX는 그대로 동작하지만 새 로그를 파일로 저장하지 않습니다.
-        * Log OFF로 바꿔도 기존 로그 파일은 삭제되지 않습니다.
-        * 현재 저장 여부는 상단 Log ON/OFF와 하단 File ON/OFF에서 확인합니다.
-
-        RX View
-
-        * Terminal: 일반 쉘처럼 보여줍니다. 평소에는 이 모드를 사용합니다.
-        * HEX: 받은 raw byte를 16진수로 보여줍니다.
-        * 예: 실제 바이트 49 4E은 Terminal에서는 IN, HEX에서는 49 4E로 보입니다.
-        * 개행이 없는 연속 출력도 일정 간격으로 화면에 표시됩니다.
-        * 성능을 위해 바이트마다 갱신하지 않고 작은 덩어리로 묶어 표시합니다.
-        * TAB 바이트 09는 Terminal에서 탭 간격처럼 표시됩니다.
-        * 화면에 \t가 보이면 장치가 실제로 백슬래시와 t를 보냈을 수 있습니다.
-
-        TX Mode
-
-        * Terminal: 일반 텍스트 명령을 보냅니다. TX Ending이 적용됩니다.
-        * HEX: 입력한 16진수 바이트를 그대로 보냅니다.
-        * HEX 예시: 49 4E 0D 0A
-        * HEX 모드에서는 TX Ending이 무시됩니다. 엔터가 필요하면 0D 0A를 직접 입력합니다.
-        * Terminal 모드에서는 \t 같은 escape 문자를 해석하지 않습니다. TAB을 보내려면 HEX 모드에서 09를 입력합니다.
-
-        Search
-
-        * 검색은 현재 화면에 유지된 로그 버퍼를 대상으로 합니다.
-        * 전체 로그 파일을 검색하는 기능은 아닙니다.
-        * Enter/Shift+Enter로 검색 스냅샷을 만들고 F3/Shift+F3으로 그 결과 안에서 이동합니다.
-
-        Visible Log Max Lines
-
-        * 앱 안에서 최근 몇 줄을 검색/복사/필터용으로 유지할지 정합니다.
-        * 값이 클수록 더 오래된 로그를 앱에서 볼 수 있지만 메모리를 더 사용합니다.
-        * 장기 기록은 Log Save ON으로 파일에 저장하는 것이 좋습니다.
-
-        이벤트 규칙 만드는 방법
-
-        1. Rules 탭을 열고 상단의 + 버튼을 누릅니다.
-        2. Name에는 사람이 알아보기 쉬운 이름을 입력합니다. 예: Boot Error
-        3. Keyword에는 실제로 찾을 값을 입력합니다. 예: ERROR 또는 AA 55
-        4. Enabled와 Event를 켭니다. Event를 끄면 Events 탭에 기록되지 않습니다.
-        5. 필요하면 Highlight를 켜서 로그에 색상을 적용합니다.
-        6. 필요하면 Filter를 켜서 로그 상단 Filter 목록에서 이 규칙만 볼 수 있게 합니다.
-        7. Save를 누른 뒤 새로 수신되는 로그부터 규칙이 적용되는지 확인합니다.
-        8. 규칙을 계속 사용할 경우 Save Profile을 눌러 저장합니다.
-
-        이벤트 규칙 옵션
-
-        * Mode = Terminal: 앱이 Terminal 모드일 때만 동작하며 디코딩된 문자열에서 찾습니다. 예: ERROR, WARN, boot complete
-        * Mode = HEX: 앱이 HEX 모드일 때만 동작하며 원본 바이트에서 찾습니다. 예: AA 55 01, 49 4E
-        * Direction = RxOnly: 장비에서 받은 로그만 검사합니다. 일반적인 이벤트 규칙은 이 값을 권장합니다.
-        * Direction = TxOnly: 앱에서 보낸 TX만 검사합니다.
-        * Direction = Both: RX와 TX를 모두 검사합니다.
-        * Case sensitive: Terminal 규칙의 대소문자를 구분합니다. HEX 규칙에서는 무시됩니다.
-        * Priority: 여러 Highlight 규칙이 동시에 일치할 때 높은 값의 색상을 우선 적용합니다.
-        * Background는 필요할 때만 사용합니다. 너무 많은 배경색은 로그 가독성을 떨어뜨릴 수 있습니다.
-        * 현재 앱 모드와 Rule Mode가 다르면 Enabled 상태여도 이벤트, 하이라이트, 필터가 동작하지 않습니다.
-
-        이벤트 확인과 Context 사용
-
-        * 규칙이 일치하면 Events 탭에 시간, 규칙 이름, 방향, 원본 메시지가 추가됩니다.
-        * 이벤트를 한 번 선택하면 관련 정보가 갱신되고, 더블클릭하면 Context 탭으로 이동합니다.
-        * Context는 BEFORE / MATCHED / AFTER 순서로 이벤트 전후 로그를 보여줍니다.
-        * 이벤트 Context는 앞 5줄과 뒤 5줄로 고정됩니다.
-        * 뒤쪽 로그가 아직 도착하지 않았다면 Context pending으로 표시될 수 있습니다.
-        * Copy Event Context로 전후 로그 전체를 복사할 수 있습니다.
-
-        이벤트 알림 설정
-
-        * 규칙 편집창에서 Tray, Sound, Popup을 필요한 항목만 켭니다. 기본값은 모두 OFF입니다.
-        * Tray는 Windows 알림 영역, Sound는 알림음, Popup은 앱 내부 알림입니다.
-        * Notify cooldown 기본값은 30초입니다. 같은 규칙이 반복되면 여러 건을 묶어서 한 번만 알립니다.
-        * 알림 옵션을 모두 꺼도 이벤트 기록과 파일 저장은 계속 동작합니다.
-        * MOCK에서도 ERROR/WARN 규칙과 알림을 시험할 수 있습니다.
-
-        Saved Commands / History
-
-        * Saved Commands는 자주 쓰는 TX 명령을 버튼으로 저장하는 기능입니다.
-        * History는 최근 보낸 명령을 다시 불러오는 기능입니다.
-        * History와 Saved Command는 쉘 프롬프트 예: lupa:/> 를 자동으로 붙이지 않습니다.
-        * 프롬프트는 장치가 보여주는 문자열이고, 사용자가 보낼 명령이 아닙니다.
-
-        명령 시퀀스 만드는 방법
-
-        1. Sequences 탭을 열고 위쪽 + 버튼으로 새 시퀀스를 만듭니다. 예: Boot Check
-        2. 시퀀스를 선택한 뒤 아래쪽 + 버튼으로 첫 번째 step을 추가합니다.
-        3. Command에 실제 장비로 보낼 명령을 입력합니다. 쉘 프롬프트 문자는 넣지 않습니다.
-        4. Line ending은 Global, None, CR, LF, CRLF 중 장비에 맞는 값을 선택합니다.
-        5. Delay after ms에는 이 명령을 보낸 뒤 다음 step까지 기다릴 시간을 입력합니다.
-        6. 필요한 명령 수만큼 step을 추가하고 Up/Dn으로 순서를 조정합니다.
-        7. 실제 장비 또는 MOCK에 Connect한 뒤 Run을 누릅니다.
-        8. 실행 중 중단하려면 Stop을 누릅니다.
-        9. 재사용할 시퀀스는 Save Profile로 저장합니다.
-
-        명령 시퀀스 사용 예
-
-        * Step 1: version / Global / 300 ms
-        * Step 2: status / Global / 500 ms
-        * Step 3: help / CRLF / 300 ms
-        * Delay는 명령 전송 후 대기 시간입니다. 너무 짧으면 장비가 다음 명령을 처리하지 못할 수 있습니다.
-        * 현재 시퀀스는 지정된 시간만 기다리며 장비 응답 성공 여부를 판정하지 않습니다.
-        * 실행 중 연결이 끊기거나 TX가 실패하면 시퀀스 오류로 중단됩니다.
-        * MOCK에서는 RX 로그가 계속 생성되므로 각 TX 사이에 다른 RX 로그가 섞여 보이는 것이 정상입니다.
-        * HEX 패킷 시퀀스와 응답 대기/조건 분기는 현재 지원하지 않습니다.
-
-        Markers
-
-        * MARK는 테스트 구간을 나누기 위한 표시입니다.
-        * MARK는 화면과 로그에만 기록되고 장치로 전송되지 않습니다.
-        * Ctrl+M으로 빠르게 MARK를 찍을 수 있습니다.
-        * Copy since last MARK로 특정 실험 구간만 복사할 수 있습니다.
-
-        Health
-
-        * HEALTH OK: 알려진 오류나 손실 신호가 없습니다.
-        * WARNING: 처리 지연이나 pending 증가 같은 주의 상태입니다.
-        * ERROR: 파일 드롭, 이벤트 드롭, xterm 오류, 시리얼 오류 같은 문제가 감지된 상태입니다.
-        * 화면 로그가 최대 줄 수를 넘어 오래된 줄이 잘리는 것은 정상 동작이며 오류가 아닙니다.
-
-        COM Bridge
-
-        * Bridge는 실제 장비 COM과 선택한 가상 COM 사이에서 원본 바이트를 양방향 전달합니다.
-        * 외부 프로그램은 com0com 쌍의 반대편 포트를 열어야 합니다.
-        * 가상 포트에서 들어온 Bridge 로그는 현재 Terminal/HEX 모드를 따르며 방향은 RX입니다.
-        * Terminal에서는 선택한 인코딩으로 디코딩하고 Terminal RX 규칙만, HEX에서는 원본 바이트와 HEX RX 규칙만 사용합니다.
-        * 표시 형식, 인코딩, 필터, 줄바꿈 설정은 실제 브리지 전달 바이트를 변경하지 않습니다.
-        * Bridge ON은 상단과 하단 상태줄에 항상 표시됩니다.
-
-        Settings
-
-        * Now: 즉시 적용됩니다.
-        * Reconn: 재연결 후 적용됩니다.
-        * Restart: 앱 재시작 후 적용됩니다.
-        * Profile: 프로필에 저장되는 설정입니다.
-        * 연결 중에는 위험한 시리얼 설정 변경이 제한될 수 있습니다.
-
-        MOCK
-
-        * MOCK은 실제 장비 없이 RX/TX/UI/File/Event 동작을 테스트하는 모드입니다.
-        * 스트레스 테스트로 장시간 로그 처리 안정성을 확인할 수 있습니다.
-        * No-Newline zzz 패턴은 CR/LF 없이 계속 출력되는 펌웨어 로그를 테스트합니다.
-        * CRLF 버튼으로 partial 출력이 중복 없이 줄 종료되는지 확인할 수 있습니다.
-        * 실제 장비 동작은 펌웨어와 쉘 구현에 따라 다를 수 있습니다.
-
-        Cute Background
-
-        * Cute background mode는 화면 배경만 바꿉니다.
-        * 시리얼 데이터, 로그 저장, 이벤트 감지에는 영향을 주지 않습니다.
-        * 커스텀 이미지 경로를 비워두면 앱에 내장된 기본 배경을 사용합니다.
-        * Reset bg to default는 커스텀 경로를 지우고 기본 배경으로 되돌립니다.
-        * 오래되었거나 없는 커스텀 경로는 기본 배경으로 대체됩니다.
-        * 배경이 너무 진하면 로그 가독성이 떨어질 수 있습니다.
-        """;
 
     public string AboutVersionText
     {
@@ -11084,6 +10925,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _currentUiSettings.HexGroupTimeoutMs);
             _appliedRxDisplayMode = _currentUiSettings.RxDisplayMode;
             _appliedHexGroupTimeoutMs = _currentUiSettings.HexGroupTimeoutMs;
+            ConfigureBridgeDeviceGrouping(
+                _appliedRxDisplayMode,
+                _appliedHexGroupTimeoutMs);
             ApplyProfileUiRuntimeSettings(_currentUiSettings);
 
             LogRules.Clear();
@@ -12287,6 +12131,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine($"  Pending virtual-to-device bytes: {BridgePendingVirtualToDeviceByteCount:N0}");
         builder.AppendLine($"  Oldest pending bridge chunk age: {BridgeOldestPendingChunkAgeMs:0.###} ms");
         builder.AppendLine($"  Last/max device-to-virtual delay: {_bridgeService.LastDeviceToVirtualDelayMs:0.###}/{_bridgeService.MaxDeviceToVirtualDelayMs:0.###} ms");
+        builder.AppendLine($"  Device-to-virtual HEX grouping timeout: {(_bridgeService.DeviceToVirtualGroupTimeoutMs > 0 ? $"{_bridgeService.DeviceToVirtualGroupTimeoutMs:N0} ms" : "off (raw chunks)")}");
         builder.AppendLine($"  Replay late count/max lateness: {_bridgeService.ReplayLateCount:N0}/{_bridgeService.MaxReplayLatenessMs:0.###} ms");
         builder.AppendLine($"  Queue overflow count: {_bridgeService.QueueOverflowCount:N0}");
         builder.AppendLine($"  Last bridge fault: {(_bridgeService.LastFaultReason ?? "(none)")}");

@@ -46,6 +46,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private long _lastBridgeActivityTimestamp;
     private DateTimeOffset? _lastBridgeActivityAt;
     private int _manualTxIdleGuardMs = BridgeSettings.DefaultManualTxIdleGuardMs;
+    private int _deviceToVirtualGroupTimeoutMs;
     private bool _deviceToVirtualWriteActive;
     private bool _virtualToDeviceWriteActive;
     private ManualTxState _manualTxState;
@@ -134,6 +135,11 @@ public sealed class SerialBridgeService : ISerialBridgeService
         }
     }
 
+    public int DeviceToVirtualGroupTimeoutMs
+    {
+        get { lock (_stateGate) return _deviceToVirtualGroupTimeoutMs; }
+    }
+
     public async Task StartAsync(
         BridgeSettings settings,
         SerialSettings deviceSettings,
@@ -220,6 +226,25 @@ public sealed class SerialBridgeService : ISerialBridgeService
         }
     }
 
+    public void ConfigureDeviceToVirtualGrouping(int idleTimeoutMs)
+    {
+        var changed = false;
+        lock (_stateGate)
+        {
+            var normalized = Math.Clamp(idleTimeoutMs, 0, 5_000);
+            if (_deviceToVirtualGroupTimeoutMs != normalized)
+            {
+                _deviceToVirtualGroupTimeoutMs = normalized;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            RaiseStatusChanged();
+        }
+    }
+
     public bool TryEnqueueDeviceChunk(BridgeRxChunk chunk)
     {
         ArgumentNullException.ThrowIfNull(chunk);
@@ -235,7 +260,11 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 return false;
             }
 
-            if (_deviceToVirtualQueue.TryEnqueue(chunk, chunk.Bytes.Length))
+            var queuedChunk = chunk with
+            {
+                DeviceToVirtualGroupTimeoutMs = _deviceToVirtualGroupTimeoutMs
+            };
+            if (_deviceToVirtualQueue.TryEnqueue(queuedChunk, queuedChunk.Bytes.Length))
             {
                 MarkBridgeActivityLocked();
                 SignalArbiter();
@@ -349,14 +378,19 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private async Task RunVirtualWriterAsync(SerialPortStream virtualPort, CancellationToken cancellationToken)
     {
         var replayer = new BridgeGapReplayer(_clock);
+        var grouper = new BridgeDeviceChunkGrouper();
+        BridgeRxChunk? deferredChunk = null;
+        int? replayGroupTimeoutMs = null;
         try
         {
-            while (await _deviceToVirtualQueue.WaitToReadAsync(cancellationToken))
+            while (deferredChunk is not null || await _deviceToVirtualQueue.WaitToReadAsync(cancellationToken))
             {
-                BridgeRxChunk? chunk;
+                BridgeRxChunk? chunk = deferredChunk;
+                deferredChunk = null;
                 lock (_stateGate)
                 {
-                    if (!_deviceToVirtualQueue.TryDequeue(out chunk) || chunk is null)
+                    if (chunk is null &&
+                        (!_deviceToVirtualQueue.TryDequeue(out chunk) || chunk is null))
                     {
                         continue;
                     }
@@ -366,32 +400,72 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
                 try
                 {
-                    var replay = await replayer.WaitUntilDueAsync(chunk, cancellationToken);
-                    if (replay.LatenessMilliseconds > 0)
+                    if (chunk.DeviceToVirtualGroupTimeoutMs > 0)
                     {
-                        Interlocked.Increment(ref _replayLateCount);
-                        lock (_stateGate)
+                        grouper.Append(chunk);
+                        BridgeGroupFlushReason? flushReason = null;
+                        while (!flushReason.HasValue)
                         {
-                            _maxReplayLatenessMs = Math.Max(_maxReplayLatenessMs, replay.LatenessMilliseconds);
+                            flushReason = grouper.GetImmediateFlushReason(_clock.GetTimestamp());
+                            if (flushReason.HasValue)
+                            {
+                                break;
+                            }
+
+                            BridgeRxChunk? nextChunk;
+                            lock (_stateGate)
+                            {
+                                _deviceToVirtualQueue.TryDequeue(out nextChunk);
+                            }
+
+                            if (nextChunk is not null)
+                            {
+                                flushReason = grouper.GetFlushReasonBeforeAppend(nextChunk);
+                                if (!flushReason.HasValue)
+                                {
+                                    grouper.Append(nextChunk);
+                                    continue;
+                                }
+
+                                deferredChunk = nextChunk;
+                                break;
+                            }
+
+                            var wait = grouper.GetNextWait(_clock.GetTimestamp());
+                            if (wait.Delay <= TimeSpan.Zero)
+                            {
+                                flushReason = wait.TimeoutReason;
+                                break;
+                            }
+
+                            if (!await WaitForDeviceChunkAsync(wait.Delay, cancellationToken))
+                            {
+                                flushReason = wait.TimeoutReason;
+                            }
                         }
+
+                        chunk = grouper.BuildAndReset(flushReason!.Value);
                     }
 
-                    await virtualPort.WriteAsync(chunk.Bytes, cancellationToken);
-                    var completedAt = _clock.GetTimestamp();
-                    replayer.RecordWriteCompleted(chunk, completedAt);
-                    var delayMs = TicksToMilliseconds(Math.Max(0, completedAt - chunk.ReceivedTimestamp));
-                    lock (_stateGate)
+                    if (replayGroupTimeoutMs.HasValue &&
+                        replayGroupTimeoutMs.Value != chunk.DeviceToVirtualGroupTimeoutMs)
                     {
-                        _lastDeviceToVirtualDelayMs = delayMs;
-                        _maxDeviceToVirtualDelayMs = Math.Max(_maxDeviceToVirtualDelayMs, delayMs);
-                        MarkBridgeActivityLocked();
+                        replayer.Reset();
                     }
 
-                    Interlocked.Add(ref _deviceToVirtualByteCount, chunk.Bytes.Length);
-                    var count = Interlocked.Increment(ref _deviceToVirtualChunkCount);
-                    RaiseStatusChangedPeriodically(count);
+                    replayGroupTimeoutMs = chunk.DeviceToVirtualGroupTimeoutMs;
+
+                    await WriteDeviceChunkToVirtualAsync(
+                        virtualPort,
+                        replayer,
+                        chunk,
+                        cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception) when (cancellationToken.IsCancellationRequested)
                 {
                     throw;
                 }
@@ -414,10 +488,59 @@ public sealed class SerialBridgeService : ISerialBridgeService
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             FaultBridge($"Bridge device-to-virtual write failed: {ex.Message}");
         }
+    }
+
+    private async Task<bool> WaitForDeviceChunkAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCancellation.CancelAfter(timeout);
+        try
+        {
+            return await _deviceToVirtualQueue.WaitToReadAsync(timeoutCancellation.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    private async Task WriteDeviceChunkToVirtualAsync(
+        SerialPortStream virtualPort,
+        BridgeGapReplayer replayer,
+        BridgeRxChunk chunk,
+        CancellationToken cancellationToken)
+    {
+        var replay = await replayer.WaitUntilDueAsync(chunk, cancellationToken);
+        if (replay.LatenessMilliseconds > 0)
+        {
+            Interlocked.Increment(ref _replayLateCount);
+            lock (_stateGate)
+            {
+                _maxReplayLatenessMs = Math.Max(_maxReplayLatenessMs, replay.LatenessMilliseconds);
+            }
+        }
+
+        await virtualPort.WriteAsync(chunk.Bytes, cancellationToken);
+        var completedAt = _clock.GetTimestamp();
+        replayer.RecordWriteCompleted(chunk, completedAt);
+        var delayMs = TicksToMilliseconds(Math.Max(0, completedAt - chunk.ReceivedTimestamp));
+        lock (_stateGate)
+        {
+            _lastDeviceToVirtualDelayMs = delayMs;
+            _maxDeviceToVirtualDelayMs = Math.Max(_maxDeviceToVirtualDelayMs, delayMs);
+            MarkBridgeActivityLocked();
+        }
+
+        Interlocked.Add(ref _deviceToVirtualByteCount, chunk.Bytes.Length);
+        var count = Interlocked.Increment(ref _deviceToVirtualChunkCount);
+        RaiseStatusChangedPeriodically(count);
     }
 
     private async Task RunDeviceSchedulerAsync(

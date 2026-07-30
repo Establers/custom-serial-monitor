@@ -66,9 +66,17 @@ This file tracks current intentional limits and validation gaps.
   short idle boundary so split multibyte characters and keywords remain intact.
   Bridge log queue/drop/decode counters are reported separately; these logging
   conditions never change the forwarded bytes.
-- Device-to-virtual idle gaps are replayed best-effort from monotonic receive
-  timestamps. Windows scheduling and virtual COM buffering do not guarantee
-  sub-millisecond timing; Diagnostics reports delivery delay and lateness.
+- In HEX mode, device-to-virtual chunks inside the active HEX idle timeout are
+  coalesced and normally issued as one virtual-COM write matching the xterm
+  packet line boundary. The writer waits for the smaller of the active timeout
+  and its 100 ms maximum latency. Terminal mode retains immediate raw-chunk
+  forwarding. Continuous HEX traffic is emitted at least every 100 ms and is
+  also split at 1 MiB, preserving both bounded delivery latency and bounded
+  memory.
+- A single virtual-COM write still cannot require another process to receive the
+  data in one `Read` call; Windows and the virtual-port driver expose a byte
+  stream. Coalescing substantially reduces incidental splits but protocol-level
+  framing remains the only absolute packet-boundary guarantee.
 - Queue overflow intentionally faults the bridge instead of continuing with a
   silently incomplete byte stream. It does not disconnect the physical device.
 - HEX bridge display records are capped at 256 bytes and 50 ms maximum latency.

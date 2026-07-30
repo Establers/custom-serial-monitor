@@ -70,6 +70,69 @@ public sealed class Com0ComBridgeIntegrationTests
         var partnerReceived = await ReadExactlyAsync(partner, deviceToVirtual.Length, timeout.Token);
         Assert.Equal(SHA256.HashData(deviceToVirtual), SHA256.HashData(partnerReceived));
 
+        bridge.ConfigureDeviceToVirtualGrouping(25);
+        var groupedWriteCountBefore = bridge.DeviceToVirtualChunkCount;
+        var groupedBytes = new byte[] { 0xA0, 0xA1, 0xB0, 0xC0, 0xC1, 0xC2 };
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            groupedBytes[..2],
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            groupedBytes[2..3],
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            groupedBytes[3..],
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+
+        var groupedReceived = await ReadExactlyAsync(partner, groupedBytes.Length, timeout.Token);
+        Assert.Equal(groupedBytes, groupedReceived);
+        await WaitUntilAsync(
+            () => bridge.DeviceToVirtualChunkCount == groupedWriteCountBefore + 1,
+            timeout.Token);
+        Assert.Equal(groupedWriteCountBefore + 1, bridge.DeviceToVirtualChunkCount);
+
+        bridge.ConfigureDeviceToVirtualGrouping(5_000);
+        var maximumLatencyStarted = Stopwatch.GetTimestamp();
+        var maximumLatencyByte = new byte[] { 0xD0 };
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            maximumLatencyByte,
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.Equal(
+            maximumLatencyByte,
+            await ReadExactlyAsync(partner, maximumLatencyByte.Length, timeout.Token));
+        await WaitUntilAsync(
+            () => bridge.DeviceToVirtualChunkCount == groupedWriteCountBefore + 2,
+            timeout.Token);
+        Assert.True(Stopwatch.GetElapsedTime(maximumLatencyStarted) < TimeSpan.FromSeconds(2));
+
+        var configurationSwitchWriteCountBefore = bridge.DeviceToVirtualChunkCount;
+        var configurationSwitchStarted = Stopwatch.GetTimestamp();
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            new byte[] { 0xE0 },
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        bridge.ConfigureDeviceToVirtualGrouping(0);
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            new byte[] { 0xE1 },
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.Equal(
+            new byte[] { 0xE0, 0xE1 },
+            await ReadExactlyAsync(partner, 2, timeout.Token));
+        await WaitUntilAsync(
+            () => bridge.DeviceToVirtualChunkCount == configurationSwitchWriteCountBefore + 2,
+            timeout.Token);
+        Assert.True(Stopwatch.GetElapsedTime(configurationSwitchStarted) < TimeSpan.FromSeconds(2));
+
         var virtualToDevice = new byte[12 * 1024];
         random.NextBytes(virtualToDevice);
         await partner.WriteAsync(virtualToDevice, timeout.Token);
@@ -135,6 +198,62 @@ public sealed class Com0ComBridgeIntegrationTests
         Assert.Equal(0, bridge.DroppedVirtualToDeviceChunkCount);
         Assert.Equal(0, bridge.QueueOverflowCount);
         Assert.Null(bridge.LastFaultReason);
+    }
+
+    [Fact]
+    public async Task Com4Com5_HexFirstThenTerminal_DoesNotKeepGroupingDelayOnRawWrites()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("SERIAL_COM0COM_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var partner = new SerialPortStream("COM5", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        partner.Open();
+
+        await using var bridge = new SerialBridgeService();
+        bridge.ConfigureDeviceToVirtualGrouping(5_000);
+        await bridge.StartAsync(
+            new BridgeSettings
+            {
+                Enabled = true,
+                VirtualPortName = "COM4"
+            },
+            new SerialSettings { PortName = "DEVICE", BaudRate = 115200 },
+            (_, _) => Task.CompletedTask,
+            timeout.Token);
+        partner.DiscardInBuffer();
+
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            new byte[] { 0xA0 },
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.Equal(new byte[] { 0xA0 }, await ReadExactlyAsync(partner, 1, timeout.Token));
+        await WaitUntilAsync(() => bridge.DeviceToVirtualChunkCount == 1, timeout.Token);
+        var firstGroupedDelayMs = bridge.LastDeviceToVirtualDelayMs;
+        Assert.True(firstGroupedDelayMs >= 50);
+
+        bridge.ConfigureDeviceToVirtualGrouping(0);
+        Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+            new byte[] { 0xB0 },
+            Stopwatch.GetTimestamp(),
+            false,
+            0)));
+        Assert.Equal(new byte[] { 0xB0 }, await ReadExactlyAsync(partner, 1, timeout.Token));
+        await WaitUntilAsync(() => bridge.DeviceToVirtualChunkCount == 2, timeout.Token);
+        Assert.True(bridge.LastDeviceToVirtualDelayMs < firstGroupedDelayMs / 2);
+
+        await bridge.StopAsync(timeout.Token);
     }
 
     [Fact]
