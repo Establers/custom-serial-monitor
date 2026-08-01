@@ -1,6 +1,16 @@
 # Release Notes Draft
 
-Date: 2026-07-30
+Date: 2026-08-01
+
+## Unreleased
+
+- Added profile-persisted automatic reconnect for established real COM
+  connections that fail unexpectedly. Retries use a capped 1, 2, 5, and 10
+  second backoff and can be canceled from the connection toolbar.
+- Automatic reconnect preserves the active file writer and event detector while
+  rebuilding only the serial transport and RX log pipeline. Bridge and command
+  sequence work is stopped and remains stopped after recovery.
+- Added reconnect state, attempt, success, failure, and last-error diagnostics.
 
 ## Released in v1.2.4
 

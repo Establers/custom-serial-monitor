@@ -2373,10 +2373,10 @@
                                             <TextBlock Text="Serial"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                             <TextBlock x:Uid="StaticUi126" Grid.Column="1"
-                                                       Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now."
+                                                       Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, reconnect, and confirmation apply now."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately without disconnecting the active port." />
+                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, automatic reconnect, and disconnect confirmation apply immediately without disconnecting the active port." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -2546,6 +2546,21 @@
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
                                                        ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Reconnect"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8">
+                                                <CheckBox Content="Automatically reconnect after an unexpected disconnect"
+                                                          IsChecked="{Binding AutoReconnectEnabled, Mode=TwoWay}"
+                                                          ToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying." />
+                                                <TextBlock Text="{Binding AutoReconnectStatusText}"
+                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">

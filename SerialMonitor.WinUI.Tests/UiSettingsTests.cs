@@ -34,6 +34,17 @@ public sealed class UiSettingsTests
     }
 
     [Fact]
+    public void AutoReconnect_DefaultsEnabledAndClonePreservesChoice()
+    {
+        var defaults = JsonSerializer.Deserialize<UiSettings>("{}");
+        var disabled = new UiSettings { AutoReconnectEnabled = false };
+
+        Assert.NotNull(defaults);
+        Assert.True(defaults.AutoReconnectEnabled);
+        Assert.False(disabled.Clone().AutoReconnectEnabled);
+    }
+
+    [Fact]
     public void Clone_PreservesXtermFontSettings()
     {
         var settings = new UiSettings

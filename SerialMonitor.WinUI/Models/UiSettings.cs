@@ -46,6 +46,8 @@ public sealed class UiSettings
 
     public bool ConfirmBeforeDisconnect { get; set; } = true;
 
+    public bool AutoReconnectEnabled { get; set; } = true;
+
     public bool ShowTimestampInLogView { get; set; } = true;
 
     public bool ShowRxTxDirectionPrefixInLogView { get; set; } = true;
@@ -98,6 +100,7 @@ public sealed class UiSettings
             FileLoggingWhileViewPaused = FileLoggingWhileViewPaused,
             EventAutoScrollEnabled = EventAutoScrollEnabled,
             ConfirmBeforeDisconnect = ConfirmBeforeDisconnect,
+            AutoReconnectEnabled = AutoReconnectEnabled,
             ShowTimestampInLogView = ShowTimestampInLogView,
             ShowRxTxDirectionPrefixInLogView = ShowRxTxDirectionPrefixInLogView,
             TimestampDisplayFormat = TimestampDisplayFormat,

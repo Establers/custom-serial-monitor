@@ -24,6 +24,19 @@ This file tracks current intentional limits and validation gaps.
 - Apply hints in Settings should be treated as the source of truth for when a
   setting takes effect.
 
+## Automatic Reconnect
+
+- Automatic reconnect starts only after an established real COM connection
+  enters the faulted state because of an unexpected read or write failure.
+- It retries the same COM port name after 1, 2, 5, and then repeated 10 second
+  delays. It does not follow a device by USB VID/PID/serial number if Windows
+  assigns a different COM number.
+- Manual Disconnect, `Cancel Reconnect`, disabling the setting, and application
+  shutdown cancel the retry loop. `MOCK` is intentionally excluded.
+- Active file logging and event detection remain alive across reconnect attempts.
+  A bridge and an in-progress command sequence are stopped and are not resumed
+  automatically after reconnect.
+
 ## Hardware Validation
 
 - MOCK and mock stress mode exercise the app pipeline, but they do not replace

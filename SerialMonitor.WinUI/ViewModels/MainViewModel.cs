@@ -268,6 +268,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
     private readonly Queue<Guid> _eventContextOrder = new();
     private CancellationTokenSource? _connectionCancellation;
+    private CancellationTokenSource? _autoReconnectCancellation;
+    private Task? _autoReconnectTask;
     private Task? _observeLogsTask;
     private Task? _observeEventsTask;
     private Task? _observeSequenceTriggersTask;
@@ -276,6 +278,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task? _observeEventContextsTask;
     private Task? _startupProfileTask;
     private int _bridgeStopForSerialDisconnectRunning;
+    private int _autoReconnectArmed;
+    private int _autoReconnectStartQueued;
+    private int _autoReconnectSessionServicesPreserved;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
     private string? _selectedPort;
@@ -284,6 +289,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private TxLineEndingMode _selectedTxLineEnding = TxLineEndingMode.Crlf;
     private bool _isConnected;
     private bool _isBusy;
+    private bool _isAutoReconnectRunning;
     private bool _isXtermAppendBackpressureActive;
     private bool _isAutoScrollEnabled = true;
     private bool _isXtermReady;
@@ -592,6 +598,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _bridgeVisualLogDroppedCount;
     private int _bridgeVisualLogPendingCount;
     private int _shutdownStarted;
+    private int _autoReconnectAttemptCount;
+    private long _autoReconnectSuccessCount;
+    private long _autoReconnectFailureCount;
+    private string _autoReconnectNextDelayText = "(none)";
+    private string _lastAutoReconnectError = string.Empty;
     private string _lastShutdownStartTimeText = "(none)";
     private string _lastShutdownCompletedTimeText = "(none)";
     private string _shutdownCleanupResult = "Shutdown has not run.";
@@ -726,7 +737,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             maxItemsPerTick: EventUiMaxItemsPerTick);
 
         ConnectCommand = new AsyncRelayCommand(ConnectAsync, () => CanConnect);
-        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => !IsBusy && (IsConnected || CanConnect));
+        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => CanToggleConnection);
         DisconnectCommand = new AsyncRelayCommand(DisconnectAsync, () => IsConnected && !IsBusy);
         SendCommand = new AsyncRelayCommand(SendCurrentCommandAsync, CanSendCurrentCommand);
         SendSavedCommandCommand = new AsyncRelayCommand(
@@ -743,8 +754,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CopySerialLogPathCommand = new AsyncRelayCommand(CopySerialLogPathAsync, CanUseCurrentSerialLogPath);
         ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync, () => !IsBusy);
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => !IsBusy);
-        LoadProfileCommand = new AsyncRelayCommand(LoadProfileAsync, () => !IsBusy && !IsConnected);
-        ResetProfileCommand = new AsyncRelayCommand(ResetProfileAsync, () => !IsBusy && !IsConnected);
+        LoadProfileCommand = new AsyncRelayCommand(
+            LoadProfileAsync,
+            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning);
+        ResetProfileCommand = new AsyncRelayCommand(
+            ResetProfileAsync,
+            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning);
         ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync);
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
@@ -2442,6 +2457,23 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    public bool IsAutoReconnectRunning
+    {
+        get => _isAutoReconnectRunning;
+        private set
+        {
+            if (SetProperty(ref _isAutoReconnectRunning, value))
+            {
+                OnPropertyChanged(nameof(ConnectionButtonText));
+                OnPropertyChanged(nameof(CanEditConnectionSettings));
+                OnPropertyChanged(nameof(CanConnect));
+                OnPropertyChanged(nameof(CanToggleConnection));
+                OnPropertyChanged(nameof(AutoReconnectStatusText));
+                NotifyCommandStates();
+            }
+        }
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -2463,19 +2495,34 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool CanEditConnectionSettings => !IsConnected && !IsBusy;
+    public bool CanEditConnectionSettings => !IsConnected && !IsBusy && !IsAutoReconnectRunning;
 
     public bool CanEditSizeRotationMegabytes => !IsBusy && SizeRotationEnabled;
 
     public bool CanManualDisconnect => IsConnected && !IsBusy;
 
-    public bool CanToggleConnection => IsConnected ? CanManualDisconnect : CanConnect;
+    public bool CanToggleConnection => IsAutoReconnectRunning || (IsConnected ? CanManualDisconnect : CanConnect);
 
     public bool CanConnect =>
         !IsConnected &&
         !IsBusy &&
+        !IsAutoReconnectRunning &&
         SelectedPortAvailable &&
         BaudRates.Contains(SelectedBaudRate);
+
+    public int AutoReconnectAttemptCount => Volatile.Read(ref _autoReconnectAttemptCount);
+
+    public long AutoReconnectSuccessCount => Interlocked.Read(ref _autoReconnectSuccessCount);
+
+    public long AutoReconnectFailureCount => Interlocked.Read(ref _autoReconnectFailureCount);
+
+    public string LastAutoReconnectError => _lastAutoReconnectError;
+
+    public string AutoReconnectStatusText => IsAutoReconnectRunning
+        ? $"Attempt {AutoReconnectAttemptCount:N0} · next {_autoReconnectNextDelayText}"
+        : AutoReconnectEnabled
+            ? "Ready after an unexpected disconnect"
+            : "Off";
 
     public bool IsLogRenderingPaused
     {
@@ -2548,6 +2595,36 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings.ConfirmBeforeDisconnect = value;
             RecordSettingsChange("Confirm before disconnect", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             OnPropertyChanged();
+        }
+    }
+
+    public bool AutoReconnectEnabled
+    {
+        get => _currentUiSettings.AutoReconnectEnabled;
+        set
+        {
+            if (_currentUiSettings.AutoReconnectEnabled == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.AutoReconnectEnabled = value;
+            if (value && IsConnected && !CurrentPortIsMock)
+            {
+                Volatile.Write(ref _autoReconnectArmed, 1);
+            }
+            else if (!value)
+            {
+                Volatile.Write(ref _autoReconnectArmed, 0);
+                if (IsAutoReconnectRunning)
+                {
+                    _autoReconnectCancellation?.Cancel();
+                    _ = StopCanceledAutoReconnectAsync();
+                }
+            }
+
+            RecordSettingsChange("Auto reconnect", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
+            NotifyAutoReconnectPropertiesChanged();
         }
     }
 
@@ -2831,7 +2908,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
+    public string ConnectionButtonText => IsAutoReconnectRunning
+        ? "Cancel Reconnect"
+        : IsConnected
+            ? "Disconnect"
+            : "Connect";
 
     public string PauseRenderingButtonText => IsViewPauseTransitioning
         ? "Pausing View"
@@ -4019,12 +4100,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             try
             {
-                if (IsConnected ||
-                    _connectionCancellation is not null ||
-                    _serialService.ConnectionState != SerialConnectionState.Disconnected)
-                {
-                    await DisconnectAsync(shutdownCancellation.Token);
-                }
+                // DisconnectAsync is idempotent and also owns cancellation of an
+                // active reconnect loop plus cleanup of its preserved session services.
+                await DisconnectAsync(shutdownCancellation.Token);
             }
             catch (Exception ex)
             {
@@ -5357,6 +5435,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ToggleConnectionAsync()
     {
+        if (IsAutoReconnectRunning)
+        {
+            await DisconnectAsync();
+            return;
+        }
+
         if (IsConnected)
         {
             await DisconnectAsync();
@@ -5603,6 +5687,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ConnectAsync()
     {
+        Volatile.Write(ref _autoReconnectArmed, 0);
         await _connectionLifecycleGate.WaitAsync();
         try
         {
@@ -5759,6 +5844,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             ClearPendingReconnectSettings();
             RecordConnectSucceeded(settings);
+            ArmAutoReconnect(settings);
             RestartSerialBusUtilizationMeasurement("serial connection started");
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
             SetFooter(CreateFooterStatus());
@@ -6016,6 +6102,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectAsync(CancellationToken cancellationToken)
     {
+        Volatile.Write(ref _autoReconnectArmed, 0);
+        var reconnectTask = CancelAutoReconnect();
+        if (reconnectTask is not null)
+        {
+            try
+            {
+                await reconnectTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
         await _connectionLifecycleGate.WaitAsync(cancellationToken);
         try
         {
@@ -6029,9 +6128,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectCoreAsync(CancellationToken cancellationToken, bool updateBusy)
     {
-        if (!IsConnected &&
-            _connectionCancellation is null &&
-            _serialService.ConnectionState == SerialConnectionState.Disconnected)
+        if (AutoReconnectPolicy.CanSkipDisconnectCleanup(
+                IsConnected,
+                _connectionCancellation is not null,
+                _serialService.ConnectionState,
+                Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0))
         {
             return;
         }
@@ -6089,6 +6190,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeSequenceTriggersTask = null;
             _observeEventContextsTask = null;
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
+            Volatile.Write(ref _autoReconnectSessionServicesPreserved, 0);
             IsConnected = _serialService.IsConnected;
             RestartSerialBusUtilizationMeasurement("serial disconnected");
             if (!IsConnected)
@@ -6244,6 +6346,284 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SetStatus(_lastBackgroundError);
             RefreshDiagnostics();
         }
+    }
+
+    private void ArmAutoReconnect(SerialSettings settings)
+    {
+        var shouldArm = AutoReconnectEnabled && !IsMockPortName(settings.PortName);
+        Volatile.Write(ref _autoReconnectArmed, shouldArm ? 1 : 0);
+        NotifyAutoReconnectPropertiesChanged();
+    }
+
+    private Task? CancelAutoReconnect()
+    {
+        try
+        {
+            _autoReconnectCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        return _autoReconnectTask;
+    }
+
+    private async Task StopCanceledAutoReconnectAsync()
+    {
+        try
+        {
+            var reconnectTask = CancelAutoReconnect();
+            if (reconnectTask is not null)
+            {
+                await reconnectTask;
+            }
+
+            if (!IsConnected &&
+                (_connectionCancellation is not null ||
+                    Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0))
+            {
+                await DisconnectAsync();
+            }
+
+            SetStatus("Auto reconnect disabled.");
+        }
+        catch (Exception ex)
+        {
+            _lastAutoReconnectError = $"Stopping auto reconnect failed: {ex.Message}";
+            RuntimeDiagnostics.RecordError("MainViewModel.StopCanceledAutoReconnectAsync", ex);
+            NotifyAutoReconnectPropertiesChanged();
+        }
+    }
+
+    private void TryStartAutoReconnect()
+    {
+        var settings = _lastSuccessfulSerialSettings?.Clone();
+        if (settings is null ||
+            (_autoReconnectTask is not null && !_autoReconnectTask.IsCompleted) ||
+            !AutoReconnectPolicy.ShouldStart(
+                AutoReconnectEnabled,
+                Volatile.Read(ref _autoReconnectArmed) != 0,
+                IsMockPortName(settings.PortName),
+                Volatile.Read(ref _shutdownStarted) != 0,
+                _serialService.ConnectionState))
+        {
+            return;
+        }
+
+        if (IsSequenceRunning)
+        {
+            _ = StopCommandSequenceAsync();
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _autoReconnectCancellation = cancellation;
+        Volatile.Write(ref _autoReconnectSessionServicesPreserved, 1);
+        Interlocked.Exchange(ref _autoReconnectAttemptCount, 0);
+        _autoReconnectNextDelayText = "1 s";
+        _lastAutoReconnectError = string.Empty;
+        IsAutoReconnectRunning = true;
+        AppendAutoReconnectSystemLine(
+            $"Unexpected disconnect from {settings.PortName}; automatic reconnect started.");
+        SetStatus($"{settings.PortName} disconnected unexpectedly. Reconnecting in 1 s...");
+        NotifyAutoReconnectPropertiesChanged();
+        _autoReconnectTask = RunAutoReconnectLoopAsync(settings, cancellation);
+    }
+
+    private async Task RunAutoReconnectLoopAsync(
+        SerialSettings settings,
+        CancellationTokenSource runCancellation)
+    {
+        var cancellationToken = runCancellation.Token;
+        var reconnected = false;
+        try
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var delay = AutoReconnectPolicy.GetRetryDelay(attempt);
+                Interlocked.Exchange(ref _autoReconnectAttemptCount, attempt);
+                _autoReconnectNextDelayText = $"{delay.TotalSeconds:0} s";
+                NotifyAutoReconnectPropertiesChanged();
+                SetStatus($"Auto reconnect attempt {attempt:N0} for {settings.PortName} in {delay.TotalSeconds:0} s...");
+                await Task.Delay(delay, cancellationToken);
+
+                await RefreshPortsAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!ContainsActualPort(_lastAvailableActualPorts, settings.PortName))
+                {
+                    SetStatus($"Waiting for {settings.PortName}; auto reconnect attempt {attempt:N0} deferred.");
+                    continue;
+                }
+
+                await _connectionLifecycleGate.WaitAsync(cancellationToken);
+                IsBusy = true;
+                try
+                {
+                    await CleanupTransportForAutoReconnectAsync(cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    RecordConnectRequested(settings);
+                    await StartTransportForAutoReconnectAsync(settings, cancellationToken);
+
+                    reconnected = true;
+                    Interlocked.Increment(ref _autoReconnectSuccessCount);
+                    _lastAutoReconnectError = string.Empty;
+                    AppendAutoReconnectSystemLine(
+                        $"Automatically reconnected to {settings.PortName} at {settings.BaudRate:N0} bps after {attempt:N0} attempt(s).");
+                    SetStatus($"Reconnected to {settings.PortName} at {settings.BaudRate:N0} bps.");
+                    NotifyAutoReconnectPropertiesChanged();
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref _autoReconnectFailureCount);
+                    _lastAutoReconnectError = ex.Message;
+                    RuntimeDiagnostics.RecordError("MainViewModel.AutoReconnectAttempt", ex);
+                    await CleanupTransportForAutoReconnectAsync(CancellationToken.None);
+                    SetStatus($"Auto reconnect attempt {attempt:N0} failed: {ex.Message}");
+                    NotifyAutoReconnectPropertiesChanged();
+                }
+                finally
+                {
+                    IsBusy = false;
+                    _connectionLifecycleGate.Release();
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (!reconnected)
+            {
+                AppendAutoReconnectSystemLine($"Automatic reconnect to {settings.PortName} canceled.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _autoReconnectFailureCount);
+            _lastAutoReconnectError = ex.Message;
+            RuntimeDiagnostics.RecordError("MainViewModel.RunAutoReconnectLoopAsync", ex);
+            SetStatus($"Auto reconnect stopped: {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoReconnectCancellation, runCancellation))
+            {
+                _autoReconnectCancellation = null;
+            }
+
+            runCancellation.Dispose();
+            _autoReconnectTask = null;
+            _autoReconnectNextDelayText = "(none)";
+            IsAutoReconnectRunning = false;
+            NotifyAutoReconnectPropertiesChanged();
+
+            if (AutoReconnectPolicy.ShouldStart(
+                    AutoReconnectEnabled,
+                    Volatile.Read(ref _autoReconnectArmed) != 0,
+                    IsMockPortName(settings.PortName),
+                    Volatile.Read(ref _shutdownStarted) != 0,
+                    _serialService.ConnectionState))
+            {
+                TryStartAutoReconnect();
+            }
+        }
+    }
+
+    private async Task CleanupTransportForAutoReconnectAsync(CancellationToken cancellationToken)
+    {
+        var cleanupErrors = new List<string>();
+        _sequenceCancellation?.Cancel();
+        await RunDisconnectCleanupAsync(
+            "Serial bridge stop for reconnect",
+            () => StopBridgeCoreAsync(disableRequested: true, cancellationToken),
+            cleanupErrors);
+
+        _connectionCancellation?.Cancel();
+        await RunDisconnectCleanupAsync(
+            "Log pipeline stop for reconnect",
+            () => _logPipeline.StopAsync(cancellationToken),
+            cleanupErrors);
+        await RunDisconnectCleanupAsync(
+            "Serial disconnect for reconnect",
+            () => _serialService.DisconnectAsync(cancellationToken),
+            cleanupErrors);
+
+        if (_observeLogsTask is not null)
+        {
+            await RunDisconnectCleanupAsync(
+                "Log observer stop for reconnect",
+                () => _observeLogsTask.WaitAsync(cancellationToken),
+                cleanupErrors);
+        }
+
+        _connectionCancellation?.Dispose();
+        _connectionCancellation = null;
+        _observeLogsTask = null;
+        IsConnected = false;
+        RestartSerialBusUtilizationMeasurement("serial reconnect cleanup");
+
+        if (cleanupErrors.Count > 0)
+        {
+            _lastAutoReconnectError = string.Join(" ", cleanupErrors);
+        }
+    }
+
+    private async Task StartTransportForAutoReconnectAsync(
+        SerialSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var requestedRxDisplayMode = NormalizeRxDisplayMode(SelectedRxDisplayMode);
+        var requestedHexGroupTimeoutMs = HexGroupTimeoutMs;
+        _connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        await _serialService.ConnectAsync(
+            settings,
+            CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
+            _connectionCancellation.Token);
+        ApplyRxDisplayRuntime(
+            requestedRxDisplayMode,
+            requestedHexGroupTimeoutMs,
+            "automatic reconnect receive mode applied");
+        await _logPipeline.StartAsync(
+            _serialService.ReceivedBytes,
+            settings,
+            _connectionCancellation.Token);
+        _observeLogsTask = Task.Run(
+            () => ObserveLogsAsync(_connectionCancellation.Token),
+            CancellationToken.None);
+
+        IsConnected = true;
+        ClearPendingReconnectSettings();
+        RecordConnectSucceeded(settings);
+        ArmAutoReconnect(settings);
+        RestartSerialBusUtilizationMeasurement("serial automatically reconnected");
+        OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
+        OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+        SetFooter(CreateFooterStatus());
+    }
+
+    private void AppendAutoReconnectSystemLine(string message)
+    {
+        FanOutLogLine(LogLine.System(message), fileEligible: true, detectEvent: false);
+    }
+
+    private void NotifyAutoReconnectPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(AutoReconnectEnabled));
+        OnPropertyChanged(nameof(IsAutoReconnectRunning));
+        OnPropertyChanged(nameof(AutoReconnectAttemptCount));
+        OnPropertyChanged(nameof(AutoReconnectSuccessCount));
+        OnPropertyChanged(nameof(AutoReconnectFailureCount));
+        OnPropertyChanged(nameof(LastAutoReconnectError));
+        OnPropertyChanged(nameof(AutoReconnectStatusText));
+        OnPropertyChanged(nameof(ConnectionButtonText));
+        OnPropertyChanged(nameof(CanEditConnectionSettings));
+        OnPropertyChanged(nameof(CanConnect));
+        OnPropertyChanged(nameof(CanToggleConnection));
+        ConnectCommand.NotifyCanExecuteChanged();
+        ToggleConnectionCommand.NotifyCanExecuteChanged();
     }
 
     private void QueueTriggeredSequence(DetectedEvent detectedEvent)
@@ -11099,6 +11479,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MaxVisibleEventCount));
         OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
         OnPropertyChanged(nameof(ConfirmBeforeDisconnect));
+        NotifyAutoReconnectPropertiesChanged();
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
         OnPropertyChanged(nameof(ShowTimestampInLogView));
         OnPropertyChanged(nameof(ShowRxTxDirectionPrefixInLogView));
@@ -11332,6 +11713,23 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
+        var successfulSettings = _lastSuccessfulSerialSettings;
+        if (successfulSettings is not null &&
+            AutoReconnectPolicy.ShouldStart(
+                _currentUiSettings.AutoReconnectEnabled,
+                Volatile.Read(ref _autoReconnectArmed) != 0,
+                IsMockPortName(successfulSettings.PortName),
+                Volatile.Read(ref _shutdownStarted) != 0,
+                _serialService.ConnectionState) &&
+            Interlocked.CompareExchange(ref _autoReconnectStartQueued, 1, 0) == 0)
+        {
+            RunOnUiThread(() =>
+            {
+                Interlocked.Exchange(ref _autoReconnectStartQueued, 0);
+                TryStartAutoReconnect();
+            });
+        }
+
         if (!_serialService.IsConnected &&
             _bridgeService.IsRunning &&
             Interlocked.CompareExchange(ref _bridgeStopForSerialDisconnectRunning, 1, 0) == 0)
@@ -12291,6 +12689,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         builder.AppendLine("Serial");
         builder.AppendLine($"  Serial connection state: {_serialService.ConnectionState}");
         builder.AppendLine($"  ViewModel is connected: {IsConnected}");
+        builder.AppendLine($"  Auto reconnect enabled/running/armed/preserved services: {AutoReconnectEnabled}/{IsAutoReconnectRunning}/{Volatile.Read(ref _autoReconnectArmed) != 0}/{Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0}");
+        builder.AppendLine($"  Auto reconnect attempt/success/failure: {AutoReconnectAttemptCount:N0}/{AutoReconnectSuccessCount:N0}/{AutoReconnectFailureCount:N0}");
+        builder.AppendLine($"  Last auto reconnect error: {(string.IsNullOrWhiteSpace(LastAutoReconnectError) ? "(none)" : LastAutoReconnectError)}");
         builder.AppendLine($"  ViewModel is busy: {IsBusy}");
         builder.AppendLine($"  Selected port: {SelectedPort ?? "(none)"}");
         builder.AppendLine($"  Selected port available: {SelectedPortAvailable}");

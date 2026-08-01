@@ -412,6 +412,16 @@ public sealed partial class MainWindow : Window
 
     private async void ConnectionButton_Click(object sender, RoutedEventArgs args)
     {
+        if (_viewModel.IsAutoReconnectRunning)
+        {
+            if (_viewModel.ToggleConnectionCommand.CanExecute(null))
+            {
+                _viewModel.ToggleConnectionCommand.Execute(null);
+            }
+
+            return;
+        }
+
         if (!_viewModel.IsConnected)
         {
             if (_viewModel.ConnectCommand.CanExecute(null))

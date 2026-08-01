@@ -60,6 +60,24 @@ real hardware when available.
 - [ ] Send a harmless command.
 - [ ] Disconnect and reconnect.
 - [ ] Confirm no app crash or stale connection state.
+- [ ] Enable automatic reconnect, unplug the adapter during RX, and confirm the
+  top button changes to `Cancel Reconnect` while retries use 1, 2, 5, then 10
+  second delays.
+- [ ] Reinsert the adapter with the same COM number and confirm RX resumes once,
+  without duplicate rows or duplicate observers.
+- [ ] With LOG ON, repeat the unplug/reinsert test and confirm logging continues
+  in the same active file rather than creating or appending another named file.
+- [ ] Start a bridge and a command sequence separately, force an unexpected
+  disconnect, and confirm each is stopped and not automatically resumed.
+- [ ] Run a sequence whose current step has a 600-second delay, unplug the
+  adapter, and confirm the sequence leaves Running immediately without waiting
+  for the COM port to return.
+- [ ] During retry, click `Cancel Reconnect` and confirm retries stop, background
+  connection resources are cleaned up, and a later manual Connect succeeds.
+- [ ] Let one reconnect open attempt fail, then close the app while it is waiting
+  for the next retry. Confirm the process exits and no later COM open occurs.
+- [ ] Disable automatic reconnect, force another fault, and confirm no retry is
+  scheduled. Confirm a manual Disconnect never schedules a retry.
 
 ## Bidirectional COM Bridge
 

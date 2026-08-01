@@ -88,6 +88,7 @@ HEX 모드의 수신 데이터는 byte-exact 16진수 텍스트로 기록되며 
 | 영역 | 제공 기능 |
 | --- | --- |
 | RX 표시 | 실제 COM 포트, Terminal/HEX 모드, UTF 계열·코드 페이지 디코딩, timestamp와 RX/TX prefix |
+| 연결 복구 | 실제 COM의 예기치 않은 읽기/쓰기 실패 후 같은 포트 자동 재연결, 1·2·5·10초 backoff, 수동 취소 |
 | 대용량 화면 | xterm.js 기반 선택·복사, batched append, bounded UI log buffer, pause/auto-scroll |
 | 파일 기록 | 비동기 plain-text 기록, 크기 기반 회전, 사용자 파일 이름, flush/error 카운터 |
 | 이벤트 | Terminal/HEX 전용 규칙, 전후 문맥, 일치 문자열 강조, 트레이 알림 |
@@ -135,6 +136,9 @@ background worker는 cancellation을 지원하고, 비정상 종료를 잡아 UI
   동작합니다.
 - command sequence는 고정 명령과 지연을 순서대로 실행합니다. 응답 분기와
   parameter template은 아직 제공하지 않습니다.
+- 자동 재연결은 같은 COM 포트 이름을 다시 엽니다. 장치 고유 ID를 따라 COM
+  번호 변경을 추적하지 않으며, 중단된 bridge나 command sequence를 자동으로
+  다시 시작하지 않습니다.
 - COM bridge는 byte를 그대로 전달하지만 modem-control line과 BREAK를 전달하지
   않으며, com0com 같은 가상 포트 드라이버는 별도로 준비해야 합니다.
 - MOCK/stress 검증은 실제 USB-UART adapter와 장치의 장시간 검증을 대체하지
