@@ -11,6 +11,12 @@ Date: 2026-08-01
   rebuilding only the serial transport and RX log pipeline. Bridge and command
   sequence work is stopped and remains stopped after recovery.
 - Added reconnect state, attempt, success, failure, and last-error diagnostics.
+- Added a selection tooltip time span calculated from the first and last selected
+  log-line timestamps in both Terminal and HEX modes. HEX keeps its byte count
+  on the first line and shows the time span on a second line; hidden metadata
+  does not alter rendered, searched, saved, or copied log text.
+- Terminal selection timing remains visible throughout an active drag, including
+  delayed display-mode synchronization and live append/auto-scroll events.
 
 ## Released in v1.2.4
 

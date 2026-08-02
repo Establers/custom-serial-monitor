@@ -62,6 +62,7 @@ public sealed class LogViewModel : ViewModelBase
     private readonly LinkedList<string> _visibleLines = new();
     private readonly LinkedList<string> _searchableVisibleLines = new();
     private readonly LinkedList<long> _visibleLineIds = new();
+    private readonly LinkedList<long> _visibleLineTimestampsUnixMilliseconds = new();
     private readonly LinkedList<LogDirection> _visibleLineDirections = new();
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule? _viewFilter;
@@ -322,6 +323,7 @@ public sealed class LogViewModel : ViewModelBase
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
                         retainedLine.LineId,
+                        line.Timestamp,
                         line.Direction);
                     builder.Append(appendedPartialDisplayText);
                     Interlocked.Increment(ref _partialRxAppendInPlaceCount);
@@ -332,6 +334,7 @@ public sealed class LogViewModel : ViewModelBase
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
                         retainedLine.LineId,
+                        line.Timestamp,
                         line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     builder.Append(taggedPartialDisplayLine);
@@ -359,6 +362,7 @@ public sealed class LogViewModel : ViewModelBase
                 formatted.DisplayLine,
                 formatted.SearchableLine,
                 retainedLine.LineId,
+                line.Timestamp,
                 line.Direction);
             builder.Append(taggedDisplayLine);
             appendedVisibleLineCount++;
@@ -423,16 +427,18 @@ public sealed class LogViewModel : ViewModelBase
         FlushActivePartialRxLineToNodes();
         var estimatedCapacity = (int)Math.Min(
             SnapshotPreallocationMaxChars,
-            Math.Max(0, VisibleCharacterCount + ((long)_visibleLineIds.Count * 20)));
+            Math.Max(0, VisibleCharacterCount + ((long)_visibleLineIds.Count * 40)));
         var builder = new StringBuilder(estimatedCapacity);
         var lineNode = _visibleLines.First;
         var idNode = _visibleLineIds.First;
-        while (lineNode is not null && idNode is not null)
+        var timestampNode = _visibleLineTimestampsUnixMilliseconds.First;
+        while (lineNode is not null && idNode is not null && timestampNode is not null)
         {
-            builder.Append(FormatXtermLineIdentity(idNode.Value));
+            builder.Append(FormatXtermLineIdentity(idNode.Value, timestampNode.Value));
             builder.Append(lineNode.Value);
             lineNode = lineNode.Next;
             idNode = idNode.Next;
+            timestampNode = timestampNode.Next;
         }
 
         return builder.ToString();
@@ -531,6 +537,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
         _visibleLineIds.Clear();
+        _visibleLineTimestampsUnixMilliseconds.Clear();
         _visibleLineDirections.Clear();
         _visibleCharacterCount = 0;
         _partialRxVisualLineActive = false;
@@ -546,6 +553,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.Clear();
         _searchableVisibleLines.Clear();
         _visibleLineIds.Clear();
+        _visibleLineTimestampsUnixMilliseconds.Clear();
         _visibleLineDirections.Clear();
         _retainedVisibleLineContributions.Clear();
         _visibleCharacterCount = 0;
@@ -585,6 +593,7 @@ public sealed class LogViewModel : ViewModelBase
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
                         retainedLine.LineId,
+                        line.Timestamp,
                         line.Direction);
                 }
                 else
@@ -593,6 +602,7 @@ public sealed class LogViewModel : ViewModelBase
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
                         retainedLine.LineId,
+                        line.Timestamp,
                         line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     _partialRxVisualLineActive = true;
@@ -611,7 +621,12 @@ public sealed class LogViewModel : ViewModelBase
                 formattingErrors++;
             }
 
-            AddVisibleLine(formatted.DisplayLine, formatted.SearchableLine, retainedLine.LineId, line.Direction);
+            AddVisibleLine(
+                formatted.DisplayLine,
+                formatted.SearchableLine,
+                retainedLine.LineId,
+                line.Timestamp,
+                line.Direction);
             _retainedVisibleLineContributions.Enqueue(1);
         }
 
@@ -673,6 +688,7 @@ public sealed class LogViewModel : ViewModelBase
             _visibleLines.First is null ||
             _searchableVisibleLines.First is null ||
             _visibleLineIds.First is null ||
+            _visibleLineTimestampsUnixMilliseconds.First is null ||
             _visibleLineDirections.First is null)
         {
             return false;
@@ -685,6 +701,7 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLines.RemoveFirst();
         _searchableVisibleLines.RemoveFirst();
         _visibleLineIds.RemoveFirst();
+        _visibleLineTimestampsUnixMilliseconds.RemoveFirst();
         _visibleLineDirections.RemoveFirst();
         if (ReferenceEquals(removedDisplayNode, _partialRxDisplayNode) ||
             ReferenceEquals(removedSearchableNode, _partialRxSearchableNode))
@@ -712,20 +729,23 @@ public sealed class LogViewModel : ViewModelBase
         string displayLine,
         string searchableLine,
         long lineId,
+        DateTimeOffset timestamp,
         LogDirection direction)
     {
-        var taggedDisplayLine = FormatXtermLineIdentity(lineId) + displayLine;
+        var timestampUnixMilliseconds = timestamp.ToUnixTimeMilliseconds();
+        var taggedDisplayLine = FormatXtermLineIdentity(lineId, timestampUnixMilliseconds) + displayLine;
         _visibleLineLengths.AddLast(displayLine.Length);
         _visibleLines.AddLast(displayLine);
         _searchableVisibleLines.AddLast(searchableLine);
         _visibleLineIds.AddLast(lineId);
+        _visibleLineTimestampsUnixMilliseconds.AddLast(timestampUnixMilliseconds);
         _visibleLineDirections.AddLast(direction);
         _visibleCharacterCount += displayLine.Length;
         return taggedDisplayLine;
     }
 
-    private static string FormatXtermLineIdentity(long lineId) =>
-        $"{XtermLineIdentityOscPrefix}{lineId.ToString(CultureInfo.InvariantCulture)}{XtermOscTerminator}";
+    private static string FormatXtermLineIdentity(long lineId, long timestampUnixMilliseconds) =>
+        $"{XtermLineIdentityOscPrefix}{lineId.ToString(CultureInfo.InvariantCulture)},{timestampUnixMilliseconds.ToString(CultureInfo.InvariantCulture)}{XtermOscTerminator}";
 
     private int EstimateLiveBatchCharacterCount(IReadOnlyList<LogLine> lines)
     {
@@ -807,14 +827,16 @@ public sealed class LogViewModel : ViewModelBase
         string displayText,
         string searchableText,
         long lineId,
+        DateTimeOffset timestamp,
         LogDirection direction)
     {
         if (_visibleLines.Last is null ||
             _searchableVisibleLines.Last is null ||
             _visibleLineLengths.Last is null ||
-            _visibleLineIds.Last is null)
+            _visibleLineIds.Last is null ||
+            _visibleLineTimestampsUnixMilliseconds.Last is null)
         {
-            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId, direction);
+            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId, timestamp, direction);
             BeginActivePartialRxVisualLine(displayText, searchableText);
             _partialRxVisualLength = searchableText.Length;
             return taggedDisplayLine;

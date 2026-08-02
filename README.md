@@ -89,7 +89,7 @@ HEX 모드의 수신 데이터는 byte-exact 16진수 텍스트로 기록되며 
 | --- | --- |
 | RX 표시 | 실제 COM 포트, Terminal/HEX 모드, UTF 계열·코드 페이지 디코딩, timestamp와 RX/TX prefix |
 | 연결 복구 | 실제 COM의 예기치 않은 읽기/쓰기 실패 후 같은 포트 자동 재연결, 1·2·5·10초 backoff, 수동 취소 |
-| 대용량 화면 | xterm.js 기반 선택·복사, batched append, bounded UI log buffer, pause/auto-scroll |
+| 대용량 화면 | xterm.js 기반 선택·복사, 선택 구간 시간차 및 HEX byte 길이 툴팁, batched append, bounded UI log buffer, pause/auto-scroll |
 | 파일 기록 | 비동기 plain-text 기록, 크기 기반 회전, 사용자 파일 이름, flush/error 카운터 |
 | 이벤트 | Terminal/HEX 전용 규칙, 전후 문맥, 일치 문자열 강조, 트레이 알림 |
 | 검색 | 현재 보관 중인 로그 검색, F3/Shift+F3, 결과 목록, 1,000줄 단위 페이지 |

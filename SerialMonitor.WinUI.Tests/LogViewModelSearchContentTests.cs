@@ -152,7 +152,12 @@ public sealed class LogViewModelSearchContentTests
     public void SearchContent_LineIdsRemainStableAcrossFormattingRebuild()
     {
         var viewModel = new LogViewModel(100);
-        viewModel.AddRange([LogLine.Rx("first"), LogLine.Tx("second")]);
+        var firstTimestamp = new DateTimeOffset(2026, 8, 2, 12, 34, 56, 789, TimeSpan.Zero);
+        viewModel.AddRange(
+        [
+            new LogLine(firstTimestamp, LogDirection.Rx, "first"),
+            new LogLine(firstTimestamp.AddSeconds(1.423), LogDirection.Tx, "second")
+        ]);
         var before = viewModel.GetVisibleSearchContentSnapshot();
 
         viewModel.SetTimestampDisplayFormat(TimestampDisplayFormat.TimeSeconds);
@@ -162,8 +167,56 @@ public sealed class LogViewModelSearchContentTests
         Assert.Equal(2, after.Select(line => line.LineId).Distinct().Count());
         Assert.DoesNotContain("\u001b]777;", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
         Assert.Contains(
-            $"\u001b]777;{after[0].LineId}\u0007",
+            $"\u001b]777;{after[0].LineId},{firstTimestamp.ToUnixTimeMilliseconds()}\u0007",
             viewModel.GetXtermTextSnapshot(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void XtermTimestampMetadata_RemainsAvailableWhenVisibleTimestampIsHidden()
+    {
+        var timestamp = new DateTimeOffset(2026, 8, 2, 12, 34, 56, 789, TimeSpan.Zero);
+        var viewModel = new LogViewModel(100);
+        viewModel.SetShowTimestampInLogView(false);
+        viewModel.AddRange([new LogLine(timestamp, LogDirection.Rx, "READY")]);
+
+        var line = Assert.Single(viewModel.GetVisibleSearchContentSnapshot());
+        var xtermText = viewModel.GetXtermTextSnapshot();
+
+        Assert.DoesNotContain("2026-08-02", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.Contains(
+            $"\u001b]777;{line.LineId},{timestamp.ToUnixTimeMilliseconds()}\u0007",
+            xtermText,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void XtermTimestampMetadata_StaysAlignedAfterCapacityTrim()
+    {
+        var firstTimestamp = new DateTimeOffset(2026, 8, 2, 12, 0, 0, TimeSpan.Zero);
+        var viewModel = new LogViewModel(2);
+        viewModel.AddRange(
+        [
+            new LogLine(firstTimestamp, LogDirection.Rx, "first"),
+            new LogLine(firstTimestamp.AddSeconds(1), LogDirection.Rx, "second"),
+            new LogLine(firstTimestamp.AddSeconds(2), LogDirection.Rx, "third")
+        ]);
+
+        var lines = viewModel.GetVisibleSearchContentSnapshot();
+        var xtermText = viewModel.GetXtermTextSnapshot();
+
+        Assert.Equal(2, lines.Count);
+        Assert.DoesNotContain(
+            $"\u001b]777;1,{firstTimestamp.ToUnixTimeMilliseconds()}\u0007",
+            xtermText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"\u001b]777;{lines[0].LineId},{firstTimestamp.AddSeconds(1).ToUnixTimeMilliseconds()}\u0007",
+            xtermText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"\u001b]777;{lines[1].LineId},{firstTimestamp.AddSeconds(2).ToUnixTimeMilliseconds()}\u0007",
+            xtermText,
             StringComparison.Ordinal);
     }
 

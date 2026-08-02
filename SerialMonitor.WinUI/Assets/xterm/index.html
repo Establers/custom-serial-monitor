@@ -266,7 +266,7 @@
       line-height: 16px;
       pointer-events: none;
       user-select: none;
-      white-space: nowrap;
+      white-space: pre-line;
     }
   </style>
 </head>
@@ -515,6 +515,7 @@
     const appendQueue = [];
     const replaceQueue = [];
     const parsedLogLineIds = [];
+    const parsedLogLineTimestamps = [];
     let appendQueueHead = 0;
     let replaceQueueHead = 0;
     let parsedLogLineIdHead = 0;
@@ -540,6 +541,7 @@
 
     function resetParsedLogLineIds() {
       parsedLogLineIds.length = 0;
+      parsedLogLineTimestamps.length = 0;
       parsedLogLineIdHead = 0;
     }
 
@@ -551,6 +553,7 @@
 
       if (parsedLogLineIdHead > 4096 && parsedLogLineIdHead * 2 > parsedLogLineIds.length) {
         parsedLogLineIds.splice(0, parsedLogLineIdHead);
+        parsedLogLineTimestamps.splice(0, parsedLogLineIdHead);
         parsedLogLineIdHead = 0;
       }
     }
@@ -595,12 +598,24 @@
     }
 
     terminal.parser.registerOscHandler(777, data => {
-      const lineId = String(data ?? '').trim();
+      const metadata = String(data ?? '').trim().split(',');
+      const lineId = metadata[0];
       if (!/^\d+$/.test(lineId)) {
         return false;
       }
 
+      let timestamp = null;
+      if (metadata.length === 2 && /^-?\d+$/.test(metadata[1])) {
+        const parsedTimestamp = Number(metadata[1]);
+        if (Number.isSafeInteger(parsedTimestamp)) {
+          timestamp = parsedTimestamp;
+        }
+      } else if (metadata.length !== 1) {
+        return false;
+      }
+
       parsedLogLineIds.push(lineId);
+      parsedLogLineTimestamps.push(timestamp);
       trimParsedLogLineIds();
       return true;
     });
@@ -644,6 +659,16 @@
       }
     }
 
+    function onTerminalWriteParsed() {
+      // terminal.write parses asynchronously. A drag can rebuild the logical
+      // row cache after the write was queued but before its OSC metadata and
+      // buffer rows are committed, so invalidate again at the parse boundary.
+      invalidateLogicalLineStartRows();
+      if (pointerSelectionGesture) {
+        queueHexSelectionHintUpdate();
+      }
+    }
+
     function drainAppendQueue() {
       appendDrainScheduled = false;
       if (appendWriting || replaceWriting || appendQueueLength() === 0) {
@@ -655,6 +680,7 @@
       appendWriting = true;
       try {
         terminal.write(item.text, () => {
+          onTerminalWriteParsed();
           if (item.autoScroll && appendQueueLength() === 0) {
             terminal.scrollToBottom();
           }
@@ -707,7 +733,10 @@
         // Clear can then stop a long restore after the current bounded chunk
         // instead of waiting for every chunk already queued inside xterm.
         const chunk = replaceQueue[replaceQueueHead++];
-        terminal.write(chunk, () => commitReplaceQueue(autoScroll, operationId));
+        terminal.write(chunk, () => {
+          onTerminalWriteParsed();
+          commitReplaceQueue(autoScroll, operationId);
+        });
       } catch (error) {
         replaceWriting = false;
         replaceQueue.length = 0;
@@ -907,6 +936,85 @@
       return position ? JSON.stringify(position) : '';
     }
 
+    function findLogicalLineIndexForBufferRow(lineStarts, targetRow) {
+      let low = 0;
+      let high = lineStarts.length - 1;
+      let result = -1;
+      while (low <= high) {
+        const middle = low + Math.floor((high - low) / 2);
+        if (lineStarts[middle] <= targetRow) {
+          result = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      return result;
+    }
+
+    function getTimestampForLogicalLineIndex(logicalLineIndex, logicalLineCount) {
+      trimParsedLogLineIds();
+      const retainedMetadataCount = parsedLogLineIds.length - parsedLogLineIdHead;
+      const retainedMetadataStart = retainedMetadataCount - logicalLineCount;
+      const metadataIndex = parsedLogLineIdHead + retainedMetadataStart + logicalLineIndex;
+      if (retainedMetadataStart < 0 ||
+          logicalLineIndex < 0 ||
+          metadataIndex < parsedLogLineIdHead ||
+          metadataIndex >= parsedLogLineTimestamps.length) {
+        return null;
+      }
+
+      const timestamp = parsedLogLineTimestamps[metadataIndex];
+      return Number.isSafeInteger(timestamp) ? timestamp : null;
+    }
+
+    function getSelectionDeltaMilliseconds(selectionPosition) {
+      const lineStarts = getLogicalLineStartRows();
+      if (!selectionPosition || lineStarts.length === 0) {
+        return null;
+      }
+
+      const startIndex = findLogicalLineIndexForBufferRow(lineStarts, selectionPosition.start.y);
+      const endIndex = findLogicalLineIndexForBufferRow(lineStarts, selectionPosition.end.y);
+      const startTimestamp = getTimestampForLogicalLineIndex(startIndex, lineStarts.length);
+      const endTimestamp = getTimestampForLogicalLineIndex(endIndex, lineStarts.length);
+      if (startTimestamp === null || endTimestamp === null) {
+        return null;
+      }
+
+      return Math.abs(endTimestamp - startTimestamp);
+    }
+
+    function formatSelectionDelta(deltaMilliseconds) {
+      if (deltaMilliseconds < 1000) {
+        return `${deltaMilliseconds}ms`;
+      }
+
+      if (deltaMilliseconds < 60000) {
+        return `${(deltaMilliseconds / 1000).toFixed(3)}s`;
+      }
+
+      const totalSeconds = deltaMilliseconds / 1000;
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = (totalSeconds % 60).toFixed(3);
+      return hours > 0
+        ? `${hours}h ${minutes}m ${seconds}s`
+        : `${minutes}m ${seconds}s`;
+    }
+
+    function buildSelectionHintText(byteCountText, deltaMilliseconds) {
+      const parts = [];
+      if (byteCountText) {
+        parts.push(`Len: ${byteCountText}`);
+      }
+      if (deltaMilliseconds !== null) {
+        parts.push(`Δt: ${formatSelectionDelta(deltaMilliseconds)}`);
+      }
+      return parts.join('\n');
+    }
+
     function countHexBytesInSelectedLine(selectedLine) {
       let byteCount = 0;
       let candidate = selectedLine;
@@ -993,7 +1101,7 @@
     }
 
     function updateHexSelectionHint(forceUpdate) {
-      if (!hexSelectionHintEnabled || (!pointerSelectionGesture && !forceUpdate)) {
+      if (!pointerSelectionGesture && !forceUpdate) {
         return;
       }
 
@@ -1004,26 +1112,35 @@
         return;
       }
 
+      const deltaMilliseconds = getSelectionDeltaMilliseconds(selectionPosition);
       const selectedRowCount = Math.abs(selectionPosition.end.y - selectionPosition.start.y) + 1;
-      if (!forceUpdate && selectedRowCount > maxLiveHexSelectionRows) {
-        showHexSelectionHint('Len : …');
+      if (hexSelectionHintEnabled && !forceUpdate && selectedRowCount > maxLiveHexSelectionRows) {
+        showHexSelectionHint(buildSelectionHintText('…', deltaMilliseconds));
         return;
       }
 
-      // getSelection can allocate a very large string. Call it only once for
-      // the coalesced frame, and only after the live-size guard above.
-      const selectedText = terminal.getSelection();
-      const byteCount = countHexBytesInSelection(selectedText);
-      if (byteCount <= 0) {
+      let byteCountText = '';
+      if (hexSelectionHintEnabled) {
+        // getSelection can allocate a very large string. Call it only once for
+        // the coalesced frame, and only after the live-size guard above.
+        const selectedText = terminal.getSelection();
+        const byteCount = countHexBytesInSelection(selectedText);
+        if (byteCount > 0) {
+          byteCountText = String(byteCount);
+        }
+      }
+
+      const hintText = buildSelectionHintText(byteCountText, deltaMilliseconds);
+      if (!hintText) {
         hideHexSelectionHint();
         return;
       }
 
-      showHexSelectionHint(`Len : ${byteCount}`);
+      showHexSelectionHint(hintText);
     }
 
     function queueHexSelectionHintUpdate(forceUpdate = false) {
-      if (!hexSelectionHintEnabled || (!pointerSelectionGesture && !forceUpdate)) {
+      if (!pointerSelectionGesture && !forceUpdate) {
         return;
       }
 
@@ -1222,9 +1339,18 @@
     };
 
     window.serialMonitorSetHexSelectionHintEnabled = function (enabled) {
-      hexSelectionHintEnabled = !!enabled;
-      if (!hexSelectionHintEnabled) {
-        pointerSelectionGesture = false;
+      const nextEnabled = !!enabled;
+      if (hexSelectionHintEnabled === nextEnabled) {
+        return true;
+      }
+
+      hexSelectionHintEnabled = nextEnabled;
+      // This flag now controls only the HEX length row. Terminal selections
+      // still use the same overlay for Δt, so an asynchronously completed mode
+      // sync must not cancel a drag that has already started.
+      if (pointerSelectionGesture) {
+        queueHexSelectionHintUpdate(true);
+      } else {
         hideHexSelectionHint();
       }
 
@@ -1806,7 +1932,7 @@
         return;
       }
 
-      pointerSelectionGesture = hexSelectionHintEnabled;
+      pointerSelectionGesture = true;
       selectionPointerX = event.clientX;
       selectionPointerY = event.clientY;
       hideHexSelectionHint();
@@ -1871,7 +1997,14 @@
 
     document.addEventListener('scroll', () => {
       hideContextMenu();
-      hideHexSelectionHint();
+      // Live appends and drag auto-scroll can raise captured scroll events.
+      // Keep an active selection hint alive and recalculate its endpoints;
+      // preserve the previous hide-on-scroll behavior after the drag ends.
+      if (pointerSelectionGesture) {
+        queueHexSelectionHintUpdate();
+      } else {
+        hideHexSelectionHint();
+      }
     }, true);
     window.addEventListener('blur', () => {
       hideContextMenu();

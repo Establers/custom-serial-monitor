@@ -35,6 +35,16 @@ real hardware when available.
 - [ ] Connect and confirm RX logs arrive.
 - [ ] While connected, switch Terminal/HEX mode repeatedly and confirm the same
   COM port remains selected and connected while new data uses the active mode.
+- [ ] In Terminal mode, drag across two timestamped log lines and confirm the
+  tooltip shows only `Δt: <duration>`; selecting within one logical line shows
+  `Δt: 0ms`.
+- [ ] Keep dragging in Terminal mode while new MOCK lines append or the terminal
+  auto-scrolls; confirm the delta tooltip remains visible until mouse release.
+- [ ] Hide visible timestamps and repeat the Terminal selection; confirm the
+  delta tooltip still works and copied text contains no tooltip metadata.
+- [ ] In HEX mode, drag across known bytes on two log lines and confirm the
+  tooltip uses two lines: `Len: <bytes>` followed by `Δt: <duration>`. Confirm
+  the byte count matches the previous selection-length behavior.
 - [ ] In HEX mode, change the HEX group timeout and confirm it applies without
   disconnecting the COM port.
 - [ ] Confirm `RX BUSY -- · IDLE -- · PEAK -- · 1m` appears to the right of the HEX timeout
