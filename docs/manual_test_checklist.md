@@ -14,7 +14,8 @@ real hardware when available.
 - [ ] Confirm the window opens without an unhandled exception.
 - [ ] Confirm the Port list includes one `MOCK` entry.
 - [ ] Confirm bottom health shows `HEALTH OK` or a clear non-stale warning.
-- [ ] Confirm Diagnostics can be opened.
+- [ ] Hover over the footer and confirm the health reason and counter legend appear.
+- [ ] Right-click the footer, copy status, and paste it into Notepad.
 
 ## MOCK Connect And Disconnect
 
@@ -22,7 +23,7 @@ real hardware when available.
 - [ ] Click Connect.
 - [ ] Confirm connection state changes to connected.
 - [ ] Confirm RX logs start appending.
-- [ ] Confirm FileWriter running state is true in Diagnostics.
+- [ ] Confirm the footer changes to `File ON` while file logging is active.
 - [ ] Disconnect.
 - [ ] Confirm FileWriter stops cleanly.
 - [ ] Reconnect to `MOCK`.
@@ -114,7 +115,7 @@ real hardware when available.
 - [ ] Change RX encoding and Terminal/HEX display modes; confirm forwarded bytes remain unchanged.
 - [ ] Pause rendering and minimize the app while sending sustained virtual-to-device traffic; confirm the device continues receiving without bridge transport drops.
 - [ ] If the UI-only bridge log queue is forced to overflow, confirm only its UI drop counter increases while transport byte counts continue.
-- [ ] While Bridge is OFF, confirm Diagnostics reports raw bridge priority OFF and the normal awaited RX pipeline remains active.
+- [ ] While Bridge is OFF, confirm the normal awaited RX pipeline remains active and footer drop counts stay at zero.
 - [ ] While Bridge is ON, force parser/UI overload and confirm raw bridge traffic continues while only the bridge-priority parser/log drop counter increases.
 - [ ] Stop the external program temporarily and confirm bridge backlog/drop/error counters remain bounded and visible.
 - [ ] While bridge traffic is active, request one manual TX and confirm the UI
@@ -123,7 +124,7 @@ real hardware when available.
   25 ms of global bridge idle.
 - [ ] Confirm Send, Enter, Quick command, saved shortcut, and history resend are
   disabled immediately on the Waiting transition and remain disabled through
-  Sending, without waiting for the Diagnostics refresh timer.
+  Sending, without waiting for the footer status refresh timer.
 - [ ] Split one HEX rule pattern at every byte boundary across consecutive
   writes on COM5 and confirm the TxOnly/Both rule fires once for each logical
   idle group while the bytes reaching the device remain unchanged.
@@ -137,8 +138,8 @@ real hardware when available.
 - [ ] Saturate the device-to-virtual queue and confirm the bridge alone stops
   with `Bridge stopped: virtual COM consumer too slow`, while the device COM and
   normal RX remain connected.
-- [ ] Check Diagnostics for queued chunks/bytes, oldest age, replay delay/
-  lateness, overflow reason, last activity, and manual TX state.
+- [ ] Force a bridge warning or failure and confirm the footer health tooltip
+  keeps the reason visible and copied status includes it.
 - [ ] Stop the bridge and confirm the `BRIDGE ON` indicators disappear.
 - [ ] Disconnect the device and confirm the bridge stops before the device port closes.
 
@@ -485,12 +486,22 @@ real hardware when available.
   actual-gap and throughput summary.
 - [ ] Close Serial Monitor and run the opt-in automated native-boundary test.
 
-## Health And Diagnostics
+## Health And Footer Status
 
 - [ ] Confirm bottom status shows `HEALTH OK` during a clean mock session.
-- [ ] Confirm Diagnostics shows health reasons and detailed counters.
-- [ ] Copy Diagnostics and paste into Notepad.
+- [ ] Confirm hovering over the footer shows the current health reasons.
+- [ ] Right-click the footer, copy status, and paste it into Notepad.
 - [ ] If practical, force a warning/error counter and confirm health changes to
   `WARNING` or `ERROR`.
+- [ ] Trigger a recoverable validation error and confirm it does not leave Health
+  permanently at `ERROR`.
+- [ ] Recover or restart a failed background service and confirm its active
+  background error clears from the footer reason list.
+- [ ] Force two different observer loops to fail and confirm both reasons remain
+  independently visible; a service status change must not clear either reason.
+- [ ] Confirm an observer reason clears only after that observer task is actually
+  created again. Bridge observer failures should remain until app restart.
+- [ ] Accumulate more than five health reasons and confirm the tooltip shows five
+  plus a remaining count while copied status includes every reason.
 - [ ] Confirm stale profile or search-result states are not treated as health
   errors.

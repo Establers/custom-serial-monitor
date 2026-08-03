@@ -540,14 +540,6 @@
     <value>Runs immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi229.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Inspect runtime counters, queue state, drops, and recent errors.</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
-  <data name="StaticUi231.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Copy diagnostics</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
   <data name="StaticUi232.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Read quick instructions for events, sequences, the COM bridge, and shortcuts.</value>
     <comment>Static MainWindow UI text.</comment>
@@ -618,10 +610,6 @@
   </data>
   <data name="StaticUi259.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll quick commands right</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
-  <data name="StaticUi260.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>DRV F/P/O/RX shows Windows driver-reported Frame, Parity, hardware Overrun, and RX-buffer warnings. Q F/E/U shows pending File, Event, and UI queues. Drop UI counts only overload losses. PS counts lines intentionally skipped by Pause View. B means bytes and l means lines.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi261.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -801,7 +789,7 @@
     <comment>Help section title.</comment>
   </data>
   <data name="HelpModeAndLogsBody" xml:space="preserve">
-    <value>The main Mode setting controls both RX display and TX input interpretation.&#x0A;Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.&#x0A;HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.&#x0A;Mode and HEX timeout apply immediately without disconnecting.&#x0A;HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.&#x0A;Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.&#x0A;RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.&#x0A;Clear affects only the screen and does not delete saved files.&#x0A;If Drop or Error increases in Health, inspect the cause on the Diag tab.</value>
+    <value>The main Mode setting controls both RX display and TX input interpretation.&#x0A;Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.&#x0A;HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.&#x0A;Mode and HEX timeout apply immediately without disconnecting.&#x0A;HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.&#x0A;Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.&#x0A;RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.&#x0A;Clear affects only the screen and does not delete saved files.&#x0A;If Health shows WARNING or ERROR, hover over the footer to inspect the cause or right-click it to copy the status.</value>
     <comment>Help section body.</comment>
   </data>
   <data name="HelpShortcutsTitle" xml:space="preserve">
@@ -811,5 +799,29 @@
   <data name="HelpShortcutsBody" xml:space="preserve">
     <value>Ctrl+F  Focus search&#x0A;Enter / Shift+Enter  Refresh search and select next / previous&#x0A;F3 / Shift+F3  Move to next / previous result in the last search&#x0A;Ctrl+C  Copy selected log text&#x0A;Ctrl+M  Insert MARK&#x0A;↑ / ↓ in TX input  Move through command history</value>
     <comment>Help section body.</comment>
+  </data>
+  <data name="FooterCopyStatusMenuItem.Text" xml:space="preserve">
+    <value>Copy status</value>
+    <comment>Footer context-menu command.</comment>
+  </data>
+  <data name="FooterStatusToolTipFormat" xml:space="preserve">
+    <value>Health: {0}&#x0A;{1}&#x0A;&#x0A;DRV F/P/O/RX: Frame, Parity, hardware Overrun, RX-buffer warning. Q F/E/U: pending File, Event, UI queues. Drop RX/F/UI: overload losses. PS: lines intentionally skipped by Pause View. Right-click to copy this status.</value>
+    <comment>Footer health reasons and counter legend.</comment>
+  </data>
+  <data name="HealthReasonLabel" xml:space="preserve">
+    <value>Health reason</value>
+    <comment>Copied footer status label.</comment>
+  </data>
+  <data name="NoHealthIssues" xml:space="preserve">
+    <value>No health issues.</value>
+    <comment>Footer health reason when no issue exists.</comment>
+  </data>
+  <data name="AdditionalHealthReasonsFormat" xml:space="preserve">
+    <value>+{0} more</value>
+    <comment>Footer tooltip suffix for hidden health reasons.</comment>
+  </data>
+  <data name="FooterStatusCopied" xml:space="preserve">
+    <value>Footer status copied to clipboard.</value>
+    <comment>Status shown after copying footer health.</comment>
   </data>
 </root>

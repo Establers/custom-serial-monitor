@@ -1597,20 +1597,10 @@
                                 <Grid ColumnSpacing="5"
                                       MinWidth="0"
                                       ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
-                                      RowDefinitions="Auto,Auto">
+                                      RowDefinitions="Auto">
                                     <TextBlock Text="Search"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
                                                Margin="0,0,6,0" />
-                                    <TextBlock Grid.Row="1"
-                                               Grid.ColumnSpan="6"
-                                               Text="{Binding AppliedSearchCriteriaText}"
-                                               FontFamily="Consolas"
-                                               Style="{StaticResource CompactCellTextStyle}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MinWidth="0"
-                                               Margin="0,3,0,0"
-                                               VerticalAlignment="Center"
-                                               ToolTipService.ToolTip="{Binding AppliedSearchCriteriaText}" />
                                     <Button x:Uid="StaticUi029" Grid.Column="1"
                                             Content="Refresh"
                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -2642,7 +2632,7 @@
                                                        Text="Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms)."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
-                                                       ToolTipService.ToolTip="Check Diag > Last RX chunk gap and Last HEX group bytes. A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
+                                                       ToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
                                               ColumnSpacing="4">
@@ -3098,51 +3088,6 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem x:Uid="StaticUi229" Header="Diag"
-                                 IsClosable="False"
-                                 ToolTipService.ToolTip="Inspect runtime counters, queue state, drops, and recent errors.">
-                        <Grid Style="{StaticResource InspectorTabGridStyle}"
-                              RowDefinitions="Auto,Auto,*">
-                            <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
-                                <Grid ColumnDefinitions="*,Auto"
-                                      ColumnSpacing="4">
-                                    <TextBlock Text="Diagnostics"
-                                               Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button x:Uid="StaticUi231" Grid.Column="1"
-                                            Content="Copy"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Command="{Binding CopyDiagnosticsCommand}"
-                                            ToolTipService.ToolTip="Copy diagnostics" />
-                                </Grid>
-                            </Border>
-
-                            <Border Grid.Row="1"
-                                     Style="{StaticResource InspectorSectionBorderStyle}"
-                                     Padding="4"
-                                     MaxHeight="74">
-                                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                              VerticalScrollBarVisibility="Disabled">
-                                    <TextBlock Text="{Binding DiagnosticsSummaryText, Mode=OneWay}"
-                                               FontFamily="Consolas"
-                                               FontSize="11"
-                                               TextWrapping="NoWrap" />
-                                </ScrollViewer>
-                            </Border>
-
-                            <Border Grid.Row="2"
-                                    Style="{StaticResource InspectorTabBodyBorderStyle}">
-                                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                              VerticalScrollBarVisibility="Auto">
-                                    <TextBlock Text="{Binding DiagnosticsText, Mode=OneWay}"
-                                               FontFamily="Consolas"
-                                               FontSize="12"
-                                               IsTextSelectionEnabled="True"
-                                               TextWrapping="NoWrap" />
-                                </ScrollViewer>
-                            </Border>
-                        </Grid>
-                    </TabViewItem>
-
                     <TabViewItem x:Uid="StaticUi232" Header="Help"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Read quick instructions for events, sequences, the COM bridge, and shortcuts.">
@@ -3555,8 +3500,16 @@
                            FontSize="11"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="DRV F/P/O/RX shows Windows driver-reported Frame, Parity, hardware Overrun, and RX-buffer warnings. Q F/E/U shows pending File, Event, and UI queues. Drop UI counts only overload losses. PS counts lines intentionally skipped by Pause View. B means bytes and l means lines."
-                           MaxLines="1" />
+                           ToolTipService.ToolTip="{Binding FooterStatusToolTipText}"
+                           MaxLines="1">
+                    <TextBlock.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem x:Uid="FooterCopyStatusMenuItem"
+                                            Text="Copy status"
+                                            Click="FooterCopyStatusMenuItem_Click" />
+                        </MenuFlyout>
+                    </TextBlock.ContextFlyout>
+                </TextBlock>
             </ScrollViewer>
         </Border>
 

@@ -14,7 +14,7 @@ Date: 2026-08-03
 - Automatic reconnect preserves the active file writer and event detector while
   rebuilding only the serial transport and RX log pipeline. Bridge and command
   sequence work is stopped and remains stopped after recovery.
-- Added reconnect state, attempt, success, failure, and last-error diagnostics.
+- Added reconnect state, attempt, success, failure, and last-error tracking.
 - Added a selection tooltip time span calculated from the first and last selected
   log-line timestamps in both Terminal and HEX modes. HEX keeps its byte count
   on the first line and shows the time span on a second line; hidden metadata
@@ -95,7 +95,7 @@ Date: 2026-08-03
 - JSON profile save/load/reset.
 - Settings validation and apply-behavior hints.
 - Mock stress mode and sequence-loss diagnostics.
-- Compact health summary and detailed copyable diagnostics.
+- Compact footer health summary with hoverable reasons and copyable status.
 - Log file quick actions for opening/copying the active serial log path.
 - In-app Help/Guide tab.
 - Live Terminal/HEX mode and HEX timeout changes without disconnecting the
@@ -134,7 +134,7 @@ Date: 2026-08-03
 ## Suggested Next Validation Steps
 
 1. Run the manual regression checklist with `MOCK`.
-2. Run mock stress mode at low, medium, and high rates and copy diagnostics.
+2. Run mock stress mode at low, medium, and high rates and copy the footer status.
 3. Repeat core connect/TX/log/event checks on one real COM device.
 4. Run a multi-hour real serial soak test with file logging and event detection.
 5. Run an overnight test and verify:

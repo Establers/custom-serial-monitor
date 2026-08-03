@@ -3972,7 +3972,6 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _viewModel.SetActiveInspectorTab(GetInspectorTabName(InspectorTabView.SelectedItem));
             if (ReferenceEquals(InspectorTabView.SelectedItem, ContextTabViewItem))
             {
                 _viewModel.RecordContextTabActivated();
@@ -3995,11 +3994,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static string GetInspectorTabName(object? selectedItem)
+    private void FooterCopyStatusMenuItem_Click(object sender, RoutedEventArgs args)
     {
-        return selectedItem is TabViewItem tabViewItem
-            ? tabViewItem.Header?.ToString() ?? "(unknown)"
-            : "(unknown)";
+        _viewModel.CopyStatusCommand.Execute(null);
     }
 
     private void SelectEventAndShowContext(DetectedEvent detectedEvent)

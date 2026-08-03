@@ -10,7 +10,7 @@ No backend changes are recommended here.
 
 The app has matured into a capable embedded serial debugging tool: xterm.js is the
 right primary log surface, event context is separated into a reliable WebView,
-search results are stable by default, and diagnostics/health make long-running
+search results are stable by default, and footer health makes long-running
 verification practical.
 
 The main UX risk is that the app now exposes many advanced controls in one window.
@@ -31,9 +31,9 @@ workflows faster, not on adding more features.
 
 2. **Inspector has too many equally weighted tabs**
    - Area: `MainWindow.xaml` `TabView` with `Events`, `Context`, `Search`,
-     `Rules`, `Settings`, `Diag`, `Help`.
+     `Rules`, `Settings`, `Help`.
    - All tabs look equally important, but daily-use priority is usually
-     `Events`, `Context`, `Search`; `Rules`, `Settings`, `Diag`, and `Help`
+     `Events`, `Context`, `Search`; `Rules`, `Settings`, and `Help`
      are secondary.
    - The current `TabViewItem` max width helps compactness but can make the
      tab row feel crowded on narrow layouts.
@@ -63,15 +63,14 @@ workflows faster, not on adding more features.
 6. **Connection bar still carries verbose status**
    - Area: `MainWindow.xaml` top connection row.
    - The compact connection status can include port, baud, and status text in
-     one long `TextBlock`. It truncates, but users may not know where full status
-     lives unless they open Diagnostics.
+     one long `TextBlock`. It truncates; the footer remains the compact runtime
+     health and counter summary.
 
-7. **Diagnostics is powerful but too verbose for routine use**
-   - Area: `MainViewModel.BuildDiagnosticsText`, `MainWindow.xaml` Diag tab.
-   - Copy Diagnostics is useful, but the diagnostics text is very long. This is
-     appropriate for support, not for routine triage.
-   - Health summary helps, but diagnostics would benefit from a short top
-     summary before the full dump.
+7. **Runtime status is intentionally compact**
+   - Area: `MainViewModel.CreateFooterStatus`, `MainWindow.xaml` footer.
+   - Runtime health, resource, queue, drop, RX, driver, event, and file state
+     stay in one footer line; reasons are available on hover and status is
+     copyable from the footer context menu.
 
 8. **Search results are split between two mental models**
    - Area: quick search row, Search tab, xterm search bridge.
@@ -112,12 +111,6 @@ workflows faster, not on adding more features.
   - Example: `Send command: reboot (Ctrl+1)`.
   - File/area: `TxCommand.SendToolTip` or button tooltip binding.
 
-- **Make Diagnostics start with a compact summary**
-  - Add health, last error, current serial log path, current event log path,
-    file writer running, event detector running, and mock missing count before
-    the detailed counters.
-  - File/area: `MainViewModel.BuildDiagnosticsText`.
-
 - **Normalize action button labels**
   - `Open S`, `Open E`, `Copy S`, `Copy E` are compact but cryptic.
   - Consider `Serial`, `Events`, `Folder`, `Copy S`, `Copy E`, or icon+tooltip.
@@ -155,9 +148,9 @@ workflows faster, not on adding more features.
   - Narrow layout: inspector as a bottom/side pane that can hide.
   - Risk: more focus and resizing edge cases with WebView2/xterm fit.
 
-- **Add a dedicated compact status strip inside Diagnostics**
-  - Keep the full diagnostics text, but add live summary fields above it.
-  - Risk: duplicates bottom health/status data unless carefully scoped.
+- **Keep footer health reasons discoverable**
+  - Preserve the hoverable reason summary and context-menu copy action.
+  - Risk: a long tooltip can become hard to scan if too many warnings accumulate.
 
 - **Search result jump robustness**
   - Current indexed jump depends on visible-buffer order and xterm search
@@ -191,9 +184,9 @@ workflows faster, not on adding more features.
   - Keep reconnect-required behavior for port, baud, data bits, parity, stop
     bits, handshake, DTR, RTS, RX ending, and encoding.
 
-- **Do not hide diagnostics entirely**
-  - The app is intended for long-running embedded debugging; copyable diagnostics
-    are part of the stability story.
+- **Do not hide health causes**
+  - The app is intended for long-running embedded debugging; hoverable health
+    reasons and copyable footer status are part of the stability story.
 
 ## Suggested Final Layout Direction
 
@@ -208,7 +201,6 @@ workflows faster, not on adding more features.
   - `Search`
   - `Rules`
   - `Settings`
-  - `Diag`
   - `Help`
 - Bottom: compact TX row, with saved command quick chips visible.
 - Saved command management can be visually secondary or collapsible.
@@ -250,15 +242,15 @@ workflows faster, not on adding more features.
 1. Reduce top log toolbar crowding.
    - Candidate: collapse marker text into a flyout.
    - Candidate: move matched-line preview into Search tab only.
-2. Normalize compact action labels/tooltips in Settings > Log and Diagnostics.
+2. Normalize compact action labels/tooltips in Settings > Log and the footer.
 3. Show saved command shortcuts in chip tooltips.
-4. Add a concise Diagnostics summary above the full text dump.
+4. Keep footer health reasons concise when several warnings are active.
 
 ### P2: Inspector Workflow
 
-1. Evaluate whether `Help` should stay as the last tab or move behind `Diag`.
+1. Evaluate whether `Help` should stay as the last tab.
 2. Improve Help readability with bold headings or a local HTML/pre viewer.
-3. Consider grouping `Rules`, `Settings`, `Diag`, and `Help` as secondary tabs
+3. Consider grouping `Rules`, `Settings`, and `Help` as secondary tabs
    if the tab row becomes too crowded.
 4. Consider a sticky context header that remains visible while context scrolls.
 
@@ -273,7 +265,7 @@ workflows faster, not on adding more features.
 ### P4: Responsive Layout Hardening
 
 1. Verify 1600 px, 1200 px, and 900 px widths.
-2. Verify half-height windows with Rules, Settings, Context, and Diagnostics.
+2. Verify half-height windows with Rules, Settings, Context, and Help.
 3. Confirm xterm fit after tab switching, window resize, and inspector reflow.
 4. Confirm context WebView updates immediately after repeated double-clicks.
 
@@ -294,7 +286,7 @@ workflows faster, not on adding more features.
 - xterm is visually dominant and should stay that way.
 - The top toolbar has too many peers, so search, rendering, and marker actions
   compete for attention.
-- Events/Context/Search tabs are daily-use; Settings/Diag/Help are secondary.
+- Events/Context/Search tabs are daily-use; Settings/Help are secondary.
   The current tab row does not express this priority.
 
 ### Compactness And Consistency
@@ -333,17 +325,16 @@ workflows faster, not on adding more features.
 
 - Settings are grouped sensibly.
 - Apply hints are useful and now aligned.
-- Validation/status is visible through status/diagnostics; inline field-level
+- Validation/status is visible through status and footer health; inline field-level
   error decoration is not present.
 - Save directory validation is important because log writing depends on it.
 
-### Diagnostics And Health
+### Footer Health
 
 - Bottom health summary is valuable and should stay compact.
-- Diagnostics text is comprehensive but not optimized for quick visual triage.
-- Copy Diagnostics is easy to find.
-- Log file quick actions are now in Settings > Log; this is coherent, but users
-  may still expect them in Diagnostics. Help should mention the Settings location.
+- Hovering exposes active reasons without adding a permanent panel.
+- Right-click copy preserves a compact support handoff path.
+- Log file quick actions remain in Settings > Log.
 
 ### TX And Saved Commands
 

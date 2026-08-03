@@ -241,7 +241,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int SearchResultPageSize = 1_000;
     private const int MaxSearchHistoryCount = 50;
     private const int PendingVisualWarningThreshold = 5_000;
-    private const long Boundary64KWarningThreshold = 65_000;
     private const int SmoothVisualRenderIntervalMs = 16;
     private const int EventRenderIntervalMs = 250;
     private const int EventUiMaxItemsPerTick = 250;
@@ -268,7 +267,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const long DiskErrorFreeBytes = 1L * 1024 * 1024 * 1024;
     private const string MockPortName = "MOCK";
     private const string MockPortDisplayName = "[TEST] MOCK";
+    private const string LogObserverHealthKey = "Log observer";
+    private const string EventObserverHealthKey = "Event observer";
+    private const string SequenceTriggerObserverHealthKey = "Sequence trigger observer";
+    private const string EventContextObserverHealthKey = "Event context observer";
+    private const string BridgeVisualObserverHealthKey = "Bridge visual observer";
+    private const string BridgeProcessedObserverHealthKey = "Bridge processed-log observer";
     private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RecentRuntimeHealthErrorDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ViewPauseDrainTimeout = TimeSpan.FromSeconds(30);
     private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
@@ -286,11 +292,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<DetectedEvent> _eventBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
     private readonly CoalescingAsyncOperation _portRefreshOperation;
-    private readonly DispatcherQueueTimer _diagnosticsTimer;
+    private readonly DispatcherQueueTimer _statusTimer;
     private readonly SerialBusUtilizationMeter _serialBusUtilizationMeter = new();
     private readonly object _eventNotificationGate = new();
     private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
     private readonly SinglePendingGate _triggeredSequenceGate = new();
+    private readonly object _backgroundHealthErrorGate = new();
+    private readonly Dictionary<string, string> _activeBackgroundHealthErrors = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
     private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
@@ -523,7 +531,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastEventSelectionError = string.Empty;
     private string _lastEventListScrollError = string.Empty;
     private string _lastListUpdateError = string.Empty;
-    private string _activeInspectorTabText = "Events";
     private string _lastInspectorTabLayoutError = string.Empty;
     private string _lastSearchTabLayoutError = string.Empty;
     private string _lastContextRefreshError = string.Empty;
@@ -565,8 +572,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private DateTimeOffset? _lastMarkerTime;
     private string _statusText = "Disconnected";
     private string _footerStatusText = "Ready";
-    private string _diagnosticsSummaryText = "Diagnostics summary initializing...";
-    private string _diagnosticsText = "Diagnostics initializing...";
     private string _lastBackgroundError = string.Empty;
     private bool _cuteBackgroundFileExists;
     private bool _cuteBackgroundLoaded;
@@ -614,12 +619,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _selectedPortAvailable;
     private long _fileWriterDroppedHealthBaseline;
     private long _fileWriterErrorHealthBaseline;
+    private long _serialConnectionErrorHealthBaseline;
     private string _healthStateText = "HEALTH OK";
     private string _healthReasonSummary = "No health issues.";
-    private string _healthReasonsText = "No health issues.";
-    private string _lastHealthUpdateTimeText = "(none)";
-    private int _healthWarningCount;
-    private int _healthErrorCount;
+    private string _healthReasonDetails = "No health issues.";
+    private string _lastRuntimeError = string.Empty;
+    private DateTimeOffset? _lastRuntimeErrorTime;
     private long _lastHealthObservedDecodeErrorCount;
     private bool _hasHealthDecodeBaseline;
     private long _diskFreeBytes;
@@ -704,7 +709,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         long DiskTotalBytes,
         long CurrentSessionLogSizeBytes,
         long ProcessWorkingSetBytes,
-        string Error);
+        string Error,
+        string LastRuntimeError,
+        DateTimeOffset? LastRuntimeErrorTime);
 
     private sealed class PendingEventNotification
     {
@@ -784,7 +791,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         AddDefaultMarkerCommand = new AsyncRelayCommand(AddDefaultMarkerAsync, () => IsConnected && !IsBusy);
         ToggleLogRenderingPauseCommand = new AsyncRelayCommand(ToggleLogRenderingPauseAsync);
         ClearScreenCommand = new AsyncRelayCommand(ClearScreenAsync);
-        CopyDiagnosticsCommand = new AsyncRelayCommand(CopyDiagnosticsAsync);
+        CopyStatusCommand = new AsyncRelayCommand(CopyStatusAsync);
         CopyHelpCommand = new AsyncRelayCommand(CopyHelpAsync);
         OpenLogFolderCommand = new AsyncRelayCommand(OpenLogFolderAsync);
         OpenCurrentSerialLogCommand = new AsyncRelayCommand(OpenCurrentSerialLogAsync, CanOpenCurrentSerialLog);
@@ -841,7 +848,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 args.PropertyName == nameof(CommandViewModel.HistoryErrorCount) ||
                 args.PropertyName == nameof(CommandViewModel.LastHistoryError))
             {
-                RefreshDiagnostics();
+                RefreshStatusBar();
             }
         };
 
@@ -858,18 +865,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _bridgeService.StatusChanged += OnBridgeStatusChanged;
         _bridgeService.ManualTxStateChanged += OnManualTxStateChanged;
         _bridgeLogProcessor.Error += OnBackgroundError;
+        ClearActiveBackgroundHealthError(BridgeProcessedObserverHealthKey);
         _observeBridgeProcessedLogsTask = Task.Run(
             () => ObserveBridgeProcessedLogsAsync(_bridgeVisualLogCancellation.Token),
             CancellationToken.None);
+        ClearActiveBackgroundHealthError(BridgeVisualObserverHealthKey);
         _observeBridgeVisualLogsTask = Task.Run(
             () => ObserveBridgeVisualLogsAsync(_bridgeVisualLogCancellation.Token),
             CancellationToken.None);
 
-        _diagnosticsTimer = dispatcherQueue.CreateTimer();
-        _diagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
-        _diagnosticsTimer.Tick += OnDiagnosticsTimerTick;
-        _diagnosticsTimer.Start();
-        RefreshDiagnostics();
+        _statusTimer = dispatcherQueue.CreateTimer();
+        _statusTimer.Interval = TimeSpan.FromSeconds(1);
+        _statusTimer.Tick += OnStatusTimerTick;
+        _statusTimer.Start();
+        RefreshStatusBar();
 
         _ = RefreshPortsAsync();
     }
@@ -1166,7 +1175,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SequenceCompletedStepsText));
                 RefreshSelectedCommandSequenceStepNumbers();
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             }
         }
     }
@@ -1312,7 +1321,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public AsyncRelayCommand ClearScreenCommand { get; }
 
-    public AsyncRelayCommand CopyDiagnosticsCommand { get; }
+    public AsyncRelayCommand CopyStatusCommand { get; }
 
     public AsyncRelayCommand CopyHelpCommand { get; }
 
@@ -1661,7 +1670,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(TxLineEndingToolTip));
             RefreshVisibleLogFilterOptions(preserveSelection: true, applyFilter: true);
             NotifyRuleEditorStateChanged();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -1753,7 +1762,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                         SettingsApplyBehavior.Immediate,
                         $"{value} ms (custom)");
                     OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
-                    RefreshDiagnostics();
+                    RefreshStatusBar();
                 }
                 return;
             }
@@ -1776,7 +1785,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             OnPropertyChanged(nameof(HexGroupTimeoutMsText));
             OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -2353,7 +2362,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(MaxVisibleLogLinesText));
             OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));
             OnPropertyChanged(nameof(LastVisibleCapChangeTimeText));
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -2753,7 +2762,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(CuteBackgroundOpacityText));
             OnPropertyChanged(nameof(CuteBackgroundOverlayOpacity));
             RecordSettingsChange("Cute background mode", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -2774,7 +2783,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 "Custom cute background image",
                 SettingsApplyBehavior.Immediate,
                 string.IsNullOrWhiteSpace(normalized) ? "(none)" : normalized);
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -2801,7 +2810,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 "Cute background opacity",
                 SettingsApplyBehavior.Immediate,
                 clamped.ToString("0.00", CultureInfo.InvariantCulture));
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -2818,7 +2827,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             SetStatus("Cute background opacity was invalid.");
             _lastBackgroundError = "Cute background opacity was invalid.";
-            RefreshDiagnostics();
+            RefreshStatusBar();
             OnPropertyChanged();
         }
     }
@@ -2864,7 +2873,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SettingsApplyBehavior.Immediate,
             "reset to bundled default");
         SetStatus("Cute background reset to bundled default.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
         return Task.CompletedTask;
     }
 
@@ -2927,7 +2936,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CuteBackgroundSource));
         OnPropertyChanged(nameof(CuteBackgroundBundledPath));
         OnPropertyChanged(nameof(CuteBackgroundLoadError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordCuteBackgroundLoadResult(bool fileExists, bool loaded, string? error)
@@ -2958,7 +2967,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _ = RefreshPortsAsync();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -3521,7 +3530,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SelectedEventContextHeaderText));
                 OnPropertyChanged(nameof(LastEventSelectionError));
                 CopyEventContextCommand.NotifyCanExecuteChanged();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             }
         }
     }
@@ -3630,12 +3639,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long ListUpdateErrorCount => Interlocked.Read(ref _listUpdateErrorCount);
 
     public string LastListUpdateError => _lastListUpdateError;
-
-    public string ActiveInspectorTabText
-    {
-        get => _activeInspectorTabText;
-        private set => SetProperty(ref _activeInspectorTabText, value);
-    }
 
     public long InspectorTabLayoutErrorCount => Interlocked.Read(ref _inspectorTabLayoutErrorCount);
 
@@ -3896,18 +3899,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         private set => SetProperty(ref _footerStatusText, value);
     }
 
-    public string DiagnosticsSummaryText
-    {
-        get => _diagnosticsSummaryText;
-        private set => SetProperty(ref _diagnosticsSummaryText, value);
-    }
-
-    public string DiagnosticsText
-    {
-        get => _diagnosticsText;
-        private set => SetProperty(ref _diagnosticsText, value);
-    }
-
     public string HexFtdiHelpNoticeText => UiText.Get(
         "HexFtdiHelpNotice",
         "The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. " +
@@ -3992,7 +3983,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.
                     RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.
                     Clear affects only the screen and does not delete saved files.
-                    If Drop or Error increases in Health, inspect the cause on the Diag tab.
+                    If Health shows WARNING or ERROR, hover over the footer to inspect the cause or right-click it to copy the status.
                     """)),
             new HelpSection(
                 UiText.Get("HelpShortcutsTitle", "Shortcuts"),
@@ -4028,38 +4019,41 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string HealthStateText
     {
         get => _healthStateText;
-        private set => SetProperty(ref _healthStateText, value);
+        private set
+        {
+            if (SetProperty(ref _healthStateText, value))
+            {
+                OnPropertyChanged(nameof(FooterStatusToolTipText));
+            }
+        }
     }
 
     public string HealthReasonSummary
     {
         get => _healthReasonSummary;
-        private set => SetProperty(ref _healthReasonSummary, value);
+        private set
+        {
+            if (SetProperty(ref _healthReasonSummary, value))
+            {
+                OnPropertyChanged(nameof(FooterStatusToolTipText));
+            }
+        }
     }
 
-    public string HealthReasonsText
+    public string HealthReasonDetails
     {
-        get => _healthReasonsText;
-        private set => SetProperty(ref _healthReasonsText, value);
+        get => _healthReasonDetails;
+        private set => SetProperty(ref _healthReasonDetails, value);
     }
 
-    public int HealthWarningCount
-    {
-        get => _healthWarningCount;
-        private set => SetProperty(ref _healthWarningCount, value);
-    }
-
-    public int HealthErrorCount
-    {
-        get => _healthErrorCount;
-        private set => SetProperty(ref _healthErrorCount, value);
-    }
-
-    public string LastHealthUpdateTimeText
-    {
-        get => _lastHealthUpdateTimeText;
-        private set => SetProperty(ref _lastHealthUpdateTimeText, value);
-    }
+    public string FooterStatusToolTipText =>
+        UiText.Format(
+            "FooterStatusToolTipFormat",
+            "Health: {0}\n{1}\n\nDRV F/P/O/RX: Frame, Parity, hardware Overrun, RX-buffer warning. " +
+            "Q F/E/U: pending File, Event, UI queues. Drop RX/F/UI: overload losses. " +
+            "PS: lines intentionally skipped by Pause View. Right-click to copy this status.",
+            HealthStateText,
+            HealthReasonSummary);
 
     public long DiskFreeBytes => Interlocked.Read(ref _diskFreeBytes);
 
@@ -4163,7 +4157,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _wasSerialConnectedDuringShutdown = IsConnected || _serialService.IsConnected;
         NotifyShutdownPropertiesChanged();
         SetStatus("Shutting down...");
-        RefreshDiagnostics();
+        RefreshStatusBar();
 
         var cleanupErrors = new List<string>();
         using var shutdownCancellation = new CancellationTokenSource(timeout);
@@ -4245,7 +4239,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RuntimeDiagnostics.RecordShutdown(BuildShutdownRecord(cleanupErrors));
             NotifyShutdownPropertiesChanged();
             SetStatus(_shutdownCleanupResult);
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -4256,8 +4250,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventNotificationCancellation.Cancel();
         _bridgeVisualLogCancellation.Cancel();
         _bridgeVisualLogQueue.Writer.TryComplete();
-        _diagnosticsTimer.Stop();
-        _diagnosticsTimer.Tick -= OnDiagnosticsTimerTick;
+        _statusTimer.Stop();
+        _statusTimer.Tick -= OnStatusTimerTick;
 
         await DisconnectAsync();
         await _fileLogWriter.StopAsync(CancellationToken.None);
@@ -4406,7 +4400,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     UpdateSelectedPortAvailability();
                     _lastPortRefreshResult = $"Ports refreshed while connected; preserved {SelectedPort ?? "(none)"}.";
                     NotifyPortSelectionDiagnosticsChanged();
-                    RefreshDiagnostics();
+                    RefreshStatusBar();
                     return;
                 }
 
@@ -4447,7 +4441,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                 UpdateSelectedPortAvailability();
                 NotifyPortSelectionDiagnosticsChanged();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             });
         }
         catch (Exception ex)
@@ -4461,7 +4455,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                 _lastPortRefreshResult = $"Port scan failed: {ex.Message}";
                 NotifyPortSelectionDiagnosticsChanged();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             });
             if (refreshGeneration == Volatile.Read(ref _portRefreshGeneration))
             {
@@ -4665,7 +4659,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 RefreshProfileProperties();
                 SetStatus(ProfileStatusText);
                 SetFooter(CreateFooterStatus());
-                RefreshDiagnostics();
+                RefreshStatusBar();
             });
         }
         catch (Exception ex)
@@ -4675,7 +4669,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _lastBackgroundError = $"Startup profile load failed: {ex.Message}";
                 SetStatus(_lastBackgroundError);
                 RefreshProfileProperties();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             });
         }
         finally
@@ -4692,14 +4686,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _profileService.SaveAsync(CurrentProfilePath, profile, CancellationToken.None);
             RefreshProfileProperties();
             SetStatus(ProfileStatusText);
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
             _lastBackgroundError = $"Save profile failed: {ex.Message}";
             SetStatus(_lastBackgroundError);
             RefreshProfileProperties();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -4722,14 +4716,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RefreshProfileProperties();
             SetStatus(ProfileStatusText);
             SetFooter(CreateFooterStatus());
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
             _lastBackgroundError = $"Load profile failed: {ex.Message}";
             SetStatus(_lastBackgroundError);
             RefreshProfileProperties();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         finally
         {
@@ -4755,7 +4749,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RefreshProfileProperties();
             SetStatus("Default profile settings applied. Use Save Profile to persist them.");
             SetFooter(CreateFooterStatus());
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         finally
         {
@@ -5259,7 +5253,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(SearchErrorCount));
             OnPropertyChanged(nameof(LastSearchError));
             SetStatus(_lastSearchError);
-            RefreshDiagnostics();
+            RefreshStatusBar();
             return VisibleSearchApplyResult.Failed;
         }
         finally
@@ -5324,7 +5318,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(SearchResultBuildErrorCount));
             OnPropertyChanged(nameof(LastSearchResultBuildError));
             SetStatus(_lastSearchResultBuildError);
-            RefreshDiagnostics();
+            RefreshStatusBar();
             return false;
         }
         finally
@@ -5635,7 +5629,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ApplySearchSnapshotMatch(resolved.Value);
             RequestXtermSearch(SearchMove.None);
             SetStatus($"Search result {result.MatchIndex:N0} selected: {SearchText}");
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
@@ -5723,7 +5717,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SearchResultJumpErrorCount));
         OnPropertyChanged(nameof(LastSearchResultJumpError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private async Task ToggleConnectionAsync()
@@ -5864,6 +5858,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 CreateCurrentSettings(),
                 ForwardBridgeBytesToDeviceAsync,
                 _connectionCancellation?.Token ?? CancellationToken.None);
+            ClearActiveBackgroundHealthError(_bridgeService);
+            ClearActiveBackgroundHealthError(_bridgeLogProcessor);
             _serialService.SetRawBridgePriorityEnabled(true);
             SetStatus($"Bidirectional raw bridge active: {devicePort} ↔ {virtualPort}");
         }
@@ -5874,12 +5870,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _lastBackgroundError = $"Bridge start failed: {ex.Message}";
+            SetActiveBackgroundHealthError(_bridgeService, _lastBackgroundError);
             SetStatus(_lastBackgroundError);
         }
         finally
         {
             NotifyBridgePropertiesChanged();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -5913,7 +5910,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         finally
         {
             NotifyBridgePropertiesChanged();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -6127,9 +6124,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 requestedHexGroupTimeoutMs,
                 "serial connection mode applied");
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
+            ClearActiveBackgroundHealthError(_logPipeline);
+            ClearActiveBackgroundHealthError(LogObserverHealthKey);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
+            ClearActiveBackgroundHealthError(EventObserverHealthKey);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
+            ClearActiveBackgroundHealthError(SequenceTriggerObserverHealthKey);
             _observeSequenceTriggersTask = Task.Run(() => ObserveSequenceTriggersAsync(CancellationToken.None), CancellationToken.None);
+            ClearActiveBackgroundHealthError(EventContextObserverHealthKey);
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
             IsConnected = true;
@@ -6210,7 +6212,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastConnectFailureTimeText = "(none)";
         _selectedPortAfterConnectFailure = "(none)";
         NotifyConnectDiagnosticsChanged();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordConnectSucceeded(SerialSettings settings)
@@ -6225,9 +6227,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastConnectExceptionType = string.Empty;
         _lastConnectFailureTimeText = "(none)";
         _selectedPortAfterConnectFailure = "(none)";
+        _serialConnectionErrorHealthBaseline = _serialService.ConnectionErrorCount;
+        ClearActiveBackgroundHealthError(_serialService);
         NotifyConnectDiagnosticsChanged();
         NotifyPortSelectionDiagnosticsChanged();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordConnectFailure(SerialSettings settings, Exception exception, string cleanupError)
@@ -6254,7 +6258,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         NotifyConnectDiagnosticsChanged();
         SetStatus(_lastBackgroundError);
-        RefreshDiagnostics();
+        RefreshStatusBar();
         RequestConnectFailureDialog(settings, reason);
     }
 
@@ -6274,7 +6278,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastBackgroundError = $"Connect failure dialog failed: {ex.Message}";
             RuntimeDiagnostics.RecordError("MainViewModel.RequestConnectFailureDialog", ex);
             SetStatus(_lastBackgroundError);
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -6300,7 +6304,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ConnectFailureKind.OpenFailed =>
                 $"Port {portName} could not be opened. Check the cable, driver, and whether another terminal is connected.",
             _ =>
-                $"Port {portName} could not be opened. See Diagnostics for details."
+                $"Port {portName} could not be opened. Hover over the footer health status for details."
         };
     }
 
@@ -6311,7 +6315,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ConnectFailureKind.AccessDenied => $"Connect failed: {portName} is in use or access denied.",
             ConnectFailureKind.PortNotFound => $"Connect failed: {portName} not found.",
             ConnectFailureKind.OpenFailed => $"Connect failed: {portName} could not be opened.",
-            _ => $"Connect failed: {portName}. See Diagnostics."
+            _ => $"Connect failed: {portName}. Hover over the footer health status for details."
         };
     }
 
@@ -6509,7 +6513,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     ? $"Disconnect incomplete: {message}"
                     : $"Disconnected with cleanup warnings: {message}";
                 SetStatus(_lastBackgroundError);
-                RefreshDiagnostics();
+                RefreshStatusBar();
             }
 
             SetFooter(CreateFooterStatus());
@@ -6584,9 +6588,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _lastBackgroundError = $"Log observer failed: {ex.Message}";
+            SetActiveBackgroundHealthError(LogObserverHealthKey, _lastBackgroundError);
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveLogsAsync", ex);
             SetStatus(_lastBackgroundError);
-            RefreshDiagnostics();
+            RunOnUiThread(RefreshStatusBar);
         }
     }
 
@@ -6614,9 +6619,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _lastBackgroundError = $"Event observer failed: {ex.Message}";
+            SetActiveBackgroundHealthError(EventObserverHealthKey, _lastBackgroundError);
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveEventsAsync", ex);
             SetStatus(_lastBackgroundError);
-            RefreshDiagnostics();
+            RunOnUiThread(RefreshStatusBar);
         }
     }
 
@@ -6635,9 +6641,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _lastBackgroundError = $"Sequence trigger observer failed: {ex.Message}";
+            SetActiveBackgroundHealthError(SequenceTriggerObserverHealthKey, _lastBackgroundError);
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveSequenceTriggersAsync", ex);
             SetStatus(_lastBackgroundError);
-            RefreshDiagnostics();
+            RunOnUiThread(RefreshStatusBar);
         }
     }
 
@@ -6900,6 +6907,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _serialService.ReceivedBytes,
             settings,
             _connectionCancellation.Token);
+        ClearActiveBackgroundHealthError(_logPipeline);
+        ClearActiveBackgroundHealthError(LogObserverHealthKey);
         _observeLogsTask = Task.Run(
             () => ObserveLogsAsync(_connectionCancellation.Token),
             CancellationToken.None);
@@ -7147,7 +7156,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            RunOnUiThread(() => RecordEventContextUiError($"Event context observer failed: {ex.Message}"));
+            var message = $"Event context observer failed: {ex.Message}";
+            SetActiveBackgroundHealthError(EventContextObserverHealthKey, message);
+            RunOnUiThread(() => RecordEventContextUiError(message));
         }
     }
 
@@ -7277,7 +7288,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             RequestXtermSearch(SearchMove.Next);
             RecordXtermContextMenuAction($"Search selected text ({searchText.Length:N0} chars)");
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
@@ -7292,7 +7303,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastXtermContextMenuAction));
         OnPropertyChanged(nameof(LastXtermContextMenuError));
         SetStatus(action);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermContextMenuError(string message)
@@ -7303,7 +7314,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermContextMenuErrorCount));
         OnPropertyChanged(nameof(LastXtermContextMenuError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordCopyAllVisibleSuccess(int lineCount)
@@ -7350,7 +7361,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastXtermContextMenuAction));
         OnPropertyChanged(nameof(LastXtermContextMenuError));
         SetStatus("No TX found in visible buffer.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordCopySinceLastTxError(string message)
@@ -7410,7 +7421,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastXtermContextMenuAction));
         OnPropertyChanged(nameof(LastXtermContextMenuError));
         SetStatus("No MARK found in visible buffer.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordCopySinceLastMarkError(string message)
@@ -7441,7 +7452,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastDisconnectConfirmationError = string.Empty;
         OnPropertyChanged(nameof(LastDisconnectConfirmationResult));
         OnPropertyChanged(nameof(LastDisconnectConfirmationError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordDisconnectConfirmationError(string message)
@@ -7456,7 +7467,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(DisconnectConfirmationErrorCount));
         OnPropertyChanged(nameof(LastDisconnectConfirmationError));
         SetStatus(safeMessage);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordTimestampDisplayModeError(string message)
@@ -7471,7 +7482,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(TimestampDisplayModeErrorCount));
         OnPropertyChanged(nameof(LastTimestampDisplayModeError));
         SetStatus(safeMessage);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private async Task SetSessionAsync()
@@ -7669,7 +7680,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSequenceError));
         OnPropertyChanged(nameof(LastSequenceActionStatus));
         SetStatus(_lastSequenceActionStatus);
-        RefreshDiagnostics();
+        RefreshStatusBar();
 
         try
         {
@@ -7726,7 +7737,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _sequenceCancellation?.Dispose();
             _sequenceCancellation = null;
             NotifyCommandStates();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
     }
 
@@ -7741,7 +7752,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SequenceStopCount));
         _sequenceCancellation?.Cancel();
         RecordSequenceStatus("Stopping command sequence...");
-        RefreshDiagnostics();
+        RefreshStatusBar();
         return Task.CompletedTask;
     }
 
@@ -7917,7 +7928,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         Commands.ClearHistory();
         SetStatus("Command history cleared.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void SelectEventFromUi(object? selectedItem)
@@ -7953,7 +7964,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedEventContextLineCount));
         OnPropertyChanged(nameof(SelectedEventContextHeaderText));
         CopyEventContextCommand.NotifyCanExecuteChanged();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public bool SelectLatestEventFromUi()
@@ -7971,7 +7982,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Interlocked.Increment(ref _latestEventSelectCount);
             OnPropertyChanged(nameof(LatestEventSelectCount));
             SetStatus($"Selected latest event: {latestEvent.RuleName} {latestEvent.DirectionText}");
-            RefreshDiagnostics();
+            RefreshStatusBar();
             return true;
         }
         catch (Exception ex)
@@ -8561,7 +8572,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(EventSelectionErrorCount));
         OnPropertyChanged(nameof(LastEventSelectionError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordEventListScrollError(string message)
@@ -8572,7 +8583,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(EventListScrollErrorCount));
         OnPropertyChanged(nameof(LastEventListScrollError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordListUpdateError(string message)
@@ -8583,15 +8594,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ListUpdateErrorCount));
         OnPropertyChanged(nameof(LastListUpdateError));
         SetStatus(message);
-        RefreshDiagnostics();
-    }
-
-    public void SetActiveInspectorTab(string? tabName)
-    {
-        ActiveInspectorTabText = string.IsNullOrWhiteSpace(tabName)
-            ? "(unknown)"
-            : tabName;
-        RefreshDiagnostics(forceDetailed: IsDiagnosticsTabActive);
+        RefreshStatusBar();
     }
 
     public void RecordInspectorTabLayoutError(string message)
@@ -8602,7 +8605,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(InspectorTabLayoutErrorCount));
         OnPropertyChanged(nameof(LastInspectorTabLayoutError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordSearchTabLayoutError(string message)
@@ -8613,7 +8616,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SearchTabLayoutErrorCount));
         OnPropertyChanged(nameof(LastSearchTabLayoutError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextRenderRefresh()
@@ -8622,14 +8625,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastContextRefreshError = string.Empty;
         OnPropertyChanged(nameof(ContextRefreshCount));
         OnPropertyChanged(nameof(LastContextRefreshError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextTabActivated()
     {
         Interlocked.Increment(ref _contextTabActivatedCount);
         OnPropertyChanged(nameof(ContextTabActivatedCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextVisualRefresh(int textLength, string selectedEventId, string selectedEventSummary)
@@ -8646,13 +8649,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastContextVisualRefreshEventSummary));
         OnPropertyChanged(nameof(LastContextVisualRefreshTimeText));
         OnPropertyChanged(nameof(LastContextRenderError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void SetContextWebViewReady(bool isReady)
     {
         IsContextWebViewReady = isReady;
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextWebViewUpdate(int textLength, string selectedEventSummary)
@@ -8667,7 +8670,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastContextWebViewUpdateEventSummary));
         OnPropertyChanged(nameof(LastContextWebViewUpdateTimeText));
         OnPropertyChanged(nameof(LastContextWebViewUpdateError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextWebViewUpdateError(string message)
@@ -8678,7 +8681,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ContextWebViewUpdateErrorCount));
         OnPropertyChanged(nameof(LastContextWebViewUpdateError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordContextRenderRefreshError(string message)
@@ -8693,7 +8696,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastContextRefreshError));
         OnPropertyChanged(nameof(LastContextRenderError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermFitResizeSuccess()
@@ -8718,7 +8721,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermLayoutErrorCount));
         OnPropertyChanged(nameof(LastXtermLayoutError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordAutoScrollAction(string action, bool? atBottom)
@@ -8729,7 +8732,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastAutoScrollActionTimeText));
         OnPropertyChanged(nameof(LastAutoScrollError));
         OnPropertyChanged(nameof(XtermAtBottomText));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordAutoScrollError(string message)
@@ -8746,7 +8749,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastXtermLayoutError));
         OnPropertyChanged(nameof(XtermLayoutErrorCount));
         SetStatus(_lastAutoScrollError);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void SetVisibleLogRebuildReason(string reason)
@@ -8929,7 +8932,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                         string.Join(", ", selected.Select(option => option.DisplayName))));
             }
 
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
@@ -9036,7 +9039,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(VisibleFilterErrorCount));
         OnPropertyChanged(nameof(LastVisibleFilterError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private bool IsRuleAvailableAsViewFilter(LogRule rule)
@@ -9136,7 +9139,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastRuleEditStatus));
         OnPropertyChanged(nameof(LastRuleEditError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordRuleEditError(string message)
@@ -9147,7 +9150,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(RuleEditErrorCount));
         OnPropertyChanged(nameof(LastRuleEditError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordRuleColorChangeError(string message)
@@ -9162,7 +9165,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(RuleColorChangeErrorCount));
         OnPropertyChanged(nameof(LastRuleColorChangeError));
         SetStatus(safeMessage);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordCommandEditStatus(string message)
@@ -9172,7 +9175,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastCommandEditStatus));
         OnPropertyChanged(nameof(LastCommandEditError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordCommandEditError(string message)
@@ -9183,7 +9186,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CommandEditErrorCount));
         OnPropertyChanged(nameof(LastCommandEditError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSequenceStatus(string message)
@@ -9194,7 +9197,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSequenceError));
         OnPropertyChanged(nameof(SequenceStatusText));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSequenceError(string message)
@@ -9206,7 +9209,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSequenceError));
         OnPropertyChanged(nameof(SequenceStatusText));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void NotifyRuleEditorStateChanged()
@@ -9232,14 +9235,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasSelectedEventRule));
         OnPropertyChanged(nameof(HasSelectedHighlightRule));
         SetFooter(CreateFooterStatus());
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void NotifyCommandEditorStateChanged()
     {
         OnPropertyChanged(nameof(SavedCommandEditorCount));
         OnPropertyChanged(nameof(HasSelectedSavedCommand));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void NotifyCommandSequenceStateChanged()
@@ -9257,7 +9260,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSequenceActionStatus));
         RunCommandSequenceCommand.NotifyCanExecuteChanged();
         StopCommandSequenceCommand.NotifyCanExecuteChanged();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RefreshSelectedCommandSequenceStepNumbers()
@@ -9690,7 +9693,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(IsWindowMinimized));
         OnPropertyChanged(nameof(LastWindowMinimizeTimeText));
         OnPropertyChanged(nameof(LastWindowRestoreTimeText));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void SetVisualAppendSuspendedForMinimize(bool suspended)
@@ -9703,7 +9706,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _isVisualAppendSuspendedForMinimize = suspended;
         OnPropertyChanged(nameof(IsVisualAppendSuspendedForMinimize));
         OnPropertyChanged(nameof(RenderingStateText));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void SetXtermNeedsFullRerenderAfterRestore(bool needed)
@@ -9715,7 +9718,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         _xtermNeedsFullRerenderAfterRestore = needed;
         OnPropertyChanged(nameof(XtermNeedsFullRerenderAfterRestore));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordMinimizedVisualAppendCoalesced(int lineCount, int characterCount)
@@ -9779,21 +9782,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SetStatus(_lastRestoreRenderMode.Contains("delta", StringComparison.OrdinalIgnoreCase)
             ? $"Catching up xterm visual logs: {pendingLineCount:N0} lines."
             : "Redrawing xterm from retained visible buffer.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderRequested(string reason)
     {
         Interlocked.Increment(ref _fullXtermRerenderRequestCount);
         OnPropertyChanged(nameof(FullXtermRerenderRequestCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderCoalesced(string reason)
     {
         Interlocked.Increment(ref _fullXtermRerenderCoalescedCount);
         OnPropertyChanged(nameof(FullXtermRerenderCoalescedCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderCanceled(string reason, string error)
@@ -9804,7 +9807,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FullXtermRerenderCanceledCount));
         OnPropertyChanged(nameof(LastFullXtermRerenderReason));
         OnPropertyChanged(nameof(LastFullXtermRerenderError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderStarted(string reason, long generation)
@@ -9825,7 +9828,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastFullXtermRerenderGeneration));
         OnPropertyChanged(nameof(LastFullXtermClearCount));
         OnPropertyChanged(nameof(LastFullXtermVisibilityToggleCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderCompleted(
@@ -9864,7 +9867,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastFullXtermRerenderGeneration));
         OnPropertyChanged(nameof(LastFullXtermClearCount));
         OnPropertyChanged(nameof(LastFullXtermVisibilityToggleCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderEndedAfterError(
@@ -9893,7 +9896,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastFullXtermRerenderError));
         OnPropertyChanged(nameof(LastFullXtermRerenderGeneration));
         OnPropertyChanged(nameof(FullXtermRerenderCanceledCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordRestoreRenderCompleted(int renderedLineCount, TimeSpan duration)
@@ -9920,7 +9923,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SetStatus(_lastRestoreRenderMode.Contains("delta", StringComparison.OrdinalIgnoreCase)
             ? $"xterm visual catch-up complete: {renderedLineCount:N0} lines."
             : $"xterm redraw complete: {renderedLineCount:N0} lines.");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordRestoreFullRerenderSuppressed(string reason)
@@ -9929,7 +9932,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastRestoreRenderMode = "delta append";
         OnPropertyChanged(nameof(RestoreFullRerenderSuppressedCount));
         OnPropertyChanged(nameof(LastRestoreRenderMode));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordWindowActivationRerenderSuppressed()
@@ -9982,7 +9985,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermAppendErrorCount));
         OnPropertyChanged(nameof(LastXtermAppendError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermFontLoadWarning(string message)
@@ -9991,7 +9994,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastXtermFontLoadWarning = message;
         OnPropertyChanged(nameof(XtermFontLoadWarningCount));
         OnPropertyChanged(nameof(LastXtermFontLoadWarning));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermCopySuccess(int copiedCharacterCount)
@@ -10002,7 +10005,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermCopyRequestCount));
         OnPropertyChanged(nameof(XtermCopiedCharacterCount));
         OnPropertyChanged(nameof(LastXtermCopyError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermCopyError(string message)
@@ -10015,14 +10018,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermCopyErrorCount));
         OnPropertyChanged(nameof(LastXtermCopyError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermSearchRequested()
     {
         Interlocked.Increment(ref _xtermSearchRequestCount);
         OnPropertyChanged(nameof(XtermSearchRequestCount));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermSearchResult(bool found, long durationMs)
@@ -10038,7 +10041,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermSearchHitCount));
         OnPropertyChanged(nameof(LastXtermSearchError));
         OnPropertyChanged(nameof(LastSearchError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordXtermSearchError(string message)
@@ -10053,7 +10056,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SearchErrorCount));
         OnPropertyChanged(nameof(LastSearchError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSearchShortcutAction(string action, string source)
@@ -10070,7 +10073,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSearchShortcutSource));
         OnPropertyChanged(nameof(LastSearchShortcutTimeText));
         OnPropertyChanged(nameof(LastSearchShortcutError));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSearchShortcutError(string message, string source)
@@ -10091,13 +10094,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SearchShortcutErrorCount));
         OnPropertyChanged(nameof(LastSearchShortcutError));
         SetStatus(_lastSearchShortcutError);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void SetXtermReady(bool isReady)
     {
         IsXtermReady = isReady;
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordTxSuccess(
@@ -10119,7 +10122,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SetStatus(mode == TxSendMode.Hex
             ? $"Sent HEX TX: {byteCount:N0} bytes"
             : $"Sent TX command: {commandText}");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordTxAttemptDiagnostics(
@@ -10146,7 +10149,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(TxErrorCount));
         OnPropertyChanged(nameof(LastTxError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordMarkerSuccess(string markerText, string action, DateTimeOffset insertedAt)
@@ -10162,7 +10165,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastMarkerTimeText));
         OnPropertyChanged(nameof(LastMarkerError));
         SetStatus($"{_lastMarkerAction}: {markerText}");
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     public void RecordMarkerError(string message)
@@ -10173,7 +10176,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(MarkerInsertErrorCount));
         OnPropertyChanged(nameof(LastMarkerError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSessionAction(string message)
@@ -10187,7 +10190,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSessionError));
         OnPropertyChanged(nameof(ActiveLogFileName));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSessionError(string message)
@@ -10198,7 +10201,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SessionErrorCount));
         OnPropertyChanged(nameof(LastSessionError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private async Task ToggleLogRenderingPauseAsync()
@@ -10364,23 +10367,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private Task CopyDiagnosticsAsync()
+    private Task CopyStatusAsync()
     {
         try
         {
-            RefreshDiagnostics(forceDetailed: true);
-
             var package = new DataPackage();
-            package.SetText(DiagnosticsText);
+            package.SetText(
+                $"{FooterStatusText}{Environment.NewLine}" +
+                $"{UiText.Get("HealthReasonLabel", "Health reason")}:" +
+                $"{Environment.NewLine}{HealthReasonDetails}");
             Clipboard.SetContent(package);
             Clipboard.Flush();
-            SetStatus("Diagnostics copied to clipboard");
+            SetStatus(UiText.Get("FooterStatusCopied", "Footer status copied to clipboard."));
         }
         catch (Exception ex)
         {
-            SetStatus($"Copy diagnostics failed: {ex.Message}");
-            _lastBackgroundError = $"Copy diagnostics failed: {ex.Message}";
-            RefreshDiagnostics();
+            _lastBackgroundError = $"Copy footer status failed: {ex.Message}";
+            SetStatus(_lastBackgroundError);
+            RefreshStatusBar();
         }
 
         return Task.CompletedTask;
@@ -10402,7 +10406,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             SetStatus($"Copy help failed: {ex.Message}");
             _lastBackgroundError = $"Copy help failed: {ex.Message}";
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
 
         return Task.CompletedTask;
@@ -10434,7 +10438,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(CopiedEventContextCount));
             OnPropertyChanged(nameof(LastEventContextUiError));
             SetStatus("Event context copied to clipboard");
-            RefreshDiagnostics();
+            RefreshStatusBar();
         }
         catch (Exception ex)
         {
@@ -10461,7 +10465,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             !IsMockPortName(GetActualPortName(SelectedPort)))
         {
             SetStatus("Connect to MOCK before starting stress mode.");
-            RefreshDiagnostics();
+            RefreshStatusBar();
             return Task.CompletedTask;
         }
 
@@ -10469,7 +10473,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.StartMockStress();
         SetStatus("Mock stress running.");
         RefreshMockStressProperties();
-        RefreshDiagnostics();
+        RefreshStatusBar();
         return Task.CompletedTask;
     }
 
@@ -10478,7 +10482,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _serialService.StopMockStress();
         SetStatus("Mock stress stopped.");
         RefreshMockStressProperties();
-        RefreshDiagnostics();
+        RefreshStatusBar();
         return Task.CompletedTask;
     }
 
@@ -10488,7 +10492,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ResetMockSequenceVerificationCounters();
         SetStatus("Mock stress counters reset.");
         RefreshMockStressProperties();
-        RefreshDiagnostics();
+        RefreshStatusBar();
         return Task.CompletedTask;
     }
 
@@ -10498,14 +10502,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             !IsMockPortName(GetActualPortName(SelectedPort)))
         {
             SetStatus("Connect to MOCK before sending mock CRLF.");
-            RefreshDiagnostics();
+            RefreshStatusBar();
             return;
         }
 
         await _serialService.SendMockCrlfAsync(CancellationToken.None);
         SetStatus("MOCK CRLF sent.");
         RefreshMockStressProperties();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void ConfigureMockStressFromUi()
@@ -10561,7 +10565,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 {
                     SetStatus(_lastMockSequenceError);
                     RefreshMockStressProperties();
-                    RefreshDiagnostics();
+                    RefreshStatusBar();
                 });
             }
 
@@ -10589,7 +10593,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 SetStatus(_lastMockSequenceError);
                 RefreshMockStressProperties();
-                RefreshDiagnostics();
+                RefreshStatusBar();
             });
             return;
         }
@@ -10610,7 +10614,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             SetStatus(_lastMockSequenceError);
             RefreshMockStressProperties();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         });
     }
 
@@ -10809,7 +10813,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastLogToggleTimeText));
         OnPropertyChanged(nameof(LastLogToggleError));
         SetFooter(CreateFooterStatus());
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordLogToggleError(string message)
@@ -10824,7 +10828,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastLogToggleError));
         OnPropertyChanged(nameof(LogToggleErrorCount));
         SetFooter(CreateFooterStatus());
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private Task OpenCurrentSerialLogAsync()
@@ -10951,7 +10955,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastLogFileActionStatus));
         OnPropertyChanged(nameof(LastLogFileActionError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordLogFileActionError(string message)
@@ -10964,7 +10968,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LogFileActionErrorCount));
         OnPropertyChanged(nameof(LastLogFileActionError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSaveDirectoryAction(string message)
@@ -10974,7 +10978,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSaveDirectoryAction));
         OnPropertyChanged(nameof(LastSaveDirectoryError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSaveDirectoryError(string message)
@@ -10987,7 +10991,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SaveDirectoryBrowseErrorCount));
         OnPropertyChanged(nameof(LastSaveDirectoryError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void ApplySizeRotationSettings()
@@ -11048,7 +11052,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SessionFileNamingErrorCount));
         OnPropertyChanged(nameof(LastSessionFileNamingError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private bool TryParseIntSetting(string settingName, string? value, int minValue, int maxValue, out int parsed)
@@ -11171,7 +11175,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         RefreshSettingsApplyStatusProperties();
         SetStatus(_lastSettingsApplyStatus);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSettingsApplyStatus(string changeText, string statusText)
@@ -11186,7 +11190,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastSettingsApplyError = string.Empty;
         RefreshSettingsApplyStatusProperties();
         SetStatus(_lastSettingsApplyStatus);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordSettingsValidationError(string message)
@@ -11201,7 +11205,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastSettingsApplyStatus = safeMessage;
         RefreshSettingsApplyStatusProperties();
         SetStatus(safeMessage);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void ClearPendingReconnectSettings()
@@ -11238,7 +11242,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastSettingsApplyStatus = message;
         RefreshSettingsApplyStatusProperties();
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordStatusChangedThreadMarshalError(string message)
@@ -11249,7 +11253,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(StatusChangedThreadMarshalErrorCount));
         OnPropertyChanged(nameof(LastStatusChangedThreadMarshalError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RecordStatusChangedThreadMarshalErrorWithoutUi(string message)
@@ -11335,6 +11339,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveBridgeVisualLogsAsync", ex);
+            SetActiveBackgroundHealthError(
+                BridgeVisualObserverHealthKey,
+                $"Bridge visual log observer failed: {ex.Message}");
             Interlocked.Increment(ref _bridgeVisualLogDroppedCount);
             Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
         }
@@ -11610,7 +11617,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(EventContextUiErrorCount));
         OnPropertyChanged(nameof(LastEventContextUiError));
         SetStatus(message);
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void UpdateLogRenderingPauseState(string statusMessage)
@@ -11631,7 +11638,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(PendingVisualLineCount));
         SetStatus(statusMessage);
         SetFooter(CreateFooterStatus());
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private SerialSettings CreateCurrentSettings()
@@ -12154,6 +12161,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnBackgroundError(object? sender, string message)
     {
+        SetActiveBackgroundHealthError(sender, message);
         RunOnUiThread(() =>
         {
             _lastBackgroundError = message;
@@ -12162,12 +12170,88 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(ConnectionStateText));
             OnPropertyChanged(nameof(CompactConnectionStatusText));
             FooterStatusText = CreateFooterStatus();
-            RefreshDiagnostics();
+            RefreshStatusBar();
         });
+    }
+
+    private void SetActiveBackgroundHealthError(object? source, string message)
+    {
+        SetActiveBackgroundHealthError(GetBackgroundHealthSourceName(source), message);
+    }
+
+    private void SetActiveBackgroundHealthError(string sourceKey, string message)
+    {
+        lock (_backgroundHealthErrorGate)
+        {
+            _activeBackgroundHealthErrors[sourceKey] = message;
+        }
+    }
+
+    private void ClearActiveBackgroundHealthError(object? source)
+    {
+        ClearActiveBackgroundHealthError(GetBackgroundHealthSourceName(source));
+    }
+
+    private void ClearActiveBackgroundHealthError(string sourceKey)
+    {
+        lock (_backgroundHealthErrorGate)
+        {
+            _activeBackgroundHealthErrors.Remove(sourceKey);
+        }
+    }
+
+    private string[] GetActiveBackgroundHealthErrors()
+    {
+        lock (_backgroundHealthErrorGate)
+        {
+            return _activeBackgroundHealthErrors
+                .Select(pair => $"{pair.Key}: {pair.Value}")
+                .ToArray();
+        }
+    }
+
+    private string GetBackgroundHealthSourceName(object? source)
+    {
+        if (ReferenceEquals(source, _serialService))
+        {
+            return "Serial service";
+        }
+
+        if (ReferenceEquals(source, _logPipeline))
+        {
+            return "Log pipeline service";
+        }
+
+        if (ReferenceEquals(source, _fileLogWriter))
+        {
+            return "File writer service";
+        }
+
+        if (ReferenceEquals(source, _eventDetector))
+        {
+            return "Event detector service";
+        }
+
+        if (ReferenceEquals(source, _bridgeService))
+        {
+            return "Bridge service";
+        }
+
+        if (ReferenceEquals(source, _bridgeLogProcessor))
+        {
+            return "Bridge log processor service";
+        }
+
+        return source?.GetType().Name ?? "Background task";
     }
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
+        if (_serialService.IsConnected && string.IsNullOrWhiteSpace(_serialService.LastError))
+        {
+            ClearActiveBackgroundHealthError(_serialService);
+        }
+
         var successfulSettings = _lastSuccessfulSerialSettings;
         if (successfulSettings is not null &&
             AutoReconnectPolicy.ShouldStart(
@@ -12206,6 +12290,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RuntimeDiagnostics.RecordError("MainViewModel.StopBridgeAfterSerialDisconnectAsync", ex);
             _lastBackgroundError = $"Bridge stop after serial disconnect failed: {ex.Message}";
+            SetActiveBackgroundHealthError(_bridgeService, _lastBackgroundError);
         }
         finally
         {
@@ -12265,16 +12350,31 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnFileLogStatusChanged(object? sender, EventArgs args)
     {
+        if (_fileLogWriter.IsRunning && string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError))
+        {
+            ClearActiveBackgroundHealthError(_fileLogWriter);
+        }
+
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnEventDetectorStatusChanged(object? sender, EventArgs args)
     {
+        if (_eventDetector.IsRunning && string.IsNullOrWhiteSpace(_eventDetector.LastError))
+        {
+            ClearActiveBackgroundHealthError(_eventDetector);
+        }
+
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
     private void OnBridgeStatusChanged(object? sender, EventArgs args)
     {
+        if (_bridgeService.IsRunning && string.IsNullOrWhiteSpace(_bridgeService.LastError))
+        {
+            ClearActiveBackgroundHealthError(_bridgeService);
+        }
+
         if (!_bridgeService.IsRunning)
         {
             _serialService.SetRawBridgePriorityEnabled(false);
@@ -12328,11 +12428,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RuntimeDiagnostics.RecordError("MainViewModel.ObserveBridgeProcessedLogsAsync", ex);
             _lastBackgroundError = $"Bridge log observer failed: {ex.Message}";
+            SetActiveBackgroundHealthError(BridgeProcessedObserverHealthKey, _lastBackgroundError);
             Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
         }
     }
 
-    private void OnDiagnosticsTimerTick(DispatcherQueueTimer sender, object args)
+    private void OnStatusTimerTick(DispatcherQueueTimer sender, object args)
     {
         StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
@@ -12341,49 +12442,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             IsConnected = _serialService.IsConnected;
             OnPropertyChanged(nameof(ConnectionStateText));
             OnPropertyChanged(nameof(CompactConnectionStatusText));
+            NotifyBridgePropertiesChanged();
         }
 
         RefreshSerialBusUtilizationMeasurement();
+        if (IsMockStressRunning)
+        {
+            RefreshMockStressProperties();
+        }
 
-        OnPropertyChanged(nameof(PendingVisualLineCount));
-        OnPropertyChanged(nameof(CurrentViewPauseOmittedLineCount));
-        OnPropertyChanged(nameof(TotalViewPauseOmittedLineCount));
-        OnPropertyChanged(nameof(ViewPauseCount));
-        OnPropertyChanged(nameof(LastViewPauseSummary));
-        OnPropertyChanged(nameof(VisualDispatcherFlushCount));
-        OnPropertyChanged(nameof(MaxVisualDispatcherBatchSize));
-        OnPropertyChanged(nameof(LastVisualAppendLineCount));
-        OnPropertyChanged(nameof(MaxVisualAppendLineCount));
-        OnPropertyChanged(nameof(VisualAppendBatchCount));
-        OnPropertyChanged(nameof(MaxVisualBacklogLineCount));
-        OnPropertyChanged(nameof(PendingEventUiCount));
-        OnPropertyChanged(nameof(PendingEventContextUiCount));
-        OnPropertyChanged(nameof(TotalPendingUiCount));
-        OnPropertyChanged(nameof(RecordedRxDropCount));
-        OnPropertyChanged(nameof(RecordedUiDropCount));
-        NotifyBridgePropertiesChanged();
-        OnPropertyChanged(nameof(EventContextUiDroppedCount));
-        OnPropertyChanged(nameof(EventUiFlushCount));
-        OnPropertyChanged(nameof(MaxEventUiBatchSize));
-        OnPropertyChanged(nameof(XtermAppendedLineCount));
-        OnPropertyChanged(nameof(XtermAppendBatchCount));
-        OnPropertyChanged(nameof(LastXtermAppendLineCount));
-        OnPropertyChanged(nameof(LastXtermAppendCharacterCount));
-        OnPropertyChanged(nameof(MaxXtermAppendLineCount));
-        OnPropertyChanged(nameof(MaxXtermAppendCharacterCount));
-        OnPropertyChanged(nameof(XtermPendingCharacterCount));
-        OnPropertyChanged(nameof(MaxXtermPendingCharacterCount));
-        OnPropertyChanged(nameof(LastRenderedSequenceId));
-        OnPropertyChanged(nameof(PendingVisualDeltaLineCount));
-        OnPropertyChanged(nameof(MinimizedVisualCoalescedLineCount));
-        OnPropertyChanged(nameof(MinimizedVisualCoalescedCharacterCount));
-        OnPropertyChanged(nameof(MaxMinimizedVisualCoalescedLineCount));
-        OnPropertyChanged(nameof(MaxMinimizedVisualCoalescedCharacterCount));
-        OnPropertyChanged(nameof(ActiveHighlightRuleCount));
-        RefreshMockStressProperties();
-        RefreshProfileProperties();
-        RefreshLogFileActionProperties();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void RestartSerialBusUtilizationMeasurement(string reason)
@@ -12482,32 +12550,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string CreateFooterStatus()
     {
-        var missingSequenceText = IsMockStressRunning &&
-            _serialService.MockGeneratorPattern == MockGeneratorPattern.NormalLines
-            ? $" | Missing {MockMissingSequenceCount:N0}"
-            : string.Empty;
-        var viewBacklogText = PendingVisualLineCount >= PendingVisualWarningThreshold
-            ? $" | View backlog {PendingVisualLineCount:N0} l"
-            : string.Empty;
-        var lastErrorText = CreateLastErrorSummaryText();
-        var lastErrorSummary = string.IsNullOrWhiteSpace(lastErrorText)
-            ? string.Empty
-            : $" | Last {lastErrorText}";
-        var bridgeText = IsBridgeActive
-            ? $" | BRIDGE ON {_bridgeService.VirtualPortName}"
-            : string.Empty;
-
         return
             $"{HealthStateText} | " +
             CreateResourceStatusText() + " | " +
             $"RX {_logPipeline.ParsedLineCount:N0} l / {_serialService.ReceivedByteCount:N0} B | " +
             $"DRV F/P/O/RX {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0} | " +
             $"Events {_eventDetector.DetectedEventCount:N0} | " +
-            CreateLogFileStatusText() +
-            bridgeText +
-            missingSequenceText +
-            viewBacklogText +
-            lastErrorSummary;
+            CreateLogFileStatusText();
     }
 
     private string CreateResourceStatusText()
@@ -12544,126 +12593,270 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return "File ON waiting";
     }
 
-    private void RefreshHealthSummary(string lastRuntimeError)
+    private void RefreshHealthSummary()
     {
-        var warnings = new List<string>();
-        var errors = new List<string>();
+        var reasons = new List<string>();
+        var hasError = false;
+        var hasWarning = false;
 
-        AddErrorIf(errors, MockMissingSequenceCount > 0, $"Missing mock sequences: {MockMissingSequenceCount:N0}");
-        var fileWriterDroppedSinceBaseline = Math.Max(0, _fileLogWriter.DroppedLineCount - _fileWriterDroppedHealthBaseline);
-        var fileWriterErrorsSinceBaseline = Math.Max(0, _fileLogWriter.FileErrorCount - _fileWriterErrorHealthBaseline);
+        foreach (var backgroundError in GetActiveBackgroundHealthErrors())
+        {
+            hasError = true;
+            reasons.Add($"Active background error: {backgroundError}");
+        }
 
-        AddErrorIf(errors, FileLoggingEnabled && fileWriterDroppedSinceBaseline > 0, $"File writer dropped lines: {fileWriterDroppedSinceBaseline:N0}");
-        AddErrorIf(errors, _eventDetector.DroppedInputLineCount > 0, $"Event detector dropped input lines: {_eventDetector.DroppedInputLineCount:N0}");
-        AddErrorIf(errors, _eventDetector.DroppedOutputEventCount > 0, $"Event detector dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
-        AddErrorIf(errors, XtermAppendErrorCount > 0, $"xterm append errors: {XtermAppendErrorCount:N0}");
-        AddErrorIf(errors, FileLoggingEnabled && fileWriterErrorsSinceBaseline > 0, $"File writer errors: {fileWriterErrorsSinceBaseline:N0}");
-        AddErrorIf(errors, _serialService.ConnectionErrorCount > 0, $"Serial connection errors: {_serialService.ConnectionErrorCount:N0}");
-        AddErrorIf(errors, !string.IsNullOrWhiteSpace(lastRuntimeError), "Unhandled runtime error captured");
-        AddErrorIf(errors, BridgeDroppedChunkCount > 0, $"Bridge dropped device-to-virtual chunks: {BridgeDroppedChunkCount:N0}");
-        AddErrorIf(
-            errors,
-            _hasResourceSnapshot && DiskTotalBytes > 0 &&
-            (DiskFreeBytes < DiskErrorFreeBytes || DiskFreePercent < 2),
-            $"Log disk space critically low: {FormatByteSize(DiskFreeBytes)} free ({DiskFreePercent:0.#}%)");
+        if (!string.IsNullOrWhiteSpace(_lastRuntimeError) &&
+            _lastRuntimeErrorTime is { } runtimeErrorTime &&
+            DateTimeOffset.UtcNow - runtimeErrorTime <= RecentRuntimeHealthErrorDuration)
+        {
+            hasWarning = true;
+            reasons.Add($"Recent runtime error: {TruncateStatusText(_lastRuntimeError, 240)}");
+        }
 
-        AddWarningIf(warnings, PendingVisualLineCount >= PendingVisualWarningThreshold, $"Pending visual lines high: {PendingVisualLineCount:N0}/{PendingVisualWarningThreshold:N0}");
-        AddWarningIf(
-            warnings,
-            IsVisualAppendSuspendedForMinimize && MinimizedVisualCoalescedLineCount >= PendingVisualWarningThreshold,
-            $"Minimized visual redraw backlog high: {MinimizedVisualCoalescedLineCount:N0}/{PendingVisualWarningThreshold:N0}");
-        AddWarningIf(warnings, Log.DroppedPendingLineCount > 0, $"UI pending lines dropped: {Log.DroppedPendingLineCount:N0}");
-        AddWarningIf(warnings, _eventDetector.ContextCaptureDroppedCount > 0, $"Event context captures dropped: {_eventDetector.ContextCaptureDroppedCount:N0}");
-        AddWarningIf(
-            warnings,
-            _eventDetector.MaxContextCaptureScanCount >= 500,
-            $"High event context scan fan-out: {_eventDetector.MaxContextCaptureScanCount:N0} captures on one line");
-        AddWarningIf(
-            warnings,
-            _eventDetector.IsContextCaptureOverloadActive,
-            $"Event context overload active: {_eventDetector.ActivePendingContextCount:N0} pending; new contexts are temporarily skipped");
-        AddWarningIf(
-            warnings,
-            _eventDetector.ContextCaptureOverloadSkippedCount > 0,
-            $"Event contexts skipped during overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
-        AddWarningIf(warnings, EventContextUiDroppedCount > 0, $"UI-only event context updates dropped: {EventContextUiDroppedCount:N0}");
-        AddWarningIf(warnings, _eventDetector.ContextCaptureFailedCount > 0, $"Event context captures failed: {_eventDetector.ContextCaptureFailedCount:N0}");
-        AddWarningIf(warnings, Log.XtermFormattingErrorCount > 0, $"xterm formatting errors: {Log.XtermFormattingErrorCount:N0}");
-        AddWarningIf(warnings, XtermLayoutErrorCount > 0, $"xterm layout errors: {XtermLayoutErrorCount:N0}");
-        AddWarningIf(
-            warnings,
-            XtermFontLoadWarningCount > 0,
-            $"xterm bundled font fallback active: {XtermFontLoadWarningCount:N0}");
-        AddWarningIf(
-            warnings,
-            _hasResourceSnapshot && DiskTotalBytes > 0 &&
-            DiskFreeBytes >= DiskErrorFreeBytes &&
-            DiskFreePercent >= 2 &&
-            (DiskFreeBytes < DiskWarningFreeBytes || DiskFreePercent < 10),
-            $"Log disk space low: {FormatByteSize(DiskFreeBytes)} free ({DiskFreePercent:0.#}%)");
-        AddWarningIf(
-            warnings,
-            FileLoggingEnabled && _hasResourceSnapshot && !string.IsNullOrWhiteSpace(_resourceSnapshotError),
-            $"Resource status unavailable: {_resourceSnapshotError}");
-        AddWarningIf(warnings, BridgeErrorCount > 0, $"Bridge errors: {BridgeErrorCount:N0}");
-        AddWarningIf(
-            warnings,
-            BridgeVisualLogDroppedCount > 0,
-            $"Bridge UI-only log entries dropped: {BridgeVisualLogDroppedCount:N0} (bridge transport unaffected)");
-        AddWarningIf(
-            warnings,
-            _bridgeLogProcessor.DroppedInputChunkCount > 0 || _bridgeLogProcessor.DroppedOutputLineCount > 0,
-            $"Bridge log processing drops: input {_bridgeLogProcessor.DroppedInputChunkCount:N0} chunks / {_bridgeLogProcessor.DroppedInputByteCount:N0} bytes, output {_bridgeLogProcessor.DroppedOutputLineCount:N0} lines (bridge transport unaffected)");
-        AddWarningIf(
-            warnings,
-            _bridgeLogProcessor.DecodeErrorCount > 0,
-            $"Bridge Terminal decode errors: {_bridgeLogProcessor.DecodeErrorCount:N0}");
-        AddWarningIf(
-            warnings,
-            BridgePriorityDroppedPipelineChunkCount > 0,
-            $"Bridge-priority parser/log chunks dropped: {BridgePriorityDroppedPipelineChunkCount:N0} ({BridgePriorityDroppedPipelineByteCount:N0} bytes; raw bridge prioritized)");
+        if (MockMissingSequenceCount > 0)
+        {
+            hasError = true;
+            reasons.Add($"Missing mock sequences: {MockMissingSequenceCount:N0}");
+        }
+
+        var fileWriterDroppedSinceBaseline = Math.Max(
+            0,
+            _fileLogWriter.DroppedLineCount - _fileWriterDroppedHealthBaseline);
+        if (FileLoggingEnabled && fileWriterDroppedSinceBaseline > 0)
+        {
+            hasError = true;
+            reasons.Add($"File writer dropped lines: {fileWriterDroppedSinceBaseline:N0}");
+        }
+
+        if (_eventDetector.DroppedInputLineCount > 0)
+        {
+            hasError = true;
+            reasons.Add($"Event detector dropped input lines: {_eventDetector.DroppedInputLineCount:N0}");
+        }
+
+        if (_eventDetector.DroppedOutputEventCount > 0)
+        {
+            hasError = true;
+            reasons.Add($"Event detector dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
+        }
+
+        if (XtermAppendErrorCount > 0)
+        {
+            hasError = true;
+            reasons.Add($"xterm append errors: {XtermAppendErrorCount:N0}");
+        }
+
+        var fileWriterErrorsSinceBaseline = Math.Max(
+            0,
+            _fileLogWriter.FileErrorCount - _fileWriterErrorHealthBaseline);
+        if (FileLoggingEnabled && fileWriterErrorsSinceBaseline > 0)
+        {
+            hasError = true;
+            reasons.Add($"File writer errors: {fileWriterErrorsSinceBaseline:N0}");
+        }
+
+        var serialConnectionErrorsSinceBaseline = Math.Max(
+            0,
+            _serialService.ConnectionErrorCount - _serialConnectionErrorHealthBaseline);
+        if (serialConnectionErrorsSinceBaseline > 0)
+        {
+            hasError = true;
+            reasons.Add($"Serial connection errors: {serialConnectionErrorsSinceBaseline:N0}");
+        }
+
+        if (BridgeDroppedChunkCount > 0)
+        {
+            hasError = true;
+            reasons.Add($"Bridge dropped chunks: {BridgeDroppedChunkCount:N0}");
+        }
+
+        var diskSpaceCritical =
+            _hasResourceSnapshot &&
+            DiskTotalBytes > 0 &&
+            (DiskFreeBytes < DiskErrorFreeBytes || DiskFreePercent < 2);
+        if (diskSpaceCritical)
+        {
+            hasError = true;
+            reasons.Add($"Log disk space critically low: {FormatByteSize(DiskFreeBytes)} ({DiskFreePercent:0.#}%)");
+        }
+
+        if (PendingVisualLineCount >= PendingVisualWarningThreshold)
+        {
+            hasWarning = true;
+            reasons.Add($"Pending visual lines high: {PendingVisualLineCount:N0}");
+        }
+
+        if (IsVisualAppendSuspendedForMinimize &&
+            MinimizedVisualCoalescedLineCount >= PendingVisualWarningThreshold)
+        {
+            hasWarning = true;
+            reasons.Add($"Minimized visual backlog high: {MinimizedVisualCoalescedLineCount:N0}");
+        }
+
+        if (Log.DroppedPendingLineCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"UI pending lines dropped: {Log.DroppedPendingLineCount:N0}");
+        }
+
+        if (_eventDetector.ContextCaptureDroppedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Event context captures dropped: {_eventDetector.ContextCaptureDroppedCount:N0}");
+        }
+
+        if (_eventDetector.MaxContextCaptureScanCount >= 500)
+        {
+            hasWarning = true;
+            reasons.Add($"Event context scan fan-out high: {_eventDetector.MaxContextCaptureScanCount:N0}");
+        }
+
+        if (_eventDetector.IsContextCaptureOverloadActive)
+        {
+            hasWarning = true;
+            reasons.Add($"Event context overload active: {_eventDetector.ActivePendingContextCount:N0} pending");
+        }
+
+        if (_eventDetector.ContextCaptureOverloadSkippedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Event contexts skipped during overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
+        }
+
+        if (EventContextUiDroppedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"UI event context updates dropped: {EventContextUiDroppedCount:N0}");
+        }
+
+        if (_eventDetector.ContextCaptureFailedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Event context captures failed: {_eventDetector.ContextCaptureFailedCount:N0}");
+        }
+
+        if (Log.XtermFormattingErrorCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"xterm formatting errors: {Log.XtermFormattingErrorCount:N0}");
+        }
+
+        if (XtermLayoutErrorCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"xterm layout errors: {XtermLayoutErrorCount:N0}");
+        }
+
+        if (XtermFontLoadWarningCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"xterm font fallback warnings: {XtermFontLoadWarningCount:N0}");
+        }
+
+        var diskSpaceLow =
+            _hasResourceSnapshot &&
+            DiskTotalBytes > 0 &&
+            !diskSpaceCritical &&
+            (DiskFreeBytes < DiskWarningFreeBytes || DiskFreePercent < 10);
+        if (diskSpaceLow)
+        {
+            hasWarning = true;
+            reasons.Add($"Log disk space low: {FormatByteSize(DiskFreeBytes)} ({DiskFreePercent:0.#}%)");
+        }
+
+        if (FileLoggingEnabled &&
+            _hasResourceSnapshot &&
+            !string.IsNullOrWhiteSpace(_resourceSnapshotError))
+        {
+            hasWarning = true;
+            reasons.Add($"Resource status unavailable: {_resourceSnapshotError}");
+        }
+
+        if (BridgeErrorCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Bridge errors: {BridgeErrorCount:N0}");
+        }
+
+        if (BridgeVisualLogDroppedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Bridge UI log entries dropped: {BridgeVisualLogDroppedCount:N0}");
+        }
+
+        if (_bridgeLogProcessor.DroppedInputChunkCount > 0 ||
+            _bridgeLogProcessor.DroppedOutputLineCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add(
+                $"Bridge log processing drops: input {_bridgeLogProcessor.DroppedInputChunkCount:N0}, " +
+                $"output {_bridgeLogProcessor.DroppedOutputLineCount:N0}");
+        }
+
+        if (_bridgeLogProcessor.DecodeErrorCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Bridge decode errors: {_bridgeLogProcessor.DecodeErrorCount:N0}");
+        }
+
+        if (BridgePriorityDroppedPipelineChunkCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"Bridge-priority parser chunks dropped: {BridgePriorityDroppedPipelineChunkCount:N0}");
+        }
 
         var decodeErrorCount = _logPipeline.DecodeErrorCount;
-        if (!_hasHealthDecodeBaseline || decodeErrorCount > _lastHealthObservedDecodeErrorCount)
+        if ((!_hasHealthDecodeBaseline || decodeErrorCount > _lastHealthObservedDecodeErrorCount) &&
+            decodeErrorCount > 0)
         {
-            AddWarningIf(warnings, decodeErrorCount > 0, $"Decode errors increased to: {decodeErrorCount:N0}");
+            hasWarning = true;
+            reasons.Add($"Decode errors increased to: {decodeErrorCount:N0}");
         }
 
         _lastHealthObservedDecodeErrorCount = decodeErrorCount;
         _hasHealthDecodeBaseline = true;
 
-        HealthErrorCount = errors.Count;
-        HealthWarningCount = warnings.Count;
-        HealthStateText = errors.Count > 0
+        HealthStateText = hasError
             ? "ERROR"
-            : warnings.Count > 0
+            : hasWarning
                 ? "WARNING"
                 : "HEALTH OK";
-
-        var reasonLines = errors.Concat(warnings).ToArray();
-        HealthReasonsText = reasonLines.Length == 0
-            ? "No health issues."
-            : string.Join(Environment.NewLine, reasonLines);
-        HealthReasonSummary = reasonLines.Length == 0
-            ? "No health issues."
-            : string.Join("; ", reasonLines.Take(3)) + (reasonLines.Length > 3 ? $"; +{reasonLines.Length - 3:N0} more" : string.Empty);
-        LastHealthUpdateTimeText = DateTimeOffset.Now.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        var noIssuesText = UiText.Get("NoHealthIssues", "No health issues.");
+        HealthReasonDetails = reasons.Count == 0
+            ? noIssuesText
+            : string.Join(Environment.NewLine, reasons);
+        HealthReasonSummary = CreateHealthReasonSummary(
+            reasons,
+            maxVisibleReasons: 5,
+            noIssuesText,
+            UiText.Get("AdditionalHealthReasonsFormat", "+{0} more"));
     }
 
-    private static void AddErrorIf(ICollection<string> errors, bool condition, string reason)
+    internal static string CreateHealthReasonSummary(
+        IReadOnlyList<string> reasons,
+        int maxVisibleReasons,
+        string noIssuesText,
+        string additionalReasonsFormat)
     {
-        if (condition)
-        {
-            errors.Add(reason);
-        }
-    }
+        ArgumentNullException.ThrowIfNull(reasons);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxVisibleReasons, 1);
 
-    private static void AddWarningIf(ICollection<string> warnings, bool condition, string reason)
-    {
-        if (condition)
+        if (reasons.Count == 0)
         {
-            warnings.Add(reason);
+            return noIssuesText;
         }
+
+        var visibleReasons = reasons.Take(maxVisibleReasons).ToList();
+        var hiddenReasonCount = reasons.Count - visibleReasons.Count;
+        if (hiddenReasonCount > 0)
+        {
+            visibleReasons.Add(string.Format(
+                CultureInfo.CurrentCulture,
+                additionalReasonsFormat,
+                hiddenReasonCount));
+        }
+
+        return string.Join(Environment.NewLine, visibleReasons);
     }
 
     private void StartResourceSnapshotRefreshIfDue()
@@ -12698,7 +12891,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            snapshot = new ResourceSnapshot(0, 0, 0, 0, ex.Message);
+            snapshot = new ResourceSnapshot(0, 0, 0, 0, ex.Message, string.Empty, null);
         }
         finally
         {
@@ -12761,12 +12954,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             errors.Add($"memory: {ex.Message}");
         }
 
+        var lastRuntimeError = RuntimeDiagnostics.ReadLastError();
+        DateTimeOffset? lastRuntimeErrorTime = null;
+        if (!string.IsNullOrWhiteSpace(lastRuntimeError))
+        {
+            try
+            {
+                lastRuntimeErrorTime = File.GetLastWriteTimeUtc(RuntimeDiagnostics.LastErrorPath);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"runtime error timestamp: {ex.Message}");
+            }
+        }
+
         return new ResourceSnapshot(
             diskFreeBytes,
             diskTotalBytes,
             sessionLogSizeBytes,
             processWorkingSetBytes,
-            string.Join("; ", errors));
+            string.Join("; ", errors),
+            lastRuntimeError,
+            lastRuntimeErrorTime);
     }
 
     private void ApplyResourceSnapshot(ResourceSnapshot snapshot)
@@ -12776,6 +12985,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Interlocked.Exchange(ref _currentSessionLogSizeBytes, Math.Max(0, snapshot.CurrentSessionLogSizeBytes));
         Interlocked.Exchange(ref _processWorkingSetBytes, Math.Max(0, snapshot.ProcessWorkingSetBytes));
         _resourceSnapshotError = snapshot.Error;
+        _lastRuntimeError = snapshot.LastRuntimeError;
+        _lastRuntimeErrorTime = snapshot.LastRuntimeErrorTime;
         _hasResourceSnapshot = true;
 
         OnPropertyChanged(nameof(DiskFreeBytes));
@@ -12783,7 +12994,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(DiskFreePercent));
         OnPropertyChanged(nameof(CurrentSessionLogSizeBytes));
         OnPropertyChanged(nameof(ProcessWorkingSetBytes));
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private static string FormatByteSize(long bytes)
@@ -12801,17 +13012,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return unitIndex == 0
             ? $"{value:N0} {units[unitIndex]}"
             : $"{displayValue:0.#} {units[unitIndex]}";
-    }
-
-    private string CreateLastErrorSummaryText()
-    {
-        var lastError = CreateLastErrorText();
-        if (string.Equals(lastError, "(none)", StringComparison.Ordinal))
-        {
-            return HealthErrorCount > 0 ? TruncateStatusText(HealthReasonSummary, 120) : string.Empty;
-        }
-
-        return TruncateStatusText(lastError, 120);
     }
 
     private static string TruncateStatusText(string text, int maxLength)
@@ -12843,952 +13043,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return compact.Length <= 200 ? compact : compact[..200];
     }
 
-    private bool IsDiagnosticsTabActive =>
-        string.Equals(ActiveInspectorTabText, "Diag", StringComparison.OrdinalIgnoreCase);
-
-    private void RefreshDiagnostics(bool forceDetailed = false)
+    private void RefreshStatusBar()
     {
-        var lastRuntimeError = RuntimeDiagnostics.ReadLastError();
-        RefreshHealthSummary(lastRuntimeError);
-        FooterStatusText = CreateFooterStatus();
-        DiagnosticsSummaryText = BuildDiagnosticsSummaryText();
-        if (forceDetailed || IsDiagnosticsTabActive)
+        RefreshHealthSummary();
+        var footerStatus = CreateFooterStatus();
+        if (!string.Equals(FooterStatusText, footerStatus, StringComparison.Ordinal))
         {
-            DiagnosticsText = BuildDiagnosticsText(lastRuntimeError);
+            FooterStatusText = footerStatus;
         }
     }
-
-    private string BuildDiagnosticsSummaryText()
-    {
-        var lastErrorSummary = CreateLastErrorSummaryText();
-        if (string.IsNullOrWhiteSpace(lastErrorSummary))
-        {
-            lastErrorSummary = "(none)";
-        }
-
-        return
-            $"Health: {HealthStateText} | Last error: {lastErrorSummary}" + Environment.NewLine +
-            $"Serial log: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}" + Environment.NewLine +
-            $"Log Save: {(FileLoggingEnabled ? "ON" : "OFF")} | " +
-            $"FileWriter: {(_fileLogWriter.IsRunning ? "running" : "stopped")} | " +
-            $"EventDetector: {(_eventDetector.IsRunning ? "running" : "stopped")} | " +
-            $"Bridge: {(IsBridgeActive ? $"ON {_bridgeService.VirtualPortName}" : BridgeStateText)} | " +
-            $"Mock missing seq: {MockMissingSequenceCount:N0}";
-    }
-
-    private string BuildBoundary64KWarningText()
-    {
-        var warnings = new List<string>();
-        AddBoundary64KWarning(warnings, "RX bytes", _serialService.ReceivedByteCount);
-        AddBoundary64KWarning(warnings, "RX chunks", _serialService.ReceivedChunkCount);
-        AddBoundary64KWarning(warnings, "parsed lines", _logPipeline.ParsedLineCount);
-        AddBoundary64KWarning(warnings, "displayed lines", Log.DisplayedLineCount);
-        AddBoundary64KWarning(warnings, "file written lines", _fileLogWriter.WrittenLineCount);
-        AddBoundary64KWarning(warnings, "detected events", _eventDetector.DetectedEventCount);
-        AddBoundary64KWarning(warnings, "visible events", Events.CurrentVisibleEventCount);
-        AddBoundary64KWarning(warnings, "xterm appended lines", XtermAppendedLineCount);
-        return warnings.Count == 0
-            ? "(none)"
-            : string.Join("; ", warnings);
-    }
-
-    private static void AddBoundary64KWarning(ICollection<string> warnings, string name, long value)
-    {
-        if (value >= Boundary64KWarningThreshold)
-        {
-            warnings.Add($"{name} {value:N0}");
-        }
-    }
-
-    private string BuildDiagnosticsText(string lastRuntimeError)
-    {
-        var lastShutdown = RuntimeDiagnostics.ReadLastShutdown();
-        var builder = new StringBuilder();
-        builder.AppendLine($"Updated: {DateTimeOffset.Now.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}");
-        builder.AppendLine($"Connection state: {_serialService.ConnectionState}");
-        builder.AppendLine($"Is connected: {_serialService.IsConnected}");
-        builder.AppendLine($"Status: {StatusText}");
-        builder.AppendLine($"Last error: {CreateLastErrorText()}");
-        builder.AppendLine($"Diagnostics file: {RuntimeDiagnostics.LastErrorPath}");
-        builder.AppendLine($"Last app runtime error: {(string.IsNullOrWhiteSpace(lastRuntimeError) ? "(none)" : "see below")}");
-        if (!string.IsNullOrWhiteSpace(lastRuntimeError))
-        {
-            builder.AppendLine(lastRuntimeError.TrimEnd());
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("Manual Disconnect Confirmation");
-        builder.AppendLine($"  Confirm before disconnect: {ConfirmBeforeDisconnect}");
-        builder.AppendLine($"  Last disconnect confirmation result: {LastDisconnectConfirmationResult}");
-        builder.AppendLine($"  Disconnect confirmation errors: {DisconnectConfirmationErrorCount:N0}");
-        builder.AppendLine($"  Last disconnect confirmation error: {(string.IsNullOrWhiteSpace(LastDisconnectConfirmationError) ? "(none)" : LastDisconnectConfirmationError)}");
-
-        builder.AppendLine();
-        builder.AppendLine("Connect Attempts");
-        builder.AppendLine($"  Last connect requested port: {LastConnectRequestedPort}");
-        builder.AppendLine($"  Last connect requested baud: {LastConnectRequestedBaud:N0}");
-        builder.AppendLine($"  Last connect result: {LastConnectResult}");
-        builder.AppendLine($"  Last connect failure reason: {(string.IsNullOrWhiteSpace(LastConnectFailureReason) ? "(none)" : LastConnectFailureReason)}");
-        builder.AppendLine($"  Last connect exception type: {(string.IsNullOrWhiteSpace(LastConnectExceptionType) ? "(none)" : LastConnectExceptionType)}");
-        builder.AppendLine($"  Last connect failure time: {LastConnectFailureTimeText}");
-        builder.AppendLine($"  Selected port after failure: {SelectedPortAfterConnectFailure}");
-
-        builder.AppendLine();
-        builder.AppendLine("Shutdown");
-        builder.AppendLine($"  Last shutdown start time: {LastShutdownStartTimeText}");
-        builder.AppendLine($"  Last shutdown completed time: {LastShutdownCompletedTimeText}");
-        builder.AppendLine($"  Shutdown cleanup result: {ShutdownCleanupResult}");
-        builder.AppendLine($"  Shutdown disconnect error: {(string.IsNullOrWhiteSpace(ShutdownDisconnectError) ? "(none)" : ShutdownDisconnectError)}");
-        builder.AppendLine($"  Shutdown file flush error: {(string.IsNullOrWhiteSpace(ShutdownFileFlushError) ? "(none)" : ShutdownFileFlushError)}");
-        builder.AppendLine($"  Shutdown profile save error: {(string.IsNullOrWhiteSpace(ShutdownProfileSaveError) ? "(none)" : ShutdownProfileSaveError)}");
-        builder.AppendLine($"  Sequence running during shutdown: {WasSequenceRunningDuringShutdown}");
-        builder.AppendLine($"  Serial connected during shutdown: {WasSerialConnectedDuringShutdown}");
-        builder.AppendLine($"  Last persisted shutdown diagnostics: {(string.IsNullOrWhiteSpace(lastShutdown) ? "(none)" : "see below")}");
-        if (!string.IsNullOrWhiteSpace(lastShutdown))
-        {
-            foreach (var line in lastShutdown.TrimEnd().Split(Environment.NewLine, StringSplitOptions.None))
-            {
-                builder.AppendLine($"    {line}");
-            }
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("Health");
-        builder.AppendLine($"  Current health state: {HealthStateText}");
-        builder.AppendLine($"  Health warning count: {HealthWarningCount:N0}");
-        builder.AppendLine($"  Health error count: {HealthErrorCount:N0}");
-        builder.AppendLine($"  Last health update time: {LastHealthUpdateTimeText}");
-        builder.AppendLine($"  Log disk free: {(_hasResourceSnapshot && DiskTotalBytes > 0 ? $"{FormatByteSize(DiskFreeBytes)} / {FormatByteSize(DiskTotalBytes)} ({DiskFreePercent:0.#}%)" : "(unavailable)")}");
-        builder.AppendLine($"  Current session log size: {(_hasResourceSnapshot ? FormatByteSize(CurrentSessionLogSizeBytes) : "(unavailable)")}");
-        builder.AppendLine($"  Process working set: {(_hasResourceSnapshot ? FormatByteSize(ProcessWorkingSetBytes) : "(unavailable)")}");
-        builder.AppendLine($"  UI retained logs: {Log.TotalRetainedLineCount:N0}/{Log.Capacity:N0}");
-        builder.AppendLine($"  Pending queues (file/event/UI): {_fileLogWriter.PendingRequestCount:N0}/{_eventDetector.PendingInputLineCount:N0}/{TotalPendingUiCount:N0}");
-        builder.AppendLine($"  Recorded drops (RX/file/UI): {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0}");
-        builder.AppendLine($"  Resource snapshot error: {(string.IsNullOrWhiteSpace(_resourceSnapshotError) ? "(none)" : _resourceSnapshotError)}");
-        builder.AppendLine("  Health reasons:");
-        foreach (var reason in HealthReasonsText.Split(Environment.NewLine, StringSplitOptions.None))
-        {
-            builder.AppendLine($"    {reason}");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("Serial Bridge");
-        builder.AppendLine($"  Explicit user-start active: {BridgeRequestedEnabled}");
-        builder.AppendLine($"  Active: {IsBridgeActive}");
-        builder.AppendLine($"  Route: {BridgeRouteText}");
-        builder.AppendLine($"  Device to virtual bytes/chunks: {BridgeDeviceToVirtualByteCount:N0}/{BridgeDeviceToVirtualChunkCount:N0}");
-        builder.AppendLine($"  Virtual to device bytes/chunks: {BridgeVirtualToDeviceByteCount:N0}/{BridgeVirtualToDeviceChunkCount:N0}");
-        builder.AppendLine($"  Pending device-to-virtual chunks: {BridgePendingDeviceToVirtualChunkCount:N0}");
-        builder.AppendLine($"  Pending virtual-to-device chunks: {BridgePendingVirtualToDeviceChunkCount:N0}");
-        builder.AppendLine($"  Pending device-to-virtual bytes: {BridgePendingDeviceToVirtualByteCount:N0}");
-        builder.AppendLine($"  Pending virtual-to-device bytes: {BridgePendingVirtualToDeviceByteCount:N0}");
-        builder.AppendLine($"  Oldest pending bridge chunk age: {BridgeOldestPendingChunkAgeMs:0.###} ms");
-        builder.AppendLine($"  Last/max device-to-virtual delay: {_bridgeService.LastDeviceToVirtualDelayMs:0.###}/{_bridgeService.MaxDeviceToVirtualDelayMs:0.###} ms");
-        builder.AppendLine($"  Device-to-virtual HEX grouping timeout: {(_bridgeService.DeviceToVirtualGroupTimeoutMs > 0 ? $"{_bridgeService.DeviceToVirtualGroupTimeoutMs:N0} ms" : "off (raw chunks)")}");
-        builder.AppendLine($"  Replay late count/max lateness: {_bridgeService.ReplayLateCount:N0}/{_bridgeService.MaxReplayLatenessMs:0.###} ms");
-        builder.AppendLine($"  Queue overflow count: {_bridgeService.QueueOverflowCount:N0}");
-        builder.AppendLine($"  Last bridge fault: {(_bridgeService.LastFaultReason ?? "(none)")}");
-        builder.AppendLine($"  Last bridge activity: {(_bridgeService.LastBridgeActivityAt?.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) ?? "(none)")}");
-        builder.AppendLine($"  Manual TX state/wait/idle guard remaining: {ManualTxState}/{_bridgeService.ManualTxWaitMs:0.###}/{_bridgeService.ManualTxIdleGuardRemainingMs:0.###} ms");
-        builder.AppendLine($"  Dropped device-to-virtual bytes/chunks: {BridgeDroppedDeviceToVirtualByteCount:N0}/{BridgeDroppedDeviceToVirtualChunkCount:N0}");
-        builder.AppendLine($"  Dropped virtual-to-device bytes/chunks: {BridgeDroppedVirtualToDeviceByteCount:N0}/{BridgeDroppedVirtualToDeviceChunkCount:N0}");
-        builder.AppendLine($"  Errors: {BridgeErrorCount:N0}");
-        builder.AppendLine($"  UI-only bridge log pending/dropped: {BridgeVisualLogPendingCount:N0}/{BridgeVisualLogDroppedCount:N0}");
-        builder.AppendLine("  UI-only bridge log drops do not affect raw bridge transport.");
-        builder.AppendLine($"  Bridge log input pending/dropped chunks/bytes: {_bridgeLogProcessor.PendingInputChunkCount:N0}/{_bridgeLogProcessor.DroppedInputChunkCount:N0}/{_bridgeLogProcessor.DroppedInputByteCount:N0}");
-        builder.AppendLine($"  Bridge log output dropped lines: {_bridgeLogProcessor.DroppedOutputLineCount:N0}");
-        builder.AppendLine($"  Bridge Terminal decode errors: {_bridgeLogProcessor.DecodeErrorCount:N0}");
-        builder.AppendLine($"  Bridge log processor errors: {_bridgeLogProcessor.ErrorCount:N0}");
-        builder.AppendLine("  Bridge log processing drops do not affect raw bridge transport.");
-        builder.AppendLine($"  Raw bridge priority enabled: {IsRawBridgePriorityEnabled}");
-        builder.AppendLine($"  Bridge-priority parser/log dropped bytes/chunks: {BridgePriorityDroppedPipelineByteCount:N0}/{BridgePriorityDroppedPipelineChunkCount:N0}");
-        builder.AppendLine("  Bridge-priority parser/log drops do not affect raw bridge transport.");
-        builder.AppendLine($"  Last error: {(string.IsNullOrWhiteSpace(BridgeLastError) ? "(none)" : BridgeLastError)}");
-
-        builder.AppendLine();
-        builder.AppendLine("Log File Actions");
-        builder.AppendLine($"  Current serial log path: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}");
-        builder.AppendLine($"  Last log file action status: {LastLogFileActionStatus}");
-        builder.AppendLine($"  Log file action error count: {LogFileActionErrorCount:N0}");
-        builder.AppendLine($"  Last log file action error: {(string.IsNullOrWhiteSpace(LastLogFileActionError) ? "(none)" : LastLogFileActionError)}");
-        builder.AppendLine($"  Requested log file name: {(string.IsNullOrWhiteSpace(LogFileName) ? "(none)" : LogFileName)}");
-        builder.AppendLine($"  Active log file name: {CurrentSessionDisplayText}");
-        builder.AppendLine($"  Active exact log file name: {(string.IsNullOrWhiteSpace(ActiveLogFileName) ? "(none)" : ActiveLogFileName)}");
-        builder.AppendLine($"  Last log file naming action: {LastSessionFileAction}");
-        builder.AppendLine($"  Log file naming errors: {SessionFileNamingErrorCount:N0}");
-        builder.AppendLine($"  Last log file naming error: {(string.IsNullOrWhiteSpace(LastSessionFileNamingError) ? "(none)" : LastSessionFileNamingError)}");
-        builder.AppendLine($"  Last save directory action: {LastSaveDirectoryAction}");
-        builder.AppendLine($"  Save directory browse errors: {SaveDirectoryBrowseErrorCount:N0}");
-        builder.AppendLine($"  Last save directory error: {(string.IsNullOrWhiteSpace(LastSaveDirectoryError) ? "(none)" : LastSaveDirectoryError)}");
-
-        builder.AppendLine();
-        builder.AppendLine("Log Save");
-        builder.AppendLine($"  File logging enabled: {FileLoggingEnabled}");
-        builder.AppendLine($"  File logging active: {FileLoggingActive}");
-        builder.AppendLine($"  Current serial log path: {(string.IsNullOrWhiteSpace(CurrentSerialLogPath) ? "(not open)" : CurrentSerialLogPath)}");
-        builder.AppendLine($"  Last log toggle action: {LastLogToggleAction}");
-        builder.AppendLine($"  Last log toggle time: {LastLogToggleTimeText}");
-        builder.AppendLine($"  Log toggle errors: {LogToggleErrorCount:N0}");
-        builder.AppendLine($"  Last log toggle error: {(string.IsNullOrWhiteSpace(LastLogToggleError) ? "(none)" : LastLogToggleError)}");
-
-        builder.AppendLine();
-        builder.AppendLine("Profile");
-        builder.AppendLine($"  Current profile path: {CurrentProfilePath}");
-        builder.AppendLine($"  Profile schema version: {ProfileSchemaVersion:N0}");
-        builder.AppendLine($"  Profile loaded: {ProfileLoaded}");
-        builder.AppendLine($"  Profile load time: {ProfileLoadTimeText}");
-        builder.AppendLine($"  Profile save time: {ProfileSaveTimeText}");
-        builder.AppendLine($"  Profile load count: {ProfileLoadCount:N0}");
-        builder.AppendLine($"  Profile save count: {ProfileSaveCount:N0}");
-        builder.AppendLine($"  Profile status: {ProfileStatusText}");
-        builder.AppendLine($"  Profile last error: {(string.IsNullOrWhiteSpace(ProfileLastError) ? "(none)" : ProfileLastError)}");
-        builder.AppendLine($"  Profile load error count: {ProfileLoadErrorCount:N0}");
-        builder.AppendLine($"  Profile save error count: {ProfileSaveErrorCount:N0}");
-        builder.AppendLine($"  Profile normalization count: {ProfileNormalizationCount:N0}");
-        builder.AppendLine($"  Profile file logging enabled: {_currentLogSettings.FileLoggingEnabled}");
-        builder.AppendLine($"  Profile log save directory: {_currentLogSettings.SaveDirectory}");
-        builder.AppendLine("  Date-based serial log rotation: disabled");
-        builder.AppendLine($"  Profile size rotation enabled: {_currentLogSettings.SizeRotationEnabled}");
-        builder.AppendLine($"  Profile last successful port: {LastSuccessfulPort}");
-        builder.AppendLine($"  Profile last successful baud: {LastSuccessfulBaudRate:N0}");
-        builder.AppendLine($"  Profile visible/xterm line limit: {_currentUiSettings.MaxVisibleLogLines:N0}");
-        builder.AppendLine($"  Profile max visible event count: {_currentUiSettings.MaxVisibleEventCount:N0}");
-        builder.AppendLine($"  Profile auto-scroll enabled: {_currentUiSettings.AutoScrollEnabled}");
-        builder.AppendLine($"  Profile file logging while view paused: {_currentUiSettings.FileLoggingWhileViewPaused}");
-        builder.AppendLine($"  Profile confirm before disconnect: {_currentUiSettings.ConfirmBeforeDisconnect}");
-        builder.AppendLine($"  Profile show timestamp in log view: {_currentUiSettings.ShowTimestampInLogView}");
-        builder.AppendLine($"  Profile show RX/TX direction prefixes in log view: {_currentUiSettings.ShowRxTxDirectionPrefixInLogView}");
-        builder.AppendLine($"  Profile timestamp display format: {LogLine.GetTimestampFormatPattern(_currentUiSettings.TimestampDisplayFormat)}");
-        builder.AppendLine("  Rule changes apply to new logs only: True (fixed)");
-        builder.AppendLine($"  Profile RX display mode: {FormatRxDisplayModeName(_currentUiSettings.RxDisplayMode)}");
-        builder.AppendLine($"  Profile HEX group timeout: {_currentUiSettings.HexGroupTimeoutMs:N0} ms");
-        builder.AppendLine($"  Profile TX send mode: {FormatTxSendModeName(_currentUiSettings.TxSendMode)}");
-        builder.AppendLine($"  Profile cute background mode: {_currentUiSettings.CuteBackgroundMode}");
-        builder.AppendLine($"  Profile custom cute background image path: {(string.IsNullOrWhiteSpace(_currentUiSettings.CuteBackgroundImagePath) ? "(none)" : _currentUiSettings.CuteBackgroundImagePath)}");
-        builder.AppendLine($"  Profile cute background opacity: {_currentUiSettings.CuteBackgroundOpacity:0.00}");
-        builder.AppendLine($"  Profile custom cute background path cleared by migration: {ProfileCuteBackgroundCustomPathCleared}");
-        builder.AppendLine($"  Profile custom cute background path clear reason: {ProfileCuteBackgroundCustomPathClearReason}");
-        builder.AppendLine($"  Profile show MOCK test port: {_currentUiSettings.ShowMockTestPort}");
-        builder.AppendLine($"  Profile event auto-scroll enabled: {_currentUiSettings.EventAutoScrollEnabled}");
-        builder.AppendLine($"  Profile search case sensitive: {_currentUiSettings.SearchCaseSensitive}");
-        builder.AppendLine($"  Profile search whole word: {_currentUiSettings.SearchWholeWord}");
-        builder.AppendLine($"  Profile search regex: {_currentUiSettings.SearchUseRegularExpression}");
-        builder.AppendLine("  Search result refresh mode: Manual only");
-        builder.AppendLine($"  Profile last search text: {(string.IsNullOrWhiteSpace(_currentUiSettings.LastSearchText) ? "(none)" : _currentUiSettings.LastSearchText)}");
-        builder.AppendLine($"  Profile marker text: {(string.IsNullOrWhiteSpace(_currentUiSettings.MarkerText) ? "(none)" : _currentUiSettings.MarkerText)}");
-        builder.AppendLine($"  Profile mock lines/sec: {_currentUiSettings.MockStressLinesPerSecond:N0}");
-        builder.AppendLine($"  Profile mock burst size: {_currentUiSettings.MockStressBurstSize:N0}");
-        builder.AppendLine($"  Profile mock pattern: {FormatMockGeneratorPatternName(_currentUiSettings.MockGeneratorPattern)}");
-        builder.AppendLine($"  Profile mock event injection enabled: {_currentUiSettings.MockStressEventInjectionEnabled}");
-        builder.AppendLine($"  Profile mock invalid byte injection enabled: {_currentUiSettings.MockStressInvalidByteInjectionEnabled}");
-        builder.AppendLine($"  Event before context lines: {_currentEventContextSettings.BeforeContextLines:N0}");
-        builder.AppendLine($"  Event after context lines: {_currentEventContextSettings.AfterContextLines:N0}");
-        builder.AppendLine($"  Saved commands in profile: {Commands.SavedCommands.Count:N0}");
-        builder.AppendLine($"  Command history in profile: {Commands.CommandHistoryCount:N0}");
-        builder.AppendLine($"  Command sequences in profile: {CommandSequences.Count:N0}");
-        builder.AppendLine($"  Unified log rules in profile: {LogRules.Count:N0}");
-        builder.AppendLine($"  Terminal log rules in profile: {TerminalLogRuleCount:N0}");
-        builder.AppendLine($"  HEX log rules in profile: {HexLogRuleCount:N0}");
-        builder.AppendLine($"  Invalid HEX log rules in profile: {InvalidHexLogRuleCount:N0}");
-        builder.AppendLine($"  Event rule projections in profile: {EventRules.Count:N0}");
-        builder.AppendLine($"  Highlight rule projections in profile: {HighlightRules.Count:N0}");
-        builder.AppendLine($"  Rule migration result: {RuleMigrationResult}");
-        builder.AppendLine($"  Last settings change: {LastSettingsChange}");
-        builder.AppendLine($"  Last settings apply status: {LastSettingsApplyStatus}");
-        builder.AppendLine($"  Pending reconnect-required settings: {PendingReconnectRequiredSettingsCount:N0}");
-        builder.AppendLine($"  Pending restart-required settings: {PendingRestartRequiredSettingsCount:N0}");
-        builder.AppendLine($"  Settings apply errors: {SettingsApplyErrorCount:N0}");
-        builder.AppendLine($"  Last settings apply error: {(string.IsNullOrWhiteSpace(LastSettingsApplyError) ? "(none)" : LastSettingsApplyError)}");
-        builder.AppendLine($"  Settings validation errors: {SettingsValidationErrorCount:N0}");
-        builder.AppendLine($"  Last settings validation error: {(string.IsNullOrWhiteSpace(LastSettingsValidationError) ? "(none)" : LastSettingsValidationError)}");
-        builder.AppendLine($"  Last normalized setting: {LastNormalizedSetting}");
-        builder.AppendLine();
-        builder.AppendLine("Rule / Command Editors");
-        builder.AppendLine($"  Unified log rule count: {LogRuleEditorCount:N0}");
-        builder.AppendLine($"  Rules used for events: {ActiveEventLogRuleCount:N0}");
-        builder.AppendLine($"  Rules used for highlights: {ActiveHighlightRuleCount:N0}");
-        builder.AppendLine($"  Rules used for filters: {ActiveViewFilterRuleCount:N0}");
-        builder.AppendLine($"  Terminal mode rule count: {TerminalLogRuleCount:N0}");
-        builder.AppendLine($"  HEX mode rule count: {HexLogRuleCount:N0}");
-        builder.AppendLine($"  Invalid HEX rule count: {InvalidHexLogRuleCount:N0}");
-        builder.AppendLine($"  Last invalid HEX rule: {(string.IsNullOrWhiteSpace(LastInvalidHexLogRuleName) ? "(none)" : LastInvalidHexLogRuleName)}");
-        builder.AppendLine($"  Last invalid HEX rule error: {(string.IsNullOrWhiteSpace(LastInvalidHexLogRuleError) ? "(none)" : LastInvalidHexLogRuleError)}");
-        builder.AppendLine($"  Rule evaluation errors: {_eventDetector.RuleEvaluationErrorCount:N0}");
-        builder.AppendLine($"  Last rule evaluation error: {(string.IsNullOrWhiteSpace(_eventDetector.LastRuleEvaluationError) ? "(none)" : _eventDetector.LastRuleEvaluationError)}");
-        builder.AppendLine($"  Last HEX rule match: {(string.IsNullOrWhiteSpace(_eventDetector.LastHexRuleMatchName) ? "(none)" : _eventDetector.LastHexRuleMatchName)}");
-        builder.AppendLine($"  Last HEX rule match bytes: {(string.IsNullOrWhiteSpace(_eventDetector.LastHexRuleMatchBytesPreview) ? "(none)" : _eventDetector.LastHexRuleMatchBytesPreview)}");
-        builder.AppendLine("  Apply rules to new logs only: True (fixed)");
-        builder.AppendLine($"  Automatic rule re-render suppressed count: {AutomaticRuleRerenderSuppressedCount:N0}");
-        builder.AppendLine($"  Last live-only rule change time: {LastRuleChangeLiveOnlyTimeText}");
-        builder.AppendLine($"  Rule changes since clear: {RuleChangesSinceClearCount:N0}");
-        builder.AppendLine("  New rule Event default: false");
-        builder.AppendLine($"  Unified log rule color count: {UnifiedLogRuleColorCount:N0}");
-        builder.AppendLine($"  Invalid rule color fallbacks: {InvalidRuleColorFallbackCount:N0}");
-        builder.AppendLine($"  Event rule projection count: {EventRules.Count:N0}");
-        builder.AppendLine($"  Highlight rule projection count: {HighlightRules.Count:N0}");
-        builder.AppendLine($"  Saved command count: {SavedCommandEditorCount:N0}");
-        builder.AppendLine($"  Command sequence count: {CommandSequenceCount:N0}");
-        builder.AppendLine($"  Selected log rule: {SelectedLogRule?.Name ?? "(none)"}");
-        builder.AppendLine($"  Selected saved command: {SelectedSavedCommand?.Name ?? "(none)"}");
-        builder.AppendLine($"  Selected saved command shortcut: {SelectedSavedCommand?.OptionalShortcut ?? "(none)"}");
-        builder.AppendLine($"  Selected sequence: {SelectedCommandSequenceName}");
-        builder.AppendLine($"  Selected sequence steps: {SelectedCommandSequenceStepCount:N0}");
-        builder.AppendLine($"  Last rule edit status: {LastRuleEditStatus}");
-        builder.AppendLine($"  Last rule edit error: {(string.IsNullOrWhiteSpace(LastRuleEditError) ? "(none)" : LastRuleEditError)}");
-        builder.AppendLine($"  Rule edit errors: {RuleEditErrorCount:N0}");
-        builder.AppendLine($"  Last rule color change: {LastRuleColorChange}");
-        builder.AppendLine($"  Rule color change errors: {RuleColorChangeErrorCount:N0}");
-        builder.AppendLine($"  Last rule color change error: {(string.IsNullOrWhiteSpace(LastRuleColorChangeError) ? "(none)" : LastRuleColorChangeError)}");
-        builder.AppendLine($"  Last command edit status: {LastCommandEditStatus}");
-        builder.AppendLine($"  Last command edit error: {(string.IsNullOrWhiteSpace(LastCommandEditError) ? "(none)" : LastCommandEditError)}");
-        builder.AppendLine($"  Command edit errors: {CommandEditErrorCount:N0}");
-        builder.AppendLine();
-        builder.AppendLine("Serial");
-        builder.AppendLine($"  Serial connection state: {_serialService.ConnectionState}");
-        builder.AppendLine($"  ViewModel is connected: {IsConnected}");
-        builder.AppendLine($"  Auto reconnect enabled/running/armed/preserved services: {AutoReconnectEnabled}/{IsAutoReconnectRunning}/{Volatile.Read(ref _autoReconnectArmed) != 0}/{Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0}");
-        builder.AppendLine($"  Auto reconnect attempt/success/failure: {AutoReconnectAttemptCount:N0}/{AutoReconnectSuccessCount:N0}/{AutoReconnectFailureCount:N0}");
-        builder.AppendLine($"  Last auto reconnect error: {(string.IsNullOrWhiteSpace(LastAutoReconnectError) ? "(none)" : LastAutoReconnectError)}");
-        builder.AppendLine($"  ViewModel is busy: {IsBusy}");
-        builder.AppendLine($"  Selected port: {SelectedPort ?? "(none)"}");
-        builder.AppendLine($"  Selected port available: {SelectedPortAvailable}");
-        builder.AppendLine($"  Last successful port: {LastSuccessfulPort}");
-        builder.AppendLine($"  Last successful baud: {LastSuccessfulBaudRate:N0}");
-        builder.AppendLine($"  HEX RX bus meter active: {_serialBusUtilizationMeter.IsActive}");
-        builder.AppendLine($"  HEX RX bus meter display: {(IsHexRxViewSelected ? SerialBusUtilizationHeaderText : "(hidden in Terminal mode)")}");
-        builder.AppendLine($"  HEX RX bus meter frame: {(string.IsNullOrWhiteSpace(_serialBusFrameFormatText) ? "(not measuring)" : _serialBusFrameFormatText)}");
-        builder.AppendLine($"  HEX RX bus meter started: {(_serialBusMeasurementStartedAt.HasValue ? FormatDiagnosticTime(_serialBusMeasurementStartedAt.Value) : "(not active)")}");
-        builder.AppendLine($"  HEX RX bus meter last reset reason: {_lastSerialBusMeasurementResetReason}");
-        builder.AppendLine($"  HEX RX bus meter observed bytes/window: {(_serialBusUtilizationSnapshot.IsAvailable ? $"{_serialBusUtilizationSnapshot.ReceivedBytes:0} B / {_serialBusUtilizationSnapshot.ObservationSeconds:0.0} s" : "(warming up or inactive)")}");
-        builder.AppendLine($"  HEX RX bus meter rolling peak: {(_serialBusUtilizationSnapshot.IsPeakAvailable ? $"{_serialBusUtilizationSnapshot.PeakBusyPercent:0.0}%" : "(requires full 60-second window)")}");
-        builder.AppendLine("  HEX RX bus meter does not add local TX; adapter echo may still reappear as observed RX.");
-        builder.AppendLine("  HEX RX bus meter estimates wire time only from successfully observed RX bytes.");
-        builder.AppendLine($"  Last port selection change reason: {LastPortSelectionChangeReason}");
-        builder.AppendLine($"  Last disconnect preserved port: {LastDisconnectPreservedPort}");
-        builder.AppendLine($"  Last port refresh result: {LastPortRefreshResult}");
-        builder.AppendLine($"  Show MOCK test port: {ShowMockTestPort}");
-        builder.AppendLine($"  Current port is MOCK: {CurrentPortIsMock}");
-        builder.AppendLine($"  Last port refresh included MOCK: {LastPortRefreshIncludedMock}");
-        builder.AppendLine($"  Received bytes: {_serialService.ReceivedByteCount:N0}");
-        builder.AppendLine($"  Received chunks: {_serialService.ReceivedChunkCount:N0}");
-        builder.AppendLine($"  Active log observer task count: {ActiveLogObserverTaskCount:N0}");
-        builder.AppendLine($"  Active event observer task count: {ActiveEventObserverTaskCount:N0}");
-        builder.AppendLine($"  Active sequence trigger observer task count: {ActiveSequenceTriggerObserverTaskCount:N0}");
-        builder.AppendLine($"  Active event context observer task count: {ActiveEventContextObserverTaskCount:N0}");
-        builder.AppendLine($"  Connection errors: {_serialService.ConnectionErrorCount:N0}");
-        builder.AppendLine($"  Serial last error: {_serialService.LastError ?? "(none)"}");
-        builder.AppendLine($"  Duplicate MOCK port entries removed: {DuplicateMockPortEntryCount:N0}");
-        builder.AppendLine();
-        builder.AppendLine("Mock Stress / Sequence Verification");
-        builder.AppendLine($"  Stress running: {IsMockStressRunning}");
-        builder.AppendLine($"  Stress status: {_serialService.MockStressStatus}");
-        builder.AppendLine($"  Mock pattern: {SelectedMockGeneratorPatternText}");
-        builder.AppendLine($"  No-newline mock active: {IsMockNoNewlineActive}");
-        builder.AppendLine($"  No-newline mock emitted bytes: {MockNoNewlineEmittedBytes:N0}");
-        builder.AppendLine($"  Selected lines/sec: {SelectedMockStressLinesPerSecond:N0}");
-        builder.AppendLine($"  Selected burst size: {SelectedMockStressBurstSize:N0}");
-        builder.AppendLine($"  ERROR/WARN/FAULT injection enabled: {IsMockStressEventInjectionEnabled}");
-        builder.AppendLine($"  Invalid byte injection enabled: {IsMockStressInvalidByteInjectionEnabled}");
-        builder.AppendLine($"  Mock generated lines/packets: {MockGeneratedLineCount:N0}");
-        builder.AppendLine($"  Mock expected sequence: {MockExpectedSequence:N0}");
-        builder.AppendLine($"  Mock last generated sequence: {MockLastGeneratedSequence:N0}");
-        builder.AppendLine($"  Mock last parsed sequence: {MockLastParsedSequence:N0}");
-        builder.AppendLine($"  Missing sequence count: {MockMissingSequenceCount:N0}");
-        builder.AppendLine($"  Duplicate sequence count: {MockDuplicateSequenceCount:N0}");
-        builder.AppendLine($"  Out-of-order sequence count: {MockOutOfOrderSequenceCount:N0}");
-        builder.AppendLine($"  Malformed sequence line count: {MockMalformedSequenceCount:N0}");
-        builder.AppendLine($"  Last sequence error: {(string.IsNullOrWhiteSpace(LastMockSequenceError) ? "(none)" : LastMockSequenceError)}");
-        builder.AppendLine($"  RX bytes: {_serialService.ReceivedByteCount:N0}");
-        builder.AppendLine($"  RX chunks: {_serialService.ReceivedChunkCount:N0}");
-        builder.AppendLine($"  Pipeline processed RX bytes: {_logPipeline.ProcessedRxByteCount:N0}");
-        builder.AppendLine($"  Parsed lines: {_logPipeline.ParsedLineCount:N0}");
-        builder.AppendLine($"  Displayed lines: {Log.DisplayedLineCount:N0}");
-        builder.AppendLine($"  File written lines: {_fileLogWriter.WrittenLineCount:N0}");
-        builder.AppendLine($"  Events detected: {_eventDetector.DetectedEventCount:N0}");
-        builder.AppendLine($"  64K boundary warning: {BuildBoundary64KWarningText()}");
-        builder.AppendLine("  64K counter audit: no app log/event counters use 16-bit integer types; GetKeyState interop uses Win32 short only.");
-        builder.AppendLine($"  Dropped UI visible lines: {Log.DroppedVisibleLineCount:N0}");
-        builder.AppendLine($"  Dropped UI pending lines: {Log.DroppedPendingLineCount:N0}");
-        builder.AppendLine($"  Pending visual line count: {PendingVisualLineCount:N0}");
-        builder.AppendLine($"  View pause active: {IsLogRenderingPaused}");
-        builder.AppendLine($"  Current pause skip (PS) lines: {CurrentViewPauseOmittedLineCount:N0}");
-        builder.AppendLine($"  Total pause skip (PS) lines: {TotalViewPauseOmittedLineCount:N0}");
-        builder.AppendLine($"  View pause count: {ViewPauseCount:N0}");
-        builder.AppendLine($"  File logging while view paused: {FileLoggingWhileViewPaused}");
-        builder.AppendLine($"  Last view-pause summary: {LastViewPauseSummary}");
-        builder.AppendLine($"  File writer dropped lines: {_fileLogWriter.DroppedLineCount:N0}");
-        builder.AppendLine($"  Event detector dropped input lines: {_eventDetector.DroppedInputLineCount:N0}");
-        builder.AppendLine($"  Event detector dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
-        builder.AppendLine($"  Event detector failed contexts: {_eventDetector.ContextCaptureFailedCount:N0}");
-        builder.AppendLine();
-        builder.AppendLine("TX");
-        builder.AppendLine($"  Selected TX line ending: {SelectedTxLineEnding}");
-        builder.AppendLine($"  TX send mode: {FormatTxSendModeName(SelectedTxSendMode)}");
-        builder.AppendLine($"  Last TX mode: {FormatTxSendModeName(LastTxMode)}");
-        builder.AppendLine($"  Last TX raw input: {(string.IsNullOrWhiteSpace(LastTxRawInput) ? "(none)" : LastTxRawInput)}");
-        builder.AppendLine($"  Last TX byte count: {LastTxByteCount:N0}");
-        builder.AppendLine($"  Last TX HEX parse error: {(string.IsNullOrWhiteSpace(LastTxHexParseError) ? "(none)" : LastTxHexParseError)}");
-        builder.AppendLine($"  Sent command count: {SentCommandCount:N0}");
-        builder.AppendLine($"  Last sent command text: {(string.IsNullOrWhiteSpace(LastSentCommandText) ? "(none)" : LastSentCommandText)}");
-        builder.AppendLine($"  Last sent command time: {LastSentCommandTimeText}");
-        builder.AppendLine($"  TX written bytes: {_serialService.WrittenByteCount:N0}");
-        builder.AppendLine($"  TX error count: {TxErrorCount:N0}");
-        builder.AppendLine($"  Last TX error: {(string.IsNullOrWhiteSpace(LastTxError) ? "(none)" : LastTxError)}");
-        builder.AppendLine($"  Command history count: {Commands.CommandHistoryCount:N0}");
-        builder.AppendLine($"  Last history command: {(string.IsNullOrWhiteSpace(Commands.LastHistoryCommand) ? "(none)" : Commands.LastHistoryCommand)}");
-        builder.AppendLine($"  Last history update time: {Commands.LastHistoryUpdateTimeText}");
-        builder.AppendLine($"  History max count: {Commands.HistoryMaxCount:N0}");
-        builder.AppendLine($"  History errors: {Commands.HistoryErrorCount:N0}");
-        builder.AppendLine($"  Last history error: {(string.IsNullOrWhiteSpace(Commands.LastHistoryError) ? "(none)" : Commands.LastHistoryError)}");
-        builder.AppendLine();
-        builder.AppendLine("Command Sequences");
-        builder.AppendLine($"  Sequence count: {CommandSequenceCount:N0}");
-        builder.AppendLine($"  Selected sequence: {SelectedCommandSequenceName}");
-        builder.AppendLine($"  Running: {IsSequenceRunning}");
-        builder.AppendLine($"  Running sequence: {RunningSequenceName}");
-        builder.AppendLine($"  Current step: {CurrentSequenceStepText}");
-        builder.AppendLine($"  Completed steps: {CompletedSequenceSteps:N0}");
-        builder.AppendLine($"  Last sequence action status: {LastSequenceActionStatus}");
-        builder.AppendLine($"  Sequence run count: {SequenceRunCount:N0}");
-        builder.AppendLine($"  Sequence stop count: {SequenceStopCount:N0}");
-        builder.AppendLine($"  Sequence errors: {SequenceErrorCount:N0}");
-        builder.AppendLine($"  Last sequence error: {(string.IsNullOrWhiteSpace(LastSequenceError) ? "(none)" : LastSequenceError)}");
-        builder.AppendLine();
-        builder.AppendLine("Markers");
-        builder.AppendLine($"  Marker count: {MarkerCount:N0}");
-        builder.AppendLine($"  Last marker action: {LastMarkerAction}");
-        builder.AppendLine($"  Last marker text: {(string.IsNullOrWhiteSpace(LastMarkerText) ? "(none)" : LastMarkerText)}");
-        builder.AppendLine($"  Last marker time: {LastMarkerTimeText}");
-        builder.AppendLine($"  Marker insert errors: {MarkerInsertErrorCount:N0}");
-        builder.AppendLine($"  Last marker error: {(string.IsNullOrWhiteSpace(LastMarkerError) ? "(none)" : LastMarkerError)}");
-        builder.AppendLine();
-        builder.AppendLine("Pipeline");
-        builder.AppendLine($"  Parsed lines: {_logPipeline.ParsedLineCount:N0}");
-        builder.AppendLine($"  Decode errors: {_logPipeline.DecodeErrorCount:N0}");
-        builder.AppendLine($"  Partial line buffer length: {_logPipeline.PartialLineBufferLength:N0}");
-        builder.AppendLine($"  Max partial line buffer length: {_logPipeline.MaxPartialLineBufferLength:N0}");
-        builder.AppendLine($"  Partial RX flush count: {_logPipeline.PartialRxFlushCount:N0}");
-        builder.AppendLine($"  Last partial RX flush time: {_logPipeline.LastPartialRxFlushTimeText}");
-        builder.AppendLine($"  No-newline RX detected: {_logPipeline.NoNewlineRxDetected}");
-        builder.AppendLine($"  Last partial finalized by newline: {_logPipeline.LastPartialFinalizedByNewline}");
-        builder.AppendLine($"  Partial duplicate suppression count: {_logPipeline.PartialDuplicateSuppressionCount:N0}");
-        builder.AppendLine($"  Last RX chunk bytes: {_logPipeline.LastRxChunkBytes:N0}");
-        var lastRxChunkGapTicks = _logPipeline.LastRxChunkGapTicks;
-        builder.AppendLine($"  Last RX chunk gap: {(lastRxChunkGapTicks < 0 ? "(none)" : $"{TimeSpan.FromTicks(lastRxChunkGapTicks).TotalMilliseconds:0.###} ms")}");
-        builder.AppendLine($"  Last RX raw bytes hex preview: {(string.IsNullOrWhiteSpace(_logPipeline.LastRxRawBytesHexPreview) ? "(none)" : _logPipeline.LastRxRawBytesHexPreview)}");
-        builder.AppendLine($"  Last RX chunk had newline: {_logPipeline.LastRxChunkHadNewline}");
-        builder.AppendLine($"  Last RX contained TAB byte: {_logPipeline.LastRxContainedTabByte}");
-        builder.AppendLine($"  Last RX contained literal backslash-t: {_logPipeline.LastRxContainedLiteralBackslashT}");
-        builder.AppendLine($"  Last RX chunk parsed lines: {_logPipeline.LastRxChunkParsedLines:N0}");
-        builder.AppendLine($"  Max RX chunk parsed lines: {_logPipeline.MaxRxChunkParsedLines:N0}");
-        builder.AppendLine($"  Driver-reported F/P/overrun/RX-buffer-warning signals: {_serialService.SerialFrameErrorCount:N0}/{_serialService.SerialParityErrorCount:N0}/{_serialService.SerialOverrunErrorCount:N0}/{_serialService.SerialRxOverErrorCount:N0}");
-        builder.AppendLine($"  Last driver-reported line-status signal: {_serialService.LastSerialErrorSummary}");
-        builder.AppendLine($"  Native idle boundaries suppressed by line-status errors: {_serialService.SerialLineErrorBoundarySuppressionCount:N0}");
-        builder.AppendLine($"  Native RX idle timeout enabled: {_serialService.UsesNativeReceiveIdleTimeout}");
-        builder.AppendLine($"  Native RX idle timeout applied: {(_serialService.UsesNativeReceiveIdleTimeout ? $"{_serialService.AppliedReceiveIdleTimeoutMs:N0} ms" : "immediate drain")}");
-        builder.AppendLine();
-        builder.AppendLine("UI Log");
-        builder.AppendLine($"  Active log view mode: {ActiveLogViewModeText}");
-        builder.AppendLine($"  Smooth rendering enabled: {SmoothLogRenderingEnabled}");
-        builder.AppendLine($"  Visual render interval ms: {VisualRenderIntervalMs:N0}");
-        builder.AppendLine($"  Visual drain batch size: {VisualDrainBatchSize:N0}");
-        builder.AppendLine($"  Visual drain max chars: {VisualDrainMaxChars:N0}");
-        builder.AppendLine($"  Show timestamp in log view: {ShowTimestampInLogView}");
-        builder.AppendLine($"  Show RX/TX direction prefixes in log view: {ShowRxTxDirectionPrefixInLogView}");
-        builder.AppendLine($"  RX display mode: {FormatRxDisplayModeName(SelectedRxDisplayMode)}");
-        builder.AppendLine($"  HEX group timeout profile/app/native: {HexGroupTimeoutMs:N0}/{_logPipeline.HexGroupTimeoutMs:N0}/{(_serialService.UsesNativeReceiveIdleTimeout ? _serialService.AppliedReceiveIdleTimeoutMs : 0):N0} ms");
-        builder.AppendLine($"  HEX timeout recommendation: {HexGroupTimeoutRecommendationText}");
-        builder.AppendLine($"  HEX pending bytes: {_logPipeline.HexPendingByteCount:N0}");
-        builder.AppendLine($"  HEX accepted/emitted bytes: {_logPipeline.HexAcceptedByteCount:N0}/{_logPipeline.HexEmittedByteCount:N0}");
-        builder.AppendLine($"  HEX byte conservation delta: {_logPipeline.HexAcceptedByteCount - _logPipeline.HexEmittedByteCount - _logPipeline.HexPendingByteCount:N0}");
-        builder.AppendLine($"  Last HEX group bytes: {_logPipeline.LastHexGroupByteCount:N0}");
-        builder.AppendLine($"  HEX group flush count: {_logPipeline.HexGroupFlushCount:N0}");
-        builder.AppendLine($"  Last HEX group flush: {_logPipeline.LastHexGroupFlushTimeText}");
-        builder.AppendLine($"  Partial RX visual line active: {Log.PartialRxVisualLineActive}");
-        builder.AppendLine($"  Partial RX visual length: {Log.PartialRxVisualLength:N0}");
-        builder.AppendLine($"  Partial RX append-in-place count: {Log.PartialRxAppendInPlaceCount:N0}");
-        builder.AppendLine("  RX visual formatting mode: terminal tabs; CR/LF/ESC/other controls are shown as safe text");
-        builder.AppendLine($"  RX render mode errors: {Log.XtermFormattingErrorCount:N0}");
-        builder.AppendLine($"  RX control character format errors: {Log.XtermFormattingErrorCount:N0}");
-        builder.AppendLine($"  Cute background enabled: {CuteBackgroundMode}");
-        builder.AppendLine($"  Cute background source: {CuteBackgroundSource}");
-        builder.AppendLine($"  Custom background image path: {(string.IsNullOrWhiteSpace(CuteBackgroundImagePath) ? "(none)" : CuteBackgroundImagePath)}");
-        builder.AppendLine($"  Bundled background path: {(string.IsNullOrWhiteSpace(CuteBackgroundBundledPath) ? "(none)" : CuteBackgroundBundledPath)}");
-        builder.AppendLine($"  Cute background file exists: {CuteBackgroundFileExists}");
-        builder.AppendLine($"  Cute background loaded: {CuteBackgroundLoaded}");
-        builder.AppendLine($"  Cute background opacity: {CuteBackgroundOpacity:0.00}");
-        builder.AppendLine($"  Cute background dark overlay opacity: {CuteBackgroundOverlayOpacity:0.00}");
-        builder.AppendLine($"  Last cute background visual update: {CuteBackgroundLastAppliedTimeText}");
-        builder.AppendLine($"  Cute background apply count: {CuteBackgroundApplyCount:N0}");
-        builder.AppendLine($"  Cute background image reload count: {CuteBackgroundImageReloadCount:N0}");
-        builder.AppendLine($"  Cute background skipped unchanged count: {CuteBackgroundSkippedUnchangedCount:N0}");
-        builder.AppendLine("  Cute background flicker prevention active: True");
-        builder.AppendLine($"  Cute background load error: {(string.IsNullOrWhiteSpace(CuteBackgroundLoadError) ? "(none)" : CuteBackgroundLoadError)}");
-        builder.AppendLine($"  Last timestamp display mode change time: {LastTimestampDisplayModeChangeTimeText}");
-        builder.AppendLine($"  Timestamp display mode errors: {TimestampDisplayModeErrorCount:N0}");
-        builder.AppendLine($"  Last timestamp display mode error: {(string.IsNullOrWhiteSpace(LastTimestampDisplayModeError) ? "(none)" : LastTimestampDisplayModeError)}");
-        builder.AppendLine($"  xterm ready: {IsXtermReady}");
-        builder.AppendLine($"  Rendering paused: {IsLogRenderingPaused}");
-        builder.AppendLine($"  Rendering pause reason: {RenderingPauseReason}");
-        builder.AppendLine($"  Manual pause active: {IsManualLogRenderingPaused}");
-        builder.AppendLine($"  xterm append backpressure active: {IsXtermAppendBackpressureActive}");
-        builder.AppendLine($"  xterm backlog UI relief active: {IsXtermAppendBackpressureActive}");
-        builder.AppendLine($"  Effective xterm auto-scroll: {IsEffectiveXtermAutoScrollEnabled}");
-        builder.AppendLine("  Search auto-refresh: disabled (manual only)");
-        builder.AppendLine($"  Event auto-scroll suppressed by xterm backlog: {IsEventAutoScrollSuppressedByXtermBackpressure}");
-        builder.AppendLine($"  Backlog event auto-scroll suppressions: {XtermBackpressureEventAutoScrollSuppressedCount:N0}");
-        builder.AppendLine($"  Backlog xterm auto-scroll suppressions: {XtermBackpressureAutoScrollSuppressedCount:N0}");
-        builder.AppendLine($"  Backlog full re-renders deferred: {XtermBackpressureFullRerenderDeferredCount:N0}");
-        builder.AppendLine($"  Window minimized: {IsWindowMinimized}");
-        builder.AppendLine($"  Visual append suspended by minimize: {IsVisualAppendSuspendedForMinimize}");
-        builder.AppendLine($"  xterm needs full re-render after restore: {XtermNeedsFullRerenderAfterRestore}");
-        builder.AppendLine($"  Last minimize time: {LastWindowMinimizeTimeText}");
-        builder.AppendLine($"  Last restore time: {LastWindowRestoreTimeText}");
-        builder.AppendLine($"  Restore render started time: {RestoreRenderStartedTimeText}");
-        builder.AppendLine($"  Restore render completed time: {RestoreRenderCompletedTimeText}");
-        builder.AppendLine($"  Restore mode: {LastRestoreRenderMode}");
-        builder.AppendLine($"  Restore rendered line count: {RestoreRenderedLineCount:N0}");
-        builder.AppendLine($"  Restore render duration: {RestoreRenderDurationText}");
-        builder.AppendLine($"  Restore full re-render suppressed count: {RestoreFullRerenderSuppressedCount:N0}");
-        builder.AppendLine($"  Window activation re-render suppressed count: {WindowActivationRerenderSuppressedCount:N0}");
-        builder.AppendLine($"  Last rendered sequence id: {LastRenderedSequenceId:N0}");
-        builder.AppendLine($"  Retained first sequence id: {(Log.TotalRetainedLineCount > 0 ? Math.Max(1, Log.DisplayedLineCount - Log.TotalRetainedLineCount + 1) : 0):N0}");
-        builder.AppendLine($"  Retained last sequence id: {Log.DisplayedLineCount:N0}");
-        builder.AppendLine($"  Pending visual delta lines: {PendingVisualDeltaLineCount:N0}");
-        builder.AppendLine($"  Full re-render in progress: {IsFullXtermRerenderInProgress}");
-        builder.AppendLine($"  Last full re-render reason: {LastFullXtermRerenderReason}");
-        builder.AppendLine($"  Last full re-render source tag: {LastVisibleLogRebuildReason}");
-        builder.AppendLine($"  Last full re-render generation: {LastFullXtermRerenderGeneration:N0}");
-        builder.AppendLine($"  Full re-render requested count: {FullXtermRerenderRequestCount:N0}");
-        builder.AppendLine($"  Full re-render coalesced count: {FullXtermRerenderCoalescedCount:N0}");
-        builder.AppendLine($"  Full re-render canceled count: {FullXtermRerenderCanceledCount:N0}");
-        builder.AppendLine($"  Last full re-render line count: {LastFullXtermRerenderLineCount:N0}");
-        builder.AppendLine($"  Last full re-render duration: {LastFullXtermRerenderDurationText}");
-        builder.AppendLine($"  Full re-render scroll restore attempted: {LastFullXtermScrollRestoreAttempted}");
-        builder.AppendLine($"  Full re-render final scroll action: {LastFullXtermFinalScrollAction}");
-        builder.AppendLine($"  Last full re-render xterm clear count: {LastFullXtermClearCount:N0}");
-        builder.AppendLine($"  Last full re-render visibility toggle count: {LastFullXtermVisibilityToggleCount:N0}");
-        builder.AppendLine($"  Suppressed intermediate auto-scroll count: {SuppressedIntermediateAutoScrollCount:N0}");
-        builder.AppendLine($"  Last full re-render error: {(string.IsNullOrWhiteSpace(LastFullXtermRerenderError) ? "(none)" : LastFullXtermRerenderError)}");
-        builder.AppendLine($"  Visible/xterm line limit: {MaxVisibleLogLines:N0}");
-        builder.AppendLine($"  Last visible cap change time: {LastVisibleCapChangeTimeText}");
-        builder.AppendLine($"  Last applied xterm scrollback size: {LastAppliedXtermScrollbackSize:N0}");
-        builder.AppendLine($"  Pending visual line count: {PendingVisualLineCount:N0}");
-        builder.AppendLine($"  Visual pending char count: {XtermPendingCharacterCount:N0}");
-        builder.AppendLine($"  Max visual pending char count: {MaxXtermPendingCharacterCount:N0}");
-        builder.AppendLine($"  Minimized coalesced visual lines: {MinimizedVisualCoalescedLineCount:N0}");
-        builder.AppendLine($"  Minimized coalesced visual chars: {MinimizedVisualCoalescedCharacterCount:N0}");
-        builder.AppendLine($"  Max minimized coalesced visual lines: {MaxMinimizedVisualCoalescedLineCount:N0}");
-        builder.AppendLine($"  Max minimized coalesced visual chars: {MaxMinimizedVisualCoalescedCharacterCount:N0}");
-        builder.AppendLine($"  Suspended xterm pending lines: {SuspendedXtermPendingLineCount:N0}");
-        builder.AppendLine($"  Suspended xterm pending chars: {SuspendedXtermPendingCharacterCount:N0}");
-        builder.AppendLine($"  Suspended xterm queue collapse count: {SuspendedXtermQueueCollapseCount:N0}");
-        builder.AppendLine($"  Last suspended xterm queue collapse: {LastSuspendedXtermQueueCollapseReason}");
-        builder.AppendLine($"  Last visual append line count: {LastVisualAppendLineCount:N0}");
-        builder.AppendLine($"  Max visual append line count: {MaxVisualAppendLineCount:N0}");
-        builder.AppendLine($"  Max visual backlog line count: {MaxVisualBacklogLineCount:N0}");
-        builder.AppendLine($"  Visual append batch count: {VisualAppendBatchCount:N0}");
-        builder.AppendLine($"  Active highlight rule count: {ActiveHighlightRuleCount:N0}");
-        builder.AppendLine($"  Visual dispatcher flush count: {VisualDispatcherFlushCount:N0}");
-        builder.AppendLine($"  Max visual dispatcher batch size: {MaxVisualDispatcherBatchSize:N0}");
-        builder.AppendLine($"  Compiled highlight Terminal rule count: {Log.CompiledTerminalRuleCount:N0}");
-        builder.AppendLine($"  Compiled highlight HEX rule count: {Log.CompiledHexRuleCount:N0}");
-        builder.AppendLine($"  Invalid compiled highlight rule count: {Log.InvalidCompiledRuleCount:N0}");
-        builder.AppendLine($"  Current visible filter: {CurrentVisibleFilterText}");
-        builder.AppendLine($"  Available view filters: {AvailableViewFilterCount:N0}");
-        builder.AppendLine($"  Filtered visible line count: {Log.FilteredVisibleLineCount:N0}");
-        builder.AppendLine($"  Total visible buffer line count: {Log.TotalRetainedLineCount:N0}");
-        builder.AppendLine($"  Retained visible lines count: {Log.TotalRetainedLineCount:N0}");
-        builder.AppendLine($"  Visible trim count due to cap: {Log.DroppedVisibleLineCount:N0}");
-        builder.AppendLine($"  Retained visible character count approx: {Log.VisibleCharacterCount:N0}");
-        builder.AppendLine($"  Approx retained visible memory estimate: {Log.VisibleCharacterCount * 2:N0} bytes of UTF-16 text");
-        builder.AppendLine($"  Max retained visible line count seen: {Log.MaxRetainedLineCountSeen:N0}");
-        builder.AppendLine($"  Last filter change time: {LastVisibleFilterChangeTimeText}");
-        builder.AppendLine($"  Filter match errors: {Log.ViewFilterMatchErrorCount:N0}");
-        builder.AppendLine($"  Rule filter regex errors: 0 (regex matching is not enabled)");
-        builder.AppendLine($"  Visible filter errors: {VisibleFilterErrorCount:N0}");
-        builder.AppendLine($"  Last visible filter error: {(string.IsNullOrWhiteSpace(LastVisibleFilterError) ? "(none)" : LastVisibleFilterError)}");
-        builder.AppendLine($"  xterm appended lines: {XtermAppendedLineCount:N0}");
-        builder.AppendLine($"  xterm append batch count: {XtermAppendBatchCount:N0}");
-        builder.AppendLine($"  Last xterm append line count: {LastXtermAppendLineCount:N0}");
-        builder.AppendLine($"  Last xterm append char count: {LastXtermAppendCharacterCount:N0}");
-        builder.AppendLine($"  Max xterm append line count: {MaxXtermAppendLineCount:N0}");
-        builder.AppendLine($"  Max xterm append char count: {MaxXtermAppendCharacterCount:N0}");
-        builder.AppendLine($"  Last xterm append duration: {LastXtermAppendDurationText}");
-        builder.AppendLine($"  Max xterm append duration: {MaxXtermAppendDurationText}");
-        builder.AppendLine($"  xterm append errors: {XtermAppendErrorCount:N0}");
-        builder.AppendLine($"  xterm last append error: {(string.IsNullOrWhiteSpace(LastXtermAppendError) ? "(none)" : LastXtermAppendError)}");
-        builder.AppendLine($"  WebView2 append error count: {XtermAppendErrorCount:N0}");
-        builder.AppendLine($"  Last WebView2 append error: {(string.IsNullOrWhiteSpace(LastXtermAppendError) ? "(none)" : LastXtermAppendError)}");
-        builder.AppendLine($"  xterm font load warnings: {XtermFontLoadWarningCount:N0}");
-        builder.AppendLine($"  xterm last font load warning: {(string.IsNullOrWhiteSpace(LastXtermFontLoadWarning) ? "(none)" : LastXtermFontLoadWarning)}");
-        builder.AppendLine($"  xterm fit/resize count: {XtermFitResizeCount:N0}");
-        builder.AppendLine($"  xterm visual/layout errors: {XtermLayoutErrorCount:N0}");
-        builder.AppendLine($"  xterm last visual/layout error: {(string.IsNullOrWhiteSpace(LastXtermLayoutError) ? "(none)" : LastXtermLayoutError)}");
-        builder.AppendLine($"  Highlighted line count: {Log.HighlightedLineCount:N0}");
-        builder.AppendLine($"  xterm formatting errors: {Log.XtermFormattingErrorCount:N0}");
-        builder.AppendLine($"  xterm copy requests: {XtermCopyRequestCount:N0}");
-        builder.AppendLine($"  xterm copied characters: {XtermCopiedCharacterCount:N0}");
-        builder.AppendLine($"  xterm copy errors: {XtermCopyErrorCount:N0}");
-        builder.AppendLine($"  xterm last copy error: {(string.IsNullOrWhiteSpace(LastXtermCopyError) ? "(none)" : LastXtermCopyError)}");
-        builder.AppendLine($"  Last xterm context menu action: {LastXtermContextMenuAction}");
-        builder.AppendLine($"  xterm context menu errors: {XtermContextMenuErrorCount:N0}");
-        builder.AppendLine($"  Last xterm context menu error: {(string.IsNullOrWhiteSpace(LastXtermContextMenuError) ? "(none)" : LastXtermContextMenuError)}");
-        builder.AppendLine($"  Last copy visible line count: {LastCopyVisibleLineCount:N0}");
-        builder.AppendLine($"  Last copy since TX action time: {LastCopySinceTxActionTimeText}");
-        builder.AppendLine($"  Last copy since TX line count: {LastCopySinceTxLineCount:N0}");
-        builder.AppendLine($"  Last copy since TX character count: {LastCopySinceTxCharacterCount:N0}");
-        builder.AppendLine($"  Last copy since TX result: {LastCopySinceTxResult}");
-        builder.AppendLine($"  Copy since TX errors: {CopySinceTxErrorCount:N0}");
-        builder.AppendLine($"  Last copy since TX error: {(string.IsNullOrWhiteSpace(LastCopySinceTxError) ? "(none)" : LastCopySinceTxError)}");
-        builder.AppendLine($"  Last copy since MARK action time: {LastCopySinceMarkActionTimeText}");
-        builder.AppendLine($"  Last copy since MARK line count: {LastCopySinceMarkLineCount:N0}");
-        builder.AppendLine($"  Last copy since MARK character count: {LastCopySinceMarkCharacterCount:N0}");
-        builder.AppendLine($"  Last copy since MARK result: {LastCopySinceMarkResult}");
-        builder.AppendLine($"  Copy since MARK errors: {CopySinceMarkErrorCount:N0}");
-        builder.AppendLine($"  Last copy since MARK error: {(string.IsNullOrWhiteSpace(LastCopySinceMarkError) ? "(none)" : LastCopySinceMarkError)}");
-        builder.AppendLine($"  Last search selected text length: {LastSearchSelectedTextLength:N0}");
-        builder.AppendLine($"  Auto-scroll enabled: {IsAutoScrollEnabled}");
-        builder.AppendLine($"  xterm at bottom: {XtermAtBottomText}");
-        builder.AppendLine($"  Last auto-scroll action time: {LastAutoScrollActionTimeText}");
-        builder.AppendLine($"  Last auto-scroll error: {(string.IsNullOrWhiteSpace(LastAutoScrollError) ? "(none)" : LastAutoScrollError)}");
-        builder.AppendLine($"  Displayed lines: {Log.DisplayedLineCount:N0}");
-        builder.AppendLine($"  Dropped visible lines: {Log.DroppedVisibleLineCount:N0}");
-        builder.AppendLine($"  Dropped pending UI lines: {Log.DroppedPendingLineCount:N0}");
-        builder.AppendLine($"  Current visible line count: {Log.CurrentVisibleLineCount:N0}");
-        builder.AppendLine();
-        builder.AppendLine("Visible Log Search");
-        builder.AppendLine($"  Last search text: {(string.IsNullOrWhiteSpace(SearchText) ? "(none)" : SearchText)}");
-        builder.AppendLine($"  Case sensitive: {IsSearchCaseSensitive}");
-        builder.AppendLine($"  Whole word: {IsSearchWholeWord}");
-        builder.AppendLine($"  Regular expression: {IsSearchRegularExpression}");
-        builder.AppendLine($"  Search match count: {SearchMatchCount:N0}");
-        builder.AppendLine($"  Current search match index: {CurrentSearchMatchIndex:N0}");
-        builder.AppendLine($"  Current matched line: {(string.IsNullOrWhiteSpace(CurrentSearchMatchedLine) ? "(none)" : CurrentSearchMatchedLine)}");
-        builder.AppendLine($"  Last search snapshot lines: {Volatile.Read(ref _lastSearchSnapshotLineCount):N0}");
-        builder.AppendLine($"  Last search snapshot capture: {Interlocked.Read(ref _lastSearchSnapshotCaptureMs):N0} ms");
-        builder.AppendLine($"  Last search engine duration: {Interlocked.Read(ref _lastSearchEngineDurationMs):N0} ms");
-        builder.AppendLine($"  Last search result apply: {Interlocked.Read(ref _lastSearchResultApplyMs):N0} ms");
-        builder.AppendLine($"  Search errors: {SearchErrorCount:N0}");
-        builder.AppendLine($"  Last search error: {(string.IsNullOrWhiteSpace(LastSearchError) ? "(none)" : LastSearchError)}");
-        builder.AppendLine($"  Search result count: {SearchMatchCount:N0}");
-        builder.AppendLine($"  Search matching line count: {SearchResultMatchedLineCount:N0}");
-        builder.AppendLine($"  Search result visible count: {SearchResultVisibleCount:N0}");
-        builder.AppendLine($"  Search results page: {SearchResultPageNumber:N0}/{SearchResultPageCount:N0}");
-        builder.AppendLine($"  Selected search result index: {SelectedSearchResultIndex:N0}");
-        builder.AppendLine($"  Search result status: {SearchResultStatusText}");
-        builder.AppendLine($"  Search results rebuild count: {SearchResultsRebuildCount:N0}");
-        builder.AppendLine("  Search results refresh mode: Manual only");
-        builder.AppendLine($"  Search results stale: {AreSearchResultsStale}");
-        builder.AppendLine($"  Last search shortcut action: {LastSearchShortcutAction}");
-        builder.AppendLine($"  Last search shortcut source: {LastSearchShortcutSource}");
-        builder.AppendLine($"  Last search shortcut time: {LastSearchShortcutTimeText}");
-        builder.AppendLine($"  Search shortcut errors: {SearchShortcutErrorCount:N0}");
-        builder.AppendLine($"  Last search shortcut error: {(string.IsNullOrWhiteSpace(LastSearchShortcutError) ? "(none)" : LastSearchShortcutError)}");
-        builder.AppendLine($"  Search result selection lost count: {SearchResultSelectionLostCount:N0}");
-        builder.AppendLine($"  Search result build errors: {SearchResultBuildErrorCount:N0}");
-        builder.AppendLine($"  Last search result build error: {(string.IsNullOrWhiteSpace(LastSearchResultBuildError) ? "(none)" : LastSearchResultBuildError)}");
-        builder.AppendLine($"  Search result jump errors: {SearchResultJumpErrorCount:N0}");
-        builder.AppendLine($"  Last search result jump error: {(string.IsNullOrWhiteSpace(LastSearchResultJumpError) ? "(none)" : LastSearchResultJumpError)}");
-        builder.AppendLine($"  List update errors: {ListUpdateErrorCount:N0}");
-        builder.AppendLine($"  Last list update error: {(string.IsNullOrWhiteSpace(LastListUpdateError) ? "(none)" : LastListUpdateError)}");
-        builder.AppendLine($"  Active inspector tab: {ActiveInspectorTabText}");
-        builder.AppendLine($"  Inspector tab layout errors: {InspectorTabLayoutErrorCount:N0}");
-        builder.AppendLine($"  Last inspector tab layout error: {(string.IsNullOrWhiteSpace(LastInspectorTabLayoutError) ? "(none)" : LastInspectorTabLayoutError)}");
-        builder.AppendLine($"  Search tab layout errors: {SearchTabLayoutErrorCount:N0}");
-        builder.AppendLine($"  Last search tab layout error: {(string.IsNullOrWhiteSpace(LastSearchTabLayoutError) ? "(none)" : LastSearchTabLayoutError)}");
-        builder.AppendLine($"  StatusChanged thread marshal errors: {StatusChangedThreadMarshalErrorCount:N0}");
-        builder.AppendLine($"  Last StatusChanged thread marshal error: {(string.IsNullOrWhiteSpace(LastStatusChangedThreadMarshalError) ? "(none)" : LastStatusChangedThreadMarshalError)}");
-        builder.AppendLine($"  xterm search requests: {XtermSearchRequestCount:N0}");
-        builder.AppendLine($"  xterm search hits: {XtermSearchHitCount:N0}");
-        builder.AppendLine($"  xterm search errors: {XtermSearchErrorCount:N0}");
-        builder.AppendLine($"  xterm last search duration: {Interlocked.Read(ref _lastXtermSearchDurationMs):N0} ms");
-        builder.AppendLine($"  xterm last search error: {(string.IsNullOrWhiteSpace(LastXtermSearchError) ? "(none)" : LastXtermSearchError)}");
-        builder.AppendLine();
-        builder.AppendLine("File Writer");
-        builder.AppendLine($"  File logging enabled: {FileLoggingEnabled}");
-        builder.AppendLine($"  File logging active: {FileLoggingActive}");
-        builder.AppendLine($"  Running: {_fileLogWriter.IsRunning}");
-        builder.AppendLine($"  Pending requests: {_fileLogWriter.PendingRequestCount:N0}");
-        builder.AppendLine($"  Start count: {_fileLogWriter.StartCount:N0}");
-        builder.AppendLine($"  Stop count: {_fileLogWriter.StopCount:N0}");
-        builder.AppendLine($"  Last lifecycle action: {_fileLogWriter.LastLifecycleAction}");
-        builder.AppendLine($"  Lifecycle errors: {_fileLogWriter.LifecycleErrorCount:N0}");
-        builder.AppendLine($"  Written log lines: {_fileLogWriter.WrittenLineCount:N0}");
-        builder.AppendLine($"  Written log bytes: {_fileLogWriter.WrittenByteCount:N0}");
-        builder.AppendLine($"  Dropped lines: {_fileLogWriter.DroppedLineCount:N0}");
-        builder.AppendLine($"  Error count: {_fileLogWriter.FileErrorCount:N0}");
-        builder.AppendLine($"  Log directory: {_fileLogWriter.LogDirectory}");
-        builder.AppendLine($"  Current log file path: {_fileLogWriter.CurrentLogFilePath ?? "(not open)"}");
-        builder.AppendLine($"  File writer last error: {_fileLogWriter.LastFileError ?? "(none)"}");
-        builder.AppendLine();
-        builder.AppendLine("Event Detection");
-        builder.AppendLine($"  Running: {_eventDetector.IsRunning}");
-        builder.AppendLine($"  Event rule count: {_eventDetector.EventRuleCount:N0}");
-        builder.AppendLine($"  Active event rule mode: {_eventDetector.ActiveRuleMode}");
-        builder.AppendLine($"  Compiled event Terminal rule count: {_eventDetector.CompiledTerminalRuleCount:N0}");
-        builder.AppendLine($"  Compiled event HEX rule count: {_eventDetector.CompiledHexRuleCount:N0}");
-        builder.AppendLine($"  Invalid compiled event rule count: {_eventDetector.InvalidCompiledRuleCount:N0}");
-        builder.AppendLine($"  Enabled rule count: {EventRules.Count(rule => rule.Enabled):N0}");
-        builder.AppendLine($"  Tray notification rules: {EventRules.Count(rule => rule.Enabled && rule.TrayNotificationEnabled):N0}");
-        builder.AppendLine($"  Sound notification rules: {EventRules.Count(rule => rule.Enabled && rule.SoundNotificationEnabled):N0}");
-        builder.AppendLine($"  Popup notification rules: {EventRules.Count(rule => rule.Enabled && rule.PopupNotificationEnabled):N0}");
-        builder.AppendLine($"  Notification batches delivered: {Interlocked.Read(ref _eventNotificationBatchCount):N0}");
-        builder.AppendLine($"  Events included in notifications: {Interlocked.Read(ref _eventNotificationEventCount):N0}");
-        builder.AppendLine($"  Detected event count: {_eventDetector.DetectedEventCount:N0}");
-        builder.AppendLine($"  Detected event UI item count: {DetectedEventUiItemCount:N0}");
-        builder.AppendLine($"  Visible event cap: {Events.Capacity:N0}");
-        builder.AppendLine($"  Event UI batch interval ms: {EventRenderIntervalMs:N0}");
-        builder.AppendLine($"  Event UI pending count: {PendingEventUiCount:N0}");
-        builder.AppendLine($"  Event UI flush count: {EventUiFlushCount:N0}");
-        builder.AppendLine($"  Max event UI batch size: {MaxEventUiBatchSize:N0}");
-        builder.AppendLine($"  Displayed event count: {Events.DisplayedEventCount:N0}");
-        builder.AppendLine($"  Dropped visible event count: {Events.DroppedVisibleEventCount:N0}");
-        builder.AppendLine($"  Current visible event count: {Events.CurrentVisibleEventCount:N0}");
-        builder.AppendLine($"  Event auto-scroll enabled: {IsEventAutoScrollEnabled}");
-        builder.AppendLine($"  Latest event select count: {LatestEventSelectCount:N0}");
-        builder.AppendLine($"  Event list incremental updates: {EventListIncrementalUpdateCount:N0}");
-        builder.AppendLine($"  Event list reset count: {EventListResetCount:N0}");
-        builder.AppendLine($"  Event selection preserved count: {EventSelectionPreservedCount:N0}");
-        builder.AppendLine($"  Event selection lost count: {EventSelectionLostCount:N0}");
-        builder.AppendLine($"  Event list scroll errors: {EventListScrollErrorCount:N0}");
-        builder.AppendLine($"  Last event list scroll error: {(string.IsNullOrWhiteSpace(LastEventListScrollError) ? "(none)" : LastEventListScrollError)}");
-        builder.AppendLine($"  Event detector error count: {_eventDetector.ErrorCount:N0}");
-        builder.AppendLine($"  Coalesced sequence trigger count: {_eventDetector.CoalescedSequenceTriggerCount:N0}");
-        builder.AppendLine($"  Event context captures started: {_eventDetector.ContextCapturesStartedCount:N0}");
-        builder.AppendLine($"  Event context captures completed: {_eventDetector.ContextCapturesCompletedCount:N0}");
-        builder.AppendLine($"  Active pending event contexts: {_eventDetector.ActivePendingContextCount:N0}");
-        builder.AppendLine($"  Event context dropped count: {_eventDetector.ContextCaptureDroppedCount:N0}");
-        builder.AppendLine($"  Event context scan lines: {_eventDetector.ContextCaptureScanLineCount:N0}");
-        builder.AppendLine($"  Event context capture entries visited: {_eventDetector.ContextCaptureEntriesVisited:N0}");
-        builder.AppendLine($"  Event context max captures scanned per line: {_eventDetector.MaxContextCaptureScanCount:N0}");
-        builder.AppendLine($"  Event context overload active: {_eventDetector.IsContextCaptureOverloadActive}");
-        builder.AppendLine($"  Event context overload high/low: {_eventDetector.ContextCaptureOverloadHighWatermark:N0}/{_eventDetector.ContextCaptureOverloadLowWatermark:N0}");
-        builder.AppendLine($"  Event contexts skipped by overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
-        builder.AppendLine($"  Event context overload transitions: {_eventDetector.ContextCaptureOverloadTransitionCount:N0}");
-        builder.AppendLine($"  Last event context overload transition: {(_eventDetector.LastContextCaptureOverloadTransitionTime?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) ?? "(none)")}");
-        builder.AppendLine($"  Event context UI pending count: {PendingEventContextUiCount:N0}");
-        builder.AppendLine($"  UI-only event context updates dropped: {EventContextUiDroppedCount:N0}");
-        builder.AppendLine($"  Event context failed count: {_eventDetector.ContextCaptureFailedCount:N0}");
-        builder.AppendLine($"  Retained UI event context cap: {RetainedEventContextLimit:N0}");
-        builder.AppendLine($"  Retained UI event contexts: {_eventContextsById.Count:N0}");
-        builder.AppendLine($"  Selected event rule/name: {SelectedEventRuleName}");
-        builder.AppendLine($"  Selected event has context: {SelectedEventContextAvailable}");
-        builder.AppendLine($"  Selected event context line count: {SelectedEventContextLineCount:N0}");
-        builder.AppendLine($"  Selected event context available: {SelectedEventContextAvailable}");
-        builder.AppendLine($"  Selected event context status: {SelectedEventContextStatusText}");
-        builder.AppendLine($"  Context refresh count: {ContextRefreshCount:N0}");
-        builder.AppendLine($"  Context render refresh errors: {ContextRefreshErrorCount:N0}");
-        builder.AppendLine($"  Last context refresh error: {(string.IsNullOrWhiteSpace(LastContextRefreshError) ? "(none)" : LastContextRefreshError)}");
-        builder.AppendLine($"  Context tab activated count: {ContextTabActivatedCount:N0}");
-        builder.AppendLine($"  Context visual refresh count: {ContextVisualRefreshCount:N0}");
-        builder.AppendLine($"  Last context visual refresh time: {LastContextVisualRefreshTimeText}");
-        builder.AppendLine($"  Last context visual refresh event id: {LastContextVisualRefreshEventId}");
-        builder.AppendLine($"  Last context visual refresh event summary: {LastContextVisualRefreshEventSummary}");
-        builder.AppendLine($"  Last context text length: {LastContextVisualRefreshTextLength:N0}");
-        builder.AppendLine($"  Context render errors: {ContextRenderErrorCount:N0}");
-        builder.AppendLine($"  Last context render error: {(string.IsNullOrWhiteSpace(LastContextRenderError) ? "(none)" : LastContextRenderError)}");
-        builder.AppendLine($"  Context WebView ready: {IsContextWebViewReady}");
-        builder.AppendLine($"  Context WebView update count: {ContextWebViewUpdateCount:N0}");
-        builder.AppendLine($"  Last context WebView update time: {LastContextWebViewUpdateTimeText}");
-        builder.AppendLine($"  Selected event summary at context update: {LastContextWebViewUpdateEventSummary}");
-        builder.AppendLine($"  Context text length at update: {LastContextWebViewTextLength:N0}");
-        builder.AppendLine($"  Context WebView update errors: {ContextWebViewUpdateErrorCount:N0}");
-        builder.AppendLine($"  Last context WebView update error: {(string.IsNullOrWhiteSpace(LastContextWebViewUpdateError) ? "(none)" : LastContextWebViewUpdateError)}");
-        builder.AppendLine($"  Copied event context count: {CopiedEventContextCount:N0}");
-        builder.AppendLine($"  Event selection errors: {EventSelectionErrorCount:N0}");
-        builder.AppendLine($"  Last event selection error: {(string.IsNullOrWhiteSpace(LastEventSelectionError) ? "(none)" : LastEventSelectionError)}");
-        builder.AppendLine($"  Event context UI errors: {EventContextUiErrorCount:N0}");
-        builder.AppendLine($"  Last event context UI error: {(string.IsNullOrWhiteSpace(LastEventContextUiError) ? "(none)" : LastEventContextUiError)}");
-        builder.AppendLine($"  Dropped event input lines: {_eventDetector.DroppedInputLineCount:N0}");
-        builder.AppendLine($"  Dropped output events: {_eventDetector.DroppedOutputEventCount:N0}");
-        builder.AppendLine($"  Last detected event: {_eventDetector.LastDetectedEventText ?? "(none)"}");
-        builder.AppendLine($"  Last event detector error: {_eventDetector.LastError ?? "(none)"}");
-        return builder.ToString();
-    }
-
-    private string CreateLastErrorText()
-    {
-        if (!string.IsNullOrWhiteSpace(_lastConnectFailureReason))
-        {
-            return _lastConnectFailureReason;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_serialService.LastError))
-        {
-            return _serialService.LastError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError))
-        {
-            return _fileLogWriter.LastFileError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_eventDetector.LastError))
-        {
-            return _eventDetector.LastError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_bridgeService.LastError))
-        {
-            return _bridgeService.LastError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_profileService.LastError))
-        {
-            return _profileService.LastError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastMarkerError))
-        {
-            return _lastMarkerError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSessionError))
-        {
-            return _lastSessionError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSessionFileNamingError))
-        {
-            return _lastSessionFileNamingError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSaveDirectoryError))
-        {
-            return _lastSaveDirectoryError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastXtermAppendError))
-        {
-            return _lastXtermAppendError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastXtermCopyError))
-        {
-            return _lastXtermCopyError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastXtermSearchError))
-        {
-            return _lastXtermSearchError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastXtermContextMenuError))
-        {
-            return _lastXtermContextMenuError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastTimestampDisplayModeError))
-        {
-            return _lastTimestampDisplayModeError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastDisconnectConfirmationError))
-        {
-            return _lastDisconnectConfirmationError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSearchResultBuildError))
-        {
-            return _lastSearchResultBuildError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSearchResultJumpError))
-        {
-            return _lastSearchResultJumpError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastListUpdateError))
-        {
-            return _lastListUpdateError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastInspectorTabLayoutError))
-        {
-            return _lastInspectorTabLayoutError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSearchTabLayoutError))
-        {
-            return _lastSearchTabLayoutError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastLogFileActionError))
-        {
-            return _lastLogFileActionError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSettingsApplyError))
-        {
-            return _lastSettingsApplyError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastStatusChangedThreadMarshalError))
-        {
-            return _lastStatusChangedThreadMarshalError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastXtermLayoutError))
-        {
-            return _lastXtermLayoutError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastEventContextUiError))
-        {
-            return _lastEventContextUiError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastEventSelectionError))
-        {
-            return _lastEventSelectionError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastEventListScrollError))
-        {
-            return _lastEventListScrollError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastContextRefreshError))
-        {
-            return _lastContextRefreshError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastContextRenderError))
-        {
-            return _lastContextRenderError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastContextWebViewUpdateError))
-        {
-            return _lastContextWebViewUpdateError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastRuleEditError))
-        {
-            return _lastRuleEditError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastCommandEditError))
-        {
-            return _lastCommandEditError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastSequenceError))
-        {
-            return _lastSequenceError;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_lastMockSequenceError))
-        {
-            return _lastMockSequenceError;
-        }
-
-        return string.IsNullOrWhiteSpace(_lastBackgroundError)
-            ? "(none)"
-            : _lastBackgroundError;
-    }
-
     private string GetLogFolderPath()
     {
         return LogSaveDirectory;
@@ -13874,7 +13137,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SetFooter(CreateFooterStatus());
         RefreshLogFileActionProperties();
         NotifyLogFileActionCommandStates();
-        RefreshDiagnostics();
+        RefreshStatusBar();
     }
 
     private void NotifySearchCommandStates()

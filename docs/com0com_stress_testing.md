@@ -30,7 +30,7 @@ This matches the existing two-program workflow and needs no console generator.
 3. In the receiver instance, connect directly to `COM5` at the same baud, select
    HEX mode, and apply a 15 ms HEX timeout.
 4. Confirm the 2-6 short-gap packets form one HEX group and each 25-40 ms idle
-   period starts a new group. Watch the receiver's diagnostics and disk log for
+   period starts a new group. Watch the receiver's footer health and disk log for
    errors or missing data.
 
 The sender's internal MOCK side still bypasses native COM timing, but the raw
