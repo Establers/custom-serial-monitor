@@ -44,9 +44,57 @@
     <value>Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi014.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Filter the visible xterm log using rules marked as Filter. Log files still keep all lines.</value>
-    <comment>Static MainWindow UI text.</comment>
+  <data name="VisibleFilterLabel.Text" xml:space="preserve">
+    <value>Filter</value>
+    <comment>Visible log filter toolbar label.</comment>
+  </data>
+  <data name="VisibleFilterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Select visible log filters</value>
+    <comment>Accessible name for the visible log filter button.</comment>
+  </data>
+  <data name="VisibleFilterFlyoutTitle.Text" xml:space="preserve">
+    <value>Filter</value>
+    <comment>Visible log filter flyout title.</comment>
+  </data>
+  <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show every new log line</value>
+    <comment>Visible log ALL option tooltip.</comment>
+  </data>
+  <data name="VisibleFilterRuleCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Include lines matching this rule</value>
+    <comment>Visible log rule option tooltip.</comment>
+  </data>
+  <data name="VisibleFilterHelpText.Text" xml:space="preserve">
+    <value>Selected rules are combined with OR.&#x0A;Changes apply to new logs only.</value>
+    <comment>Visible log filter behavior notice.</comment>
+  </data>
+  <data name="VisibleFilterCancelButton.Content" xml:space="preserve">
+    <value>Cancel</value>
+    <comment>Visible log filter cancel button.</comment>
+  </data>
+  <data name="VisibleFilterApplyButton.Content" xml:space="preserve">
+    <value>Apply</value>
+    <comment>Visible log filter apply button.</comment>
+  </data>
+  <data name="VisibleFilterAllText" xml:space="preserve">
+    <value>ALL</value>
+    <comment>Visible log filter option that disables filtering.</comment>
+  </data>
+  <data name="VisibleFilterAllToolTip" xml:space="preserve">
+    <value>ALL: show every new log line.</value>
+    <comment>Dynamic tooltip when no visible log filters are selected.</comment>
+  </data>
+  <data name="VisibleFilterSelectedToolTipFormat" xml:space="preserve">
+    <value>Selected filters (OR): {0}. Applies to new logs only.</value>
+    <comment>Dynamic tooltip format for selected visible log filters.</comment>
+  </data>
+  <data name="VisibleFilterAllStatus" xml:space="preserve">
+    <value>Visible log filter: ALL. Applies to new logs only.</value>
+    <comment>Status text when visible log filtering is disabled.</comment>
+  </data>
+  <data name="VisibleFilterSelectedStatusFormat" xml:space="preserve">
+    <value>Visible log filters (OR): {0}. Applies to new logs only. Press Clear for a clean filtered view.</value>
+    <comment>Status format after applying visible log filters.</comment>
   </data>
   <data name="StaticUi015.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends.</value>

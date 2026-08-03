@@ -645,6 +645,20 @@
                 <Setter Property="Template"
                         Value="{StaticResource CompactCheckBoxTemplate}" />
             </Style>
+            <Style x:Key="FilterFlyoutCheckBoxStyle"
+                   TargetType="CheckBox"
+                   BasedOn="{StaticResource CompactCheckBoxStyle}">
+                <Setter Property="Height"
+                        Value="18" />
+                <Setter Property="MinHeight"
+                        Value="18" />
+                <Setter Property="MinWidth"
+                        Value="0" />
+                <Setter Property="FontSize"
+                        Value="11" />
+                <Setter Property="HorizontalAlignment"
+                        Value="Stretch" />
+            </Style>
             <Style x:Key="CompactLabelTextStyle"
                    TargetType="TextBlock">
                 <Setter Property="FontSize"
@@ -1177,16 +1191,91 @@
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
                                   ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
-                        <TextBlock Grid.Column="9"
+                        <TextBlock x:Uid="VisibleFilterLabel"
+                                   Grid.Column="9"
                                    Text="Filter"
                                    Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox x:Uid="StaticUi014" Grid.Column="10"
-                                  ItemsSource="{Binding VisibleLogFilterOptions}"
-                                  SelectedItem="{Binding SelectedViewFilterOption, Mode=TwoWay}"
-                                  DisplayMemberPath="DisplayName"
-                                  Style="{StaticResource CompactComboBoxStyle}"
-                                  Width="96"
-                                  ToolTipService.ToolTip="Filter the visible xterm log using rules marked as Filter. Log files still keep all lines." />
+                        <Button x:Uid="VisibleFilterButton"
+                                x:Name="VisibleLogFilterButton"
+                                Grid.Column="10"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Width="96"
+                                HorizontalContentAlignment="Stretch"
+                                ToolTipService.ToolTip="{Binding CurrentVisibleFilterToolTip}"
+                                AutomationProperties.Name="Select visible log filters">
+                            <Button.Content>
+                                <Grid ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="4">
+                                    <TextBlock Text="{Binding CurrentVisibleFilterText}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <FontIcon Grid.Column="1"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                              FontSize="9"
+                                              Glyph="&#xE70D;" />
+                                </Grid>
+                            </Button.Content>
+                            <Button.Flyout>
+                                <Flyout x:Name="VisibleLogFilterFlyout"
+                                        Placement="BottomEdgeAlignedLeft"
+                                        Opening="VisibleLogFilterFlyout_Opening"
+                                        Closed="VisibleLogFilterFlyout_Closed">
+                                    <Border MinWidth="180"
+                                            MaxWidth="260">
+                                        <StackPanel Spacing="5">
+                                            <TextBlock x:Uid="VisibleFilterFlyoutTitle"
+                                                       Text="Filter"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold" />
+                                            <CheckBox x:Uid="VisibleFilterAllCheckBox"
+                                                      Content="{Binding AllVisibleLogFilterOption.DisplayName}"
+                                                      Style="{StaticResource FilterFlyoutCheckBoxStyle}"
+                                                      IsChecked="{Binding AllVisibleLogFilterOption.IsChecked, Mode=TwoWay}"
+                                                      ToolTipService.ToolTip="Show every new log line" />
+                                            <Border Height="1"
+                                                    Margin="0,1"
+                                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                            <ScrollViewer MaxHeight="220"
+                                                          VerticalScrollMode="Auto"
+                                                          VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl ItemsSource="{Binding VisibleLogFilterOptions}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <CheckBox x:Uid="VisibleFilterRuleCheckBox"
+                                                                      Content="{Binding DisplayName}"
+                                                                      Style="{StaticResource FilterFlyoutCheckBoxStyle}"
+                                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                                      ToolTipService.ToolTip="Include lines matching this rule" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                            <TextBlock x:Uid="VisibleFilterHelpText"
+                                                       Text="Selected rules are combined with OR.&#x0a;Changes apply to new logs only."
+                                                       Margin="0,2,0,0"
+                                                       FontSize="10"
+                                                       Opacity="0.7"
+                                                       TextWrapping="Wrap" />
+                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                                  ColumnSpacing="6">
+                                                <Button x:Uid="VisibleFilterCancelButton"
+                                                        Grid.Column="1"
+                                                        Content="Cancel"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        Click="CancelVisibleLogFilterButton_Click" />
+                                                <Button x:Uid="VisibleFilterApplyButton"
+                                                        Grid.Column="2"
+                                                        Content="Apply"
+                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        IsEnabled="{Binding HasPendingVisibleLogFilterChanges}"
+                                                        Click="ApplyVisibleLogFilterButton_Click" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                         <CheckBox x:Uid="StaticUi015" Grid.Column="12"
                                   Content="Auto"
                                   IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"

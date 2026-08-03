@@ -826,6 +826,28 @@ public sealed partial class MainWindow : Window
         ScrollToolbar(sender as Button, -1);
     }
 
+    private void VisibleLogFilterFlyout_Opening(object sender, object args)
+    {
+        _viewModel.BeginVisibleLogFilterEdit();
+    }
+
+    private void VisibleLogFilterFlyout_Closed(object sender, object args)
+    {
+        _viewModel.CancelVisibleLogFilterEdit();
+    }
+
+    private void ApplyVisibleLogFilterButton_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.ApplyVisibleLogFilterEdit();
+        VisibleLogFilterFlyout.Hide();
+    }
+
+    private void CancelVisibleLogFilterButton_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.CancelVisibleLogFilterEdit();
+        VisibleLogFilterFlyout.Hide();
+    }
+
     private void ToolbarScrollForwardButton_Click(object sender, RoutedEventArgs args)
     {
         ScrollToolbar(sender as Button, 1);

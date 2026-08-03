@@ -40,7 +40,7 @@ public sealed class LogViewModel : ViewModelBase
         long LineId,
         LogLine Line,
         LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
-        LogRuleMatcher.CompiledHighlightRule? ViewFilter);
+        LogRuleMatcher.CompiledHighlightRule[] ViewFilters);
 
     private const string AnsiReset = "\u001b[0m";
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
@@ -65,7 +65,7 @@ public sealed class LogViewModel : ViewModelBase
     private readonly LinkedList<long> _visibleLineTimestampsUnixMilliseconds = new();
     private readonly LinkedList<LogDirection> _visibleLineDirections = new();
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
-    private LogRuleMatcher.CompiledHighlightRule? _viewFilter;
+    private LogRuleMatcher.CompiledHighlightRule[] _viewFilters = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private bool _showTimestampInLogView = true;
     private bool _showRxTxDirectionPrefixInLogView = true;
     private TimestampDisplayFormat _timestampDisplayFormat = TimestampDisplayFormat.DateTimeMilliseconds;
@@ -254,9 +254,12 @@ public sealed class LogViewModel : ViewModelBase
 
     public void SetViewFilter(HighlightRule? viewFilter, bool rebuildExisting = true)
     {
-        _viewFilter = viewFilter is null
-            ? null
-            : LogRuleMatcher.Compile(viewFilter);
+        SetViewFilters(viewFilter is null ? [] : [viewFilter], rebuildExisting);
+    }
+
+    public void SetViewFilters(IEnumerable<HighlightRule> viewFilters, bool rebuildExisting = true)
+    {
+        _viewFilters = viewFilters.Select(LogRuleMatcher.Compile).ToArray();
         if (!rebuildExisting)
         {
             return;
@@ -289,7 +292,7 @@ public sealed class LogViewModel : ViewModelBase
         var appendedVisibleLineCount = 0;
         foreach (var line in lines)
         {
-            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules, _viewFilter);
+            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules, _viewFilters);
             _retainedLines.Enqueue(retainedLine);
             var visibleContribution = 0;
             if (line.IsPartialRxTerminator)
@@ -303,7 +306,7 @@ public sealed class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilter(line, retainedLine.ViewFilter))
+            if (!IsVisibleByFilters(line, retainedLine.ViewFilters))
             {
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
@@ -573,7 +576,7 @@ public sealed class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilter(line, retainedLine.ViewFilter))
+            if (!IsVisibleByFilters(line, retainedLine.ViewFilters))
             {
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
@@ -992,31 +995,38 @@ public sealed class LogViewModel : ViewModelBase
         return (displayLine + Environment.NewLine, searchableLine, isHighlighted, hasFormattingError);
     }
 
-    private bool IsVisibleByFilter(
+    private bool IsVisibleByFilters(
         LogLine line,
-        LogRuleMatcher.CompiledHighlightRule? viewFilter)
+        LogRuleMatcher.CompiledHighlightRule[] viewFilters)
     {
-        if (viewFilter is null)
+        if (viewFilters.Length == 0)
         {
             return true;
         }
 
-        try
+        foreach (var viewFilter in viewFilters)
         {
-            var matched = IsRuleMatch(line, viewFilter, _rxDisplayMode, out var matchError);
-            if (!string.IsNullOrWhiteSpace(matchError))
+            try
+            {
+                var matched = IsRuleMatch(line, viewFilter, _rxDisplayMode, out var matchError);
+                if (!string.IsNullOrWhiteSpace(matchError))
+                {
+                    ViewFilterMatchErrorCount++;
+                    continue;
+                }
+
+                if (matched)
+                {
+                    return true;
+                }
+            }
+            catch
             {
                 ViewFilterMatchErrorCount++;
-                return false;
             }
+        }
 
-            return matched;
-        }
-        catch
-        {
-            ViewFilterMatchErrorCount++;
-            return false;
-        }
+        return false;
     }
 
     private static (string Text, bool IsHighlighted, bool HasFormattingError) FormatXtermDisplayLine(

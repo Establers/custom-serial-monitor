@@ -118,18 +118,33 @@ public sealed class EventNotificationRequest : EventArgs
     public bool ShowPopup { get; }
 }
 
-public sealed class VisibleLogFilterOption
+public readonly record struct VisibleLogFilterKey(
+    string Name,
+    string Keyword,
+    LogRuleMatchMode Mode,
+    HighlightMatchDirection MatchDirection,
+    bool CaseSensitive)
 {
-    public const string AllKey = "__all";
+    public static VisibleLogFilterKey All { get; } = new(
+        "__all",
+        string.Empty,
+        LogRuleMatchMode.Terminal,
+        HighlightMatchDirection.Both,
+        false);
+}
 
-    public VisibleLogFilterOption(string key, string displayName, HighlightRule? rule)
+public sealed class VisibleLogFilterOption : ViewModelBase
+{
+    private bool _isChecked;
+
+    public VisibleLogFilterOption(VisibleLogFilterKey key, string displayName, HighlightRule? rule)
     {
         Key = key;
         DisplayName = displayName;
         Rule = rule;
     }
 
-    public string Key { get; }
+    public VisibleLogFilterKey Key { get; }
 
     public string DisplayName { get; }
 
@@ -137,7 +152,24 @@ public sealed class VisibleLogFilterOption
 
     public bool IsAll => Rule is null;
 
-    public static VisibleLogFilterOption All() => new(AllKey, "ALL", null);
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (SetProperty(ref _isChecked, value))
+            {
+                IsCheckedChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    internal event EventHandler? IsCheckedChanged;
+
+    public static VisibleLogFilterOption All() => new(
+        VisibleLogFilterKey.All,
+        UiText.Get("VisibleFilterAllText", "ALL"),
+        null);
 
     public override string ToString() => DisplayName;
 }
@@ -639,7 +671,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _lastTimestampDisplayModeChangeTimeText = "(none)";
     private string _lastTimestampDisplayModeError = string.Empty;
     private long _timestampDisplayModeErrorCount;
-    private VisibleLogFilterOption? _selectedViewFilterOption;
+    private readonly VisibleLogFilterSelectionState _visibleLogFilterSelection = new();
     private bool _isRefreshingVisibleLogFilterOptions;
     private string _lastVisibleCapChangeTimeText = "(none)";
     private string _lastVisibleFilterChangeTimeText = "(none)";
@@ -790,6 +822,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshBridgePortsCommand = new AsyncRelayCommand(RefreshBridgePortsAsync);
         StartBridgeCommand = new AsyncRelayCommand(StartBridgeAsync, () => CanStartBridge);
         StopBridgeCommand = new AsyncRelayCommand(StopBridgeAsync, () => CanStopBridge);
+
+        AllVisibleLogFilterOption.IsCheckedChanged += OnVisibleLogFilterOptionCheckedChanged;
 
         ApplyProfile(profile);
 
@@ -994,6 +1028,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public ObservableCollection<LogRule> LogRules { get; } = new();
 
+    public VisibleLogFilterOption AllVisibleLogFilterOption { get; } = VisibleLogFilterOption.All();
+
     public ObservableCollection<VisibleLogFilterOption> VisibleLogFilterOptions { get; } = new();
 
     public ObservableCollection<CommandSequence> CommandSequences { get; } = new();
@@ -1056,24 +1092,37 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasSelectedLogRule => SelectedLogRule is not null;
 
-    public VisibleLogFilterOption? SelectedViewFilterOption
+    public string CurrentVisibleFilterText
     {
-        get => _selectedViewFilterOption;
-        set
+        get
         {
-            if (SetProperty(ref _selectedViewFilterOption, value))
+            var selected = GetSelectedVisibleLogFilterOptions();
+            return selected.Count switch
             {
-                if (!_isRefreshingVisibleLogFilterOptions)
-                {
-                    ApplySelectedVisibleLogFilter(recordStatus: true);
-                }
-            }
+                0 => AllVisibleLogFilterOption.DisplayName,
+                1 => selected[0].DisplayName,
+                _ => $"{selected[0].DisplayName} +{selected.Count - 1}"
+            };
         }
     }
 
-    public string CurrentVisibleFilterText => SelectedViewFilterOption?.DisplayName ?? "ALL";
+    public string CurrentVisibleFilterToolTip
+    {
+        get
+        {
+            var selected = GetSelectedVisibleLogFilterOptions();
+            return selected.Count == 0
+                ? UiText.Get("VisibleFilterAllToolTip", "ALL: show every new log line.")
+                : UiText.Format(
+                    "VisibleFilterSelectedToolTipFormat",
+                    "Selected filters (OR): {0}. Applies to new logs only.",
+                    string.Join(", ", selected.Select(option => option.DisplayName)));
+        }
+    }
 
-    public int AvailableViewFilterCount => Math.Max(0, VisibleLogFilterOptions.Count - 1);
+    public bool HasPendingVisibleLogFilterChanges => _visibleLogFilterSelection.HasPendingChanges;
+
+    public int AvailableViewFilterCount => VisibleLogFilterOptions.Count;
 
     public string LastVisibleFilterChangeTimeText => _lastVisibleFilterChangeTimeText;
 
@@ -8771,41 +8820,38 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void RefreshVisibleLogFilterOptions(bool preserveSelection, bool applyFilter)
     {
-        var previousKey = preserveSelection
-            ? SelectedViewFilterOption?.Key ?? VisibleLogFilterOption.AllKey
-            : VisibleLogFilterOption.AllKey;
-
-        VisibleLogFilterOption selected;
+        var wasPending = _visibleLogFilterSelection.HasPendingChanges;
         bool selectionChanged;
         _isRefreshingVisibleLogFilterOptions = true;
         try
         {
+            foreach (var option in VisibleLogFilterOptions)
+            {
+                option.IsCheckedChanged -= OnVisibleLogFilterOptionCheckedChanged;
+            }
+
             VisibleLogFilterOptions.Clear();
-            VisibleLogFilterOptions.Add(VisibleLogFilterOption.All());
 
             foreach (var rule in LogRules.Where(IsRuleAvailableAsViewFilter))
             {
                 var displayName = string.IsNullOrWhiteSpace(rule.Name)
                     ? rule.Keyword.Trim()
                     : rule.Name.Trim();
-                VisibleLogFilterOptions.Add(new VisibleLogFilterOption(
+                var option = new VisibleLogFilterOption(
                     BuildViewFilterKey(rule),
                     displayName,
-                    CreateHighlightRuleFromLogRule(rule)));
+                    CreateHighlightRuleFromLogRule(rule));
+                option.IsCheckedChanged += OnVisibleLogFilterOptionCheckedChanged;
+                VisibleLogFilterOptions.Add(option);
             }
 
-            selected = VisibleLogFilterOptions.FirstOrDefault(option => string.Equals(option.Key, previousKey, StringComparison.Ordinal))
-                ?? VisibleLogFilterOptions.First();
-            selectionChanged = !string.Equals(
-                _selectedViewFilterOption?.Key ?? VisibleLogFilterOption.AllKey,
-                selected.Key,
-                StringComparison.Ordinal);
-
-            if (!ReferenceEquals(_selectedViewFilterOption, selected))
-            {
-                _selectedViewFilterOption = selected;
-                OnPropertyChanged(nameof(SelectedViewFilterOption));
-            }
+            var availableKeys = VisibleLogFilterOptions
+                .Select(option => option.Key)
+                .ToHashSet();
+            selectionChanged = _visibleLogFilterSelection.RetainAvailable(
+                availableKeys,
+                preserveSelection);
+            SynchronizeVisibleLogFilterDraft();
         }
         finally
         {
@@ -8814,32 +8860,73 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         OnPropertyChanged(nameof(AvailableViewFilterCount));
         OnPropertyChanged(nameof(CurrentVisibleFilterText));
+        OnPropertyChanged(nameof(CurrentVisibleFilterToolTip));
+        NotifyPendingVisibleLogFilterStateChanged(wasPending);
 
-        if (applyFilter && (!selected.IsAll || selectionChanged))
+        if (applyFilter && (_visibleLogFilterSelection.CurrentCount > 0 || selectionChanged))
         {
-            ApplySelectedVisibleLogFilter(recordStatus: false);
+            ApplyVisibleLogFilters(recordStatus: false);
         }
     }
 
-    private void ApplySelectedVisibleLogFilter(bool recordStatus)
+    public void BeginVisibleLogFilterEdit()
+    {
+        var wasPending = _visibleLogFilterSelection.HasPendingChanges;
+        _visibleLogFilterSelection.BeginEdit();
+        SynchronizeVisibleLogFilterDraft();
+        NotifyPendingVisibleLogFilterStateChanged(wasPending);
+    }
+
+    public void CancelVisibleLogFilterEdit()
+    {
+        var wasPending = _visibleLogFilterSelection.HasPendingChanges;
+        _visibleLogFilterSelection.CancelDraft();
+        SynchronizeVisibleLogFilterDraft();
+        NotifyPendingVisibleLogFilterStateChanged(wasPending);
+    }
+
+    public void ApplyVisibleLogFilterEdit()
+    {
+        var wasPending = _visibleLogFilterSelection.HasPendingChanges;
+        var selectedKeys = VisibleLogFilterOptions
+            .Where(option => option.IsChecked)
+            .Select(option => option.Key)
+            .ToArray();
+
+        _visibleLogFilterSelection.ReplaceDraft(selectedKeys);
+        _visibleLogFilterSelection.ApplyDraft();
+        SynchronizeVisibleLogFilterDraft();
+        NotifyPendingVisibleLogFilterStateChanged(wasPending);
+        ApplyVisibleLogFilters(recordStatus: true);
+    }
+
+    private void ApplyVisibleLogFilters(bool recordStatus)
     {
         try
         {
-            var option = SelectedViewFilterOption ?? VisibleLogFilterOptions.FirstOrDefault() ?? VisibleLogFilterOption.All();
+            var selected = GetSelectedVisibleLogFilterOptions();
             RecordAutomaticRuleRerenderSuppressed();
-            Log.SetViewFilter(option.Rule, rebuildExisting: false);
+            Log.SetViewFilters(
+                selected.Select(option => option.Rule!).ToArray(),
+                rebuildExisting: false);
             _lastVisibleFilterChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             _lastVisibleFilterError = string.Empty;
             OnPropertyChanged(nameof(CurrentVisibleFilterText));
+            OnPropertyChanged(nameof(CurrentVisibleFilterToolTip));
             OnPropertyChanged(nameof(LastVisibleFilterChangeTimeText));
             OnPropertyChanged(nameof(LastVisibleFilterError));
             OnPropertyChanged(nameof(AvailableViewFilterCount));
             SetFooter(CreateFooterStatus());
             if (recordStatus)
             {
-                SetStatus(option.IsAll
-                    ? "Visible log filter: ALL. Applies to new logs only."
-                    : $"Visible log filter: {option.DisplayName}. Applies to new logs only. Press Clear for a clean filtered view.");
+                SetStatus(selected.Count == 0
+                    ? UiText.Get(
+                        "VisibleFilterAllStatus",
+                        "Visible log filter: ALL. Applies to new logs only.")
+                    : UiText.Format(
+                        "VisibleFilterSelectedStatusFormat",
+                        "Visible log filters (OR): {0}. Applies to new logs only. Press Clear for a clean filtered view.",
+                        string.Join(", ", selected.Select(option => option.DisplayName))));
             }
 
             RefreshDiagnostics();
@@ -8848,6 +8935,97 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RecordVisibleFilterError($"Visible log filter update failed: {ex.Message}");
         }
+    }
+
+    private void OnVisibleLogFilterOptionCheckedChanged(object? sender, EventArgs args)
+    {
+        if (_isRefreshingVisibleLogFilterOptions || sender is not VisibleLogFilterOption changedOption)
+        {
+            return;
+        }
+
+        _isRefreshingVisibleLogFilterOptions = true;
+        try
+        {
+            if (changedOption.IsAll)
+            {
+                if (changedOption.IsChecked)
+                {
+                    foreach (var option in VisibleLogFilterOptions)
+                    {
+                        option.IsChecked = false;
+                    }
+                }
+                else if (!VisibleLogFilterOptions.Any(option => option.IsChecked))
+                {
+                    AllVisibleLogFilterOption.IsChecked = true;
+                }
+            }
+            else if (changedOption.IsChecked)
+            {
+                AllVisibleLogFilterOption.IsChecked = false;
+            }
+            else if (!VisibleLogFilterOptions.Any(option => option.IsChecked))
+            {
+                AllVisibleLogFilterOption.IsChecked = true;
+            }
+        }
+        finally
+        {
+            _isRefreshingVisibleLogFilterOptions = false;
+        }
+
+        UpdatePendingVisibleLogFilterState();
+    }
+
+    private void SynchronizeVisibleLogFilterDraft()
+    {
+        var wasRefreshing = _isRefreshingVisibleLogFilterOptions;
+        _isRefreshingVisibleLogFilterOptions = true;
+        try
+        {
+            foreach (var option in VisibleLogFilterOptions)
+            {
+                option.IsChecked = _visibleLogFilterSelection.IsDraft(option.Key);
+            }
+
+            AllVisibleLogFilterOption.IsChecked = _visibleLogFilterSelection.DraftCount == 0;
+        }
+        finally
+        {
+            _isRefreshingVisibleLogFilterOptions = wasRefreshing;
+        }
+
+        UpdatePendingVisibleLogFilterState();
+    }
+
+    private void UpdatePendingVisibleLogFilterState()
+    {
+        var draftKeys = VisibleLogFilterOptions
+            .Where(option => option.IsChecked)
+            .Select(option => option.Key)
+            .ToArray();
+        var wasPending = _visibleLogFilterSelection.HasPendingChanges;
+        _visibleLogFilterSelection.ReplaceDraft(draftKeys);
+        if (wasPending != _visibleLogFilterSelection.HasPendingChanges)
+        {
+            OnPropertyChanged(nameof(HasPendingVisibleLogFilterChanges));
+        }
+    }
+
+    private void NotifyPendingVisibleLogFilterStateChanged(bool previousValue)
+    {
+        if (previousValue != _visibleLogFilterSelection.HasPendingChanges)
+        {
+            OnPropertyChanged(nameof(HasPendingVisibleLogFilterChanges));
+        }
+    }
+
+    private List<VisibleLogFilterOption> GetSelectedVisibleLogFilterOptions()
+    {
+        return VisibleLogFilterOptions
+            .Where(option => _visibleLogFilterSelection.IsCurrent(option.Key))
+            .ToList();
     }
 
     private void RecordVisibleFilterError(string message)
@@ -8869,15 +9047,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             !string.IsNullOrWhiteSpace(rule.Keyword);
     }
 
-    private static string BuildViewFilterKey(LogRule rule)
+    internal static VisibleLogFilterKey BuildViewFilterKey(LogRule rule)
     {
         var name = string.IsNullOrWhiteSpace(rule.Name)
             ? rule.Keyword
             : rule.Name;
-        return string.Join(
-            "|",
-            name.Trim().ToUpperInvariant(),
-            rule.Keyword.Trim().ToUpperInvariant(),
+        var normalizedName = rule.CaseSensitive
+            ? name.Trim()
+            : name.Trim().ToUpperInvariant();
+        var normalizedKeyword = rule.CaseSensitive
+            ? rule.Keyword.Trim()
+            : rule.Keyword.Trim().ToUpperInvariant();
+        return new VisibleLogFilterKey(
+            normalizedName,
+            normalizedKeyword,
             rule.Mode,
             rule.MatchDirection,
             rule.CaseSensitive);

@@ -44,9 +44,57 @@
     <value>RX 표시와 TX 입력 모드를 함께 변경합니다. Terminal은 텍스트를 사용하고 HEX는 정확한 바이트를 표시하고 전송합니다.</value>
     <comment>English: Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</comment>
   </data>
-  <data name="StaticUi014.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>필터로 지정한 규칙을 사용해 표시 중인 xterm 로그를 거릅니다. 로그 파일에는 모든 줄이 계속 저장됩니다.</value>
-    <comment>English: Filter the visible xterm log using rules marked as Filter. Log files still keep all lines.</comment>
+  <data name="VisibleFilterLabel.Text" xml:space="preserve">
+    <value>필터</value>
+    <comment>English: Filter</comment>
+  </data>
+  <data name="VisibleFilterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>표시 로그 필터 선택</value>
+    <comment>English: Select visible log filters</comment>
+  </data>
+  <data name="VisibleFilterFlyoutTitle.Text" xml:space="preserve">
+    <value>필터</value>
+    <comment>English: Filter</comment>
+  </data>
+  <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>모든 새 로그를 표시합니다</value>
+    <comment>English: Show every new log line</comment>
+  </data>
+  <data name="VisibleFilterRuleCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>이 규칙과 일치하는 로그를 표시합니다</value>
+    <comment>English: Include lines matching this rule</comment>
+  </data>
+  <data name="VisibleFilterHelpText.Text" xml:space="preserve">
+    <value>선택한 규칙은 OR 조건으로 결합됩니다.&#x0A;변경 사항은 새 로그부터 적용됩니다.</value>
+    <comment>English: Selected rules are combined with OR. Changes apply to new logs only.</comment>
+  </data>
+  <data name="VisibleFilterCancelButton.Content" xml:space="preserve">
+    <value>취소</value>
+    <comment>English: Cancel</comment>
+  </data>
+  <data name="VisibleFilterApplyButton.Content" xml:space="preserve">
+    <value>적용</value>
+    <comment>English: Apply</comment>
+  </data>
+  <data name="VisibleFilterAllText" xml:space="preserve">
+    <value>전체</value>
+    <comment>English: ALL</comment>
+  </data>
+  <data name="VisibleFilterAllToolTip" xml:space="preserve">
+    <value>전체: 모든 새 로그를 표시합니다.</value>
+    <comment>English: ALL: show every new log line.</comment>
+  </data>
+  <data name="VisibleFilterSelectedToolTipFormat" xml:space="preserve">
+    <value>선택한 필터(OR): {0}. 새 로그부터 적용됩니다.</value>
+    <comment>English: Selected filters (OR): {0}. Applies to new logs only.</comment>
+  </data>
+  <data name="VisibleFilterAllStatus" xml:space="preserve">
+    <value>표시 로그 필터: 전체. 새 로그부터 적용됩니다.</value>
+    <comment>English: Visible log filter: ALL. Applies to new logs only.</comment>
+  </data>
+  <data name="VisibleFilterSelectedStatusFormat" xml:space="preserve">
+    <value>표시 로그 필터(OR): {0}. 새 로그부터 적용됩니다. 필터 결과만 새로 보려면 화면을 지우세요.</value>
+    <comment>English: Visible log filters (OR): {0}. Applies to new logs only. Press Clear for a clean filtered view.</comment>
   </data>
   <data name="StaticUi015.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>자동 스크롤: 최신 로그를 따라갑니다. xterm 로그를 클릭하고 Enter를 누르면 전환됩니다. TX 입력란에서 Enter를 누르면 그대로 전송됩니다.</value>

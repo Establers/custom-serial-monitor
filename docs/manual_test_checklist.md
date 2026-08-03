@@ -302,9 +302,14 @@ real hardware when available.
   events/highlights.
 - [ ] Switch to HEX mode without changing either rule's Enabled state and confirm
   only the HEX rule creates events/highlights.
-- [ ] Mark both rules as filters and confirm the Filter dropdown lists only rules
-  for the current mode; switching modes must fall back to `ALL` if the selected
-  filter belongs to the other mode.
+- [ ] Mark both rules as filters and confirm the Filter flyout lists only rules
+  for the current mode.
+- [ ] Check both rules, select `Apply`, and confirm future lines matching either
+  rule are visible while non-matching future lines are hidden.
+- [ ] Reopen the Filter flyout, change the checks, close it without applying, and
+  confirm the active filter selection is unchanged.
+- [ ] Select `ALL` and confirm the individual rules are cleared; switching modes
+  must fall back to `ALL` if none of the selected filters belong to the new mode.
 - [ ] Toggle WARN highlight off.
 - [ ] Confirm future WARN lines no longer use the WARN highlight color.
 - [ ] Change ERROR highlight color.
