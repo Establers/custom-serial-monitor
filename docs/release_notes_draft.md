@@ -1,9 +1,13 @@
 # Release Notes Draft
 
-Date: 2026-08-01
+Date: 2026-08-03
 
-## Unreleased
+## Released in v1.2.5
 
+- Added Korean and English UI resources and updated the primary screens to use
+  localized text.
+- Improved bridge receive grouping so a device packet is replayed as a coherent
+  chunk after the configured idle gap instead of being split by transport reads.
 - Added profile-persisted automatic reconnect for established real COM
   connections that fail unexpectedly. Retries use a capped 1, 2, 5, and 10
   second backoff and can be canceled from the connection toolbar.
