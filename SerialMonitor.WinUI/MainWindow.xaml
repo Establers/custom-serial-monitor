@@ -1187,12 +1187,6 @@
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
                                   ToolTipService.ToolTip="Filter the visible xterm log using rules marked as Filter. Log files still keep all lines." />
-                        <TextBlock Grid.Column="11"
-                                   Text="{Binding CurrentSearchMatchedLine}"
-                                   FontFamily="Consolas"
-                                   FontSize="11"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
                         <CheckBox x:Uid="StaticUi015" Grid.Column="12"
                                   Content="Auto"
                                   IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
