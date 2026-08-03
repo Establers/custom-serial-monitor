@@ -2,6 +2,20 @@
 
 Date: 2026-08-03
 
+## Released in v1.3.0
+
+- Added Case, Whole Word, and Regex options to visible-log search, including
+  Alt+C, Alt+W, and Alt+R shortcuts and safe handling for invalid or zero-length
+  regular-expression matches.
+- Search results now remain visible as stale while the query or options are
+  edited and are replaced only after an explicit refresh.
+- Added multi-select visible-log filters with explicit Apply and ALL behavior.
+- Removed the full Diagnostics tab and its broad periodic property refresh.
+  Runtime status is now exposed through the compact footer, bounded Health
+  tooltip, right-click status copy, and the persistent runtime error file.
+- Background service and observer failures use independent Health keys and are
+  cleared only when the corresponding component actually recovers or restarts.
+
 ## Released in v1.2.5
 
 - Added Korean and English UI resources and updated the primary screens to use
