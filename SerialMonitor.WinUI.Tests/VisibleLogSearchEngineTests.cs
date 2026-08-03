@@ -1,10 +1,117 @@
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.ViewModels;
+using System.Text.RegularExpressions;
 
 namespace SerialMonitor.WinUI.Tests;
 
 public sealed class VisibleLogSearchEngineTests
 {
+    [Fact]
+    public void Build_WholeWord_ExcludesIdentifierSubstrings()
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < error errorCode preerror error-error", 5)],
+            "error",
+            new VisibleLogSearchOptions(MatchWholeWord: true));
+
+        Assert.Equal(3, snapshot.TotalMatchCount);
+        Assert.True(snapshot.TryGetFirst(out var first));
+        Assert.Equal(0, first.PayloadOffset);
+        Assert.True(snapshot.TryGetNext(first, out var second));
+        Assert.Equal(25, second.PayloadOffset);
+    }
+
+    [Fact]
+    public void Build_Regex_TracksVariableMatchLengthsDuringNavigation()
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < id=7 id=2048", 5)],
+            @"\d+",
+            new VisibleLogSearchOptions(UseRegularExpression: true));
+
+        Assert.Equal(2, snapshot.TotalMatchCount);
+        Assert.True(snapshot.TryGetFirst(out var first));
+        Assert.Equal((3, 1), (first.PayloadOffset, first.MatchLength));
+        Assert.True(snapshot.TryGetNext(first, out var second));
+        Assert.Equal((8, 4), (second.PayloadOffset, second.MatchLength));
+        Assert.True(snapshot.TryGetPrevious(second, out var previous));
+        Assert.Equal(first, previous);
+    }
+
+    [Fact]
+    public void Build_RegexOptions_CombineCaseAndWholeWord()
+    {
+        var insensitive = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < WARN warning warn", 5)],
+            "warn(?:ing)?",
+            new VisibleLogSearchOptions(
+                MatchWholeWord: true,
+                UseRegularExpression: true));
+        var sensitive = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < WARN warning warn", 5)],
+            "warn(?:ing)?",
+            new VisibleLogSearchOptions(
+                MatchCase: true,
+                MatchWholeWord: true,
+                UseRegularExpression: true));
+
+        Assert.Equal(3, insensitive.TotalMatchCount);
+        Assert.Equal(2, sensitive.TotalMatchCount);
+    }
+
+    [Fact]
+    public void Build_RegexAnchorsAtPayloadInsteadOfDisplayMetadata()
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < READY", 5)],
+            "^READY$",
+            new VisibleLogSearchOptions(UseRegularExpression: true));
+
+        Assert.Equal(1, snapshot.TotalMatchCount);
+        Assert.True(snapshot.TryGetFirst(out var match));
+        Assert.Equal(0, match.PayloadOffset);
+    }
+
+    [Fact]
+    public void Build_ZeroLengthRegex_IsExcludedFromResults()
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < aa", 5)],
+            "(?=a)",
+            new VisibleLogSearchOptions(UseRegularExpression: true));
+
+        Assert.Equal(0, snapshot.TotalMatchCount);
+        Assert.Empty(snapshot.MatchedLines);
+        Assert.False(snapshot.TryGetFirst(out _));
+    }
+
+    [Fact]
+    public void Build_StringComparisonOverloadPreservesCultureAndCaseContract()
+    {
+        var sensitive = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < a A", 5)],
+            "A",
+            StringComparison.InvariantCulture);
+        var insensitive = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < a A", 5)],
+            "A",
+            StringComparison.InvariantCultureIgnoreCase);
+
+        Assert.Equal(1, sensitive.TotalMatchCount);
+        Assert.Equal(StringComparison.InvariantCulture, sensitive.Comparison);
+        Assert.Equal(2, insensitive.TotalMatchCount);
+        Assert.Equal(StringComparison.InvariantCultureIgnoreCase, insensitive.Comparison);
+    }
+
+    [Fact]
+    public void Build_InvalidRegex_ReportsArgumentError()
+    {
+        Assert.Throws<RegexParseException>(() => VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < READY", 5)],
+            "[",
+            new VisibleLogSearchOptions(UseRegularExpression: true)));
+    }
+
     [Fact]
     public void Build_CountsEveryNonOverlappingOccurrenceInOneLine()
     {

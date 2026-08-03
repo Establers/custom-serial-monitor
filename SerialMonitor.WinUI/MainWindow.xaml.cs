@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
     private int _pendingLiveXtermLines;
     private bool _isXtermReady;
     private bool _eventAutoScrollQueued;
+    private bool _eventAutoScrollPendingAfterBackpressure;
     private bool _isPointerOverEventList;
     private bool _xtermFitQueued;
     private bool _closeAllowed;
@@ -1887,7 +1888,7 @@ public sealed partial class MainWindow : Window
 
             if (_viewModel.IsEffectiveXtermAutoScrollEnabled)
             {
-                await ScrollXtermToBottomAsync("Restore delta final scroll");
+                await ScrollXtermToBottomAsync("Restore delta final scroll", onlyIfFollowing: true);
             }
 
             var pendingDelta = Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount);
@@ -2223,6 +2224,7 @@ public sealed partial class MainWindow : Window
         await SyncXtermScrollbackSizeAsync();
         await SyncXtermFontAsync();
         await SyncXtermHexSelectionHintModeAsync();
+        await SyncXtermAutoScrollContextMenuAsync();
         QueueXtermFit();
         if (_xtermNeedsFullRerenderAfterRestore)
         {
@@ -2257,11 +2259,14 @@ public sealed partial class MainWindow : Window
             _ = SyncXtermHexSelectionHintModeAsync();
         }
 
-        if (args.PropertyName == nameof(MainViewModel.IsAutoScrollEnabled) &&
-            _viewModel.IsEffectiveXtermAutoScrollEnabled &&
-            !_isVisualAppendSuspendedForMinimize)
+        if (args.PropertyName == nameof(MainViewModel.IsAutoScrollEnabled))
         {
-            _ = ScrollXtermToBottomAsync("Auto Scroll enabled");
+            _ = SyncXtermAutoScrollContextMenuAsync();
+            if (_viewModel.IsEffectiveXtermAutoScrollEnabled &&
+                !_isVisualAppendSuspendedForMinimize)
+            {
+                _ = ScrollXtermToBottomAsync("Auto Scroll enabled");
+            }
         }
 
         if (args.PropertyName == nameof(MainViewModel.IsXtermAppendBackpressureActive) &&
@@ -2269,11 +2274,26 @@ public sealed partial class MainWindow : Window
         {
             var hadDeferredRerender = _xtermFullRerenderDeferredForBackpressure;
             QueueDeferredFullXtermRerenderAfterBackpressure();
+            ResumePendingEventAutoScrollAfterBackpressure();
             if (!hadDeferredRerender &&
                 _viewModel.IsEffectiveXtermAutoScrollEnabled &&
                 !_isVisualAppendSuspendedForMinimize)
             {
-                _ = ScrollXtermToBottomAsync("Auto Scroll resumed after xterm backlog");
+                _ = ScrollXtermToBottomAsync(
+                    "Auto Scroll resumed after xterm backlog",
+                    onlyIfFollowing: true);
+            }
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.IsEventAutoScrollEnabled))
+        {
+            if (!_viewModel.IsEventAutoScrollEnabled)
+            {
+                _eventAutoScrollPendingAfterBackpressure = false;
+            }
+            else
+            {
+                ResumePendingEventAutoScrollAfterBackpressure();
             }
         }
 
@@ -2473,14 +2493,15 @@ public sealed partial class MainWindow : Window
 
     private void OnDetectedEventsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (_isPointerOverEventList)
+        if (_viewModel.IsEventAutoScrollSuppressedByXtermBackpressure)
         {
+            _eventAutoScrollPendingAfterBackpressure = true;
+            _viewModel.RecordXtermBackpressureEventAutoScrollSuppressed();
             return;
         }
 
-        if (_viewModel.IsEventAutoScrollSuppressedByXtermBackpressure)
+        if (_isPointerOverEventList)
         {
-            _viewModel.RecordXtermBackpressureEventAutoScrollSuppressed();
             return;
         }
 
@@ -2661,6 +2682,10 @@ public sealed partial class MainWindow : Window
                     }
                     break;
 
+                case "toggleAutoScroll":
+                    _viewModel.IsAutoScrollEnabled = !_viewModel.IsAutoScrollEnabled;
+                    break;
+
                 case "clear":
                     await _viewModel.ClearScreenFromXtermContextMenuAsync();
                     break;
@@ -2810,7 +2835,7 @@ public sealed partial class MainWindow : Window
             previousScrollState = await GetXtermScrollStateAsync();
             var shouldScrollToBottomAfterRender =
                 !_viewModel.IsXtermAppendBackpressureActive &&
-                (_viewModel.IsAutoScrollEnabled || previousScrollState?.AtBottom == true);
+                previousScrollState?.AtBottom == true;
 
             if (renderEntryXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
             {
@@ -3325,7 +3350,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task ScrollXtermToBottomAsync(string action)
+    private async Task ScrollXtermToBottomAsync(string action, bool onlyIfFollowing = false)
     {
         if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
         {
@@ -3334,12 +3359,36 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var result = await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorScrollToBottom ? window.serialMonitorScrollToBottom() : false;");
+            var script = onlyIfFollowing
+                ? "window.serialMonitorScrollToBottomIfFollowing ? window.serialMonitorScrollToBottomIfFollowing() : false;"
+                : "window.serialMonitorScrollToBottom ? window.serialMonitorScrollToBottom() : false;";
+            var result = await XtermLogWebView.ExecuteScriptAsync(script);
             _viewModel.RecordAutoScrollAction(action, TryParseScriptBoolean(result));
         }
         catch (Exception ex)
         {
             _viewModel.RecordAutoScrollError($"Auto Scroll failed: {ex.Message}");
+        }
+    }
+
+    private async Task<bool> SyncXtermAutoScrollContextMenuAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed)
+        {
+            return false;
+        }
+
+        try
+        {
+            var enabled = _viewModel.IsAutoScrollEnabled ? "true" : "false";
+            var result = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorSetAutoScrollEnabled && window.serialMonitorSetAutoScrollEnabled({enabled});");
+            return TryParseScriptBoolean(result) == true;
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermContextMenuError($"Auto Scroll context menu sync failed: {ex.Message}");
+            return false;
         }
     }
 
@@ -3967,7 +4016,14 @@ public sealed partial class MainWindow : Window
 
             if (_viewModel.IsEventAutoScrollSuppressedByXtermBackpressure)
             {
+                _eventAutoScrollPendingAfterBackpressure = true;
                 _viewModel.RecordXtermBackpressureEventAutoScrollSuppressed();
+                return;
+            }
+
+            if (!_viewModel.IsEventAutoScrollEnabled)
+            {
+                _eventAutoScrollPendingAfterBackpressure = false;
                 return;
             }
 
@@ -3976,6 +4032,7 @@ public sealed partial class MainWindow : Window
                 var latestEvent = _viewModel.Events.Events.LastOrDefault();
                 if (latestEvent is null)
                 {
+                    _eventAutoScrollPendingAfterBackpressure = false;
                     return;
                 }
 
@@ -3986,12 +4043,36 @@ public sealed partial class MainWindow : Window
                 }
 
                 EventListView.ScrollIntoView(latestEvent);
+                _eventAutoScrollPendingAfterBackpressure = false;
             }
             catch (Exception ex)
             {
                 _viewModel.RecordEventListScrollError($"Event auto-scroll failed: {ex.Message}");
             }
         });
+    }
+
+    private void ResumePendingEventAutoScrollAfterBackpressure()
+    {
+        if (!_eventAutoScrollPendingAfterBackpressure ||
+            IsClosingOrClosed ||
+            _viewModel.IsXtermAppendBackpressureActive)
+        {
+            return;
+        }
+
+        if (!_viewModel.IsEventAutoScrollEnabled)
+        {
+            _eventAutoScrollPendingAfterBackpressure = false;
+            return;
+        }
+
+        if (_isPointerOverEventList)
+        {
+            return;
+        }
+
+        QueueEventAutoScrollToLatest(selectLatest: false);
     }
 
     private void EventListView_PointerEntered(object sender, PointerRoutedEventArgs args)
@@ -4002,6 +4083,7 @@ public sealed partial class MainWindow : Window
     private void EventListView_PointerExited(object sender, PointerRoutedEventArgs args)
     {
         _isPointerOverEventList = false;
+        ResumePendingEventAutoScrollAfterBackpressure();
     }
 
     private void ScrollSelectedEventIntoView()
@@ -4070,6 +4152,32 @@ public sealed partial class MainWindow : Window
 
     private async void SearchTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (IsModifierDown(VirtualKey.Menu) && !IsModifierDown(VirtualKey.Control))
+        {
+            var optionHandled = true;
+            switch (args.Key)
+            {
+                case VirtualKey.C:
+                    _viewModel.IsSearchCaseSensitive = !_viewModel.IsSearchCaseSensitive;
+                    break;
+                case VirtualKey.W:
+                    _viewModel.IsSearchWholeWord = !_viewModel.IsSearchWholeWord;
+                    break;
+                case VirtualKey.R:
+                    _viewModel.IsSearchRegularExpression = !_viewModel.IsSearchRegularExpression;
+                    break;
+                default:
+                    optionHandled = false;
+                    break;
+            }
+
+            if (optionHandled)
+            {
+                args.Handled = true;
+                return;
+            }
+        }
+
         if (IsSearchFocusShortcut(args.Key))
         {
             args.Handled = true;

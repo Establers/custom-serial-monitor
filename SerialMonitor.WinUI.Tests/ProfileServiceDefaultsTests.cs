@@ -115,6 +115,31 @@ public sealed class ProfileServiceDefaultsTests
     }
 
     [Fact]
+    public async Task SearchOptions_PersistTogether()
+    {
+        var profilePath = CreateTemporaryProfilePath();
+        try
+        {
+            var service = new ProfileService();
+            var profile = service.CreateDefaultProfile();
+            profile.UiSettings.SearchCaseSensitive = true;
+            profile.UiSettings.SearchWholeWord = true;
+            profile.UiSettings.SearchUseRegularExpression = true;
+
+            await service.SaveAsync(profilePath, profile, CancellationToken.None);
+            var loaded = await service.LoadAsync(profilePath, CancellationToken.None);
+
+            Assert.True(loaded.UiSettings.SearchCaseSensitive);
+            Assert.True(loaded.UiSettings.SearchWholeWord);
+            Assert.True(loaded.UiSettings.SearchUseRegularExpression);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(profilePath);
+        }
+    }
+
+    [Fact]
     public async Task SequenceRepeatAndRuleTrigger_ArePersistedAndProjected()
     {
         var service = new ProfileService();

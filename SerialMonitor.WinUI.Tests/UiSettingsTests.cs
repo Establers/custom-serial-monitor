@@ -68,4 +68,24 @@ public sealed class UiSettingsTests
         Assert.Equal(XtermFontFamily.Consolas, settings.XtermFontFamily);
         Assert.Equal(UiSettings.DefaultXtermFontSize, settings.XtermFontSize);
     }
+
+    [Fact]
+    public void SearchOptions_DefaultOffAndClonePreservesEnabledChoices()
+    {
+        var defaults = JsonSerializer.Deserialize<UiSettings>("{}");
+        var enabled = new UiSettings
+        {
+            SearchCaseSensitive = true,
+            SearchWholeWord = true,
+            SearchUseRegularExpression = true
+        }.Clone();
+
+        Assert.NotNull(defaults);
+        Assert.False(defaults.SearchCaseSensitive);
+        Assert.False(defaults.SearchWholeWord);
+        Assert.False(defaults.SearchUseRegularExpression);
+        Assert.True(enabled.SearchCaseSensitive);
+        Assert.True(enabled.SearchWholeWord);
+        Assert.True(enabled.SearchUseRegularExpression);
+    }
 }

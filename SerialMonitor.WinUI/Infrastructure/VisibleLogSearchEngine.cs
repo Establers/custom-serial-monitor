@@ -1,7 +1,22 @@
-using SerialMonitor.WinUI.ViewModels;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using SerialMonitor.WinUI.Models;
+using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI.Infrastructure;
+
+internal readonly record struct VisibleLogSearchOptions(
+    bool MatchCase = false,
+    bool MatchWholeWord = false,
+    bool UseRegularExpression = false,
+    StringComparison? LiteralComparison = null)
+{
+    public StringComparison Comparison => LiteralComparison ?? (MatchCase
+        ? StringComparison.Ordinal
+        : StringComparison.OrdinalIgnoreCase);
+}
+
+internal readonly record struct VisibleLogSearchMatch(int PayloadOffset, int Length);
 
 internal readonly record struct VisibleLogMatchedLine(
     long LineId,
@@ -10,7 +25,9 @@ internal readonly record struct VisibleLogMatchedLine(
     int PayloadStart,
     int MatchCount,
     int FirstPayloadOffset,
+    int FirstMatchLength,
     int LastPayloadOffset,
+    int LastMatchLength,
     int FirstTabsBeforeMatch,
     int FirstTabsBeforeMatchEnd,
     int LastTabsBeforeMatch,
@@ -21,6 +38,7 @@ internal readonly record struct VisibleLogMatchedLine(
 
 internal readonly record struct VisibleLogSearchCheckpoint(
     int PayloadOffset,
+    int MatchLength,
     int TabsBeforeMatch,
     int TabsBeforeMatchEnd);
 
@@ -28,6 +46,7 @@ internal readonly record struct VisibleLogSearchPosition(
     int MatchedLineIndex,
     int OccurrenceInLine,
     int PayloadOffset,
+    int MatchLength,
     long GlobalMatchIndex,
     int TabsBeforeMatch,
     int TabsBeforeMatchEnd);
@@ -41,20 +60,25 @@ internal readonly record struct VisibleLogSearchPage(
 internal sealed class VisibleLogSearchSnapshot
 {
     private const int OffsetCheckpointInterval = VisibleLogSearchEngine.OffsetCheckpointInterval;
+    private readonly VisibleLogSearchMatcher _matcher;
 
     public VisibleLogSearchSnapshot(
         string searchText,
-        StringComparison comparison,
+        VisibleLogSearchOptions options,
         VisibleLogMatchedLine[] matchedLines,
         long totalMatchCount)
     {
         SearchText = searchText;
-        Comparison = comparison;
+        Options = options;
+        Comparison = options.Comparison;
         MatchedLines = matchedLines;
         TotalMatchCount = totalMatchCount;
+        _matcher = new VisibleLogSearchMatcher(searchText, options);
     }
 
     public string SearchText { get; }
+
+    public VisibleLogSearchOptions Options { get; }
 
     public StringComparison Comparison { get; }
 
@@ -65,7 +89,6 @@ internal sealed class VisibleLogSearchSnapshot
     public VisibleLogSearchPage GetMatchedLinePage(int requestedPageIndex, int pageSize)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
-
         if (MatchedLines.Length == 0)
         {
             return new VisibleLogSearchPage(0, 0, 0, 0);
@@ -90,13 +113,7 @@ internal sealed class VisibleLogSearchSnapshot
         }
 
         var line = MatchedLines[0];
-        position = new VisibleLogSearchPosition(
-            0,
-            0,
-            line.FirstPayloadOffset,
-            0,
-            line.FirstTabsBeforeMatch,
-            line.FirstTabsBeforeMatchEnd);
+        position = CreatePosition(0, 0, line.FirstGlobalMatchIndex, FirstCheckpoint(line));
         return true;
     }
 
@@ -114,6 +131,7 @@ internal sealed class VisibleLogSearchSnapshot
             lineIndex,
             line.MatchCount - 1,
             line.LastPayloadOffset,
+            line.LastMatchLength,
             TotalMatchCount - 1,
             line.LastTabsBeforeMatch,
             line.LastTabsBeforeMatchEnd);
@@ -136,21 +154,29 @@ internal sealed class VisibleLogSearchSnapshot
         var line = MatchedLines[current.MatchedLineIndex];
         if (current.OccurrenceInLine + 1 < line.MatchCount)
         {
-            var nextOffset = FindNextOffset(line, current.PayloadOffset + SearchText.Length);
-            if (nextOffset >= 0)
+            var searchStart = VisibleLogSearchMatcher.GetNextSearchStart(
+                current.PayloadOffset,
+                current.MatchLength);
+            if (_matcher.TryFindNext(
+                    line.FullText,
+                    line.PayloadStart,
+                    searchStart,
+                    CancellationToken.None,
+                    out var nextMatch))
             {
-                var tabsBeforeMatch = current.TabsBeforeMatchEnd + CountTabs(
-                    line,
-                    current.PayloadOffset + SearchText.Length,
-                    nextOffset);
-                var tabsBeforeMatchEnd = tabsBeforeMatch + CountTabs(
-                    line,
-                    nextOffset,
-                    nextOffset + SearchText.Length);
+                var tabsBeforeMatch = current.TabsBeforeMatchEnd + VisibleLogSearchEngine.CountTabsInRange(
+                    line.FullText,
+                    line.PayloadStart + current.PayloadOffset + current.MatchLength,
+                    line.PayloadStart + nextMatch.PayloadOffset);
+                var tabsBeforeMatchEnd = tabsBeforeMatch + VisibleLogSearchEngine.CountTabsInRange(
+                    line.FullText,
+                    line.PayloadStart + nextMatch.PayloadOffset,
+                    line.PayloadStart + nextMatch.PayloadOffset + nextMatch.Length);
                 position = new VisibleLogSearchPosition(
                     current.MatchedLineIndex,
                     current.OccurrenceInLine + 1,
-                    nextOffset,
+                    nextMatch.PayloadOffset,
+                    nextMatch.Length,
                     current.GlobalMatchIndex + 1,
                     tabsBeforeMatch,
                     tabsBeforeMatchEnd);
@@ -160,14 +186,11 @@ internal sealed class VisibleLogSearchSnapshot
 
         var nextLineIndex = (current.MatchedLineIndex + 1) % MatchedLines.Length;
         var nextLine = MatchedLines[nextLineIndex];
-        var nextGlobalIndex = nextLineIndex == 0 ? 0 : nextLine.FirstGlobalMatchIndex;
-        position = new VisibleLogSearchPosition(
+        position = CreatePosition(
             nextLineIndex,
             0,
-            nextLine.FirstPayloadOffset,
-            nextGlobalIndex,
-            nextLine.FirstTabsBeforeMatch,
-            nextLine.FirstTabsBeforeMatchEnd);
+            nextLineIndex == 0 ? 0 : nextLine.FirstGlobalMatchIndex,
+            FirstCheckpoint(nextLine));
         return true;
     }
 
@@ -184,16 +207,10 @@ internal sealed class VisibleLogSearchSnapshot
             return TryGetLast(out position);
         }
 
-        var line = MatchedLines[current.MatchedLineIndex];
-        if (current.OccurrenceInLine > 0)
+        if (current.OccurrenceInLine > 0 &&
+            TryGetOccurrencePosition(current.MatchedLineIndex, current.OccurrenceInLine - 1, out position))
         {
-            if (TryGetOccurrencePosition(
-                    current.MatchedLineIndex,
-                    current.OccurrenceInLine - 1,
-                    out position))
-            {
-                return true;
-            }
+            return true;
         }
 
         var previousLineIndex = (current.MatchedLineIndex - 1 + MatchedLines.Length) % MatchedLines.Length;
@@ -202,6 +219,7 @@ internal sealed class VisibleLogSearchSnapshot
             previousLineIndex,
             previousLine.MatchCount - 1,
             previousLine.LastPayloadOffset,
+            previousLine.LastMatchLength,
             previousLine.FirstGlobalMatchIndex + previousLine.MatchCount - 1,
             previousLine.LastTabsBeforeMatch,
             previousLine.LastTabsBeforeMatchEnd);
@@ -231,37 +249,25 @@ internal sealed class VisibleLogSearchSnapshot
             var checkpointIndex = FindCheckpointAtOrBefore(line, payloadOffset);
             var occurrence = checkpointIndex * OffsetCheckpointInterval;
             var checkpoint = GetCheckpoint(line, checkpointIndex);
-            var offset = checkpoint.PayloadOffset;
-            var tabsBeforeMatch = checkpoint.TabsBeforeMatch;
-            var tabsBeforeMatchEnd = checkpoint.TabsBeforeMatchEnd;
-            while (offset >= 0 && offset <= payloadOffset && occurrence < line.MatchCount)
+            var preparedPayload = _matcher.PreparePayload(line.FullText, line.PayloadStart);
+            while (checkpoint.PayloadOffset <= payloadOffset && occurrence < line.MatchCount)
             {
-                if (offset == payloadOffset)
+                if (checkpoint.PayloadOffset == payloadOffset)
                 {
-                    position = new VisibleLogSearchPosition(
+                    position = CreatePosition(
                         lineIndex,
                         occurrence,
-                        offset,
                         line.FirstGlobalMatchIndex + occurrence,
-                        tabsBeforeMatch,
-                        tabsBeforeMatchEnd);
+                        checkpoint);
                     return true;
                 }
 
-                var previousOffset = offset;
-                occurrence++;
-                offset = FindNextOffset(line, offset + SearchText.Length);
-                if (offset >= 0)
+                if (!TryAdvance(line, checkpoint, preparedPayload, out checkpoint))
                 {
-                    tabsBeforeMatch = tabsBeforeMatchEnd + CountTabs(
-                        line,
-                        previousOffset + SearchText.Length,
-                        offset);
-                    tabsBeforeMatchEnd = tabsBeforeMatch + CountTabs(
-                        line,
-                        offset,
-                        offset + SearchText.Length);
+                    break;
                 }
+
+                occurrence++;
             }
 
             break;
@@ -273,18 +279,6 @@ internal sealed class VisibleLogSearchSnapshot
 
     public VisibleLogMatchedLine GetLine(VisibleLogSearchPosition position) =>
         MatchedLines[position.MatchedLineIndex];
-
-    private int FindNextOffset(VisibleLogMatchedLine line, int payloadOffset)
-    {
-        var absoluteStart = line.PayloadStart + Math.Max(0, payloadOffset);
-        if (absoluteStart > line.FullText.Length - SearchText.Length)
-        {
-            return -1;
-        }
-
-        var absoluteOffset = line.FullText.IndexOf(SearchText, absoluteStart, Comparison);
-        return absoluteOffset < line.PayloadStart ? -1 : absoluteOffset - line.PayloadStart;
-    }
 
     private bool TryGetOccurrencePosition(
         int matchedLineIndex,
@@ -304,6 +298,7 @@ internal sealed class VisibleLogSearchSnapshot
                 matchedLineIndex,
                 occurrenceInLine,
                 line.LastPayloadOffset,
+                line.LastMatchLength,
                 line.FirstGlobalMatchIndex + occurrenceInLine,
                 line.LastTabsBeforeMatch,
                 line.LastTabsBeforeMatchEnd);
@@ -313,42 +308,83 @@ internal sealed class VisibleLogSearchSnapshot
         var checkpointIndex = occurrenceInLine / OffsetCheckpointInterval;
         var currentOccurrence = checkpointIndex * OffsetCheckpointInterval;
         var checkpoint = GetCheckpoint(line, checkpointIndex);
-        var offset = checkpoint.PayloadOffset;
-        var tabsBeforeMatch = checkpoint.TabsBeforeMatch;
-        var tabsBeforeMatchEnd = checkpoint.TabsBeforeMatchEnd;
-        while (offset >= 0 && currentOccurrence < occurrenceInLine)
+        var preparedPayload = _matcher.PreparePayload(line.FullText, line.PayloadStart);
+        while (currentOccurrence < occurrenceInLine)
         {
-            var previousOffset = offset;
-            offset = FindNextOffset(line, offset + SearchText.Length);
-            currentOccurrence++;
-            if (offset >= 0)
+            if (!TryAdvance(line, checkpoint, preparedPayload, out checkpoint))
             {
-                tabsBeforeMatch = tabsBeforeMatchEnd + CountTabs(
-                    line,
-                    previousOffset + SearchText.Length,
-                    offset);
-                tabsBeforeMatchEnd = tabsBeforeMatch + CountTabs(
-                    line,
-                    offset,
-                    offset + SearchText.Length);
+                position = default;
+                return false;
             }
+
+            currentOccurrence++;
         }
 
-        if (offset < 0)
+        position = CreatePosition(
+            matchedLineIndex,
+            occurrenceInLine,
+            line.FirstGlobalMatchIndex + occurrenceInLine,
+            checkpoint);
+        return true;
+    }
+
+    private bool TryAdvance(
+        VisibleLogMatchedLine line,
+        VisibleLogSearchCheckpoint current,
+        string? preparedPayload,
+        out VisibleLogSearchCheckpoint next)
+    {
+        var searchStart = VisibleLogSearchMatcher.GetNextSearchStart(
+            current.PayloadOffset,
+            current.MatchLength);
+        if (!_matcher.TryFindNext(
+                line.FullText,
+                line.PayloadStart,
+                preparedPayload,
+                searchStart,
+                CancellationToken.None,
+                out var match))
         {
-            position = default;
+            next = default;
             return false;
         }
 
-        position = new VisibleLogSearchPosition(
-            matchedLineIndex,
-            occurrenceInLine,
-            offset,
-            line.FirstGlobalMatchIndex + occurrenceInLine,
+        var tabsBeforeMatch = current.TabsBeforeMatchEnd + VisibleLogSearchEngine.CountTabsInRange(
+            line.FullText,
+            line.PayloadStart + current.PayloadOffset + current.MatchLength,
+            line.PayloadStart + match.PayloadOffset);
+        var tabsBeforeMatchEnd = tabsBeforeMatch + VisibleLogSearchEngine.CountTabsInRange(
+            line.FullText,
+            line.PayloadStart + match.PayloadOffset,
+            line.PayloadStart + match.PayloadOffset + match.Length);
+        next = new VisibleLogSearchCheckpoint(
+            match.PayloadOffset,
+            match.Length,
             tabsBeforeMatch,
             tabsBeforeMatchEnd);
         return true;
     }
+
+    private static VisibleLogSearchPosition CreatePosition(
+        int lineIndex,
+        int occurrence,
+        long globalIndex,
+        VisibleLogSearchCheckpoint checkpoint) =>
+        new(
+            lineIndex,
+            occurrence,
+            checkpoint.PayloadOffset,
+            checkpoint.MatchLength,
+            globalIndex,
+            checkpoint.TabsBeforeMatch,
+            checkpoint.TabsBeforeMatchEnd);
+
+    private static VisibleLogSearchCheckpoint FirstCheckpoint(VisibleLogMatchedLine line) =>
+        new(
+            line.FirstPayloadOffset,
+            line.FirstMatchLength,
+            line.FirstTabsBeforeMatch,
+            line.FirstTabsBeforeMatchEnd);
 
     private static int FindCheckpointAtOrBefore(VisibleLogMatchedLine line, int payloadOffset)
     {
@@ -382,29 +418,166 @@ internal sealed class VisibleLogSearchSnapshot
     {
         if (checkpointIndex <= 0)
         {
-            return new VisibleLogSearchCheckpoint(
-                line.FirstPayloadOffset,
-                line.FirstTabsBeforeMatch,
-                line.FirstTabsBeforeMatchEnd);
+            return FirstCheckpoint(line);
         }
 
         var checkpoints = line.OccurrenceCheckpoints;
         return checkpoints is not null && checkpointIndex < checkpoints.Length
             ? checkpoints[checkpointIndex]
-            : new VisibleLogSearchCheckpoint(
-                line.FirstPayloadOffset,
-                line.FirstTabsBeforeMatch,
-                line.FirstTabsBeforeMatchEnd);
+            : FirstCheckpoint(line);
+    }
+}
+
+internal sealed class VisibleLogSearchMatcher
+{
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+    private readonly string _searchText;
+    private readonly VisibleLogSearchOptions _options;
+    private readonly Regex? _regex;
+
+    public VisibleLogSearchMatcher(string searchText, VisibleLogSearchOptions options)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(searchText);
+        _searchText = searchText;
+        _options = options;
+
+        if (options.UseRegularExpression)
+        {
+            var pattern = options.MatchWholeWord
+                ? $@"(?<!\w)(?:{searchText})(?!\w)"
+                : searchText;
+            var regexOptions = RegexOptions.CultureInvariant;
+            if (!options.MatchCase)
+            {
+                regexOptions |= RegexOptions.IgnoreCase;
+            }
+
+            _regex = new Regex(pattern, regexOptions, RegexTimeout);
+        }
     }
 
-    private static int CountTabs(
-        VisibleLogMatchedLine line,
+    public bool TryFindNext(
+        string fullText,
         int payloadStart,
-        int payloadEnd) =>
-        VisibleLogSearchEngine.CountTabsInRange(
-            line.FullText,
-            line.PayloadStart + payloadStart,
-            line.PayloadStart + payloadEnd);
+        int startPayloadOffset,
+        CancellationToken cancellationToken,
+        out VisibleLogSearchMatch result) =>
+        TryFindNext(
+            fullText,
+            payloadStart,
+            preparedPayload: null,
+            startPayloadOffset,
+            cancellationToken,
+            out result);
+
+    public bool TryFindNext(
+        string fullText,
+        int payloadStart,
+        string? preparedPayload,
+        int startPayloadOffset,
+        CancellationToken cancellationToken,
+        out VisibleLogSearchMatch result)
+    {
+        var payloadLength = Math.Max(0, fullText.Length - payloadStart);
+        if (startPayloadOffset < 0 || startPayloadOffset > payloadLength)
+        {
+            result = default;
+            return false;
+        }
+
+        if (_regex is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var payload = preparedPayload ?? PreparePayload(fullText, payloadStart)!;
+            var match = _regex.Match(payload, startPayloadOffset);
+            while (match.Success && match.Length == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (match.Index >= payload.Length)
+                {
+                    result = default;
+                    return false;
+                }
+
+                match = _regex.Match(payload, match.Index + 1);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!match.Success)
+            {
+                result = default;
+                return false;
+            }
+
+            result = new VisibleLogSearchMatch(match.Index, match.Length);
+            return true;
+        }
+
+        var absoluteStart = payloadStart + startPayloadOffset;
+        while (absoluteStart <= fullText.Length - _searchText.Length)
+        {
+            var absoluteOffset = VisibleLogSearchEngine.IndexOfWithCancellation(
+                fullText,
+                _searchText,
+                absoluteStart,
+                _options.Comparison,
+                cancellationToken);
+            if (absoluteOffset < payloadStart)
+            {
+                break;
+            }
+
+            var payloadOffset = absoluteOffset - payloadStart;
+            if (!_options.MatchWholeWord || IsWholeWord(fullText, payloadStart, payloadLength, payloadOffset, _searchText.Length))
+            {
+                result = new VisibleLogSearchMatch(payloadOffset, _searchText.Length);
+                return true;
+            }
+
+            absoluteStart = absoluteOffset + Math.Max(1, _searchText.Length);
+        }
+
+        result = default;
+        return false;
+    }
+
+    public string? PreparePayload(string fullText, int payloadStart) =>
+        _regex is null
+            ? null
+            : payloadStart == 0
+                ? fullText
+                : fullText[payloadStart..];
+
+    public static int GetNextSearchStart(int payloadOffset, int matchLength) =>
+        payloadOffset + Math.Max(1, matchLength);
+
+    private static bool IsWholeWord(
+        string fullText,
+        int payloadStart,
+        int payloadLength,
+        int payloadOffset,
+        int matchLength)
+    {
+        var hasWordBefore = payloadOffset > 0 &&
+            IsWordCharacter(fullText[payloadStart + payloadOffset - 1]);
+        var matchEnd = payloadOffset + matchLength;
+        var hasWordAfter = matchEnd < payloadLength &&
+            IsWordCharacter(fullText[payloadStart + matchEnd]);
+        return !hasWordBefore && !hasWordAfter;
+    }
+
+    private static bool IsWordCharacter(char value)
+    {
+        var category = char.GetUnicodeCategory(value);
+        return category is UnicodeCategory.UppercaseLetter or
+            UnicodeCategory.LowercaseLetter or
+            UnicodeCategory.TitlecaseLetter or
+            UnicodeCategory.ModifierLetter or
+            UnicodeCategory.OtherLetter or
+            UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.DecimalDigitNumber or
+            UnicodeCategory.ConnectorPunctuation;
+    }
 }
 
 internal static class VisibleLogSearchEngine
@@ -416,10 +589,23 @@ internal static class VisibleLogSearchEngine
         IReadOnlyList<VisibleLogSearchLine> lines,
         string searchText,
         StringComparison comparison,
+        CancellationToken cancellationToken = default) =>
+        Build(
+            lines,
+            searchText,
+            new VisibleLogSearchOptions(
+                MatchCase: comparison is StringComparison.Ordinal or StringComparison.CurrentCulture or StringComparison.InvariantCulture,
+                LiteralComparison: comparison),
+            cancellationToken);
+
+    public static VisibleLogSearchSnapshot Build(
+        IReadOnlyList<VisibleLogSearchLine> lines,
+        string searchText,
+        VisibleLogSearchOptions options,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(searchText);
-
+        var matcher = new VisibleLogSearchMatcher(searchText, options);
         var matchedLines = new List<VisibleLogMatchedLine>();
         long totalMatchCount = 0;
 
@@ -431,60 +617,48 @@ internal static class VisibleLogSearchEngine
             }
 
             var line = lines[lineIndex];
-            var firstOffset = -1;
-            var lastOffset = -1;
+            var first = default(VisibleLogSearchMatch);
+            var last = default(VisibleLogSearchMatch);
             var firstTabsBeforeMatch = 0;
             var firstTabsBeforeMatchEnd = 0;
             var lastTabsBeforeMatch = 0;
             var lastTabsBeforeMatchEnd = 0;
             var matchCount = 0;
-            var searchStart = line.PayloadStart;
+            var searchStart = 0;
             var tabScanStart = line.PayloadStart;
             var tabsSeen = 0;
+            var preparedPayload = matcher.PreparePayload(line.FullText, line.PayloadStart);
             List<VisibleLogSearchCheckpoint>? occurrenceCheckpoints = null;
 
-            while (searchStart <= line.FullText.Length - searchText.Length)
+            while (matcher.TryFindNext(
+                line.FullText,
+                line.PayloadStart,
+                preparedPayload,
+                searchStart,
+                cancellationToken,
+                out var match))
             {
                 if ((matchCount & 0xFF) == 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                 }
 
-                var absoluteOffset = IndexOfWithCancellation(
-                    line.FullText,
-                    searchText,
-                    searchStart,
-                    comparison,
-                    cancellationToken);
-                if (absoluteOffset < line.PayloadStart)
-                {
-                    break;
-                }
-
-                var payloadOffset = absoluteOffset - line.PayloadStart;
-                tabsSeen += CountTabsInRange(
-                    line.FullText,
-                    tabScanStart,
-                    absoluteOffset,
-                    cancellationToken);
+                var absoluteOffset = line.PayloadStart + match.PayloadOffset;
+                tabsSeen += CountTabsInRange(line.FullText, tabScanStart, absoluteOffset, cancellationToken);
                 var tabsBeforeMatch = tabsSeen;
-                var matchEnd = absoluteOffset + searchText.Length;
-                tabsSeen += CountTabsInRange(
-                    line.FullText,
-                    absoluteOffset,
-                    matchEnd,
-                    cancellationToken);
+                var matchEnd = absoluteOffset + match.Length;
+                tabsSeen += CountTabsInRange(line.FullText, absoluteOffset, matchEnd, cancellationToken);
                 var tabsBeforeMatchEnd = tabsSeen;
                 tabScanStart = matchEnd;
 
-                firstOffset = firstOffset < 0 ? payloadOffset : firstOffset;
-                lastOffset = payloadOffset;
                 if (matchCount == 0)
                 {
+                    first = match;
                     firstTabsBeforeMatch = tabsBeforeMatch;
                     firstTabsBeforeMatchEnd = tabsBeforeMatchEnd;
                 }
 
+                last = match;
                 lastTabsBeforeMatch = tabsBeforeMatch;
                 lastTabsBeforeMatchEnd = tabsBeforeMatchEnd;
                 if (matchCount > 0 && matchCount % OffsetCheckpointInterval == 0)
@@ -492,19 +666,21 @@ internal static class VisibleLogSearchEngine
                     occurrenceCheckpoints ??=
                     [
                         new VisibleLogSearchCheckpoint(
-                            firstOffset,
+                            first.PayloadOffset,
+                            first.Length,
                             firstTabsBeforeMatch,
                             firstTabsBeforeMatchEnd)
                     ];
                     occurrenceCheckpoints.Add(new VisibleLogSearchCheckpoint(
-                        payloadOffset,
+                        match.PayloadOffset,
+                        match.Length,
                         tabsBeforeMatch,
                         tabsBeforeMatchEnd));
                 }
 
                 matchCount++;
                 totalMatchCount++;
-                searchStart = absoluteOffset + searchText.Length;
+                searchStart = VisibleLogSearchMatcher.GetNextSearchStart(match.PayloadOffset, match.Length);
             }
 
             if (matchCount == 0)
@@ -518,8 +694,10 @@ internal static class VisibleLogSearchEngine
                 line.FullText,
                 line.PayloadStart,
                 matchCount,
-                firstOffset,
-                lastOffset,
+                first.PayloadOffset,
+                first.Length,
+                last.PayloadOffset,
+                last.Length,
                 firstTabsBeforeMatch,
                 firstTabsBeforeMatchEnd,
                 lastTabsBeforeMatch,
@@ -532,12 +710,12 @@ internal static class VisibleLogSearchEngine
         cancellationToken.ThrowIfCancellationRequested();
         return new VisibleLogSearchSnapshot(
             searchText,
-            comparison,
+            options,
             matchedLines.ToArray(),
             totalMatchCount);
     }
 
-    private static int IndexOfWithCancellation(
+    internal static int IndexOfWithCancellation(
         string source,
         string value,
         int startIndex,
@@ -587,9 +765,7 @@ internal static class VisibleLogSearchEngine
         while (windowStart < boundedEnd)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var windowEnd = (int)Math.Min(
-                boundedEnd,
-                (long)windowStart + CancellationSearchWindowCharacters);
+            var windowEnd = (int)Math.Min(boundedEnd, (long)windowStart + CancellationSearchWindowCharacters);
             var searchStart = windowStart;
             while (searchStart < windowEnd)
             {

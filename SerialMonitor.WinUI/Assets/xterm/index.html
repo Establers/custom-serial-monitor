@@ -244,6 +244,23 @@
       color: var(--menu-disabled);
     }
 
+    #contextMenu button.checkable {
+      display: grid;
+      grid-template-columns: 14px 1fr auto;
+      align-items: center;
+      column-gap: 5px;
+    }
+
+    #contextMenu .menu-check {
+      font-weight: 700;
+      text-align: center;
+    }
+
+    #contextMenu .menu-state {
+      color: var(--overlay-detail);
+      font-size: 10px;
+    }
+
     #contextMenu .separator {
       height: 1px;
       margin: 3px 4px;
@@ -284,6 +301,17 @@
     <button type="button" data-action="copyAllVisible">Copy all visible</button>
     <button type="button" data-action="copySinceLastTx" title="Copy visible log region starting at the most recent TX">Copy since last TX</button>
     <button type="button" data-action="copySinceLastMark" title="Copy visible log region starting at the most recent MARK">Copy since last MARK</button>
+    <div class="separator"></div>
+    <button id="autoScrollMenuItem"
+            class="checkable"
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked="true"
+            data-action="toggleAutoScroll">
+      <span class="menu-check" aria-hidden="true">&#x2713;</span>
+      <span>Auto Scroll</span>
+      <span class="menu-state" aria-hidden="true">ON</span>
+    </button>
     <div class="separator"></div>
     <button type="button" data-action="clear">Clear screen</button>
     <button type="button" data-action="quickMarker">Quick marker</button>
@@ -523,6 +551,8 @@
     let appendWriting = false;
     let replaceWriting = false;
     let replaceOperationId = 0;
+    let autoScrollEnabled = true;
+    let tailFollowActive = true;
     let contextMenuSelection = '';
     let hexSelectionHintEnabled = false;
     let pointerSelectionGesture = false;
@@ -533,6 +563,7 @@
     let forcePendingHexSelectionHintUpdate = false;
     const maxLiveHexSelectionRows = 2000;
     const contextMenu = document.getElementById('contextMenu');
+    const autoScrollMenuItem = document.getElementById('autoScrollMenuItem');
     const terminalElement = document.getElementById('terminal');
     const hexSelectionHint = document.getElementById('hexSelectionHint');
     const restoreOverlay = document.getElementById('restoreOverlay');
@@ -681,7 +712,10 @@
       try {
         terminal.write(item.text, () => {
           onTerminalWriteParsed();
-          if (item.autoScroll && appendQueueLength() === 0) {
+          // Re-check both the live setting and tail-follow state at completion.
+          // The user can disable Auto Scroll or scroll upward while xterm is
+          // asynchronously parsing a large write.
+          if (item.autoScroll && autoScrollEnabled && tailFollowActive && appendQueueLength() === 0) {
             terminal.scrollToBottom();
           }
           postAppendResult(item, true, '');
@@ -710,7 +744,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
-      if (autoScroll) {
+      if (autoScroll && autoScrollEnabled && tailFollowActive) {
         terminal.scrollToBottom();
       }
       queueAppendDrain();
@@ -755,6 +789,12 @@
       return buffer.viewportY >= buffer.baseY;
     }
 
+    terminal.onScroll(() => {
+      // Being at the tail is the user's resumable follow intent. Scrolling up
+      // suspends live following; manually returning to the bottom resumes it.
+      tailFollowActive = isAtBottom();
+    });
+
     function getScrollState() {
       const buffer = terminal.buffer && terminal.buffer.active;
       if (!buffer) {
@@ -790,6 +830,7 @@
       } else {
         return false;
       }
+      tailFollowActive = isAtBottom();
       return true;
     }
 
@@ -892,6 +933,7 @@
 
       // Consume key-repeat events so holding Enter cannot rapidly flip the setting.
       if (!event.repeat) {
+        window.serialMonitorSetAutoScrollEnabled(!autoScrollEnabled);
         window.chrome.webview.postMessage({ type: 'toggleAutoScroll', source });
       }
 
@@ -917,6 +959,19 @@
       contextMenu.style.display = 'none';
       contextMenu.setAttribute('aria-hidden', 'true');
     }
+
+    window.serialMonitorSetAutoScrollEnabled = function (enabled) {
+      const isEnabled = !!enabled;
+      const wasEnabled = autoScrollEnabled;
+      autoScrollEnabled = isEnabled;
+      if (isEnabled && !wasEnabled) {
+        tailFollowActive = true;
+      }
+      autoScrollMenuItem.setAttribute('aria-checked', String(isEnabled));
+      autoScrollMenuItem.querySelector('.menu-check').textContent = isEnabled ? '\u2713' : '';
+      autoScrollMenuItem.querySelector('.menu-state').textContent = isEnabled ? 'ON' : 'OFF';
+      return true;
+    };
 
     function hideHexSelectionHint() {
       cancelQueuedHexSelectionHintUpdate();
@@ -1247,6 +1302,17 @@
 
     window.serialMonitorScrollToBottom = function () {
       terminal.scrollToBottom();
+      tailFollowActive = true;
+      return isAtBottom();
+    };
+
+    window.serialMonitorScrollToBottomIfFollowing = function () {
+      if (!autoScrollEnabled || !tailFollowActive) {
+        return false;
+      }
+
+      terminal.scrollToBottom();
+      tailFollowActive = true;
       return isAtBottom();
     };
 
@@ -1985,6 +2051,11 @@
       }
 
       const action = button.getAttribute('data-action');
+      if (action === 'toggleAutoScroll') {
+        // Apply locally before crossing the WebView bridge so an in-flight
+        // terminal.write callback cannot perform one final stale scroll.
+        window.serialMonitorSetAutoScrollEnabled(!autoScrollEnabled);
+      }
       hideContextMenu();
       postContextMenuAction(action);
     });

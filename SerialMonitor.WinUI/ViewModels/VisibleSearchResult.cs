@@ -66,7 +66,10 @@ internal static class VisibleSearchResultParser
         string fullText,
         LogDirection direction = LogDirection.System,
         string? searchText = null,
-        StringComparison comparison = StringComparison.OrdinalIgnoreCase)
+        StringComparison comparison = StringComparison.OrdinalIgnoreCase,
+        VisibleLogSearchOptions? searchOptions = null,
+        VisibleLogSearchMatcher? searchMatcher = null,
+        CancellationToken cancellationToken = default)
     {
         var timeText = string.Empty;
         var bodyText = fullText;
@@ -83,10 +86,18 @@ internal static class VisibleSearchResultParser
             };
         }
 
-        var messageSegments = SearchResultMatchSegmentResolver.Resolve(
-            messagePreview,
-            searchText,
-            comparison);
+        var options = searchOptions ?? new VisibleLogSearchOptions(
+            MatchCase: comparison is StringComparison.Ordinal or StringComparison.CurrentCulture or StringComparison.InvariantCulture,
+            LiteralComparison: comparison);
+        var messageSegments = searchMatcher is not null
+            ? SearchResultMatchSegmentResolver.Resolve(
+                messagePreview,
+                searchMatcher,
+                cancellationToken)
+            : SearchResultMatchSegmentResolver.Resolve(
+                messagePreview,
+                searchText,
+                options);
 
         return new VisibleSearchResult(
             matchIndex,

@@ -351,6 +351,32 @@ real hardware when available.
 - [ ] Hold Enter while xterm is focused; confirm key repeat does not toggle it repeatedly.
 - [ ] Focus the TX input and press Enter; confirm the command sends without toggling Auto Scroll.
 - [ ] Toggle Case and confirm behavior changes.
+- [ ] After a completed search, edit the search text or toggle `Aa`, `|ab|`, or
+  `.*`; confirm the existing result rows remain visible as stale until Enter or
+  Refresh runs the new search. Confirm F3, page navigation, and result jumps are
+  blocked while those rows are stale, with a refresh-first message for a result
+  jump attempt. Clear the input completely and confirm either Enter or Refresh
+  clears the retained rows.
+- [ ] Start a search on a large snapshot, edit the search text before it
+  finishes, and confirm the old result rows, page count, and selected match stay
+  together; confirm no canceled-search xterm selection occurs.
+- [ ] With valid regex results visible, enter an invalid regex such as `[` and
+  press Enter; confirm the prior rows and snapshot remain visible as stale while
+  the readable regex error is shown. Correct the pattern and refresh to replace
+  them normally.
+- [ ] Toggle Whole Word and confirm `error` matches `error-error` but not
+  `errorCode` or `preerror`.
+- [ ] Toggle Regex, search for `id=\d+`, and confirm variable-length matches
+  are counted, highlighted, and selected at the correct xterm range.
+- [ ] Combine Case, Whole Word, and Regex and confirm all three constraints
+  apply to the same result snapshot.
+- [ ] Enter an invalid regex such as `[` and confirm a readable search error is
+  shown while RX and UI rendering continue normally.
+- [ ] Search with a zero-length-only regex such as `^` or `(?=a)` and confirm it
+  reports zero matches rather than creating an unselectable phantom result;
+  confirm a consuming anchored regex such as `^WARN` still works.
+- [ ] In the search box, press Alt+C, Alt+W, and Alt+R and confirm the matching
+  option toggles once without changing the search text.
 - [ ] Search for a timestamp-only value or direction marker such as `RX <` and
   confirm it does not match unless the same text exists in the payload itself.
 - [ ] With a narrow log viewport, create long wrapped matching lines, leave the

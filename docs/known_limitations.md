@@ -13,6 +13,9 @@ This file tracks current intentional limits and validation gaps.
 - Search Results groups repeated occurrences into one row per matching log line
   and materializes at most 1,000 lines per page. Prev/Next pages through the
   full snapshot while F3/Shift+F3 still navigates every occurrence.
+- Regex matches with zero character length, such as `^`, `$`, or a standalone
+  lookaround, are excluded because they have no selectable or highlightable
+  range. Anchored expressions that consume text, such as `^WARN`, are supported.
 
 ## Settings Apply Behavior
 

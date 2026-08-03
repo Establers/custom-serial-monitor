@@ -1116,9 +1116,9 @@
                                   ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                     <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
-                          MinWidth="1040"
+                          MinWidth="1160"
                           ColumnSpacing="5"
-                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
+                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
                         <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
                                  Grid.Column="0"
                                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -1148,46 +1148,57 @@
                                       Glyph="&#xE76C;" />
                         </Button>
                         <CheckBox Grid.Column="3"
-                                  Content="Case"
+                                  Content="Aa"
                                   IsChecked="{Binding IsSearchCaseSensitive, Mode=TwoWay}"
-                                  VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="4"
+                                  VerticalAlignment="Center"
+                                  ToolTipService.ToolTip="대/소문자 구분 (검색창에서 Alt+C)" />
+                        <CheckBox Grid.Column="4"
+                                  Content="|ab|"
+                                  IsChecked="{Binding IsSearchWholeWord, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  ToolTipService.ToolTip="단어 전체 일치 (검색창에서 Alt+W)" />
+                        <CheckBox Grid.Column="5"
+                                  Content=".*"
+                                  IsChecked="{Binding IsSearchRegularExpression, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  ToolTipService.ToolTip="정규식 사용 (검색창에서 Alt+R)" />
+                        <TextBlock Grid.Column="6"
                                    Text="{Binding SearchSummaryText}"
                                    FontWeight="SemiBold"
                                    FontSize="12"
                                    VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="5"
+                        <TextBlock Grid.Column="7"
                                    Text="Mode"
                                    Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox x:Uid="StaticUi012" Grid.Column="6"
+                        <ComboBox x:Uid="StaticUi012" Grid.Column="8"
                                   ItemsSource="{Binding RxDisplayModes}"
                                   SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
                                   ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
                                   ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
-                        <TextBlock Grid.Column="7"
+                        <TextBlock Grid.Column="9"
                                    Text="Filter"
                                    Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox x:Uid="StaticUi014" Grid.Column="8"
+                        <ComboBox x:Uid="StaticUi014" Grid.Column="10"
                                   ItemsSource="{Binding VisibleLogFilterOptions}"
                                   SelectedItem="{Binding SelectedViewFilterOption, Mode=TwoWay}"
                                   DisplayMemberPath="DisplayName"
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
                                   ToolTipService.ToolTip="Filter the visible xterm log using rules marked as Filter. Log files still keep all lines." />
-                        <TextBlock Grid.Column="9"
+                        <TextBlock Grid.Column="11"
                                    Text="{Binding CurrentSearchMatchedLine}"
                                    FontFamily="Consolas"
                                    FontSize="11"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center" />
-                        <CheckBox x:Uid="StaticUi015" Grid.Column="10"
+                        <CheckBox x:Uid="StaticUi015" Grid.Column="12"
                                   Content="Auto"
                                   IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                   VerticalAlignment="Center"
                                   ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends." />
-                        <Button Grid.Column="11"
+                        <Button Grid.Column="13"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ToggleLogRenderingPauseCommand}"
                                 ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
@@ -1196,7 +1207,7 @@
                                       UseLayoutRounding="False"
                                       Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
                         </Button>
-                        <Button x:Uid="StaticUi016" Grid.Column="12"
+                        <Button x:Uid="StaticUi016" Grid.Column="14"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ClearScreenCommand}"
                                 ToolTipService.ToolTip="Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
@@ -1205,7 +1216,7 @@
                                       UseLayoutRounding="False"
                                       Glyph="&#xE711;" />
                         </Button>
-                        <Button x:Uid="StaticUi017" Grid.Column="13"
+                        <Button x:Uid="StaticUi017" Grid.Column="15"
                                 Content="Mark"
                                 Command="{Binding AddDefaultMarkerCommand}"
                                 ToolTipService.ToolTip="Quick marker inserts current MARK TIME" />
@@ -1502,37 +1513,40 @@
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="5"
                                       MinWidth="0"
-                                      ColumnDefinitions="Auto,96,Auto,Auto,Auto,Auto,*">
+                                      ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
+                                      RowDefinitions="Auto,Auto">
                                     <TextBlock Text="Search"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
                                                Margin="0,0,6,0" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding SearchText}"
+                                    <TextBlock Grid.Row="1"
+                                               Grid.ColumnSpan="6"
+                                               Text="{Binding AppliedSearchCriteriaText}"
                                                FontFamily="Consolas"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                TextTrimming="CharacterEllipsis"
-                                               MaxWidth="96"
                                                MinWidth="0"
-                                               VerticalAlignment="Center" />
-                                    <Button x:Uid="StaticUi029" Grid.Column="2"
+                                               Margin="0,3,0,0"
+                                               VerticalAlignment="Center"
+                                               ToolTipService.ToolTip="{Binding AppliedSearchCriteriaText}" />
+                                    <Button x:Uid="StaticUi029" Grid.Column="1"
                                             Content="Refresh"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding RefreshSearchResultsCommand}"
                                             ToolTipService.ToolTip="Refresh search results" />
-                                    <Button x:Uid="StaticUi030" Grid.Column="3"
+                                    <Button x:Uid="StaticUi030" Grid.Column="2"
                                             Content="Prev"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding PreviousSearchResultsPageCommand}"
                                             ToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
-                                    <Button x:Uid="StaticUi031" Grid.Column="4"
+                                    <Button x:Uid="StaticUi031" Grid.Column="3"
                                             Content="Next"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding NextSearchResultsPageCommand}"
                                             ToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
-                                    <TextBlock Grid.Column="5"
+                                    <TextBlock Grid.Column="4"
                                                Text="{Binding SearchSummaryText}"
                                                Style="{StaticResource CompactCellTextStyle}" />
-                                    <TextBlock Grid.Column="6"
+                                    <TextBlock Grid.Column="5"
                                                Text="{Binding SearchResultStatusText}"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                MinWidth="0"

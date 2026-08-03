@@ -5,6 +5,32 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class SearchResultMatchSegmentResolverTests
 {
     [Fact]
+    public void Resolve_RegexHighlightsVariableLengthMatches()
+    {
+        var segments = SearchResultMatchSegmentResolver.Resolve(
+            "id=7 id=2048",
+            @"\d+",
+            new VisibleLogSearchOptions(UseRegularExpression: true));
+
+        Assert.Equal(
+            ["7", "2048"],
+            segments.Where(segment => segment.IsMatch).Select(segment => segment.Text));
+        Assert.Equal("id=7 id=2048", string.Concat(segments.Select(segment => segment.Text)));
+    }
+
+    [Fact]
+    public void Resolve_WholeWordDoesNotHighlightIdentifierSubstring()
+    {
+        var segments = SearchResultMatchSegmentResolver.Resolve(
+            "error errorCode",
+            "error",
+            new VisibleLogSearchOptions(MatchWholeWord: true));
+
+        Assert.Single(segments.Where(segment => segment.IsMatch));
+        Assert.Equal("error errorCode", string.Concat(segments.Select(segment => segment.Text)));
+    }
+
+    [Fact]
     public void Resolve_HighlightsEverySearchTextMatch()
     {
         var segments = SearchResultMatchSegmentResolver.Resolve(
@@ -32,6 +58,34 @@ public sealed class SearchResultMatchSegmentResolverTests
 
         Assert.Single(sensitive.Where(segment => segment.IsMatch));
         Assert.Equal(3, insensitive.Count(segment => segment.IsMatch));
+    }
+
+    [Fact]
+    public void Resolve_PreservesInvariantCultureStringComparison()
+    {
+        var sensitive = SearchResultMatchSegmentResolver.Resolve(
+            "a A",
+            "A",
+            StringComparison.InvariantCulture);
+        var insensitive = SearchResultMatchSegmentResolver.Resolve(
+            "a A",
+            "A",
+            StringComparison.InvariantCultureIgnoreCase);
+
+        Assert.Single(sensitive.Where(segment => segment.IsMatch));
+        Assert.Equal(2, insensitive.Count(segment => segment.IsMatch));
+    }
+
+    [Fact]
+    public void Resolve_ZeroLengthRegexProducesNoFalseHighlight()
+    {
+        var segments = SearchResultMatchSegmentResolver.Resolve(
+            "aa",
+            "(?=a)",
+            new VisibleLogSearchOptions(UseRegularExpression: true));
+
+        Assert.DoesNotContain(segments, segment => segment.IsMatch);
+        Assert.Equal("aa", string.Concat(segments.Select(segment => segment.Text)));
     }
 
     [Fact]

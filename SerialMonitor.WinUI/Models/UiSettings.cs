@@ -74,6 +74,10 @@ public sealed class UiSettings
 
     public bool SearchCaseSensitive { get; set; }
 
+    public bool SearchWholeWord { get; set; }
+
+    public bool SearchUseRegularExpression { get; set; }
+
     public string LastSearchText { get; set; } = string.Empty;
 
     public string MarkerText { get; set; } = string.Empty;
@@ -114,6 +118,8 @@ public sealed class UiSettings
             CuteBackgroundImagePath = CuteBackgroundImagePath,
             CuteBackgroundOpacity = CuteBackgroundOpacity,
             SearchCaseSensitive = SearchCaseSensitive,
+            SearchWholeWord = SearchWholeWord,
+            SearchUseRegularExpression = SearchUseRegularExpression,
             LastSearchText = LastSearchText,
             MarkerText = MarkerText,
             ShowMockTestPort = ShowMockTestPort,
