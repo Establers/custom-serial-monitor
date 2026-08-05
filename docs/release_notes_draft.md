@@ -1,6 +1,19 @@
 # Release Notes Draft
 
-Date: 2026-08-03
+Date: 2026-08-06
+
+## Released in v1.3.1
+
+- Serialized native-to-xterm search requests and added a five-second timeout so
+  a stalled WebView2 search cannot pile up further navigation work.
+- Coalesced repeated F3 and Shift+F3 requests while preserving their net
+  direction and movement count, preventing concurrent search navigation from
+  racing the active search snapshot.
+- Added focused coverage for latest-only execution, request combining, and
+  cancellation behavior.
+- Moved Auto Scroll, Pause Rendering, and Clear Screen to the always-visible
+  left side of the log toolbar, reduced the scrollable toolbar width, and
+  removed the redundant quick Mark button.
 
 ## Released in v1.3.0
 

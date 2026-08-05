@@ -1109,9 +1109,37 @@
                   RowDefinitions="Auto,*">
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                          ColumnSpacing="5">
+                    <StackPanel Grid.Column="0"
+                                Orientation="Horizontal"
+                                Spacing="2"
+                                VerticalAlignment="Center">
+                        <CheckBox x:Uid="StaticUi015"
+                                  Content="Auto"
+                                  IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends." />
+                        <Button Style="{StaticResource NavigationIconButtonStyle}"
+                                Command="{Binding ToggleLogRenderingPauseCommand}"
+                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
+                        </Button>
+                        <Button x:Uid="StaticUi016"
+                                Style="{StaticResource NavigationIconButtonStyle}"
+                                Command="{Binding ClearScreenCommand}"
+                                ToolTipService.ToolTip="Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      UseLayoutRounding="False"
+                                      Glyph="&#xE711;" />
+                        </Button>
+                    </StackPanel>
                     <Button x:Uid="StaticUi006" x:Name="LogToolbarScrollBackButton"
-                            Grid.Column="0"
+                            Grid.Column="1"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollBackButton_Click"
@@ -1122,7 +1150,7 @@
                                   Glyph="&#xE76B;" />
                     </Button>
                     <ScrollViewer x:Name="LogToolbarScrollViewer"
-                                  Grid.Column="1"
+                                  Grid.Column="2"
                                   HorizontalScrollMode="Enabled"
                                   HorizontalScrollBarVisibility="Hidden"
                                   VerticalScrollMode="Disabled"
@@ -1130,9 +1158,9 @@
                                   ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                     <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
-                          MinWidth="1160"
+                          MinWidth="1000"
                           ColumnSpacing="5"
-                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,Auto,96,*,Auto,Auto,Auto,Auto">
+                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,Auto,96">
                         <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
                                  Grid.Column="0"
                                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -1276,37 +1304,10 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
-                        <CheckBox x:Uid="StaticUi015" Grid.Column="12"
-                                  Content="Auto"
-                                  IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
-                                  ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends." />
-                        <Button Grid.Column="13"
-                                Style="{StaticResource NavigationIconButtonStyle}"
-                                Command="{Binding ToggleLogRenderingPauseCommand}"
-                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      FontSize="12"
-                                      UseLayoutRounding="False"
-                                      Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
-                        </Button>
-                        <Button x:Uid="StaticUi016" Grid.Column="14"
-                                Style="{StaticResource NavigationIconButtonStyle}"
-                                Command="{Binding ClearScreenCommand}"
-                                ToolTipService.ToolTip="Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      FontSize="12"
-                                      UseLayoutRounding="False"
-                                      Glyph="&#xE711;" />
-                        </Button>
-                        <Button x:Uid="StaticUi017" Grid.Column="15"
-                                Content="Mark"
-                                Command="{Binding AddDefaultMarkerCommand}"
-                                ToolTipService.ToolTip="Quick marker inserts current MARK TIME" />
                     </Grid>
                     </ScrollViewer>
                     <Button x:Uid="StaticUi018" x:Name="LogToolbarScrollForwardButton"
-                            Grid.Column="2"
+                            Grid.Column="3"
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollForwardButton_Click"

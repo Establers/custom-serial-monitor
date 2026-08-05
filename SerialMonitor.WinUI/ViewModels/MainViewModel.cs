@@ -292,6 +292,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly UiBatchDispatcher<DetectedEvent> _eventBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
     private readonly CoalescingAsyncOperation _portRefreshOperation;
+    private readonly LatestRequestAsyncOperation<SearchShortcutRequest> _searchShortcutOperation;
     private readonly DispatcherQueueTimer _statusTimer;
     private readonly SerialBusUtilizationMeter _serialBusUtilizationMeter = new();
     private readonly object _eventNotificationGate = new();
@@ -301,6 +302,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly Dictionary<string, string> _activeBackgroundHealthErrors = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
+    private readonly CancellationTokenSource _searchShortcutCancellation = new();
     private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
     private readonly object _viewPauseGate = new();
@@ -734,6 +736,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private sealed record SequenceRunRequest(CommandSequence Sequence, string Source);
 
+    private sealed record SearchShortcutRequest(
+        int Movement,
+        string Source,
+        string Action,
+        long SearchGeneration);
+
     public MainViewModel(
         ISerialService serialService,
         ILogPipeline logPipeline,
@@ -753,6 +761,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
         _portRefreshOperation = new CoalescingAsyncOperation(RefreshPortsOnceAsync);
+        _searchShortcutOperation = new LatestRequestAsyncOperation<SearchShortcutRequest>(
+            RunSearchShortcutAsync,
+            _searchShortcutCancellation.Token,
+            CombinePendingSearchShortcutRequests);
 
         var profile = profileService.CreateDefaultProfile();
 
@@ -4146,6 +4158,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        Interlocked.Increment(ref _searchGeneration);
+        _searchShortcutCancellation.Cancel();
+        CancelActiveSearch();
+
         var startedAt = DateTimeOffset.Now;
         _lastShutdownStartTimeText = FormatDiagnosticTime(startedAt);
         _lastShutdownCompletedTimeText = "(pending)";
@@ -4246,6 +4262,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Interlocked.Increment(ref _searchGeneration);
+        _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
         _eventNotificationCancellation.Cancel();
         _bridgeVisualLogCancellation.Cancel();
@@ -4298,6 +4315,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventContextBatchDispatcher.Dispose();
         _eventNotificationCancellation.Dispose();
         _bridgeVisualLogCancellation.Dispose();
+        _searchShortcutCancellation.Dispose();
         _connectionLifecycleGate.Dispose();
     }
 
@@ -4759,14 +4777,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private async Task FindNextSearchMatchAsync()
+    private Task FindNextSearchMatchAsync()
     {
-        await NavigateSearchSnapshotAsync(SearchMove.Next);
+        return QueueSearchShortcutAsync(SearchMove.Next, "search results", "Find next");
     }
 
-    private async Task FindPreviousSearchMatchAsync()
+    private Task FindPreviousSearchMatchAsync()
     {
-        await NavigateSearchSnapshotAsync(SearchMove.Previous);
+        return QueueSearchShortcutAsync(SearchMove.Previous, "search results", "Find previous");
     }
 
     public async Task SearchFromInputAsync(bool previous, string source)
@@ -4849,14 +4867,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public async Task FindNextFromShortcutAsync(string source)
+    public Task FindNextFromShortcutAsync(string source)
     {
-        await RunSearchShortcutAsync(SearchMove.Next, source, "Find next");
+        return QueueSearchShortcutAsync(SearchMove.Next, source, "Find next");
     }
 
-    public async Task FindPreviousFromShortcutAsync(string source)
+    public Task FindPreviousFromShortcutAsync(string source)
     {
-        await RunSearchShortcutAsync(SearchMove.Previous, source, "Find previous");
+        return QueueSearchShortcutAsync(SearchMove.Previous, source, "Find previous");
     }
 
     public void RecordSearchFocusShortcut(string source)
@@ -4869,31 +4887,73 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RecordSearchShortcutAction("Leave search", source);
     }
 
-    private async Task RunSearchShortcutAsync(SearchMove move, string source, string action)
+    private Task QueueSearchShortcutAsync(SearchMove move, string source, string action)
+    {
+        if (Volatile.Read(ref _shutdownStarted) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _searchShortcutOperation.RunAsync(new SearchShortcutRequest(
+            move == SearchMove.Previous ? -1 : 1,
+            source,
+            action,
+            Interlocked.Read(ref _searchGeneration)));
+    }
+
+    private static SearchShortcutRequest CombinePendingSearchShortcutRequests(
+        SearchShortcutRequest pending,
+        SearchShortcutRequest incoming)
+    {
+        if (pending.SearchGeneration != incoming.SearchGeneration)
+        {
+            return incoming;
+        }
+
+        var combinedMovement = Math.Clamp(
+            (long)pending.Movement + incoming.Movement,
+            int.MinValue,
+            int.MaxValue);
+        return incoming with { Movement = (int)combinedMovement };
+    }
+
+    private async Task RunSearchShortcutAsync(
+        SearchShortcutRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
+            if (request.SearchGeneration != Interlocked.Read(ref _searchGeneration))
+            {
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(SearchText))
             {
-                RecordSearchShortcutAction($"{action}: empty search text", source);
+                RecordSearchShortcutAction($"{request.Action}: empty search text", request.Source);
                 SetStatus("Search text is empty.");
                 return;
             }
 
-            if (move == SearchMove.Previous)
-            {
-                await FindPreviousSearchMatchAsync();
-            }
-            else
-            {
-                await FindNextSearchMatchAsync();
-            }
+            await NavigateSearchSnapshotAsync(
+                request.Movement,
+                request.SearchGeneration,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            RecordSearchShortcutAction(action, source);
+            if (request.SearchGeneration == Interlocked.Read(ref _searchGeneration))
+            {
+                RecordSearchShortcutAction(request.Action, request.Source);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
-            RecordSearchShortcutError($"{action} shortcut failed: {ex.Message}", source);
+            RecordSearchShortcutError(
+                $"{request.Action} shortcut failed: {ex.Message}",
+                request.Source);
         }
     }
 
@@ -5011,7 +5071,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         !_isSearchRunning &&
         _activeSearchSnapshot is { MatchedLines.Length: > 0 };
 
-    private async Task NavigateSearchSnapshotAsync(SearchMove move)
+    private async Task NavigateSearchSnapshotAsync(
+        int movement,
+        long expectedSearchGeneration,
+        CancellationToken cancellationToken)
     {
         var snapshot = _activeSearchSnapshot;
         if (snapshot is null || snapshot.TotalMatchCount == 0)
@@ -5020,21 +5083,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var generation = Interlocked.Read(ref _searchGeneration);
         var currentPosition = _currentSearchPosition;
-        var position = await Task.Run(() => ResolveNavigationPosition(
-            snapshot,
-            currentPosition,
-            move));
+        var position = await Task.Run(
+            () => ResolveNavigationPosition(snapshot, currentPosition, movement),
+            cancellationToken);
         if (!position.HasValue ||
-            generation != Interlocked.Read(ref _searchGeneration) ||
+            expectedSearchGeneration != Interlocked.Read(ref _searchGeneration) ||
             !ReferenceEquals(snapshot, _activeSearchSnapshot))
         {
             return;
         }
 
         ApplySearchSnapshotMatch(position.Value);
-        RequestXtermSearch(move);
+        RequestXtermSearch(movement < 0 ? SearchMove.Previous : SearchMove.Next);
         SetStatus($"Search match {CurrentSearchMatchIndex:N0} of {SearchMatchCount:N0}: {SearchText}");
     }
 
@@ -5383,17 +5444,45 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static VisibleLogSearchPosition? ResolveNavigationPosition(
         VisibleLogSearchSnapshot snapshot,
         VisibleLogSearchPosition? currentPosition,
-        SearchMove move)
+        int movement)
     {
-        VisibleLogSearchPosition position;
+        if (movement == 0)
+        {
+            return currentPosition;
+        }
+
+        var movePrevious = movement < 0;
+        var remaining = Math.Abs((long)movement);
+        var position = default(VisibleLogSearchPosition);
         var found = currentPosition.HasValue
-            ? move == SearchMove.Previous
-                ? snapshot.TryGetPrevious(currentPosition.Value, out position)
-                : snapshot.TryGetNext(currentPosition.Value, out position)
-            : move == SearchMove.Previous
+            ? Assign(currentPosition.Value, out position)
+            : movePrevious
                 ? snapshot.TryGetLast(out position)
                 : snapshot.TryGetFirst(out position);
-        return found ? position : null;
+        if (!found)
+        {
+            return null;
+        }
+
+        if (!currentPosition.HasValue)
+        {
+            remaining--;
+        }
+
+        remaining %= snapshot.TotalMatchCount;
+
+        while (remaining-- > 0)
+        {
+            found = movePrevious
+                ? snapshot.TryGetPrevious(position, out position)
+                : snapshot.TryGetNext(position, out position);
+            if (!found)
+            {
+                return null;
+            }
+        }
+
+        return position;
     }
 
     private static VisibleLogSearchPosition? ResolveSearchPosition(

@@ -104,10 +104,6 @@
     <value>Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi017.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Quick marker inserts current MARK TIME</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
   <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll log controls right</value>
     <comment>Static MainWindow UI text.</comment>

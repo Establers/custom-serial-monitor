@@ -104,10 +104,6 @@
     <value>표시 로그를 지웁니다. HEX 모드에서는 RX BUSY/IDLE 측정 구간도 다시 시작합니다.</value>
     <comment>English: Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</comment>
   </data>
-  <data name="StaticUi017.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>현재 MARK TIME을 빠르게 삽입합니다.</value>
-    <comment>English: Quick marker inserts current MARK TIME</comment>
-  </data>
   <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>로그 컨트롤을 오른쪽으로 스크롤</value>
     <comment>English: Scroll log controls right</comment>

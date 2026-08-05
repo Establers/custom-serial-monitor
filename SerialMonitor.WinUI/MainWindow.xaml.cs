@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
     private const int DwmUseImmersiveDarkModeBefore20H1 = 19;
     private const int DwmUseImmersiveDarkMode = 20;
     private static readonly TimeSpan XtermLiveAppendAckTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan XtermSearchTimeout = TimeSpan.FromSeconds(5);
     private static readonly string BundledCuteBackgroundPath =
         Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
     private static readonly string AppIconPath =
@@ -51,6 +52,8 @@ public sealed partial class MainWindow : Window
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _eventPopupTimer;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _trayIconTimer;
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
+    private readonly CancellationTokenSource _xtermSearchCancellation = new();
+    private readonly LatestRequestAsyncOperation<XtermSearchRequest> _xtermSearchOperation;
     private readonly object _xtermLiveAppendQueueGate = new();
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
     private readonly XtermClearBarrier _xtermClearBarrier = new();
@@ -147,6 +150,9 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _xtermSearchOperation = new LatestRequestAsyncOperation<XtermSearchRequest>(
+            SearchXtermAsync,
+            _xtermSearchCancellation.Token);
         _themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(AppWindow.Id);
 #if !DEBUG
         InspectorTabView.TabItems.Remove(TestTabViewItem);
@@ -223,6 +229,7 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
     }
 
@@ -299,6 +306,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnClosed(object sender, WindowEventArgs args)
     {
+        _xtermSearchCancellation.Cancel();
         CancelPendingXtermAppendAcknowledgements();
         AppWindow.Closing -= OnAppWindowClosing;
         AppWindow.Changed -= OnAppWindowChanged;
@@ -1495,11 +1503,22 @@ public sealed partial class MainWindow : Window
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
-            DispatcherQueue.TryEnqueue(() => _ = SearchXtermAsync(request));
+            DispatcherQueue.TryEnqueue(() => QueueXtermSearch(request));
             return;
         }
 
-        _ = SearchXtermAsync(request);
+        QueueXtermSearch(request);
+    }
+
+    private void QueueXtermSearch(XtermSearchRequest request)
+    {
+        if (IsClosingOrClosed)
+        {
+            return;
+        }
+
+        _viewModel.RecordXtermSearchRequested();
+        _ = _xtermSearchOperation.RunAsync(request);
     }
 
     private bool IsXtermVisualAppendSuspended()
@@ -2597,7 +2616,7 @@ public sealed partial class MainWindow : Window
                 var source = root.TryGetProperty("source", out var sourceElement)
                     ? sourceElement.GetString()
                     : "xterm";
-                _ = HandleSearchShortcutAsync(action, source ?? "xterm");
+                HandleSearchShortcut(action, source ?? "xterm");
                 return;
             }
 
@@ -3758,10 +3777,8 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private async Task SearchXtermAsync(XtermSearchRequest request)
+    private async Task SearchXtermAsync(XtermSearchRequest request, CancellationToken cancellationToken)
     {
-        _viewModel.RecordXtermSearchRequested();
-
         if (IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
         {
             return;
@@ -3773,9 +3790,14 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await _xtermAppendGate.WaitAsync();
+        CancellationTokenSource? searchTimeoutCancellation = null;
+        await _xtermAppendGate.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            searchTimeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            searchTimeoutCancellation.CancelAfter(XtermSearchTimeout);
+            var searchCancellationToken = searchTimeoutCancellation.Token;
             var payload = JsonSerializer.Serialize(new
             {
                 requestId = request.RequestId,
@@ -3794,7 +3816,8 @@ public sealed partial class MainWindow : Window
             });
             var searchStopwatch = Stopwatch.StartNew();
             var resultJson = await XtermLogWebView.ExecuteScriptAsync(
-                $"window.serialMonitorSearch ? window.serialMonitorSearch({payload}) : {{ ok: false, found: false, error: 'xterm search bridge is not available' }};");
+                    $"window.serialMonitorSearch ? window.serialMonitorSearch({payload}) : {{ ok: false, found: false, error: 'xterm search bridge is not available' }};")
+                .AsTask(searchCancellationToken);
             searchStopwatch.Stop();
 
             if (string.IsNullOrWhiteSpace(resultJson))
@@ -3821,12 +3844,21 @@ public sealed partial class MainWindow : Window
                 foundElement.ValueKind == JsonValueKind.True;
             _viewModel.RecordXtermSearchResult(found, searchStopwatch.ElapsedMilliseconds);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException) when (searchTimeoutCancellation?.IsCancellationRequested == true)
+        {
+            _viewModel.RecordXtermSearchError(
+                $"xterm search timed out after {XtermSearchTimeout.TotalSeconds:0.#} seconds; the selection request was discarded.");
+        }
         catch (Exception ex)
         {
             _viewModel.RecordXtermSearchError($"xterm search failed: {ex.Message}");
         }
         finally
         {
+            searchTimeoutCancellation?.Dispose();
             _xtermAppendGate.Release();
         }
     }
@@ -4241,7 +4273,7 @@ public sealed partial class MainWindow : Window
             source: "search box");
     }
 
-    private async Task HandleSearchShortcutAsync(string? action, string source)
+    private void HandleSearchShortcut(string? action, string source)
     {
         if (IsClosingOrClosed)
         {
@@ -4254,10 +4286,10 @@ public sealed partial class MainWindow : Window
                 FocusSearchBox(source);
                 break;
             case "previous":
-                await _viewModel.FindPreviousFromShortcutAsync(source);
+                _ = _viewModel.FindPreviousFromShortcutAsync(source);
                 break;
             case "next":
-                await _viewModel.FindNextFromShortcutAsync(source);
+                _ = _viewModel.FindNextFromShortcutAsync(source);
                 break;
             default:
                 _viewModel.RecordXtermSearchError($"Unknown search shortcut action: {action ?? "(null)"}");
