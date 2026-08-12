@@ -273,6 +273,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const string EventContextObserverHealthKey = "Event context observer";
     private const string BridgeVisualObserverHealthKey = "Bridge visual observer";
     private const string BridgeProcessedObserverHealthKey = "Bridge processed-log observer";
+    private const string SystemSleepBlockerHealthKey = "Automatic sleep prevention";
     private static readonly TimeSpan ResourceSnapshotRefreshInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RecentRuntimeHealthErrorDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
@@ -300,6 +301,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly SinglePendingGate _triggeredSequenceGate = new();
     private readonly object _backgroundHealthErrorGate = new();
     private readonly Dictionary<string, string> _activeBackgroundHealthErrors = new(StringComparer.Ordinal);
+    private readonly SystemSleepBlocker _systemSleepBlocker = new();
+    private readonly FileLogIngressCoordinator _fileLogIngress = new();
+    private readonly FileLogAutoRestartCoordinator _fileLogAutoRestart;
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
     private readonly CancellationTokenSource _searchShortcutCancellation = new();
@@ -324,6 +328,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _autoReconnectStartQueued;
     private int _autoReconnectSessionServicesPreserved;
     private long _pendingLogDropCount;
+    private long _lastFileWriterDurableCount;
     private int _backgroundStatusSnapshotDirty;
     private string? _selectedPort;
     private long _portRefreshGeneration;
@@ -619,8 +624,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _lastDisconnectPreservedPort;
     private string _lastPortRefreshResult = "No port refresh yet.";
     private bool _selectedPortAvailable;
-    private long _fileWriterDroppedHealthBaseline;
-    private long _fileWriterErrorHealthBaseline;
     private long _serialConnectionErrorHealthBaseline;
     private string _healthStateText = "HEALTH OK";
     private string _healthReasonSummary = "No health issues.";
@@ -760,6 +763,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _bridgeLogProcessor = bridgeLogProcessor;
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
+        _lastFileWriterDurableCount = fileLogWriter.WrittenLineCount;
+        _fileLogAutoRestart = new FileLogAutoRestartCoordinator(
+            ShouldAutoRestartFileLogging,
+            TryAutoRestartFileLoggingAsync);
+        _fileLogAutoRestart.StatusChanged += OnFileLogAutoRestartStatusChanged;
         _portRefreshOperation = new CoalescingAsyncOperation(RefreshPortsOnceAsync);
         _searchShortcutOperation = new LatestRequestAsyncOperation<SearchShortcutRequest>(
             RunSearchShortcutAsync,
@@ -864,6 +872,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
         };
 
+        RuntimeDiagnostics.StartFileWriterIncidentSession();
         _serialService.Error += OnBackgroundError;
         _serialService.StatusChanged += OnSerialStatusChanged;
         _logPipeline.Error += OnBackgroundError;
@@ -912,43 +921,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public ObservableCollection<string> BridgePortNames { get; } = new();
 
-    public ObservableCollection<int> BaudRates { get; } = new()
-    {
-        1200,
-        4800,
-        9600,
-        19200,
-        38400,
-        57600,
-        115200,
-        230400,
-        460800,
-        921600
-    };
+    public ObservableCollection<int> BaudRates { get; } = new(SerialPortPolicy.SupportedBaudRates);
 
-    public ObservableCollection<int> DataBitOptions { get; } = new()
-    {
-        5,
-        6,
-        7,
-        8
-    };
+    public ObservableCollection<int> DataBitOptions { get; } =
+        new(SerialPortPolicy.SupportedDataBits);
 
-    public ObservableCollection<SerialParityMode> ParityModes { get; } = new()
-    {
-        SerialParityMode.None,
-        SerialParityMode.Odd,
-        SerialParityMode.Even,
-        SerialParityMode.Mark,
-        SerialParityMode.Space
-    };
+    public ObservableCollection<SerialParityMode> ParityModes { get; } =
+        new(SerialPortPolicy.SupportedParityModes);
 
-    public ObservableCollection<SerialStopBitsMode> StopBitsModes { get; } = new()
-    {
-        SerialStopBitsMode.One,
-        SerialStopBitsMode.OnePointFive,
-        SerialStopBitsMode.Two
-    };
+    public ObservableCollection<SerialStopBitsMode> StopBitsModes { get; } =
+        new(SerialPortPolicy.SupportedStopBitsModes);
 
     public ObservableCollection<SerialHandshakeMode> HandshakeModes { get; } = new()
     {
@@ -2225,10 +2207,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool FileLoggingEnabled
     {
-        get => _currentLogSettings.FileLoggingEnabled;
+        get => _fileLogIngress.IsRequested;
         set
         {
-            if (_currentLogSettings.FileLoggingEnabled == value)
+            if (FileLoggingEnabled == value)
             {
                 return;
             }
@@ -2237,15 +2219,72 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool FileLoggingActive => FileLoggingEnabled && _fileLogWriter.IsRunning;
+    public bool FileLoggingIngressActive => _fileLogIngress.IsActive;
+
+    public bool FileLoggingActive => FileLoggingIngressActive && _fileLogWriter.IsRunning;
+
+    public FileLogWriterState FileLoggingWriterState => _fileLogWriter.State;
+
+    public bool IsFileLoggingRetrying => _fileLogAutoRestart.IsRetrying;
+
+    public string FileLoggingFaultText => _fileLogWriter.LastFault?.Message ?? string.Empty;
 
     public string FileLoggingToggleText => FileLoggingEnabled ? "LOG ON" : "LOG OFF";
 
-    public string FileLoggingMainStatusText => FileLoggingEnabled ? "Log Save: ON" : "Log Save: OFF";
+    public string FileLoggingMainStatusText => FileLogStatusPresentation.CreateMainStatus(
+        FileLoggingEnabled,
+        _fileLogWriter.State,
+        _fileLogAutoRestart.IsRetrying,
+        FileLoggingIngressActive);
 
-    public string FileLoggingToolTip => FileLoggingEnabled
-        ? "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted."
-        : "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
+    public string FileLoggingToolTip
+    {
+        get
+        {
+            if (!FileLoggingEnabled)
+            {
+                return "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
+            }
+
+            if (_fileLogWriter.State == FileLogWriterState.Faulted)
+            {
+                if (!FileLoggingIngressActive)
+                {
+                    return _fileLogAutoRestart.IsRetrying
+                        ? $"File logging FAULTED before file ingress activated and is retrying with bounded backoff. Lines remain terminal/event-only until restart succeeds. {_fileLogWriter.LastFault?.Message}"
+                        : $"File logging FAULTED before file ingress activated and is not writing. Lines remain terminal/event-only. {_fileLogWriter.LastFault?.Message}";
+                }
+
+                return _fileLogAutoRestart.IsRetrying
+                    ? $"File logging FAULTED and is retrying with bounded backoff. Lines offered during restart are counted as dropped. {_fileLogWriter.LastFault?.Message}"
+                    : $"File logging FAULTED and is not writing. Lines offered while faulted are counted as dropped. {_fileLogWriter.LastFault?.Message}";
+            }
+
+            if (_fileLogWriter.State == FileLogWriterState.Starting)
+            {
+                return FileLoggingIngressActive
+                    ? "File logging is restarting. File-ingress lines remain accounted and are counted as dropped until the writer is Running."
+                    : "Log Save is starting. Lines remain terminal/event-only until the file writer accepts ingress.";
+            }
+
+            if (_fileLogWriter.State == FileLogWriterState.Stopping)
+            {
+                return "File logging is stopping and is not accepting new file ingress.";
+            }
+
+            if (!FileLoggingIngressActive)
+            {
+                return "Log Save is armed and file ingress is inactive. The writer opens before serial RX on the next connection or retry.";
+            }
+
+            if (_fileLogWriter.State == FileLogWriterState.Stopped)
+            {
+                return "File logging is unexpectedly stopped and is not accepting new records.";
+            }
+
+            return "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted.";
+        }
+    }
 
     public bool FileLoggingWhileViewPaused
     {
@@ -2697,6 +2736,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     _ = StopCanceledAutoReconnectAsync();
                 }
             }
+
+            ReleaseSystemSleepBlockerIfNotNeeded();
 
             RecordSettingsChange("Auto reconnect", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             NotifyAutoReconnectPropertiesChanged();
@@ -4158,6 +4199,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
+
+        ReleaseSystemSleepBlockerIfNotNeeded();
+
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
@@ -4271,12 +4316,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _statusTimer.Tick -= OnStatusTimerTick;
 
         await DisconnectAsync();
+        _fileLogAutoRestart.StatusChanged -= OnFileLogAutoRestartStatusChanged;
+        await _fileLogAutoRestart.DisposeAsync();
         await _fileLogWriter.StopAsync(CancellationToken.None);
+        _fileLogWriter.Error -= OnBackgroundError;
+        await RuntimeDiagnostics.CompleteFileWriterIncidentSessionAsync(TimeSpan.FromSeconds(2));
+        _systemSleepBlocker.Dispose();
         _serialService.Error -= OnBackgroundError;
         _serialService.StatusChanged -= OnSerialStatusChanged;
         _logPipeline.Error -= OnBackgroundError;
         _logPipeline.StatusChanged -= OnPipelineStatusChanged;
-        _fileLogWriter.Error -= OnBackgroundError;
         _fileLogWriter.StatusChanged -= OnFileLogStatusChanged;
         _eventDetector.Error -= OnBackgroundError;
         _eventDetector.StatusChanged -= OnEventDetectorStatusChanged;
@@ -6224,6 +6273,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
             IsConnected = true;
+            TryScheduleFileLogRestart();
+            TryAcquireSystemSleepBlocker();
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             ClearPendingReconnectSettings();
@@ -6488,6 +6539,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectAsync(CancellationToken cancellationToken)
     {
+        await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
         Volatile.Write(ref _autoReconnectArmed, 0);
         var reconnectTask = CancelAutoReconnect();
         if (reconnectTask is not null)
@@ -6508,12 +6560,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
+            ReleaseSystemSleepBlockerIfNotNeeded();
             _connectionLifecycleGate.Release();
         }
     }
 
     private async Task DisconnectCoreAsync(CancellationToken cancellationToken, bool updateBusy)
     {
+        if (_fileLogIngress.DeactivateWhileRequested())
+        {
+            NotifyFileLoggingStateChanged();
+        }
+
         if (AutoReconnectPolicy.CanSkipDisconnectCleanup(
                 IsConnected,
                 _connectionCancellation is not null,
@@ -6578,6 +6636,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
             Volatile.Write(ref _autoReconnectSessionServicesPreserved, 0);
             IsConnected = _serialService.IsConnected;
+            ReleaseSystemSleepBlockerIfNotNeeded();
+
             RestartSerialBusUtilizationMeasurement("serial disconnected");
             if (!IsConnected)
             {
@@ -6799,6 +6859,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RuntimeDiagnostics.RecordError("MainViewModel.StopCanceledAutoReconnectAsync", ex);
             NotifyAutoReconnectPropertiesChanged();
         }
+        finally
+        {
+            ReleaseSystemSleepBlockerIfNotNeeded();
+        }
     }
 
     private void TryStartAutoReconnect()
@@ -6924,6 +6988,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _autoReconnectNextDelayText = "(none)";
             IsAutoReconnectRunning = false;
             NotifyAutoReconnectPropertiesChanged();
+            ReleaseSystemSleepBlockerIfNotNeeded();
 
             if (AutoReconnectPolicy.ShouldStart(
                     AutoReconnectEnabled,
@@ -6967,7 +7032,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _connectionCancellation?.Dispose();
         _connectionCancellation = null;
         _observeLogsTask = null;
-        IsConnected = false;
+        IsConnected = _serialService.IsConnected;
+        ReleaseSystemSleepBlockerIfNotNeeded();
         RestartSerialBusUtilizationMeasurement("serial reconnect cleanup");
 
         if (cleanupErrors.Count > 0)
@@ -7003,6 +7069,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             CancellationToken.None);
 
         IsConnected = true;
+        TryScheduleFileLogRestart();
+        TryAcquireSystemSleepBlocker();
         ClearPendingReconnectSettings();
         RecordConnectSucceeded(settings);
         ArmAutoReconnect(settings);
@@ -7936,6 +8004,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RecordTxError($"Send failed: {ex.Message}");
             IsConnected = _serialService.IsConnected;
+            ReleaseSystemSleepBlockerIfNotNeeded();
             return false;
         }
     }
@@ -10349,7 +10418,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 var resumeLine = LogLine.System(completion.Summary);
                 var dropped = _logBatchDispatcher.Post(resumeLine);
                 RecordPendingUiDrops(dropped);
-                if (FileLoggingEnabled && completion.SkippedFromFile > 0)
+                if (completion.SkippedFromFile > 0 &&
+                    _fileLogIngress.ShouldOfferToWriter(fileEligible: true))
                 {
                     _fileLogWriter.TryEnqueue(resumeLine);
                 }
@@ -10373,7 +10443,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             completion = completion with { Summary = failureSummary };
             var failureLine = LogLine.System(failureSummary);
             RecordPendingUiDrops(_logBatchDispatcher.Post(failureLine));
-            if (FileLoggingEnabled && completion.SkippedFromFile > 0)
+            if (completion.SkippedFromFile > 0 &&
+                _fileLogIngress.ShouldOfferToWriter(fileEligible: true))
             {
                 _fileLogWriter.TryEnqueue(failureLine);
             }
@@ -10782,7 +10853,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _connectionLifecycleGate.WaitAsync();
             gateEntered = true;
 
-            if (_currentLogSettings.FileLoggingEnabled == enabled)
+            if (FileLoggingEnabled == enabled)
             {
                 RecordLogToggleAction(enabled ? "Log saving already ON." : "Log saving already OFF.");
                 return;
@@ -10796,27 +10867,40 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     return;
                 }
 
+                await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
+                _fileLogIngress.BeginRequest(
+                    _fileLogWriter.DroppedLineCount,
+                    _fileLogWriter.FileErrorCount);
+                _currentLogSettings.FileLoggingEnabled = true;
+                NotifyFileLoggingStateChanged();
                 var started = true;
                 if (IsConnected)
                 {
                     started = await TryStartFileLoggingAsync(LogSaveDirectory, CancellationToken.None);
                 }
 
+                if (recordSettingChange)
+                {
+                    RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, "ON");
+                }
+
                 if (started)
                 {
-                    _currentLogSettings.FileLoggingEnabled = true;
-                    if (recordSettingChange)
-                    {
-                        RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, "ON");
-                    }
-
-                    RecordLogToggleAction(IsConnected ? "Log saving ON." : "Log saving ON; files open when connected/log lines arrive.");
-                    SetStatus("Log saving ON.");
+                    RecordLogToggleAction(IsConnected
+                        ? "Log saving ON."
+                        : "Log saving armed; the file opens before serial RX on the next connection.");
+                    SetStatus(IsConnected ? "Log saving ON." : "Log saving armed.");
+                }
+                else
+                {
+                    SetStatus(FileLoggingMainStatusText);
                 }
             }
             else
             {
+                _fileLogIngress.EndRequest();
                 _currentLogSettings.FileLoggingEnabled = false;
+                await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
                 if (recordSettingChange)
                 {
                     RecordSettingsChange("Log Save", SettingsApplyBehavior.Immediate, "OFF");
@@ -10852,18 +10936,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             ApplySizeRotationSettings();
-            await _fileLogWriter.StartAsync(directory, cancellationToken);
-            _fileWriterDroppedHealthBaseline = _fileLogWriter.DroppedLineCount;
-            _fileWriterErrorHealthBaseline = _fileLogWriter.FileErrorCount;
+            var activated = await _fileLogIngress.StartAndActivateAsync(
+                async token =>
+                {
+                    await _fileLogWriter.StartAsync(directory, token);
+                    return _fileLogWriter.IsRunning;
+                },
+                cancellationToken);
+            if (!activated)
+            {
+                throw new InvalidOperationException(
+                    "File writer start completed without an active file-ingress boundary.");
+            }
+
             RefreshLogFileActionProperties();
             return true;
         }
         catch (Exception ex)
         {
             await StopFileLoggingAfterFailedStartAsync();
-            _currentLogSettings.FileLoggingEnabled = false;
             RecordLogToggleError($"Log saving ON failed: {ex.Message}");
-            SetStatus("Log saving failed; continuing without file logging.");
+            TryScheduleFileLogRestart();
+            SetStatus(FileLoggingMainStatusText);
             NotifyFileLoggingStateChanged();
             return false;
         }
@@ -11365,11 +11459,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         lock (_viewPauseGate)
         {
+            var ingressActive = _fileLogIngress.IsActive;
             var decision = _viewPause.ClassifyRecord(
                 fileEligible,
-                FileLoggingEnabled,
+                ingressActive,
                 FileLoggingWhileViewPaused);
-            if (decision.EnqueueFile)
+            if (_fileLogIngress.ShouldOfferToWriter(decision.EnqueueFile))
             {
                 _fileLogWriter.TryEnqueue(line);
             }
@@ -11808,6 +11903,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 : _lastSuccessfulSerialSettings.PortName;
             _lastSuccessfulBaudRate = _lastSuccessfulSerialSettings?.BaudRate ?? 0;
             _currentLogSettings = profile.LogSettings.Clone();
+            _fileLogIngress.EndRequest();
             _currentLogSettings.FileLoggingEnabled = false;
             _currentUiSettings = profile.UiSettings.Clone();
             _hexGroupTimeoutDraftText = _currentUiSettings.HexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
@@ -11999,6 +12095,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(IsTxLineEndingEffective));
         OnPropertyChanged(nameof(TxLineEndingToolTip));
         OnPropertyChanged(nameof(FileLoggingEnabled));
+        OnPropertyChanged(nameof(FileLoggingIngressActive));
         OnPropertyChanged(nameof(FileLoggingActive));
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
@@ -12083,6 +12180,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void RefreshLogFileActionProperties()
     {
         OnPropertyChanged(nameof(FileLoggingEnabled));
+        OnPropertyChanged(nameof(FileLoggingIngressActive));
         OnPropertyChanged(nameof(FileLoggingActive));
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
@@ -12248,9 +12346,119 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         };
     }
 
+    private void TryAcquireSystemSleepBlocker()
+    {
+        try
+        {
+            _systemSleepBlocker.Acquire("Serial Monitor is capturing a long-running device session.");
+            ClearActiveBackgroundHealthError(SystemSleepBlockerHealthKey);
+        }
+        catch (Exception ex)
+        {
+            var message = $"Could not prevent Windows automatic sleep: {ex.Message}";
+            _lastBackgroundError = message;
+            SetActiveBackgroundHealthError(SystemSleepBlockerHealthKey, message);
+            RuntimeDiagnostics.RecordError("MainViewModel.SystemSleepBlocker", ex);
+        }
+    }
+
+    private bool ShouldAutoRestartFileLogging() => FileLogAutoRestartPolicy.ShouldRetry(
+        FileLoggingEnabled,
+        _serialService.IsConnected ||
+        (AutoReconnectEnabled && Volatile.Read(ref _autoReconnectArmed) != 0),
+        Volatile.Read(ref _shutdownStarted) != 0,
+        _fileLogWriter.State,
+        _fileLogWriter.CanAutoRecover);
+
+    private void TryScheduleFileLogRestart()
+    {
+        if (ShouldAutoRestartFileLogging())
+        {
+            _fileLogAutoRestart.RequestRetry();
+        }
+    }
+
+    private async Task<bool> TryAutoRestartFileLoggingAsync(CancellationToken cancellationToken)
+    {
+        var gateEntered = false;
+        try
+        {
+            await _connectionLifecycleGate.WaitAsync(cancellationToken);
+            gateEntered = true;
+            if (!ShouldAutoRestartFileLogging())
+            {
+                return false;
+            }
+
+            ApplySizeRotationSettings();
+            var activated = await _fileLogIngress.StartAndActivateAsync(
+                async token =>
+                {
+                    await _fileLogWriter.StartAsync(LogSaveDirectory, token);
+                    return _fileLogWriter.IsRunning;
+                },
+                cancellationToken);
+            if (!activated)
+            {
+                return false;
+            }
+
+            RunOnUiThread(() =>
+            {
+                RecordLogToggleAction("File logging automatically restarted after a retryable fault.");
+                SetStatus("Log saving recovered and is running.");
+                NotifyFileLoggingStateChanged();
+            });
+            return _fileLogWriter.State == FileLogWriterState.Running;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainViewModel.FileLogAutoRestart", ex);
+            RunOnUiThread(() =>
+            {
+                _lastBackgroundError = $"File logging automatic restart failed: {ex.Message}";
+                SetStatus(FileLoggingMainStatusText);
+                NotifyFileLoggingStateChanged();
+            });
+            return false;
+        }
+        finally
+        {
+            if (gateEntered)
+            {
+                _connectionLifecycleGate.Release();
+            }
+        }
+    }
+
+    private void OnFileLogAutoRestartStatusChanged(object? sender, EventArgs args)
+    {
+        Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private bool ShouldKeepSystemAwake() =>
+        SystemAwakePolicy.ShouldKeepSystemAwake(
+            _serialService.IsConnected,
+            AutoReconnectEnabled,
+            Volatile.Read(ref _autoReconnectArmed) != 0,
+            IsAutoReconnectRunning,
+            Volatile.Read(ref _shutdownStarted) != 0);
+
+    private void ReleaseSystemSleepBlockerIfNotNeeded() =>
+        _systemSleepBlocker.ReleaseIfDisconnected(ShouldKeepSystemAwake);
+
     private void OnBackgroundError(object? sender, string message)
     {
         SetActiveBackgroundHealthError(sender, message);
+        if (ReferenceEquals(sender, _fileLogWriter))
+        {
+            RuntimeDiagnostics.RecordFileWriterIncident(message);
+        }
+
         RunOnUiThread(() =>
         {
             _lastBackgroundError = message;
@@ -12336,9 +12544,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
-        if (_serialService.IsConnected && string.IsNullOrWhiteSpace(_serialService.LastError))
+        ReleaseSystemSleepBlockerIfNotNeeded();
+        var serialIsConnected = _serialService.IsConnected;
+        if (serialIsConnected && string.IsNullOrWhiteSpace(_serialService.LastError))
         {
             ClearActiveBackgroundHealthError(_serialService);
+        }
+
+        if (serialIsConnected)
+        {
+            TryScheduleFileLogRestart();
         }
 
         var successfulSettings = _lastSuccessfulSerialSettings;
@@ -12358,7 +12573,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             });
         }
 
-        if (!_serialService.IsConnected &&
+        if (!serialIsConnected &&
             _bridgeService.IsRunning &&
             Interlocked.CompareExchange(ref _bridgeStopForSerialDisconnectRunning, 1, 0) == 0)
         {
@@ -12443,6 +12658,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             ClearActiveBackgroundHealthError(_fileLogWriter);
         }
+
+        var writtenLineCount = _fileLogWriter.WrittenLineCount;
+        if (_fileLogWriter.State == FileLogWriterState.Running &&
+            writtenLineCount > Interlocked.Read(ref _lastFileWriterDurableCount))
+        {
+            Interlocked.Exchange(ref _lastFileWriterDurableCount, writtenLineCount);
+            _fileLogAutoRestart.MarkDurableProgress();
+        }
+
+        TryScheduleFileLogRestart();
 
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
@@ -12529,8 +12754,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (backgroundStatusChanged)
         {
             IsConnected = _serialService.IsConnected;
+            ReleaseSystemSleepBlockerIfNotNeeded();
             OnPropertyChanged(nameof(ConnectionStateText));
             OnPropertyChanged(nameof(CompactConnectionStatusText));
+            NotifyFileLoggingStateChanged();
             NotifyBridgePropertiesChanged();
         }
 
@@ -12669,17 +12896,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string CreateLogFileStatusText()
     {
-        if (!FileLoggingEnabled)
-        {
-            return "File OFF";
-        }
-
-        if (!string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath))
-        {
-            return $"File ON {Path.GetFileName(_fileLogWriter.CurrentLogFilePath)}";
-        }
-
-        return "File ON waiting";
+        return FileLogStatusPresentation.CreateCompactStatus(
+            FileLoggingEnabled,
+            _fileLogWriter.State,
+            _fileLogAutoRestart.IsRetrying,
+            _fileLogWriter.CurrentLogFilePath,
+            FileLoggingIngressActive);
     }
 
     private void RefreshHealthSummary()
@@ -12692,6 +12914,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             hasError = true;
             reasons.Add($"Active background error: {backgroundError}");
+        }
+
+        if (FileLoggingEnabled && _fileLogWriter.State == FileLogWriterState.Faulted)
+        {
+            hasError = true;
+            reasons.Add(_fileLogAutoRestart.IsRetrying
+                ? $"File writer FAULTED; automatic retry active: {_fileLogWriter.LastFault?.Message}"
+                : $"File writer FAULTED: {_fileLogWriter.LastFault?.Message}");
         }
 
         if (!string.IsNullOrWhiteSpace(_lastRuntimeError) &&
@@ -12708,9 +12938,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             reasons.Add($"Missing mock sequences: {MockMissingSequenceCount:N0}");
         }
 
-        var fileWriterDroppedSinceBaseline = Math.Max(
-            0,
-            _fileLogWriter.DroppedLineCount - _fileWriterDroppedHealthBaseline);
+        var fileWriterDroppedSinceBaseline = _fileLogIngress.GetDroppedLineCountSinceRequest(
+            _fileLogWriter.DroppedLineCount);
         if (FileLoggingEnabled && fileWriterDroppedSinceBaseline > 0)
         {
             hasError = true;
@@ -12735,9 +12964,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             reasons.Add($"xterm append errors: {XtermAppendErrorCount:N0}");
         }
 
-        var fileWriterErrorsSinceBaseline = Math.Max(
-            0,
-            _fileLogWriter.FileErrorCount - _fileWriterErrorHealthBaseline);
+        var fileWriterErrorsSinceBaseline = _fileLogIngress.GetFileErrorCountSinceRequest(
+            _fileLogWriter.FileErrorCount);
         if (FileLoggingEnabled && fileWriterErrorsSinceBaseline > 0)
         {
             hasError = true;
@@ -13216,7 +13444,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void NotifyFileLoggingStateChanged()
     {
         OnPropertyChanged(nameof(FileLoggingEnabled));
+        OnPropertyChanged(nameof(FileLoggingIngressActive));
         OnPropertyChanged(nameof(FileLoggingActive));
+        OnPropertyChanged(nameof(FileLoggingWriterState));
+        OnPropertyChanged(nameof(IsFileLoggingRetrying));
+        OnPropertyChanged(nameof(FileLoggingFaultText));
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
