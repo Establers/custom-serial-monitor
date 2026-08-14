@@ -278,6 +278,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static readonly TimeSpan RecentRuntimeHealthErrorDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ViewPauseDrainTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan EstablishedSessionDrainTimeout = TimeSpan.FromSeconds(30);
     private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
         new[] { "0.10", "0.20", "0.25", "0.30", "0.40", "0.50" };
 
@@ -302,6 +303,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly object _backgroundHealthErrorGate = new();
     private readonly Dictionary<string, string> _activeBackgroundHealthErrors = new(StringComparer.Ordinal);
     private readonly SystemSleepBlocker _systemSleepBlocker = new();
+    private readonly AutoReconnectArmState _autoReconnectArmState = new();
     private readonly FileLogIngressCoordinator _fileLogIngress = new();
     private readonly FileLogAutoRestartCoordinator _fileLogAutoRestart;
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
@@ -313,7 +315,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly ViewPauseStateMachine _viewPause = new();
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
     private readonly Queue<Guid> _eventContextOrder = new();
-    private CancellationTokenSource? _connectionCancellation;
+    // Connect-attempt cancellation preempts a native Open while the established
+    // session token is reserved for forced-abort cleanup. Normal disconnect
+    // drains channel completion without canceling the established token.
+    private CancellationTokenSource? _connectAttemptCancellation;
+    private CancellationTokenSource? _establishedSessionCancellation;
     private CancellationTokenSource? _autoReconnectCancellation;
     private Task? _autoReconnectTask;
     private Task? _observeLogsTask;
@@ -324,7 +330,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task? _observeEventContextsTask;
     private Task? _startupProfileTask;
     private int _bridgeStopForSerialDisconnectRunning;
-    private int _autoReconnectArmed;
     private int _autoReconnectStartQueued;
     private int _autoReconnectSessionServicesPreserved;
     private long _pendingLogDropCount;
@@ -377,6 +382,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _isFullXtermRerenderInProgress;
     private string _lastFullXtermRerenderReason = "(none)";
     private int _lastFullXtermRerenderLineCount;
+    private long _lastFullXtermRerenderCharacterCount;
+    private int _lastFullXtermTransportChunkCount;
     private string _lastFullXtermRerenderDurationText = "(none)";
     private bool _lastFullXtermScrollRestoreAttempted;
     private string _lastFullXtermFinalScrollAction = "(none)";
@@ -2725,11 +2732,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings.AutoReconnectEnabled = value;
             if (value && IsConnected && !CurrentPortIsMock)
             {
-                Volatile.Write(ref _autoReconnectArmed, 1);
+                _autoReconnectArmState.SetForEstablishedUserSession(shouldArm: true);
             }
             else if (!value)
             {
-                Volatile.Write(ref _autoReconnectArmed, 0);
+                _autoReconnectArmState.Disarm();
                 if (IsAutoReconnectRunning)
                 {
                     _autoReconnectCancellation?.Cancel();
@@ -3249,6 +3256,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string LastFullXtermRerenderReason => _lastFullXtermRerenderReason;
 
     public int LastFullXtermRerenderLineCount => Volatile.Read(ref _lastFullXtermRerenderLineCount);
+
+    public long LastFullXtermRerenderCharacterCount => Interlocked.Read(ref _lastFullXtermRerenderCharacterCount);
+
+    public int LastFullXtermTransportChunkCount => Volatile.Read(ref _lastFullXtermTransportChunkCount);
+
+    public string LastFullXtermRerenderWorkloadText => IsFullXtermRerenderInProgress
+        ? "(pending)"
+        : $"{LastFullXtermRerenderLineCount:N0} lines · " +
+          $"{LastFullXtermRerenderCharacterCount:N0} chars · " +
+          $"{LastFullXtermTransportChunkCount:N0} chunks · " +
+          LastFullXtermRerenderDurationText;
 
     public string LastFullXtermRerenderDurationText => _lastFullXtermRerenderDurationText;
 
@@ -4199,6 +4217,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        // Preempt OS Open() waits and quiesce the current bridge/RX producers
+        // before shutdown can queue behind a lifecycle owner.
+        _serialService.CancelPendingConnect();
+        _bridgeService.BeginStop();
+        CancelConnectAttempt();
+        _serialService.BeginDisconnect();
         await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
 
         ReleaseSystemSleepBlockerIfNotNeeded();
@@ -5995,7 +6019,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _currentBridgeSettings.Clone(),
                 CreateCurrentSettings(),
                 ForwardBridgeBytesToDeviceAsync,
-                _connectionCancellation?.Token ?? CancellationToken.None);
+                _establishedSessionCancellation?.Token ?? CancellationToken.None,
+                _serialService.ReceiveSessionGeneration);
             ClearActiveBackgroundHealthError(_bridgeService);
             ClearActiveBackgroundHealthError(_bridgeLogProcessor);
             _serialService.SetRawBridgePriorityEnabled(true);
@@ -6115,7 +6140,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ConnectAsync()
     {
-        Volatile.Write(ref _autoReconnectArmed, 0);
+        _autoReconnectArmState.Disarm();
         await _connectionLifecycleGate.WaitAsync();
         try
         {
@@ -6232,15 +6257,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         IsBusy = true;
+        CancellationTokenSource? connectAttempt = null;
         RecordConnectRequested(settings);
         try
         {
-            if (_connectionCancellation is not null && !IsConnected)
+            if (_establishedSessionCancellation is not null && !IsConnected)
             {
                 await DisconnectCoreAsync(CancellationToken.None, updateBusy: false);
+                if (_establishedSessionCancellation is not null)
+                {
+                    throw new InvalidOperationException(
+                        "The previous serial session is still draining; a new connection cannot start yet.");
+                }
             }
 
-            _connectionCancellation = new CancellationTokenSource();
+            _establishedSessionCancellation = new CancellationTokenSource();
+            var establishedSessionToken = _establishedSessionCancellation.Token;
+            connectAttempt = new CancellationTokenSource();
+            _connectAttemptCancellation = connectAttempt;
             ApplySizeRotationSettings();
             ApplySessionFileNaming(requestNewFile: false);
             if (FileLoggingEnabled)
@@ -6256,15 +6290,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _serialService.ConnectAsync(
                 settings,
                 CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
-                _connectionCancellation.Token);
+                connectAttempt.Token);
+            CompleteConnectAttempt(connectAttempt);
             ApplyRxDisplayRuntime(
                 requestedRxDisplayMode,
                 requestedHexGroupTimeoutMs,
                 "serial connection mode applied");
-            await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
+            await _logPipeline.StartAsync(
+                _serialService.ReceivedBytes,
+                settings,
+                establishedSessionToken);
             ClearActiveBackgroundHealthError(_logPipeline);
             ClearActiveBackgroundHealthError(LogObserverHealthKey);
-            _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
+            _observeLogsTask = Task.Run(
+                () => ObserveLogsAsync(establishedSessionToken),
+                CancellationToken.None);
             ClearActiveBackgroundHealthError(EventObserverHealthKey);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
             ClearActiveBackgroundHealthError(SequenceTriggerObserverHealthKey);
@@ -6272,15 +6312,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ClearActiveBackgroundHealthError(EventContextObserverHealthKey);
             _observeEventContextsTask = Task.Run(() => ObserveEventContextsAsync(CancellationToken.None), CancellationToken.None);
 
+            RememberSuccessfulSettingsForReconnect(settings);
+            ArmAutoReconnect(settings);
+            if (HandleManualConnectionStartupFault(settings))
+            {
+                return;
+            }
+
             IsConnected = true;
             TryScheduleFileLogRestart();
             TryAcquireSystemSleepBlocker();
             OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             ClearPendingReconnectSettings();
-            RecordConnectSucceeded(settings);
-            ArmAutoReconnect(settings);
             RestartSerialBusUtilizationMeasurement("serial connection started");
+            if (HandleManualConnectionStartupFault(settings))
+            {
+                return;
+            }
+
+            RecordConnectSucceeded(settings);
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
             SetFooter(CreateFooterStatus());
         }
@@ -6302,6 +6353,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
+            if (connectAttempt is not null)
+            {
+                CompleteConnectAttempt(connectAttempt);
+            }
+
             IsBusy = false;
         }
     }
@@ -6368,7 +6424,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _lastConnectFailureTimeText = "(none)";
         _selectedPortAfterConnectFailure = "(none)";
         _serialConnectionErrorHealthBaseline = _serialService.ConnectionErrorCount;
-        ClearActiveBackgroundHealthError(_serialService);
+        if (_serialService.ConnectionState == SerialConnectionState.Connected &&
+            string.IsNullOrWhiteSpace(_serialService.LastError))
+        {
+            ClearActiveBackgroundHealthError(_serialService);
+        }
         NotifyConnectDiagnosticsChanged();
         NotifyPortSelectionDiagnosticsChanged();
         RefreshStatusBar();
@@ -6539,42 +6599,55 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
-        Volatile.Write(ref _autoReconnectArmed, 0);
+        // These calls are synchronous cancellation signals only. They must run
+        // before waiting for reconnect tasks or the lifecycle gate so a blocked
+        // native Open() cannot hold disconnect/shutdown hostage.
+        _serialService.CancelPendingConnect();
+        _bridgeService.BeginStop();
+        CancelConnectAttempt();
+        _autoReconnectArmState.Disarm();
         var reconnectTask = CancelAutoReconnect();
+        // Establish the producer boundary before waiting for a reconnect task
+        // or lifecycle owner. This is nonblocking and guarantees that anything
+        // already accepted remains in the completed channel for natural drain.
+        _serialService.BeginDisconnect();
+        await _fileLogAutoRestart.CancelAsync(resetAttempts: true);
+
+        var lifecycleEntered = false;
+        try
+        {
+            await _connectionLifecycleGate.WaitAsync(cancellationToken);
+            lifecycleEntered = true;
+            await DisconnectCoreAsync(cancellationToken, updateBusy: true);
+        }
+        finally
+        {
+            ReleaseSystemSleepBlockerIfNotNeeded();
+            if (lifecycleEntered)
+            {
+                _connectionLifecycleGate.Release();
+            }
+        }
+
         if (reconnectTask is not null)
         {
             try
             {
                 await reconnectTask.WaitAsync(cancellationToken);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
+                // The producer boundary and serialized session cleanup above
+                // have already completed or reported their bounded failures.
             }
-        }
-
-        await _connectionLifecycleGate.WaitAsync(cancellationToken);
-        try
-        {
-            await DisconnectCoreAsync(cancellationToken, updateBusy: true);
-        }
-        finally
-        {
-            ReleaseSystemSleepBlockerIfNotNeeded();
-            _connectionLifecycleGate.Release();
         }
     }
 
     private async Task DisconnectCoreAsync(CancellationToken cancellationToken, bool updateBusy)
     {
-        if (_fileLogIngress.DeactivateWhileRequested())
-        {
-            NotifyFileLoggingStateChanged();
-        }
-
         if (AutoReconnectPolicy.CanSkipDisconnectCleanup(
                 IsConnected,
-                _connectionCancellation is not null,
+                _establishedSessionCancellation is not null,
                 _serialService.ConnectionState,
                 Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0))
         {
@@ -6589,51 +6662,63 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         var selectedPortBeforeDisconnect = SelectedPort;
         var settingsBeforeDisconnect = CreateCurrentSettings();
         var cleanupErrors = new List<string>();
+        using var cleanupCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cleanupCancellation.CancelAfter(EstablishedSessionDrainTimeout);
+        var cleanupToken = cleanupCancellation.Token;
         try
         {
             _sequenceCancellation?.Cancel();
+            // Stop RX publication and complete the input channel before any
+            // potentially slow native/bridge cleanup. Already accepted chunks
+            // remain available to the pipeline.
+            _serialService.BeginDisconnect();
             if (IsSequenceRunning)
             {
-                await RunDisconnectCleanupAsync("Command sequence stop", () => WaitForSequenceStopAsync(cancellationToken), cleanupErrors);
+                await RunDisconnectCleanupAsync("Command sequence stop", () => WaitForSequenceStopAsync(cleanupToken), cleanupErrors);
             }
 
-            await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: true, cancellationToken), cleanupErrors);
+            await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: true, cleanupToken), cleanupErrors);
 
-            _connectionCancellation?.Cancel();
-            await RunDisconnectCleanupAsync("Log pipeline stop", () => _logPipeline.StopAsync(cancellationToken), cleanupErrors);
-            await RunDisconnectCleanupAsync("Serial disconnect", () => _serialService.DisconnectAsync(cancellationToken), cleanupErrors);
+            await RunDisconnectCleanupAsync(
+                "Serial producer stop",
+                () => _serialService.DisconnectAsync(cleanupToken),
+                cleanupErrors);
+            await RunDisconnectCleanupAsync(
+                "Log pipeline drain",
+                () => _logPipeline.StopAsync(cleanupToken),
+                cleanupErrors);
 
             if (_observeLogsTask is not null)
             {
-                await RunDisconnectCleanupAsync("Log observer stop", () => _observeLogsTask.WaitAsync(cancellationToken), cleanupErrors);
+                await RunDisconnectCleanupAsync("Log observer drain", () => _observeLogsTask.WaitAsync(cleanupToken), cleanupErrors);
             }
 
-            await RunDisconnectCleanupAsync("Event detector stop", () => _eventDetector.StopAsync(cancellationToken), cleanupErrors);
+            await RunDisconnectCleanupAsync("Event detector drain", () => _eventDetector.StopAsync(cleanupToken), cleanupErrors);
             if (_observeEventsTask is not null)
             {
-                await RunDisconnectCleanupAsync("Event observer stop", () => _observeEventsTask.WaitAsync(cancellationToken), cleanupErrors);
+                await RunDisconnectCleanupAsync("Event observer drain", () => _observeEventsTask.WaitAsync(cleanupToken), cleanupErrors);
             }
 
             if (_observeSequenceTriggersTask is not null)
             {
                 await RunDisconnectCleanupAsync(
-                    "Sequence trigger observer stop",
-                    () => _observeSequenceTriggersTask.WaitAsync(cancellationToken),
+                    "Sequence trigger observer drain",
+                    () => _observeSequenceTriggersTask.WaitAsync(cleanupToken),
                     cleanupErrors);
             }
 
             if (_observeEventContextsTask is not null)
             {
-                await RunDisconnectCleanupAsync("Event context observer stop", () => _observeEventContextsTask.WaitAsync(cancellationToken), cleanupErrors);
+                await RunDisconnectCleanupAsync("Event context observer drain", () => _observeEventContextsTask.WaitAsync(cleanupToken), cleanupErrors);
             }
 
-            _connectionCancellation?.Dispose();
-            _connectionCancellation = null;
-            _observeLogsTask = null;
-            _observeEventsTask = null;
-            _observeSequenceTriggersTask = null;
-            _observeEventContextsTask = null;
-            await RunDisconnectCleanupAsync("File writer stop", () => _fileLogWriter.StopAsync(cancellationToken), cleanupErrors);
+            FinalizeEstablishedSessionAfterDrain(cleanupErrors);
+            if (_fileLogIngress.DeactivateWhileRequested())
+            {
+                NotifyFileLoggingStateChanged();
+            }
+
+            await RunDisconnectCleanupAsync("File writer drain", () => _fileLogWriter.StopAsync(cleanupToken), cleanupErrors);
             Volatile.Write(ref _autoReconnectSessionServicesPreserved, 0);
             IsConnected = _serialService.IsConnected;
             ReleaseSystemSleepBlockerIfNotNeeded();
@@ -6724,7 +6809,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 VerifyMockSequence(line);
                 if (line.IsPartialRxTerminator)
                 {
-                    FanOutLogLine(line, fileEligible: false, detectEvent: false);
+                    FanOutLogLine(line, fileEligible: true, detectEvent: false);
                     continue;
                 }
 
@@ -6742,6 +6827,111 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             SetStatus(_lastBackgroundError);
             RunOnUiThread(RefreshStatusBar);
         }
+    }
+
+    private void CancelConnectAttempt()
+    {
+        var cancellation = Volatile.Read(ref _connectAttemptCancellation);
+        try
+        {
+            cancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void CompleteConnectAttempt(CancellationTokenSource cancellation)
+    {
+        if (!ReferenceEquals(
+                Interlocked.CompareExchange(ref _connectAttemptCancellation, null, cancellation),
+                cancellation))
+        {
+            return;
+        }
+
+        cancellation.Dispose();
+    }
+
+    private void FinalizeEstablishedSessionAfterDrain(ICollection<string> cleanupErrors)
+    {
+        var incompleteStages = new List<string>(capacity: 6);
+        if (_logPipeline.IsRunning)
+        {
+            incompleteStages.Add("log pipeline");
+        }
+
+        AddIncompleteStage(_observeLogsTask, "log observer", incompleteStages);
+        if (_eventDetector.IsRunning)
+        {
+            incompleteStages.Add("event detector");
+        }
+
+        AddIncompleteStage(_observeEventsTask, "event observer", incompleteStages);
+        AddIncompleteStage(_observeSequenceTriggersTask, "sequence-trigger observer", incompleteStages);
+        AddIncompleteStage(_observeEventContextsTask, "event-context observer", incompleteStages);
+
+        if (incompleteStages.Count > 0)
+        {
+            ForceAbortEstablishedSession(
+                cleanupErrors,
+                $"Established-session drain did not complete ({string.Join(", ", incompleteStages)}); " +
+                "forced abort was requested and an accepted tail may not have reached every downstream consumer.");
+            return;
+        }
+
+        DisposeEstablishedSessionOwnership();
+        _observeLogsTask = null;
+        _observeEventsTask = null;
+        _observeSequenceTriggersTask = null;
+        _observeEventContextsTask = null;
+    }
+
+    private void FinalizeTransportSessionAfterDrain(ICollection<string> cleanupErrors)
+    {
+        if (_logPipeline.IsRunning ||
+            (_observeLogsTask is not null && !_observeLogsTask.IsCompleted))
+        {
+            ForceAbortEstablishedSession(
+                cleanupErrors,
+                "Automatic-reconnect transport drain did not complete; forced abort was requested and " +
+                "the next transport session is blocked until the previous observer exits.");
+            return;
+        }
+
+        DisposeEstablishedSessionOwnership();
+        _observeLogsTask = null;
+    }
+
+    private static void AddIncompleteStage(Task? task, string name, ICollection<string> stages)
+    {
+        if (task is not null && !task.IsCompleted)
+        {
+            stages.Add(name);
+        }
+    }
+
+    private void ForceAbortEstablishedSession(ICollection<string> cleanupErrors, string message)
+    {
+        cleanupErrors.Add(message);
+        RuntimeDiagnostics.RecordError(
+            "MainViewModel.EstablishedSessionDrain",
+            new TimeoutException(message));
+
+        _logPipeline.Abort();
+        try
+        {
+            _establishedSessionCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void DisposeEstablishedSessionOwnership()
+    {
+        var cancellation = Interlocked.Exchange(ref _establishedSessionCancellation, null);
+        cancellation?.Dispose();
     }
 
     private async Task ObserveEventsAsync(CancellationToken cancellationToken)
@@ -6817,8 +7007,114 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ArmAutoReconnect(SerialSettings settings)
     {
         var shouldArm = AutoReconnectEnabled && !IsMockPortName(settings.PortName);
-        Volatile.Write(ref _autoReconnectArmed, shouldArm ? 1 : 0);
+        _autoReconnectArmState.SetForEstablishedUserSession(shouldArm);
         NotifyAutoReconnectPropertiesChanged();
+    }
+
+    private void RememberSuccessfulSettingsForReconnect(SerialSettings settings)
+    {
+        // ConnectAsync has committed the port by this point. Publish the full
+        // "connected" diagnostics only after the post-arm state check, but
+        // retain these settings now so an immediately faulted receiver has a
+        // target for the catch-up reconnect request.
+        _lastSuccessfulSerialSettings = settings.Clone();
+    }
+
+    private bool HandleManualConnectionStartupFault(SerialSettings settings)
+    {
+        var connectionState = _serialService.ConnectionState;
+        if (connectionState == SerialConnectionState.Connected)
+        {
+            return false;
+        }
+
+        IsConnected = false;
+        PreserveSerialStartupFaultHealth(connectionState);
+        QueueAutoReconnectStartIfEligible();
+        SetFooter(CreateFooterStatus());
+
+        if (AutoReconnectPolicy.ShouldStart(
+                AutoReconnectEnabled,
+                _autoReconnectArmState.IsArmed,
+                IsMockPortName(settings.PortName),
+                Volatile.Read(ref _shutdownStarted) != 0,
+                connectionState))
+        {
+            return true;
+        }
+
+        throw CreateSerialStartupException(settings, connectionState);
+    }
+
+    private void EnsureAutoReconnectTransportStarted(SerialSettings settings)
+    {
+        var connectionState = _serialService.ConnectionState;
+        if (connectionState == SerialConnectionState.Connected)
+        {
+            return;
+        }
+
+        IsConnected = false;
+        PreserveSerialStartupFaultHealth(connectionState);
+        throw CreateSerialStartupException(settings, connectionState);
+    }
+
+    private void PreserveSerialStartupFaultHealth(SerialConnectionState connectionState)
+    {
+        var error = _serialService.LastError;
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            SetActiveBackgroundHealthError(_serialService, error);
+            return;
+        }
+
+        SetActiveBackgroundHealthError(
+            _serialService,
+            $"Serial transport entered {connectionState} during connection startup.");
+    }
+
+    private InvalidOperationException CreateSerialStartupException(
+        SerialSettings settings,
+        SerialConnectionState connectionState)
+    {
+        var detail = string.IsNullOrWhiteSpace(_serialService.LastError)
+            ? connectionState.ToString()
+            : _serialService.LastError;
+        return new InvalidOperationException(
+            $"Serial transport for {settings.PortName} did not remain connected: {detail}");
+    }
+
+    private void QueueAutoReconnectStartIfEligible()
+    {
+        var successfulSettings = _lastSuccessfulSerialSettings;
+        if (successfulSettings is null)
+        {
+            return;
+        }
+
+        if (!AutoReconnectPolicy.ShouldStart(
+                _currentUiSettings.AutoReconnectEnabled,
+                _autoReconnectArmState.IsArmed,
+                IsMockPortName(successfulSettings.PortName),
+                Volatile.Read(ref _shutdownStarted) != 0,
+                _serialService.ConnectionState) ||
+            Interlocked.CompareExchange(ref _autoReconnectStartQueued, 1, 0) != 0)
+        {
+            return;
+        }
+
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                IsConnected = _serialService.IsConnected;
+                TryStartAutoReconnect();
+            }
+            finally
+            {
+                Volatile.Write(ref _autoReconnectStartQueued, 0);
+            }
+        });
     }
 
     private Task? CancelAutoReconnect()
@@ -6845,7 +7141,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             if (!IsConnected &&
-                (_connectionCancellation is not null ||
+                (_establishedSessionCancellation is not null ||
                     Volatile.Read(ref _autoReconnectSessionServicesPreserved) != 0))
             {
                 await DisconnectAsync();
@@ -6872,7 +7168,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             (_autoReconnectTask is not null && !_autoReconnectTask.IsCompleted) ||
             !AutoReconnectPolicy.ShouldStart(
                 AutoReconnectEnabled,
-                Volatile.Read(ref _autoReconnectArmed) != 0,
+                _autoReconnectArmState.IsArmed,
                 IsMockPortName(settings.PortName),
                 Volatile.Read(ref _shutdownStarted) != 0,
                 _serialService.ConnectionState))
@@ -6883,6 +7179,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (IsSequenceRunning)
         {
             _ = StopCommandSequenceAsync();
+        }
+
+        var ownership = _autoReconnectArmState.CaptureOwnership();
+        if (!ownership.WasArmed)
+        {
+            return;
         }
 
         var cancellation = new CancellationTokenSource();
@@ -6896,12 +7198,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             $"Unexpected disconnect from {settings.PortName}; automatic reconnect started.");
         SetStatus($"{settings.PortName} disconnected unexpectedly. Reconnecting in 1 s...");
         NotifyAutoReconnectPropertiesChanged();
-        _autoReconnectTask = RunAutoReconnectLoopAsync(settings, cancellation);
+        _autoReconnectTask = RunAutoReconnectLoopAsync(settings, cancellation, ownership);
     }
 
     private async Task RunAutoReconnectLoopAsync(
         SerialSettings settings,
-        CancellationTokenSource runCancellation)
+        CancellationTokenSource runCancellation,
+        AutoReconnectOwnership ownership)
     {
         var cancellationToken = runCancellation.Token;
         var reconnected = false;
@@ -6932,6 +7235,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     cancellationToken.ThrowIfCancellationRequested();
                     RecordConnectRequested(settings);
                     await StartTransportForAutoReconnectAsync(settings, cancellationToken);
+                    EnsureAutoReconnectTransportStarted(settings);
+
+                    if (!_autoReconnectArmState.TryCommitAutomaticReconnect(ownership))
+                    {
+                        // Manual disconnect/disable won the ownership race.
+                        // Do not publish success; retire the just-opened
+                        // transport while this attempt still owns the gate.
+                        await CleanupTransportForAutoReconnectAsync(CancellationToken.None);
+                        return;
+                    }
 
                     reconnected = true;
                     Interlocked.Increment(ref _autoReconnectSuccessCount);
@@ -6992,7 +7305,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             if (AutoReconnectPolicy.ShouldStart(
                     AutoReconnectEnabled,
-                    Volatile.Read(ref _autoReconnectArmed) != 0,
+                    _autoReconnectArmState.IsArmed,
                     IsMockPortName(settings.PortName),
                     Volatile.Read(ref _shutdownStarted) != 0,
                     _serialService.ConnectionState))
@@ -7005,33 +7318,34 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task CleanupTransportForAutoReconnectAsync(CancellationToken cancellationToken)
     {
         var cleanupErrors = new List<string>();
+        using var cleanupCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cleanupCancellation.CancelAfter(EstablishedSessionDrainTimeout);
+        var cleanupToken = cleanupCancellation.Token;
         _sequenceCancellation?.Cancel();
+        _serialService.BeginDisconnect();
         await RunDisconnectCleanupAsync(
             "Serial bridge stop for reconnect",
-            () => StopBridgeCoreAsync(disableRequested: true, cancellationToken),
+            () => StopBridgeCoreAsync(disableRequested: true, cleanupToken),
             cleanupErrors);
 
-        _connectionCancellation?.Cancel();
         await RunDisconnectCleanupAsync(
-            "Log pipeline stop for reconnect",
-            () => _logPipeline.StopAsync(cancellationToken),
+            "Serial producer stop for reconnect",
+            () => _serialService.DisconnectAsync(cleanupToken),
             cleanupErrors);
         await RunDisconnectCleanupAsync(
-            "Serial disconnect for reconnect",
-            () => _serialService.DisconnectAsync(cancellationToken),
+            "Log pipeline drain for reconnect",
+            () => _logPipeline.StopAsync(cleanupToken),
             cleanupErrors);
 
         if (_observeLogsTask is not null)
         {
             await RunDisconnectCleanupAsync(
                 "Log observer stop for reconnect",
-                () => _observeLogsTask.WaitAsync(cancellationToken),
+                () => _observeLogsTask.WaitAsync(cleanupToken),
                 cleanupErrors);
         }
 
-        _connectionCancellation?.Dispose();
-        _connectionCancellation = null;
-        _observeLogsTask = null;
+        FinalizeTransportSessionAfterDrain(cleanupErrors);
         IsConnected = _serialService.IsConnected;
         ReleaseSystemSleepBlockerIfNotNeeded();
         RestartSerialBusUtilizationMeasurement("serial reconnect cleanup");
@@ -7039,6 +7353,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (cleanupErrors.Count > 0)
         {
             _lastAutoReconnectError = string.Join(" ", cleanupErrors);
+            throw new InvalidOperationException(_lastAutoReconnectError);
         }
     }
 
@@ -7046,14 +7361,30 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
+        if (_establishedSessionCancellation is not null)
+        {
+            throw new InvalidOperationException(
+                "The previous serial transport session has not finished draining.");
+        }
+
         var requestedRxDisplayMode = NormalizeRxDisplayMode(SelectedRxDisplayMode);
         var requestedHexGroupTimeoutMs = HexGroupTimeoutMs;
-        _connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _establishedSessionCancellation = new CancellationTokenSource();
+        var establishedSessionToken = _establishedSessionCancellation.Token;
+        var connectAttempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _connectAttemptCancellation = connectAttempt;
 
-        await _serialService.ConnectAsync(
-            settings,
-            CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
-            _connectionCancellation.Token);
+        try
+        {
+            await _serialService.ConnectAsync(
+                settings,
+                CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
+                connectAttempt.Token);
+        }
+        finally
+        {
+            CompleteConnectAttempt(connectAttempt);
+        }
         ApplyRxDisplayRuntime(
             requestedRxDisplayMode,
             requestedHexGroupTimeoutMs,
@@ -7061,22 +7392,23 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await _logPipeline.StartAsync(
             _serialService.ReceivedBytes,
             settings,
-            _connectionCancellation.Token);
+            establishedSessionToken);
         ClearActiveBackgroundHealthError(_logPipeline);
         ClearActiveBackgroundHealthError(LogObserverHealthKey);
         _observeLogsTask = Task.Run(
-            () => ObserveLogsAsync(_connectionCancellation.Token),
+            () => ObserveLogsAsync(establishedSessionToken),
             CancellationToken.None);
 
+        EnsureAutoReconnectTransportStarted(settings);
         IsConnected = true;
         TryScheduleFileLogRestart();
         TryAcquireSystemSleepBlocker();
         ClearPendingReconnectSettings();
-        RecordConnectSucceeded(settings);
-        ArmAutoReconnect(settings);
         RestartSerialBusUtilizationMeasurement("serial automatically reconnected");
         OnPropertyChanged(nameof(HexGroupTimeoutAppliedText));
         OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
+        EnsureAutoReconnectTransportStarted(settings);
+        RecordConnectSucceeded(settings);
         SetFooter(CreateFooterStatus());
     }
 
@@ -9986,11 +10318,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastFullXtermRerenderGeneration));
         OnPropertyChanged(nameof(LastFullXtermClearCount));
         OnPropertyChanged(nameof(LastFullXtermVisibilityToggleCount));
+        OnPropertyChanged(nameof(LastFullXtermRerenderWorkloadText));
         RefreshStatusBar();
     }
 
     public void RecordFullXtermRerenderCompleted(
         int renderedLineCount,
+        long renderedCharacterCount,
+        int transportChunkCount,
         TimeSpan duration,
         bool scrollRestoreAttempted,
         string finalScrollAction,
@@ -10001,6 +10336,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         _isFullXtermRerenderInProgress = false;
         Volatile.Write(ref _lastFullXtermRerenderLineCount, Math.Max(0, renderedLineCount));
+        Interlocked.Exchange(ref _lastFullXtermRerenderCharacterCount, Math.Max(0, renderedCharacterCount));
+        Volatile.Write(ref _lastFullXtermTransportChunkCount, Math.Max(0, transportChunkCount));
         _lastFullXtermRerenderDurationText = $"{duration.TotalMilliseconds:0} ms";
         _lastFullXtermScrollRestoreAttempted = scrollRestoreAttempted;
         _lastFullXtermFinalScrollAction = string.IsNullOrWhiteSpace(finalScrollAction)
@@ -10017,7 +10354,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         OnPropertyChanged(nameof(IsFullXtermRerenderInProgress));
         OnPropertyChanged(nameof(LastFullXtermRerenderLineCount));
+        OnPropertyChanged(nameof(LastFullXtermRerenderCharacterCount));
+        OnPropertyChanged(nameof(LastFullXtermTransportChunkCount));
         OnPropertyChanged(nameof(LastFullXtermRerenderDurationText));
+        OnPropertyChanged(nameof(LastFullXtermRerenderWorkloadText));
         OnPropertyChanged(nameof(LastFullXtermScrollRestoreAttempted));
         OnPropertyChanged(nameof(LastFullXtermFinalScrollAction));
         OnPropertyChanged(nameof(SuppressedIntermediateAutoScrollCount));
@@ -10054,6 +10394,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastFullXtermRerenderError));
         OnPropertyChanged(nameof(LastFullXtermRerenderGeneration));
         OnPropertyChanged(nameof(FullXtermRerenderCanceledCount));
+        OnPropertyChanged(nameof(LastFullXtermRerenderWorkloadText));
         RefreshStatusBar();
     }
 
@@ -12365,7 +12706,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool ShouldAutoRestartFileLogging() => FileLogAutoRestartPolicy.ShouldRetry(
         FileLoggingEnabled,
         _serialService.IsConnected ||
-        (AutoReconnectEnabled && Volatile.Read(ref _autoReconnectArmed) != 0),
+        (AutoReconnectEnabled && _autoReconnectArmState.IsArmed),
         Volatile.Read(ref _shutdownStarted) != 0,
         _fileLogWriter.State,
         _fileLogWriter.CanAutoRecover);
@@ -12444,7 +12785,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         SystemAwakePolicy.ShouldKeepSystemAwake(
             _serialService.IsConnected,
             AutoReconnectEnabled,
-            Volatile.Read(ref _autoReconnectArmed) != 0,
+            _autoReconnectArmState.IsArmed,
             IsAutoReconnectRunning,
             Volatile.Read(ref _shutdownStarted) != 0);
 
@@ -12556,22 +12897,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             TryScheduleFileLogRestart();
         }
 
-        var successfulSettings = _lastSuccessfulSerialSettings;
-        if (successfulSettings is not null &&
-            AutoReconnectPolicy.ShouldStart(
-                _currentUiSettings.AutoReconnectEnabled,
-                Volatile.Read(ref _autoReconnectArmed) != 0,
-                IsMockPortName(successfulSettings.PortName),
-                Volatile.Read(ref _shutdownStarted) != 0,
-                _serialService.ConnectionState) &&
-            Interlocked.CompareExchange(ref _autoReconnectStartQueued, 1, 0) == 0)
-        {
-            RunOnUiThread(() =>
-            {
-                Interlocked.Exchange(ref _autoReconnectStartQueued, 0);
-                TryStartAutoReconnect();
-            });
-        }
+        QueueAutoReconnectStartIfEligible();
 
         if (!serialIsConnected &&
             _bridgeService.IsRunning &&
@@ -13272,18 +13598,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var lastRuntimeError = RuntimeDiagnostics.ReadLastError();
-        DateTimeOffset? lastRuntimeErrorTime = null;
-        if (!string.IsNullOrWhiteSpace(lastRuntimeError))
-        {
-            try
-            {
-                lastRuntimeErrorTime = File.GetLastWriteTimeUtc(RuntimeDiagnostics.LastErrorPath);
-            }
-            catch (Exception ex)
-            {
-                errors.Add($"runtime error timestamp: {ex.Message}");
-            }
-        }
+        var lastRuntimeErrorTime = string.IsNullOrWhiteSpace(lastRuntimeError)
+            ? null
+            : RuntimeDiagnostics.LastErrorRecordedAt;
 
         return new ResourceSnapshot(
             diskFreeBytes,

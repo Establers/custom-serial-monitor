@@ -9,6 +9,7 @@ public partial class App : Application
 
     public App()
     {
+        RuntimeDiagnostics.StartGeneralDiagnosticSession();
         RuntimeDiagnostics.RecordStartup();
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
@@ -25,21 +26,27 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            RuntimeDiagnostics.RecordError("App.OnLaunched", ex);
+            RuntimeDiagnostics.RecordFatalError("App.OnLaunched", ex);
             throw;
         }
     }
 
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
     {
-        RuntimeDiagnostics.RecordError("Application.UnhandledException", args.Exception);
+        RuntimeDiagnostics.RecordFatalError("Application.UnhandledException", args.Exception);
     }
 
     private static void OnAppDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs args)
     {
         if (args.ExceptionObject is Exception exception)
         {
-            RuntimeDiagnostics.RecordError("AppDomain.UnhandledException", exception);
+            RuntimeDiagnostics.RecordFatalError("AppDomain.UnhandledException", exception);
+        }
+        else
+        {
+            RuntimeDiagnostics.RecordFatalError(
+                "AppDomain.UnhandledException",
+                new InvalidOperationException("The runtime supplied a non-Exception fatal object."));
         }
     }
 

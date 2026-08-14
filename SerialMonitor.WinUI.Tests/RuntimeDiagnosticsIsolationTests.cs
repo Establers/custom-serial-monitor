@@ -36,4 +36,41 @@ public sealed class RuntimeDiagnosticsIsolationTests
 
         await incidentTask.WaitAsync(TimeSpan.FromSeconds(2));
     }
+
+    [Fact]
+    public async Task BlockingGeneralPump_DoesNotDelayIncidentPump()
+    {
+        using var generalStarted = new ManualResetEventSlim(initialState: false);
+        using var releaseGeneral = new ManualResetEventSlim(initialState: false);
+        var incidentCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var general = new BoundedDiagnosticWriter(
+            capacity: 2,
+            (_, _) =>
+            {
+                generalStarted.Set();
+                releaseGeneral.Wait();
+            });
+        await using var incident = new BoundedIncidentWriter(
+            capacity: 2,
+            _ => incidentCompleted.TrySetResult());
+
+        Assert.True(general.TryEnqueue(new GeneralDiagnosticWork(
+            GeneralDiagnosticWorkKind.Error,
+            "blocked general diagnostic",
+            DateTimeOffset.UtcNow)));
+        Assert.True(generalStarted.Wait(TimeSpan.FromSeconds(2)));
+        try
+        {
+            Assert.True(incident.TryEnqueue("independent writer incident"));
+            await incidentCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(1, general.PendingWorkCount);
+        }
+        finally
+        {
+            releaseGeneral.Set();
+        }
+
+        Assert.True(await general.CompleteAndDrainAsync(TimeSpan.FromSeconds(2)));
+        Assert.True(await incident.CompleteAndDrainAsync(TimeSpan.FromSeconds(2)));
+    }
 }

@@ -43,6 +43,8 @@ public interface ISerialService : IAsyncDisposable
 
     bool IsRawBridgePriorityEnabled { get; }
 
+    long ReceiveSessionGeneration { get; }
+
     long BridgePriorityDroppedPipelineByteCount { get; }
 
     long BridgePriorityDroppedPipelineChunkCount { get; }
@@ -77,6 +79,17 @@ public interface ISerialService : IAsyncDisposable
         SerialSettings settings,
         SerialReceiveOptions receiveOptions,
         CancellationToken cancellationToken);
+
+    void CancelPendingConnect();
+
+    /// <summary>
+    /// Synchronously cancels a pending connect and prevents the established
+    /// session from starting another native read. A read that already returned
+    /// bytes retains ownership of its final publish; its worker completes that
+    /// session's input channel after publication. Native close/dispose remains
+    /// owned by <see cref="DisconnectAsync"/>.
+    /// </summary>
+    void BeginDisconnect();
 
     Task DisconnectAsync(CancellationToken cancellationToken);
 

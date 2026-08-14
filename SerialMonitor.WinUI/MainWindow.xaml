@@ -3083,6 +3083,18 @@
                                                        Text="Info"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}" />
                                         </Grid>
+                                        <Grid ColumnDefinitions="86,*,58"
+                                              ColumnSpacing="4">
+                                            <TextBlock Text="Xterm full"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding LastFullXtermRerenderWorkloadText}"
+                                                       TextWrapping="Wrap"
+                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Info"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

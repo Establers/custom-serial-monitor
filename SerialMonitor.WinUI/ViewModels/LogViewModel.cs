@@ -40,12 +40,20 @@ public sealed class LogViewModel : ViewModelBase
         long LineId,
         LogLine Line,
         LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
-        LogRuleMatcher.CompiledHighlightRule[] ViewFilters);
+        LogRuleMatcher.CompiledHighlightRule[] ViewFilters,
+        long SourceCostBytes);
 
     private const string AnsiReset = "\u001b[0m";
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
     private const int LiveBatchPreallocationMaxChars = 1024 * 1024;
     private const int EstimatedFormattedLineOverheadChars = 64;
+    // Proxy costs deliberately include object/array headers and collection
+    // references in addition to payload bytes/chars. They are conservative on
+    // current x64 .NET layouts rather than pretending to be a heap profiler.
+    private const long RetainedLineFixedCostBytes = 256;
+    private const long VisibleLineFixedCostBytes = 384;
+    public const long DefaultRetainedMemoryBudgetBytes = 256L * 1024 * 1024;
+    public const int DefaultMaximumPartialRxVisualCharacters = 256 * 1024;
     private const string AnsiBracketBlue = "\u001b[38;2;207;232;255m";
     private const string AnsiCyan = "\u001b[36m";
     private const string AnsiGreen = "\u001b[32m";
@@ -64,6 +72,7 @@ public sealed class LogViewModel : ViewModelBase
     private readonly LinkedList<long> _visibleLineIds = new();
     private readonly LinkedList<long> _visibleLineTimestampsUnixMilliseconds = new();
     private readonly LinkedList<LogDirection> _visibleLineDirections = new();
+    private readonly LinkedList<long> _visibleLineMemoryCosts = new();
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule[] _viewFilters = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private bool _showTimestampInLogView = true;
@@ -72,6 +81,8 @@ public sealed class LogViewModel : ViewModelBase
     private RxDisplayMode _rxDisplayMode = RxDisplayMode.Terminal;
     private bool _partialRxVisualLineActive;
     private int _partialRxVisualLength;
+    private int _partialRxVisualDisplayLength;
+    private int _partialRxVisualSearchLength;
     private StringBuilder? _partialRxDisplayBuilder;
     private StringBuilder? _partialRxSearchableBuilder;
     private LinkedListNode<string>? _partialRxDisplayNode;
@@ -84,21 +95,46 @@ public sealed class LogViewModel : ViewModelBase
     private long _xtermFormattingErrorCount;
     private long _viewFilterMatchErrorCount;
     private long _visibleCharacterCount;
+    private long _retainedSourceCostBytes;
+    private long _retainedVisualCostBytes;
+    private long _activePartialBuilderCostBytes;
+    private long _forcedPartialVisualBoundaryCount;
     private long _maxRetainedLineCountSeen;
     private long _partialRxAppendInPlaceCount;
     private int _compiledTerminalRuleCount;
     private int _compiledHexRuleCount;
     private int _invalidCompiledRuleCount;
     private long _nextLineId;
+    private readonly long _retainedMemoryBudgetBytes;
+    private readonly int _maximumPartialRxVisualCharacters;
 
-    public LogViewModel(int capacity)
+    public LogViewModel(
+        int capacity,
+        long retainedMemoryBudgetBytes = DefaultRetainedMemoryBudgetBytes,
+        int maximumPartialRxVisualCharacters = DefaultMaximumPartialRxVisualCharacters)
     {
         if (capacity <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than zero.");
         }
 
+        if (retainedMemoryBudgetBytes <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(retainedMemoryBudgetBytes),
+                "The retained-memory budget must be greater than zero.");
+        }
+
+        if (maximumPartialRxVisualCharacters <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumPartialRxVisualCharacters),
+                "The partial RX visual-line limit must be greater than zero.");
+        }
+
         _capacity = capacity;
+        _retainedMemoryBudgetBytes = retainedMemoryBudgetBytes;
+        _maximumPartialRxVisualCharacters = maximumPartialRxVisualCharacters;
     }
 
     public event EventHandler<LogTextBatch>? TextBatchAppended;
@@ -151,6 +187,18 @@ public sealed class LogViewModel : ViewModelBase
 
     public int Capacity => _capacity;
 
+    public long RetainedMemoryBudgetBytes => _retainedMemoryBudgetBytes;
+
+    public long RetainedMemoryCostBytes => SaturatingAdd(
+        SaturatingAdd(_retainedSourceCostBytes, _retainedVisualCostBytes),
+        _activePartialBuilderCostBytes);
+
+    public long RetainedSourceCostBytes => Math.Max(0, _retainedSourceCostBytes);
+
+    public long RetainedVisualCostBytes => Math.Max(
+        0,
+        SaturatingAdd(_retainedVisualCostBytes, _activePartialBuilderCostBytes));
+
     public long VisibleCharacterCount
     {
         get => _visibleCharacterCount;
@@ -166,6 +214,11 @@ public sealed class LogViewModel : ViewModelBase
     public bool PartialRxVisualLineActive => _partialRxVisualLineActive;
 
     public int PartialRxVisualLength => _partialRxVisualLength;
+
+    public int MaximumPartialRxVisualCharacters => _maximumPartialRxVisualCharacters;
+
+    public long ForcedPartialVisualBoundaryCount =>
+        Interlocked.Read(ref _forcedPartialVisualBoundaryCount);
 
     public long PartialRxAppendInPlaceCount => Interlocked.Read(ref _partialRxAppendInPlaceCount);
 
@@ -188,7 +241,7 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         _capacity = capacity;
-        var trimmed = TrimRetainedLinesToCapacity(out _);
+        var trimmed = TrimRetainedLinesToLimits(out _);
         OnPropertyChanged(nameof(Capacity));
         RaiseVisibleCountProperties();
         if (trimmed > 0)
@@ -210,7 +263,14 @@ public sealed class LogViewModel : ViewModelBase
 
     public void SetShowTimestampInLogView(bool showTimestamp)
     {
+        if (_showTimestampInLogView == showTimestamp)
+        {
+            return;
+        }
+
         _showTimestampInLogView = showTimestamp;
+        RebuildVisibleLinesWithinLimits();
+        TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetShowRxTxDirectionPrefixInLogView(bool showDirectionPrefix)
@@ -221,7 +281,7 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         _showRxTxDirectionPrefixInLogView = showDirectionPrefix;
-        RebuildVisibleLinesFromRetained();
+        RebuildVisibleLinesWithinLimits();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
@@ -234,7 +294,7 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         _timestampDisplayFormat = timestampDisplayFormat;
-        RebuildVisibleLinesFromRetained();
+        RebuildVisibleLinesWithinLimits();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
@@ -248,7 +308,7 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         _rxDisplayMode = mode;
-        RebuildVisibleLinesFromRetained();
+        RebuildVisibleLinesWithinLimits();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
@@ -265,13 +325,13 @@ public sealed class LogViewModel : ViewModelBase
             return;
         }
 
-        RebuildVisibleLinesFromRetained();
+        RebuildVisibleLinesWithinLimits();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     public void RefreshVisibleFormatting()
     {
-        RebuildVisibleLinesFromRetained();
+        RebuildVisibleLinesWithinLimits();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
@@ -292,8 +352,15 @@ public sealed class LogViewModel : ViewModelBase
         var appendedVisibleLineCount = 0;
         foreach (var line in lines)
         {
-            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules, _viewFilters);
+            var sourceCostBytes = EstimateRetainedSourceCostBytes(line);
+            var retainedLine = new RetainedLogLine(
+                ++_nextLineId,
+                line,
+                _highlightRules,
+                _viewFilters,
+                sourceCostBytes);
             _retainedLines.Enqueue(retainedLine);
+            _retainedSourceCostBytes = SaturatingAdd(_retainedSourceCostBytes, sourceCostBytes);
             var visibleContribution = 0;
             if (line.IsPartialRxTerminator)
             {
@@ -315,6 +382,18 @@ public sealed class LogViewModel : ViewModelBase
             if (ShouldMergePartialRxVisually(line))
             {
                 var formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                if (_partialRxVisualLineActive && WouldExceedPartialVisualLimit(formattedPartial))
+                {
+                    if (CompleteActivePartialRxVisualLine(builder))
+                    {
+                        appendedVisibleLineCount++;
+                    }
+
+                    Interlocked.Increment(ref _forcedPartialVisualBoundaryCount);
+                    formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                }
+
+                formattedPartial = ClampOversizedPartialFragment(formattedPartial);
                 if (formattedPartial.HasFormattingError)
                 {
                     formattingErrors++;
@@ -341,7 +420,6 @@ public sealed class LogViewModel : ViewModelBase
                         line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     builder.Append(taggedPartialDisplayLine);
-                    _partialRxVisualLength = formattedPartial.RawTextLength;
                     visibleContribution = 1;
                 }
 
@@ -385,7 +463,7 @@ public sealed class LogViewModel : ViewModelBase
             MaxRetainedLineCountSeen = retainedCount;
         }
 
-        var droppedCount = TrimRetainedLinesToCapacity(out var trimCharacterCount);
+        var droppedCount = TrimRetainedLinesToLimits(out var trimCharacterCount);
 
         DisplayedLineCount += lines.Count;
         DroppedVisibleLineCount += droppedCount;
@@ -393,7 +471,11 @@ public sealed class LogViewModel : ViewModelBase
         XtermFormattingErrorCount += formattingErrors;
         RaiseVisibleCountProperties();
 
-        if (appendedVisibleLineCount > 0)
+        // A hidden incoming line can still evict an older visible line at the
+        // count or memory bound. Emit a trim-only visual mutation in that case
+        // so xterm can reconcile its retained prefix even though there is no
+        // delta text to append.
+        if (appendedVisibleLineCount > 0 || trimCharacterCount > 0)
         {
             TextBatchAppended?.Invoke(this, new LogTextBatch(builder.ToString(), trimCharacterCount, appendedVisibleLineCount, DisplayedLineCount));
         }
@@ -542,12 +624,28 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineIds.Clear();
         _visibleLineTimestampsUnixMilliseconds.Clear();
         _visibleLineDirections.Clear();
+        _visibleLineMemoryCosts.Clear();
         _visibleCharacterCount = 0;
+        _retainedSourceCostBytes = 0;
+        _retainedVisualCostBytes = 0;
+        _activePartialBuilderCostBytes = 0;
         _partialRxVisualLineActive = false;
         _partialRxVisualLength = 0;
+        _partialRxVisualDisplayLength = 0;
+        _partialRxVisualSearchLength = 0;
         ClearActivePartialRxBuilders();
         RaiseVisibleCountProperties();
         TextCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RebuildVisibleLinesWithinLimits()
+    {
+        RebuildVisibleLinesFromRetained();
+        var droppedCount = TrimRetainedLinesToLimits(out _);
+        if (droppedCount > 0)
+        {
+            DroppedVisibleLineCount += droppedCount;
+        }
     }
 
     private void RebuildVisibleLinesFromRetained()
@@ -558,10 +656,15 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineIds.Clear();
         _visibleLineTimestampsUnixMilliseconds.Clear();
         _visibleLineDirections.Clear();
+        _visibleLineMemoryCosts.Clear();
         _retainedVisibleLineContributions.Clear();
         _visibleCharacterCount = 0;
+        _retainedVisualCostBytes = 0;
+        _activePartialBuilderCostBytes = 0;
         _partialRxVisualLineActive = false;
         _partialRxVisualLength = 0;
+        _partialRxVisualDisplayLength = 0;
+        _partialRxVisualSearchLength = 0;
         ClearActivePartialRxBuilders();
 
         var formattingErrors = 0;
@@ -585,6 +688,14 @@ public sealed class LogViewModel : ViewModelBase
             if (ShouldMergePartialRxVisually(line))
             {
                 var formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                if (_partialRxVisualLineActive && WouldExceedPartialVisualLimit(formattedPartial))
+                {
+                    CompleteActivePartialRxVisualLine();
+                    Interlocked.Increment(ref _forcedPartialVisualBoundaryCount);
+                    formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                }
+
+                formattedPartial = ClampOversizedPartialFragment(formattedPartial);
                 if (formattedPartial.HasFormattingError)
                 {
                     formattingErrors++;
@@ -608,8 +719,6 @@ public sealed class LogViewModel : ViewModelBase
                         line.Timestamp,
                         line.Direction);
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
-                    _partialRxVisualLineActive = true;
-                    _partialRxVisualLength = formattedPartial.RawTextLength;
                     visibleContribution = 1;
                 }
 
@@ -642,14 +751,23 @@ public sealed class LogViewModel : ViewModelBase
         RaiseVisibleCountProperties();
     }
 
-    private int TrimRetainedLinesToCapacity(out int trimCharacterCount)
+    private int TrimRetainedLinesToLimits(out int trimCharacterCount)
     {
         var droppedCount = 0;
         var previousVisibleCharacterCount = VisibleCharacterCount;
         var needsRebuild = _retainedVisibleLineContributions.Count != _retainedLines.Count;
-        while (_retainedLines.Count > _capacity)
+        while (_retainedLines.Count > _capacity || RetainedMemoryCostBytes > _retainedMemoryBudgetBytes)
         {
-            var removedLine = _retainedLines.Dequeue().Line;
+            if (_retainedLines.Count == 0)
+            {
+                break;
+            }
+
+            var removedRetainedLine = _retainedLines.Dequeue();
+            var removedLine = removedRetainedLine.Line;
+            _retainedSourceCostBytes = Math.Max(
+                0,
+                _retainedSourceCostBytes - removedRetainedLine.SourceCostBytes);
             var visibleContribution = _retainedVisibleLineContributions.Count > 0
                 ? _retainedVisibleLineContributions.Dequeue()
                 : 0;
@@ -661,7 +779,14 @@ public sealed class LogViewModel : ViewModelBase
                 needsRebuild = true;
             }
 
-            if (!needsRebuild && visibleContribution > 0)
+            if (needsRebuild)
+            {
+                RebuildVisibleLinesFromRetained();
+                needsRebuild = false;
+                continue;
+            }
+
+            if (visibleContribution > 0)
             {
                 for (var index = 0; index < visibleContribution; index++)
                 {
@@ -674,7 +799,7 @@ public sealed class LogViewModel : ViewModelBase
             }
         }
 
-        if (droppedCount > 0 && needsRebuild)
+        if (needsRebuild)
         {
             RebuildVisibleLinesFromRetained();
         }
@@ -692,7 +817,8 @@ public sealed class LogViewModel : ViewModelBase
             _searchableVisibleLines.First is null ||
             _visibleLineIds.First is null ||
             _visibleLineTimestampsUnixMilliseconds.First is null ||
-            _visibleLineDirections.First is null)
+            _visibleLineDirections.First is null ||
+            _visibleLineMemoryCosts.First is null)
         {
             return false;
         }
@@ -706,11 +832,17 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineIds.RemoveFirst();
         _visibleLineTimestampsUnixMilliseconds.RemoveFirst();
         _visibleLineDirections.RemoveFirst();
+        _retainedVisualCostBytes = Math.Max(
+            0,
+            _retainedVisualCostBytes - _visibleLineMemoryCosts.First.Value);
+        _visibleLineMemoryCosts.RemoveFirst();
         if (ReferenceEquals(removedDisplayNode, _partialRxDisplayNode) ||
             ReferenceEquals(removedSearchableNode, _partialRxSearchableNode))
         {
             _partialRxVisualLineActive = false;
             _partialRxVisualLength = 0;
+            _partialRxVisualDisplayLength = 0;
+            _partialRxVisualSearchLength = 0;
             ClearActivePartialRxBuilders();
         }
 
@@ -723,9 +855,13 @@ public sealed class LogViewModel : ViewModelBase
         OnPropertyChanged(nameof(FilteredVisibleLineCount));
         OnPropertyChanged(nameof(TotalRetainedLineCount));
         OnPropertyChanged(nameof(VisibleCharacterCount));
+        OnPropertyChanged(nameof(RetainedMemoryCostBytes));
+        OnPropertyChanged(nameof(RetainedSourceCostBytes));
+        OnPropertyChanged(nameof(RetainedVisualCostBytes));
         OnPropertyChanged(nameof(PartialRxVisualLineActive));
         OnPropertyChanged(nameof(PartialRxVisualLength));
         OnPropertyChanged(nameof(PartialRxAppendInPlaceCount));
+        OnPropertyChanged(nameof(ForcedPartialVisualBoundaryCount));
     }
 
     private string AddVisibleLine(
@@ -743,6 +879,9 @@ public sealed class LogViewModel : ViewModelBase
         _visibleLineIds.AddLast(lineId);
         _visibleLineTimestampsUnixMilliseconds.AddLast(timestampUnixMilliseconds);
         _visibleLineDirections.AddLast(direction);
+        var visibleCostBytes = EstimateVisibleLineCostBytes(displayLine, searchableLine);
+        _visibleLineMemoryCosts.AddLast(visibleCostBytes);
+        _retainedVisualCostBytes = SaturatingAdd(_retainedVisualCostBytes, visibleCostBytes);
         _visibleCharacterCount += displayLine.Length;
         return taggedDisplayLine;
     }
@@ -777,10 +916,14 @@ public sealed class LogViewModel : ViewModelBase
     {
         _partialRxDisplayNode = _visibleLines.Last;
         _partialRxSearchableNode = _searchableVisibleLines.Last;
-        _partialRxDisplayBuilder = new StringBuilder(displayLine);
-        _partialRxSearchableBuilder = new StringBuilder(searchableLine);
+        _partialRxDisplayBuilder = CreateBoundedPartialBuilder(displayLine);
+        _partialRxSearchableBuilder = CreateBoundedPartialBuilder(searchableLine);
         _partialRxLineDirty = false;
+        UpdateActivePartialBuilderCost();
         _partialRxVisualLineActive = true;
+        _partialRxVisualDisplayLength = displayLine.Length;
+        _partialRxVisualSearchLength = searchableLine.Length;
+        _partialRxVisualLength = Math.Max(_partialRxVisualDisplayLength, _partialRxVisualSearchLength);
     }
 
     private void EnsureActivePartialRxBuilders()
@@ -812,13 +955,16 @@ public sealed class LogViewModel : ViewModelBase
             return;
         }
 
-        _partialRxDisplayNode.Value = _partialRxDisplayBuilder.ToString();
-        _partialRxSearchableNode.Value = _partialRxSearchableBuilder.ToString();
+        ReplaceActivePartialNodeValues(
+            _partialRxDisplayBuilder.ToString(),
+            _partialRxSearchableBuilder.ToString());
         _partialRxLineDirty = false;
+        UpdateActivePartialBuilderCost();
     }
 
     private void ClearActivePartialRxBuilders()
     {
+        _activePartialBuilderCostBytes = 0;
         _partialRxDisplayBuilder = null;
         _partialRxSearchableBuilder = null;
         _partialRxDisplayNode = null;
@@ -841,7 +987,6 @@ public sealed class LogViewModel : ViewModelBase
         {
             var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId, timestamp, direction);
             BeginActivePartialRxVisualLine(displayText, searchableText);
-            _partialRxVisualLength = searchableText.Length;
             return taggedDisplayLine;
         }
 
@@ -851,17 +996,126 @@ public sealed class LogViewModel : ViewModelBase
             _partialRxDisplayBuilder.Append(displayText);
             _partialRxSearchableBuilder.Append(searchableText);
             _partialRxLineDirty = true;
+            UpdateActivePartialBuilderCost();
         }
         else
         {
-            _visibleLines.Last.Value += displayText;
-            _searchableVisibleLines.Last.Value += searchableText;
+            ReplaceLastVisibleNodeValues(
+                _visibleLines.Last.Value + displayText,
+                _searchableVisibleLines.Last.Value + searchableText);
         }
 
         _visibleLineLengths.Last.Value += displayText.Length;
         _visibleCharacterCount += displayText.Length;
-        _partialRxVisualLength += searchableText.Length;
+        _partialRxVisualDisplayLength = SaturatingAddInt(_partialRxVisualDisplayLength, displayText.Length);
+        _partialRxVisualSearchLength = SaturatingAddInt(_partialRxVisualSearchLength, searchableText.Length);
+        _partialRxVisualLength = Math.Max(_partialRxVisualDisplayLength, _partialRxVisualSearchLength);
         return displayText;
+    }
+
+    private bool WouldExceedPartialVisualLimit(
+        (string DisplayLine, string SearchableLine, int RawTextLength, bool HasFormattingError) fragment) =>
+        SaturatingAddInt(_partialRxVisualDisplayLength, fragment.DisplayLine.Length) >
+            _maximumPartialRxVisualCharacters ||
+        SaturatingAddInt(_partialRxVisualSearchLength, fragment.SearchableLine.Length) >
+            _maximumPartialRxVisualCharacters;
+
+    private (string DisplayLine, string SearchableLine, int RawTextLength, bool HasFormattingError)
+        ClampOversizedPartialFragment(
+            (string DisplayLine, string SearchableLine, int RawTextLength, bool HasFormattingError) fragment)
+    {
+        if (fragment.DisplayLine.Length <= _maximumPartialRxVisualCharacters &&
+            fragment.SearchableLine.Length <= _maximumPartialRxVisualCharacters)
+        {
+            return fragment;
+        }
+
+        const string fullBoundaryMarker = " [UI PARTIAL BOUNDARY]";
+        var boundaryMarker = fullBoundaryMarker.Length <= _maximumPartialRxVisualCharacters
+            ? fullBoundaryMarker
+            : fullBoundaryMarker[.._maximumPartialRxVisualCharacters];
+        var maximumPayloadLength = Math.Max(
+            0,
+            _maximumPartialRxVisualCharacters - boundaryMarker.Length);
+        var displayLine = fragment.DisplayLine.Length <= _maximumPartialRxVisualCharacters
+            ? fragment.DisplayLine
+            : fragment.DisplayLine[..maximumPayloadLength] + boundaryMarker;
+        var searchableLine = fragment.SearchableLine.Length <= _maximumPartialRxVisualCharacters
+            ? fragment.SearchableLine
+            : fragment.SearchableLine[..maximumPayloadLength] + boundaryMarker;
+        Interlocked.Increment(ref _forcedPartialVisualBoundaryCount);
+        return (
+            displayLine,
+            searchableLine,
+            Math.Min(fragment.RawTextLength, _maximumPartialRxVisualCharacters),
+            fragment.HasFormattingError);
+    }
+
+    private void UpdateActivePartialBuilderCost()
+    {
+        _activePartialBuilderCostBytes = _partialRxDisplayBuilder is null ||
+            _partialRxSearchableBuilder is null
+                ? 0
+                : SaturatingAdd(
+                    SaturatingAdd(
+                        SaturatingMultiply(_partialRxDisplayBuilder.Capacity, sizeof(char)),
+                        SaturatingMultiply(_partialRxSearchableBuilder.Capacity, sizeof(char))),
+                    _partialRxLineDirty
+                        ? SaturatingAdd(
+                            SaturatingMultiply(_partialRxDisplayBuilder.Length, sizeof(char)),
+                            SaturatingMultiply(_partialRxSearchableBuilder.Length, sizeof(char)))
+                        : 0);
+    }
+
+    private void ReplaceActivePartialNodeValues(string displayLine, string searchableLine)
+    {
+        if (_partialRxDisplayNode is null || _partialRxSearchableNode is null)
+        {
+            return;
+        }
+
+        ReplaceVisibleNodeValues(
+            _partialRxDisplayNode,
+            _partialRxSearchableNode,
+            displayLine,
+            searchableLine);
+    }
+
+    private void ReplaceLastVisibleNodeValues(string displayLine, string searchableLine)
+    {
+        if (_visibleLines.Last is null || _searchableVisibleLines.Last is null)
+        {
+            return;
+        }
+
+        ReplaceVisibleNodeValues(
+            _visibleLines.Last,
+            _searchableVisibleLines.Last,
+            displayLine,
+            searchableLine);
+    }
+
+    private void ReplaceVisibleNodeValues(
+        LinkedListNode<string> displayNode,
+        LinkedListNode<string> searchableNode,
+        string displayLine,
+        string searchableLine)
+    {
+        var memoryCostNode = _visibleLineMemoryCosts.Last;
+        if (memoryCostNode is null)
+        {
+            displayNode.Value = displayLine;
+            searchableNode.Value = searchableLine;
+            return;
+        }
+
+        var replacementCost = EstimateVisibleLineCostBytes(displayLine, searchableLine);
+        _retainedVisualCostBytes = SaturatingAdd(
+            Math.Max(0, _retainedVisualCostBytes - memoryCostNode.Value),
+            replacementCost);
+        memoryCostNode.Value = replacementCost;
+        displayNode.Value = displayLine;
+        searchableNode.Value = searchableLine;
     }
 
     private bool CompleteActivePartialRxVisualLine(StringBuilder? appendedText = null)
@@ -870,6 +1124,8 @@ public sealed class LogViewModel : ViewModelBase
         {
             _partialRxVisualLineActive = false;
             _partialRxVisualLength = 0;
+            _partialRxVisualDisplayLength = 0;
+            _partialRxVisualSearchLength = 0;
             return false;
         }
 
@@ -878,14 +1134,16 @@ public sealed class LogViewModel : ViewModelBase
             _partialRxDisplayNode is not null &&
             _partialRxSearchableNode is not null)
         {
-            _partialRxDisplayBuilder.Append(Environment.NewLine);
-            _partialRxDisplayNode.Value = _partialRxDisplayBuilder.ToString();
-            _partialRxSearchableNode.Value = _partialRxSearchableBuilder.ToString();
+            ReplaceActivePartialNodeValues(
+                _partialRxDisplayBuilder.ToString() + Environment.NewLine,
+                _partialRxSearchableBuilder.ToString());
             ClearActivePartialRxBuilders();
         }
         else
         {
-            _visibleLines.Last.Value += Environment.NewLine;
+            ReplaceLastVisibleNodeValues(
+                _visibleLines.Last.Value + Environment.NewLine,
+                _searchableVisibleLines.Last?.Value ?? string.Empty);
         }
 
         _visibleLineLengths.Last.Value += Environment.NewLine.Length;
@@ -893,6 +1151,8 @@ public sealed class LogViewModel : ViewModelBase
         appendedText?.Append(Environment.NewLine);
         _partialRxVisualLineActive = false;
         _partialRxVisualLength = 0;
+        _partialRxVisualDisplayLength = 0;
+        _partialRxVisualSearchLength = 0;
         return true;
     }
 
@@ -1153,6 +1413,73 @@ public sealed class LogViewModel : ViewModelBase
 
         formatted = builder.ToString();
         return true;
+    }
+
+    private StringBuilder CreateBoundedPartialBuilder(string value)
+    {
+        var capacity = Math.Min(
+            _maximumPartialRxVisualCharacters,
+            Math.Max(1, value.Length));
+        var builder = new StringBuilder(capacity, _maximumPartialRxVisualCharacters);
+        builder.Append(value);
+        return builder;
+    }
+
+    private static long EstimateRetainedSourceCostBytes(LogLine line)
+    {
+        var cost = RetainedLineFixedCostBytes;
+        cost = SaturatingAdd(cost, line.RawBytes?.LongLength ?? 0);
+        cost = SaturatingAdd(cost, EstimateStringCostBytes(line.Text));
+        if (!ReferenceEquals(line.DisplayText, line.Text))
+        {
+            cost = SaturatingAdd(cost, EstimateStringCostBytes(line.DisplayText));
+        }
+
+        return cost;
+    }
+
+    private static long EstimateVisibleLineCostBytes(string displayLine, string searchableLine)
+    {
+        var cost = SaturatingAdd(VisibleLineFixedCostBytes, EstimateStringCostBytes(displayLine));
+        if (!ReferenceEquals(displayLine, searchableLine))
+        {
+            cost = SaturatingAdd(cost, EstimateStringCostBytes(searchableLine));
+        }
+
+        return cost;
+    }
+
+    private static long EstimateStringCostBytes(string value) =>
+        SaturatingMultiply(value.Length, sizeof(char));
+
+    private static long SaturatingMultiply(long value, long multiplier)
+    {
+        if (value <= 0 || multiplier <= 0)
+        {
+            return 0;
+        }
+
+        return value > long.MaxValue / multiplier
+            ? long.MaxValue
+            : value * multiplier;
+    }
+
+    private static long SaturatingAdd(long left, long right)
+    {
+        left = Math.Max(0, left);
+        right = Math.Max(0, right);
+        return left > long.MaxValue - right
+            ? long.MaxValue
+            : left + right;
+    }
+
+    private static int SaturatingAddInt(int left, int right)
+    {
+        left = Math.Max(0, left);
+        right = Math.Max(0, right);
+        return left > int.MaxValue - right
+            ? int.MaxValue
+            : left + right;
     }
 
     private static TimestampDisplayFormat NormalizeTimestampDisplayFormat(TimestampDisplayFormat timestampDisplayFormat) =>

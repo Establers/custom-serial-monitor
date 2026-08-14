@@ -11,6 +11,8 @@ public interface ILogPipeline
 
     ChannelReader<LogLine> Logs { get; }
 
+    bool IsRunning { get; }
+
     long ParsedLineCount { get; }
 
     long DecodeErrorCount { get; }
@@ -66,4 +68,10 @@ public interface ILogPipeline
     Task StartAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forces the current worker to abandon remaining input. Normal session
+    /// shutdown must use StopAsync after the source channel is completed.
+    /// </summary>
+    void Abort();
 }

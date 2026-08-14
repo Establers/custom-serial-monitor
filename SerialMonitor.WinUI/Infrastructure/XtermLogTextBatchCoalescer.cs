@@ -49,7 +49,9 @@ internal static class XtermLogTextBatchCoalescer
             text ??= new StringBuilder(Math.Min(maxCharacterCount, batch.AppendedText.Length));
             text.Append(batch.AppendedText);
             lineCount += batch.LineCount;
-            trimCharacterCount += batch.TrimCharacterCount;
+            trimCharacterCount = (int)Math.Min(
+                int.MaxValue,
+                (long)trimCharacterCount + batch.TrimCharacterCount);
             endDisplayedLineCount = batch.EndDisplayedLineCount;
         }
 

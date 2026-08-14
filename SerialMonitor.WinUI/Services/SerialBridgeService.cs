@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RJCP.IO.Ports;
 using SerialMonitor.WinUI.Models;
 
@@ -14,18 +15,21 @@ public sealed class SerialBridgeService : ISerialBridgeService
 {
     private const string DeviceToVirtualOverflowMessage =
         "Bridge stopped: virtual COM consumer too slow";
+    internal const int MaximumOutstandingBridgeSessionCount = 4;
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
-    private readonly SemaphoreSlim _arbiterSignal = new(0, 1);
     private readonly object _stateGate = new();
+    private readonly object _pendingStartGate = new();
+    private readonly object _sessionGate = new();
     private readonly IBridgeClock _clock;
-    private BoundedByteQueue<BridgeRxChunk> _deviceToVirtualQueue;
-    private BoundedByteQueue<byte[]> _virtualToDeviceQueue;
-    private CancellationTokenSource? _cancellation;
-    private SerialPortStream? _virtualPort;
-    private Task? _readerTask;
-    private Task? _writerTask;
-    private Task? _deviceWriterTask;
+    private readonly Func<string, SerialSettings, IBridgePortConnection> _portFactory;
+    private readonly BoundedPortLifecycle<IBridgePortConnection> _portLifecycle;
+    private readonly TimeSpan _stopTimeout;
+    private readonly BoundedByteQueue<BridgeRxChunk> _idleDeviceToVirtualQueue;
+    private readonly BoundedByteQueue<byte[]> _idleVirtualToDeviceQueue;
+    private CancellationTokenSource? _pendingStartCancellation;
+    private BridgeSession? _currentSession;
+    private readonly HashSet<BridgeSession> _detachedSessions = [];
     private string _virtualPortName = string.Empty;
     private string? _lastError;
     private string? _lastFaultReason;
@@ -51,23 +55,66 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private bool _virtualToDeviceWriteActive;
     private ManualTxState _manualTxState;
     private ManualRequest? _pendingManual;
+    private long _startGeneration;
     private bool _isRunning;
+    private string _lastStopMode = "not started";
     private bool _disposed;
 
     public SerialBridgeService()
-        : this(new SystemBridgeClock())
+        : this(
+            new SystemBridgeClock(),
+            CreateVirtualPort,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultOpenTimeout,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultCleanupTimeout,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultMaximumOutstandingOperations)
     {
     }
 
     internal SerialBridgeService(IBridgeClock clock)
+        : this(
+            clock,
+            CreateVirtualPort,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultOpenTimeout,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultCleanupTimeout,
+            BoundedPortLifecycle<IBridgePortConnection>.DefaultMaximumOutstandingOperations)
     {
+    }
+
+    internal SerialBridgeService(
+        IBridgeClock clock,
+        Func<string, SerialSettings, IBridgePortConnection> portFactory,
+        TimeSpan openTimeout,
+        TimeSpan stopTimeout,
+        int maximumOutstandingOperations = BoundedPortLifecycle<IBridgePortConnection>.DefaultMaximumOutstandingOperations)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(portFactory);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(stopTimeout, TimeSpan.Zero);
         _clock = clock;
-        _deviceToVirtualQueue = CreateDeviceQueue(
+        _portFactory = portFactory;
+        _stopTimeout = stopTimeout;
+        _portLifecycle = new BoundedPortLifecycle<IBridgePortConnection>(
+            openTimeout,
+            stopTimeout,
+            maximumOutstandingOperations);
+        _idleDeviceToVirtualQueue = CreateDeviceQueue(
             BridgeSettings.DefaultMaxQueuedChunks,
             BridgeSettings.DefaultMaxQueuedBytes);
-        _virtualToDeviceQueue = CreateByteQueue(
+        _idleVirtualToDeviceQueue = CreateByteQueue(
             BridgeSettings.DefaultMaxQueuedChunks,
             BridgeSettings.DefaultMaxQueuedBytes);
+    }
+
+    internal int OutstandingPortOperationCount => _portLifecycle.OutstandingOperationCount;
+
+    internal int OutstandingBridgeSessionCount
+    {
+        get { lock (_sessionGate) return _detachedSessions.Count; }
+    }
+
+    internal string LastStopMode
+    {
+        get { lock (_stateGate) return _lastStopMode; }
     }
 
     public event EventHandler<string>? Error;
@@ -100,13 +147,13 @@ public sealed class SerialBridgeService : ISerialBridgeService
     public long QueueOverflowCount => Interlocked.Read(ref _queueOverflowCount);
     public long ReplayLateCount => Interlocked.Read(ref _replayLateCount);
 
-    public int PendingDeviceToVirtualChunkCount => _deviceToVirtualQueue.Count;
-    public int PendingVirtualToDeviceChunkCount => _virtualToDeviceQueue.Count;
-    public int PendingDeviceToVirtualByteCount => _deviceToVirtualQueue.ByteCount;
-    public int PendingVirtualToDeviceByteCount => _virtualToDeviceQueue.ByteCount;
+    public int PendingDeviceToVirtualChunkCount => CurrentDeviceQueue.Count;
+    public int PendingVirtualToDeviceChunkCount => CurrentVirtualQueue.Count;
+    public int PendingDeviceToVirtualByteCount => CurrentDeviceQueue.ByteCount;
+    public int PendingVirtualToDeviceByteCount => CurrentVirtualQueue.ByteCount;
     public double OldestPendingChunkAgeMs => Math.Max(
-        _deviceToVirtualQueue.OldestAgeMilliseconds,
-        _virtualToDeviceQueue.OldestAgeMilliseconds);
+        CurrentDeviceQueue.OldestAgeMilliseconds,
+        CurrentVirtualQueue.OldestAgeMilliseconds);
     public double LastDeviceToVirtualDelayMs { get { lock (_stateGate) return _lastDeviceToVirtualDelayMs; } }
     public double MaxDeviceToVirtualDelayMs { get { lock (_stateGate) return _maxDeviceToVirtualDelayMs; } }
     public double MaxReplayLatenessMs { get { lock (_stateGate) return _maxReplayLatenessMs; } }
@@ -144,7 +191,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
         BridgeSettings settings,
         SerialSettings deviceSettings,
         Func<byte[], CancellationToken, Task> writeToDeviceAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long sourceSerialSessionGeneration = 0)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
@@ -161,29 +209,30 @@ public sealed class SerialBridgeService : ISerialBridgeService
         var maxBytes = Math.Clamp(settings.MaxQueuedBytes, 64 * 1024, 256 * 1024 * 1024);
         var idleGuardMs = Math.Clamp(settings.ManualTxIdleGuardMs, 0, 10_000);
 
-        await _lifecycleGate.WaitAsync(cancellationToken);
+        var (operationCancellation, generation) = BeginStart(cancellationToken);
+        var operationToken = operationCancellation.Token;
+        var lifecycleEntered = false;
         try
         {
+            await _lifecycleGate.WaitAsync(operationToken);
+            lifecycleEntered = true;
             await StopCurrentAsync(CancellationToken.None);
-            var virtualPort = CreateVirtualPort(virtualPortName, deviceSettings);
-            try
-            {
-                await Task.Run(virtualPort.Open, cancellationToken);
-            }
-            catch
-            {
-                SafeCloseAndDispose(virtualPort);
-                throw;
-            }
+            EnsureSessionCapacity();
+            var virtualPort = await _portLifecycle.OpenAsync(
+                () => _portFactory(virtualPortName, deviceSettings.Clone()),
+                operationToken);
 
-            while (_arbiterSignal.Wait(0)) { }
-            _deviceToVirtualQueue = CreateDeviceQueue(maxChunks, maxBytes);
-            _virtualToDeviceQueue = CreateByteQueue(maxChunks, maxBytes);
-            var bridgeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var session = new BridgeSession(
+                generation,
+                virtualPort,
+                CreateDeviceQueue(maxChunks, maxBytes),
+                CreateByteQueue(maxChunks, maxBytes),
+                writeToDeviceAsync,
+                sourceSerialSessionGeneration,
+                cancellationToken);
             lock (_stateGate)
             {
-                _cancellation = bridgeCancellation;
-                _virtualPort = virtualPort;
+                _currentSession = session;
                 _virtualPortName = virtualPortName;
                 _lastError = null;
                 _lastFaultReason = null;
@@ -194,27 +243,100 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 _virtualToDeviceWriteActive = false;
                 _lastBridgeActivityTimestamp = _clock.GetTimestamp() - MillisecondsToTicks(idleGuardMs);
                 _lastBridgeActivityAt = null;
-                _isRunning = true;
             }
 
-            _readerTask = Task.Run(() => RunVirtualReaderAsync(virtualPort, bridgeCancellation.Token));
-            _writerTask = Task.Run(() => RunVirtualWriterAsync(virtualPort, bridgeCancellation.Token));
-            _deviceWriterTask = Task.Run(() => RunDeviceSchedulerAsync(writeToDeviceAsync, bridgeCancellation.Token));
-            RaiseStatusChanged();
+            session.ReaderTask = Task.Run(() => RunVirtualReaderAsync(session, virtualPort));
+            session.WriterTask = Task.Run(() => RunVirtualWriterAsync(session, virtualPort));
+            session.DeviceWriterTask = Task.Run(() => RunDeviceSchedulerAsync(session));
+            CommitRunning(session, generation, operationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (lifecycleEntered)
+            {
+                await StopCurrentAsync(CancellationToken.None);
+            }
+
             ReportError($"Bridge start failed for {virtualPortName}: {ex.Message}");
+            throw;
+        }
+        catch
+        {
+            if (lifecycleEntered)
+            {
+                await StopCurrentAsync(CancellationToken.None);
+            }
+
             throw;
         }
         finally
         {
-            _lifecycleGate.Release();
+            EndStart(operationCancellation);
+            if (lifecycleEntered)
+            {
+                _lifecycleGate.Release();
+            }
         }
+    }
+
+    public void CancelPendingStart()
+    {
+        CancellationTokenSource? cancellation;
+        lock (_pendingStartGate)
+        {
+            _startGeneration++;
+            cancellation = _pendingStartCancellation;
+        }
+
+        try
+        {
+            cancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    public void BeginStop()
+    {
+        CancelPendingStart();
+
+        BridgeSession? session;
+        ManualRequest? manual;
+        ManualTxStateChangedEventArgs? stateChange;
+        lock (_stateGate)
+        {
+            session = _currentSession;
+            if (session is null)
+            {
+                _isRunning = false;
+                return;
+            }
+
+            _isRunning = false;
+            manual = _pendingManual;
+            _pendingManual = null;
+            stateChange = SetManualTxStateLocked(ManualTxState.Idle);
+            _deviceToVirtualWriteActive = false;
+            _virtualToDeviceWriteActive = false;
+        }
+
+        session.CancelAndComplete();
+        manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
+        RaiseManualTxStateChanged(stateChange);
+
+        if (!session.TrySchedulePortRetire(_portLifecycle.TryScheduleRetire))
+        {
+            ReportError(
+                "Bridge port cleanup limit is exhausted; the stopped session retains cleanup ownership.");
+        }
+
+        RaiseStatusChanged();
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        BeginStop();
         await _lifecycleGate.WaitAsync(cancellationToken);
         try
         {
@@ -253,9 +375,16 @@ public sealed class SerialBridgeService : ISerialBridgeService
             return true;
         }
 
+        BridgeSession? session;
         lock (_stateGate)
         {
-            if (!_isRunning)
+            session = _currentSession;
+            if (!_isRunning || session is null)
+            {
+                return false;
+            }
+
+            if (chunk.SourceSerialSessionGeneration != session.SourceSerialSessionGeneration)
             {
                 return false;
             }
@@ -264,10 +393,10 @@ public sealed class SerialBridgeService : ISerialBridgeService
             {
                 DeviceToVirtualGroupTimeoutMs = _deviceToVirtualGroupTimeoutMs
             };
-            if (_deviceToVirtualQueue.TryEnqueue(queuedChunk, queuedChunk.Bytes.Length))
+            if (session.DeviceToVirtualQueue.TryEnqueue(queuedChunk, queuedChunk.Bytes.Length))
             {
                 MarkBridgeActivityLocked();
-                SignalArbiter();
+                SignalArbiter(session);
                 return true;
             }
         }
@@ -275,7 +404,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         Interlocked.Increment(ref _droppedDeviceToVirtualChunkCount);
         Interlocked.Add(ref _droppedDeviceToVirtualByteCount, chunk.Bytes.Length);
         Interlocked.Increment(ref _queueOverflowCount);
-        FaultBridge(DeviceToVirtualOverflowMessage);
+        FaultBridge(session!, DeviceToVirtualOverflowMessage);
         return false;
     }
 
@@ -285,10 +414,12 @@ public sealed class SerialBridgeService : ISerialBridgeService
     {
         ArgumentNullException.ThrowIfNull(transmitAsync);
         ManualRequest request;
+        BridgeSession session;
         ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
-            if (!_isRunning)
+            session = _currentSession!;
+            if (!_isRunning || session is null)
             {
                 return ManualTransmitResult.BridgeNotRunning;
             }
@@ -298,14 +429,14 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 return ManualTransmitResult.Busy;
             }
 
-            request = new ManualRequest(transmitAsync, _clock.GetTimestamp());
+            request = new ManualRequest(session, transmitAsync, _clock.GetTimestamp());
             _pendingManual = request;
             stateChange = SetManualTxStateLocked(ManualTxState.WaitingForBridgeIdle);
         }
 
         RaiseManualTxStateChanged(stateChange);
         RaiseStatusChanged();
-        SignalArbiter();
+        SignalArbiter(session);
         using var registration = cancellationToken.Register(() => CancelWaitingManual(request));
         return await request.Completion.Task.ConfigureAwait(false);
     }
@@ -317,17 +448,19 @@ public sealed class SerialBridgeService : ISerialBridgeService
             return;
         }
 
+        CancelPendingStart();
         _disposed = true;
         await StopAsync(CancellationToken.None);
         _lifecycleGate.Dispose();
-        _arbiterSignal.Dispose();
     }
 
-    private async Task RunVirtualReaderAsync(SerialPortStream virtualPort, CancellationToken cancellationToken)
+    private async Task RunVirtualReaderAsync(BridgeSession session, IBridgePortConnection virtualPort)
     {
+        var cancellationToken = session.Cancellation.Token;
         var buffer = new byte[8192];
         try
         {
+            await session.WaitUntilCommittedAsync();
             while (!cancellationToken.IsCancellationRequested)
             {
                 var bytesRead = await virtualPort.ReadAsync(buffer.AsMemory(), cancellationToken);
@@ -341,8 +474,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 lock (_stateGate)
                 {
                     enqueueResult = TryEnqueueVirtualToDevice(
-                        _isRunning,
-                        _virtualToDeviceQueue,
+                        ReferenceEquals(_currentSession, session) && _isRunning,
+                        session.VirtualToDeviceQueue,
                         chunk);
                     if (enqueueResult == BridgeQueueEnqueueResult.Enqueued)
                     {
@@ -360,37 +493,44 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     Interlocked.Increment(ref _droppedVirtualToDeviceChunkCount);
                     Interlocked.Add(ref _droppedVirtualToDeviceByteCount, chunk.Length);
                     Interlocked.Increment(ref _queueOverflowCount);
-                    FaultBridge("Bridge stopped: physical COM consumer too slow");
+                    FaultBridge(session, "Bridge stopped: physical COM consumer too slow");
                     return;
                 }
 
-                SignalArbiter();
+                SignalArbiter(session);
             }
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            FaultBridge($"Bridge virtual-to-device failed: {ex.Message}");
+            FaultBridge(session, $"Bridge virtual-to-device failed: {ex.Message}");
         }
     }
 
-    private async Task RunVirtualWriterAsync(SerialPortStream virtualPort, CancellationToken cancellationToken)
+    private async Task RunVirtualWriterAsync(BridgeSession session, IBridgePortConnection virtualPort)
     {
+        var cancellationToken = session.Cancellation.Token;
         var replayer = new BridgeGapReplayer(_clock);
         var grouper = new BridgeDeviceChunkGrouper();
         BridgeRxChunk? deferredChunk = null;
         int? replayGroupTimeoutMs = null;
         try
         {
-            while (deferredChunk is not null || await _deviceToVirtualQueue.WaitToReadAsync(cancellationToken))
+            await session.WaitUntilCommittedAsync();
+            while (deferredChunk is not null || await session.DeviceToVirtualQueue.WaitToReadAsync(cancellationToken))
             {
                 BridgeRxChunk? chunk = deferredChunk;
                 deferredChunk = null;
                 lock (_stateGate)
                 {
+                    if (!ReferenceEquals(_currentSession, session))
+                    {
+                        return;
+                    }
+
                     if (chunk is null &&
-                        (!_deviceToVirtualQueue.TryDequeue(out chunk) || chunk is null))
+                        (!session.DeviceToVirtualQueue.TryDequeue(out chunk) || chunk is null))
                     {
                         continue;
                     }
@@ -415,7 +555,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                             BridgeRxChunk? nextChunk;
                             lock (_stateGate)
                             {
-                                _deviceToVirtualQueue.TryDequeue(out nextChunk);
+                                session.DeviceToVirtualQueue.TryDequeue(out nextChunk);
                             }
 
                             if (nextChunk is not null)
@@ -438,7 +578,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                                 break;
                             }
 
-                            if (!await WaitForDeviceChunkAsync(wait.Delay, cancellationToken))
+                            if (!await WaitForDeviceChunkAsync(session, wait.Delay, cancellationToken))
                             {
                                 flushReason = wait.TimeoutReason;
                             }
@@ -456,6 +596,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     replayGroupTimeoutMs = chunk.DeviceToVirtualGroupTimeoutMs;
 
                     await WriteDeviceChunkToVirtualAsync(
+                        session,
                         virtualPort,
                         replayer,
                         chunk,
@@ -479,10 +620,13 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 {
                     lock (_stateGate)
                     {
-                        _deviceToVirtualWriteActive = false;
+                        if (ReferenceEquals(_currentSession, session))
+                        {
+                            _deviceToVirtualWriteActive = false;
+                        }
                     }
 
-                    SignalArbiter();
+                    SignalArbiter(session);
                 }
             }
         }
@@ -491,11 +635,12 @@ public sealed class SerialBridgeService : ISerialBridgeService
         catch (Exception) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            FaultBridge($"Bridge device-to-virtual write failed: {ex.Message}");
+            FaultBridge(session, $"Bridge device-to-virtual write failed: {ex.Message}");
         }
     }
 
     private async Task<bool> WaitForDeviceChunkAsync(
+        BridgeSession session,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
@@ -503,7 +648,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
         timeoutCancellation.CancelAfter(timeout);
         try
         {
-            return await _deviceToVirtualQueue.WaitToReadAsync(timeoutCancellation.Token);
+            return await session.DeviceToVirtualQueue.WaitToReadAsync(timeoutCancellation.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -512,7 +657,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
     }
 
     private async Task WriteDeviceChunkToVirtualAsync(
-        SerialPortStream virtualPort,
+        BridgeSession session,
+        IBridgePortConnection virtualPort,
         BridgeGapReplayer replayer,
         BridgeRxChunk chunk,
         CancellationToken cancellationToken)
@@ -527,15 +673,18 @@ public sealed class SerialBridgeService : ISerialBridgeService
             }
         }
 
-        await virtualPort.WriteAsync(chunk.Bytes, cancellationToken);
+        await virtualPort.WriteAsync(chunk.Bytes.AsMemory(), cancellationToken);
         var completedAt = _clock.GetTimestamp();
         replayer.RecordWriteCompleted(chunk, completedAt);
         var delayMs = TicksToMilliseconds(Math.Max(0, completedAt - chunk.ReceivedTimestamp));
         lock (_stateGate)
         {
-            _lastDeviceToVirtualDelayMs = delayMs;
-            _maxDeviceToVirtualDelayMs = Math.Max(_maxDeviceToVirtualDelayMs, delayMs);
-            MarkBridgeActivityLocked();
+            if (ReferenceEquals(_currentSession, session))
+            {
+                _lastDeviceToVirtualDelayMs = delayMs;
+                _maxDeviceToVirtualDelayMs = Math.Max(_maxDeviceToVirtualDelayMs, delayMs);
+                MarkBridgeActivityLocked();
+            }
         }
 
         Interlocked.Add(ref _deviceToVirtualByteCount, chunk.Bytes.Length);
@@ -543,12 +692,12 @@ public sealed class SerialBridgeService : ISerialBridgeService
         RaiseStatusChangedPeriodically(count);
     }
 
-    private async Task RunDeviceSchedulerAsync(
-        Func<byte[], CancellationToken, Task> writeToDeviceAsync,
-        CancellationToken cancellationToken)
+    private async Task RunDeviceSchedulerAsync(BridgeSession session)
     {
+        var cancellationToken = session.Cancellation.Token;
         try
         {
+            await session.WaitUntilCommittedAsync();
             while (!cancellationToken.IsCancellationRequested)
             {
                 byte[]? bridgeBytes = null;
@@ -557,7 +706,12 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 double waitMs = Timeout.Infinite;
                 lock (_stateGate)
                 {
-                    if (_virtualToDeviceQueue.TryDequeue(out bridgeBytes) && bridgeBytes is not null)
+                    if (!ReferenceEquals(_currentSession, session))
+                    {
+                        return;
+                    }
+
+                    if (session.VirtualToDeviceQueue.TryDequeue(out bridgeBytes) && bridgeBytes is not null)
                     {
                         _virtualToDeviceWriteActive = true;
                     }
@@ -565,8 +719,8 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     {
                         waitMs = GetIdleGuardRemainingMsLocked(_clock.GetTimestamp());
                         if (waitMs <= 0 &&
-                            _deviceToVirtualQueue.Count == 0 &&
-                            _virtualToDeviceQueue.Count == 0 &&
+                            session.DeviceToVirtualQueue.Count == 0 &&
+                            session.VirtualToDeviceQueue.Count == 0 &&
                             !_deviceToVirtualWriteActive &&
                             !_virtualToDeviceWriteActive)
                         {
@@ -587,10 +741,16 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 {
                     try
                     {
-                        await writeToDeviceAsync(bridgeBytes, cancellationToken);
+                        await session.WriteToDeviceAsync(bridgeBytes, cancellationToken);
                         Interlocked.Add(ref _virtualToDeviceByteCount, bridgeBytes.Length);
                         var count = Interlocked.Increment(ref _virtualToDeviceChunkCount);
-                        lock (_stateGate) MarkBridgeActivityLocked();
+                        lock (_stateGate)
+                        {
+                            if (ReferenceEquals(_currentSession, session))
+                            {
+                                MarkBridgeActivityLocked();
+                            }
+                        }
                         RaiseStatusChangedPeriodically(count);
                     }
                     catch
@@ -601,8 +761,14 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     }
                     finally
                     {
-                        lock (_stateGate) _virtualToDeviceWriteActive = false;
-                        SignalArbiter();
+                        lock (_stateGate)
+                        {
+                            if (ReferenceEquals(_currentSession, session))
+                            {
+                                _virtualToDeviceWriteActive = false;
+                            }
+                        }
+                        SignalArbiter(session);
                     }
 
                     continue;
@@ -632,44 +798,51 @@ public sealed class SerialBridgeService : ISerialBridgeService
                         lock (_stateGate)
                         {
                             manual.Completion.TrySetResult(result);
-                            if (ReferenceEquals(_pendingManual, manual))
+                            if (ReferenceEquals(_currentSession, session) &&
+                                ReferenceEquals(_pendingManual, manual))
                             {
                                 _pendingManual = null;
+                                completedStateChange = SetManualTxStateLocked(ManualTxState.Idle);
+                                _virtualToDeviceWriteActive = false;
                             }
-
-                            completedStateChange = SetManualTxStateLocked(ManualTxState.Idle);
-                            _virtualToDeviceWriteActive = false;
+                            else
+                            {
+                                completedStateChange = null;
+                            }
                         }
 
                         RaiseManualTxStateChanged(completedStateChange);
-                        SignalArbiter();
+                        SignalArbiter(session);
                         RaiseStatusChanged();
                     }
 
                     if (manualError is not null)
                     {
-                        FaultBridge($"Bridge manual TX failed: {manualError.Message}");
+                        FaultBridge(session, $"Bridge manual TX failed: {manualError.Message}");
                         return;
                     }
 
                     continue;
                 }
 
-                await WaitForArbiterSignalAsync(waitMs, cancellationToken);
+                await WaitForArbiterSignalAsync(session, waitMs, cancellationToken);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            FaultBridge($"Bridge physical write scheduler failed: {ex.Message}");
+            FaultBridge(session, $"Bridge physical write scheduler failed: {ex.Message}");
         }
     }
 
-    private async Task WaitForArbiterSignalAsync(double waitMs, CancellationToken cancellationToken)
+    private async Task WaitForArbiterSignalAsync(
+        BridgeSession session,
+        double waitMs,
+        CancellationToken cancellationToken)
     {
         if (double.IsPositiveInfinity(waitMs) || waitMs == Timeout.Infinite)
         {
-            await _arbiterSignal.WaitAsync(cancellationToken);
+            await session.ArbiterSignal.WaitAsync(cancellationToken);
             return;
         }
 
@@ -679,7 +852,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
             return;
         }
 
-        await _arbiterSignal.WaitAsync(TimeSpan.FromMilliseconds(waitMs), cancellationToken);
+        await session.ArbiterSignal.WaitAsync(TimeSpan.FromMilliseconds(waitMs), cancellationToken);
     }
 
     private void CancelWaitingManual(ManualRequest request)
@@ -701,20 +874,18 @@ public sealed class SerialBridgeService : ISerialBridgeService
         {
             RaiseManualTxStateChanged(stateChange);
             request.Completion.TrySetResult(ManualTransmitResult.Canceled);
-            SignalArbiter();
+            SignalArbiter(request.Session);
             RaiseStatusChanged();
         }
     }
 
-    private void FaultBridge(string message)
+    private void FaultBridge(BridgeSession session, string message)
     {
-        CancellationTokenSource? cancellation;
-        SerialPortStream? virtualPort;
         ManualRequest? manual;
         ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
-            if (!_isRunning)
+            if (!_isRunning || !ReferenceEquals(_currentSession, session))
             {
                 return;
             }
@@ -722,68 +893,128 @@ public sealed class SerialBridgeService : ISerialBridgeService
             _isRunning = false;
             _lastError = message;
             _lastFaultReason = message;
-            cancellation = _cancellation;
-            virtualPort = _virtualPort;
+            _currentSession = null;
             manual = _pendingManual;
             _pendingManual = null;
             stateChange = SetManualTxStateLocked(ManualTxState.Idle);
         }
 
         Interlocked.Increment(ref _errorCount);
-        try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
-        _deviceToVirtualQueue.TryComplete();
-        _virtualToDeviceQueue.TryComplete();
+        session.CancelAndComplete();
         manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
         RaiseManualTxStateChanged(stateChange);
         Error?.Invoke(this, message);
         RaiseStatusChanged();
-        _ = Task.Run(() => SafeCloseAndDispose(virtualPort));
+        var virtualPort = session.DetachPort();
+        if (virtualPort is not null && !_portLifecycle.TryScheduleRetire(virtualPort))
+        {
+            ReportError("Bridge port cleanup limit is exhausted; restart is disabled until an earlier OS operation finishes.");
+        }
+
+        TrackDetachedSession(session);
     }
 
     private async Task StopCurrentAsync(CancellationToken cancellationToken)
     {
-        CancellationTokenSource? cancellation;
-        SerialPortStream? virtualPort;
-        Task? readerTask;
-        Task? writerTask;
-        Task? deviceWriterTask;
+        BridgeSession? session;
         ManualRequest? manual;
         ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
-            cancellation = _cancellation;
-            virtualPort = _virtualPort;
-            readerTask = _readerTask;
-            writerTask = _writerTask;
-            deviceWriterTask = _deviceWriterTask;
+            session = _currentSession;
+            if (session is null)
+            {
+                _isRunning = false;
+                return;
+            }
+
             manual = _pendingManual;
-            _cancellation = null;
-            _virtualPort = null;
-            _readerTask = null;
-            _writerTask = null;
-            _deviceWriterTask = null;
+            _currentSession = null;
             _pendingManual = null;
             stateChange = SetManualTxStateLocked(ManualTxState.Idle);
             _isRunning = false;
         }
 
-        try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
-        _deviceToVirtualQueue.TryComplete();
-        _virtualToDeviceQueue.TryComplete();
+        session.CancelAndComplete();
         manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
         RaiseManualTxStateChanged(stateChange);
-        SignalArbiter();
-        SafeCloseAndDispose(virtualPort);
-
-        foreach (var task in new[] { readerTask, writerTask, deviceWriterTask })
+        SignalArbiter(session);
+        var stopStartedAt = Stopwatch.GetTimestamp();
+        var callerCanceled = false;
+        var virtualPort = session.DetachPort();
+        if (virtualPort is not null)
         {
-            if (task is null) continue;
-            try { await task.WaitAsync(cancellationToken); }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+            var remaining = RemainingStopTime(stopStartedAt);
+            if (remaining > TimeSpan.Zero)
+            {
+                try
+                {
+                    var retiredWithinDeadline = await _portLifecycle.RetireAsync(
+                        virtualPort,
+                        remaining,
+                        cancellationToken).ConfigureAwait(false);
+                    if (!retiredWithinDeadline)
+                    {
+                        ReportError(
+                            "Bridge port cleanup exceeded its bounded deadline; cleanup remains tracked in the background.");
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    callerCanceled = true;
+                }
+            }
+            else if (!_portLifecycle.TryScheduleRetire(virtualPort))
+            {
+                ReportError("Bridge port cleanup limit is exhausted.");
+            }
         }
 
-        cancellation?.Dispose();
+        var workers = session.Workers
+            .Where(task => task is not null)
+            .Cast<Task>()
+            .ToArray();
+        var graceful = workers.All(task => task.IsCompleted);
+        var workerRemaining = RemainingStopTime(stopStartedAt);
+        if (!graceful && workers.Length > 0 && workerRemaining > TimeSpan.Zero)
+        {
+            try
+            {
+                await Task.WhenAll(workers).WaitAsync(workerRemaining, cancellationToken);
+                graceful = true;
+            }
+            catch (TimeoutException) { }
+            catch (OperationCanceledException)
+            {
+                callerCanceled = cancellationToken.IsCancellationRequested;
+            }
+            catch (Exception) { }
+        }
+
+        graceful |= workers.All(task => task.IsCompleted);
+        if (graceful)
+        {
+            foreach (var worker in workers)
+            {
+                _ = worker.Exception;
+            }
+
+            session.Dispose();
+            SetLastStopMode("graceful stop");
+        }
+        else
+        {
+            TrackDetachedSession(session);
+            SetLastStopMode("forced stop after bounded worker timeout");
+            ReportError(
+                "Bridge worker stop exceeded its bounded deadline; the old session remains isolated and tracked.");
+        }
+
         RaiseStatusChanged();
+        if (callerCanceled)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
     }
 
     private void MarkBridgeActivityLocked()
@@ -804,11 +1035,75 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     private double TicksToMilliseconds(long ticks) => ticks * 1000d / _clock.Frequency;
 
-    private void SignalArbiter()
+    private void SignalArbiter(BridgeSession session)
     {
-        try { _arbiterSignal.Release(); }
+        try { session.ArbiterSignal.Release(); }
         catch (SemaphoreFullException) { }
         catch (ObjectDisposedException) { }
+    }
+
+    private BoundedByteQueue<BridgeRxChunk> CurrentDeviceQueue =>
+        Volatile.Read(ref _currentSession)?.DeviceToVirtualQueue ?? _idleDeviceToVirtualQueue;
+
+    private BoundedByteQueue<byte[]> CurrentVirtualQueue =>
+        Volatile.Read(ref _currentSession)?.VirtualToDeviceQueue ?? _idleVirtualToDeviceQueue;
+
+    private void EnsureSessionCapacity()
+    {
+        lock (_sessionGate)
+        {
+            if (_detachedSessions.Count >= MaximumOutstandingBridgeSessionCount)
+            {
+                throw new InvalidOperationException(
+                    $"Bridge worker cleanup capacity is exhausted " +
+                    $"({_detachedSessions.Count}/{MaximumOutstandingBridgeSessionCount}); " +
+                    "wait for an earlier bridge session to exit before starting another.");
+            }
+        }
+    }
+
+    private void TrackDetachedSession(BridgeSession session)
+    {
+        var workers = session.Workers.Where(task => task is not null).Cast<Task>().ToArray();
+        if (workers.Length == 0 || workers.All(task => task.IsCompleted))
+        {
+            foreach (var worker in workers)
+            {
+                _ = worker.Exception;
+            }
+
+            session.Dispose();
+            return;
+        }
+
+        lock (_sessionGate)
+        {
+            _detachedSessions.Add(session);
+        }
+
+        _ = Task.WhenAll(workers).ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                lock (_sessionGate)
+                {
+                    _detachedSessions.Remove(session);
+                }
+
+                session.Dispose();
+                RaiseStatusChanged();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private void SetLastStopMode(string mode)
+    {
+        lock (_stateGate)
+        {
+            _lastStopMode = mode;
+        }
     }
 
     private void ReportError(string message)
@@ -875,32 +1170,223 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private static BoundedByteQueue<BridgeRxChunk> CreateDeviceQueue(int chunks, int bytes) => new(chunks, bytes);
     private static BoundedByteQueue<byte[]> CreateByteQueue(int chunks, int bytes) => new(chunks, bytes);
 
-    private static SerialPortStream CreateVirtualPort(string portName, SerialSettings settings) =>
-        new(portName, settings.BaudRate, 8, Parity.None, StopBits.One)
-        {
-            Handshake = Handshake.None,
-            ReadBufferSize = 1024 * 1024,
-            WriteBufferSize = 1024 * 1024,
-            ReadTimeout = Timeout.Infinite,
-            WriteTimeout = 1000,
-            DtrEnable = false,
-            RtsEnable = false
-        };
-
-    private static void SafeCloseAndDispose(SerialPortStream? serialPort)
+    private static IBridgePortConnection CreateVirtualPort(string portName, SerialSettings settings)
     {
-        if (serialPort is null) return;
-        try { serialPort.Close(); } catch { }
-        try { serialPort.Dispose(); } catch { }
+        SerialPortStream? serialPort = null;
+        try
+        {
+            serialPort = new SerialPortStream(
+                portName,
+                settings.BaudRate,
+                8,
+                Parity.None,
+                StopBits.One);
+            serialPort.Handshake = Handshake.None;
+            serialPort.ReadBufferSize = 1024 * 1024;
+            serialPort.WriteBufferSize = 1024 * 1024;
+            serialPort.ReadTimeout = Timeout.Infinite;
+            serialPort.WriteTimeout = 1000;
+            serialPort.DtrEnable = false;
+            serialPort.RtsEnable = false;
+            return new BridgePortConnectionAdapter(serialPort);
+        }
+        catch
+        {
+            try { serialPort?.Close(); } catch { }
+            try { serialPort?.Dispose(); } catch { }
+            throw;
+        }
     }
+
+    private (CancellationTokenSource Cancellation, long Generation) BeginStart(
+        CancellationToken cancellationToken)
+    {
+        var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_pendingStartGate)
+        {
+            if (_pendingStartCancellation is not null)
+            {
+                operationCancellation.Dispose();
+                throw new InvalidOperationException("A bridge start attempt is already in progress.");
+            }
+
+            _pendingStartCancellation = operationCancellation;
+            return (operationCancellation, ++_startGeneration);
+        }
+    }
+
+    private void EndStart(CancellationTokenSource operationCancellation)
+    {
+        lock (_pendingStartGate)
+        {
+            if (ReferenceEquals(_pendingStartCancellation, operationCancellation))
+            {
+                _pendingStartCancellation = null;
+            }
+        }
+
+        operationCancellation.Dispose();
+    }
+
+    private void CommitRunning(
+        BridgeSession session,
+        long generation,
+        CancellationToken cancellationToken)
+    {
+        lock (_pendingStartGate)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation != _startGeneration || _pendingStartCancellation is null)
+            {
+                throw new OperationCanceledException("The bridge start attempt was superseded.", cancellationToken);
+            }
+
+            lock (_stateGate)
+            {
+                if (!ReferenceEquals(_currentSession, session))
+                {
+                    throw new OperationCanceledException(
+                        "The bridge session was replaced before commit.",
+                        cancellationToken);
+                }
+
+                _isRunning = true;
+            }
+
+            session.CommitStarted();
+            RaiseStatusChanged();
+        }
+    }
+
+    private TimeSpan RemainingStopTime(long startedAt) =>
+        _stopTimeout - Stopwatch.GetElapsedTime(startedAt);
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private sealed record ManualRequest(
+        BridgeSession Session,
         Func<CancellationToken, Task> TransmitAsync,
         long QueuedTimestamp)
     {
         public TaskCompletionSource<ManualTransmitResult> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed class BridgeSession : IDisposable
+    {
+        private readonly object _portGate = new();
+        private IBridgePortConnection? _port;
+        private int _disposed;
+
+        public BridgeSession(
+            long generation,
+            IBridgePortConnection port,
+            BoundedByteQueue<BridgeRxChunk> deviceToVirtualQueue,
+            BoundedByteQueue<byte[]> virtualToDeviceQueue,
+            Func<byte[], CancellationToken, Task> writeToDeviceAsync,
+            long sourceSerialSessionGeneration,
+            CancellationToken lifetimeCancellationToken)
+        {
+            Generation = generation;
+            _port = port;
+            DeviceToVirtualQueue = deviceToVirtualQueue;
+            VirtualToDeviceQueue = virtualToDeviceQueue;
+            WriteToDeviceAsync = writeToDeviceAsync;
+            SourceSerialSessionGeneration = sourceSerialSessionGeneration;
+            Cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetimeCancellationToken);
+        }
+
+        public long Generation { get; }
+
+        public IBridgePortConnection? Port
+        {
+            get { lock (_portGate) return _port; }
+        }
+
+        public BoundedByteQueue<BridgeRxChunk> DeviceToVirtualQueue { get; }
+
+        public BoundedByteQueue<byte[]> VirtualToDeviceQueue { get; }
+
+        public Func<byte[], CancellationToken, Task> WriteToDeviceAsync { get; }
+
+        public long SourceSerialSessionGeneration { get; }
+
+        public CancellationTokenSource Cancellation { get; }
+
+        public SemaphoreSlim ArbiterSignal { get; } = new(0, 1);
+
+        private TaskCompletionSource Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task? ReaderTask { get; set; }
+
+        public Task? WriterTask { get; set; }
+
+        public Task? DeviceWriterTask { get; set; }
+
+        public IEnumerable<Task?> Workers
+        {
+            get
+            {
+                yield return ReaderTask;
+                yield return WriterTask;
+                yield return DeviceWriterTask;
+            }
+        }
+
+        public IBridgePortConnection? DetachPort()
+        {
+            lock (_portGate)
+            {
+                var port = _port;
+                _port = null;
+                return port;
+            }
+        }
+
+        public bool TrySchedulePortRetire(Func<IBridgePortConnection, bool> scheduleRetire)
+        {
+            lock (_portGate)
+            {
+                if (_port is null)
+                {
+                    return true;
+                }
+
+                if (!scheduleRetire(_port))
+                {
+                    return false;
+                }
+
+                _port = null;
+                return true;
+            }
+        }
+
+        public Task WaitUntilCommittedAsync() => Started.Task.WaitAsync(Cancellation.Token);
+
+        public void CommitStarted() => Started.TrySetResult();
+
+        public void CancelAndComplete()
+        {
+            try { Cancellation.Cancel(); }
+            catch (ObjectDisposedException) { }
+            DeviceToVirtualQueue.TryComplete();
+            VirtualToDeviceQueue.TryComplete();
+            try { ArbiterSignal.Release(); }
+            catch (SemaphoreFullException) { }
+            catch (ObjectDisposedException) { }
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            Cancellation.Dispose();
+            ArbiterSignal.Dispose();
+        }
     }
 }

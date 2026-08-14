@@ -20,6 +20,14 @@ independent from file logging and does not create an event log file.
   line that was not made durable is counted in `Drop F`, and shutdown continues
   after a bounded 2-second cancellation window. A successfully completed file is
   closed and retained for Open and Copy path actions.
+- A connection disconnect does not reuse the connect-attempt token to cancel
+  established consumers. Serial input is completed first, the parser flushes
+  its final CRLF/Terminal/HEX tail, and the log observer remains file-eligible
+  until that completed log channel is drained. File ingress is deactivated only
+  after the downstream event observers finish, immediately before the bounded
+  writer stop. During automatic reconnect, event/file services stay open but the
+  old transport pipeline and log observer must drain and exit before a new pair
+  can start.
 - The LOG switch is the user's requested state, while the writer separately
   reports `Stopped`, `Starting`, `Running`, `Stopping`, or `Faulted`. An
   unexpected fault therefore remains visibly `FAULTED` (or `FAULTED / retrying`)
@@ -40,6 +48,18 @@ independent from file logging and does not create an event log file.
   in-flight operating-system write later proves to have completed.
 - RX, TX, MARK, and system lines use the same ordered serial log stream.
 - Terminal rendering and event detection continue while Log Save is OFF.
+
+Streaming RX preserves its logical line independently of transport segmentation.
+For a long Terminal or HEX packet, only the first partial segment writes the
+timestamp and `RX <` prefix. Later segments append payload only (HEX segments use
+one separating space), and the partial terminator writes the single newline. A
+TX/MARK/SYS/full RX record, file-name change, size rotation, or normal writer stop
+first terminates an open partial file line, then writes or opens the next logical
+line normally. A write/flush recovery segment never starts with a prefixless
+tail: the whole uncommitted batch is re-encoded from a closed logical-line state,
+so its first retained partial segment receives a fresh prefix. This can duplicate
+an uncertain boundary after an OS timeout, consistent with the existing durable
+write policy, but cannot turn the terminator into a separately timestamped line.
 
 ## Pause View
 
@@ -173,6 +193,14 @@ independent from file logging and does not create an event log file.
   batches reuse the rented buffer. A timed-out write holds a reference-counted
   lease, so its array cannot return to the pool or be mutated until the actual
   write task completes.
+- The terminal view is separately bounded by its configured line count and a
+  default 256 MiB retained-memory proxy. The proxy includes raw source bytes,
+  source/display payload characters, visible/search strings, active partial
+  builders, and conservative fixed overhead. A no-newline partial visual line is
+  forced onto a new UI-only line at 256 Ki characters. These visual boundaries
+  never alter the `LogPipeline` logical packet or the file framing described
+  above. The proxy is deliberately conservative but is not an exact managed-heap
+  reading; temporary formatting and WebView allocations remain outside it.
 - File-writer stalls, retries, and queue exhaustion are retained across app
   restarts in `%LOCALAPPDATA%\SerialMonitor\diagnostics\file_writer_incidents.log`
   (with one bounded `.previous` file) for post-incident diagnosis.

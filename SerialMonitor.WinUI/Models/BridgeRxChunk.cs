@@ -6,6 +6,11 @@ public sealed record BridgeRxChunk(
     bool EndsAtNativeIdleBoundary,
     int AppliedIdleTimeoutMs)
 {
+    // Zero denotes an unbound/manual source. Raw chunks published by
+    // SerialService carry their owning receive generation so a late callback
+    // can never enter a bridge created for a newer serial session.
+    public long SourceSerialSessionGeneration { get; init; }
+
     // Zero keeps the original low-latency raw forwarding behavior. A positive
     // value asks the device-to-virtual writer to coalesce adjacent native RX
     // chunks with the same idle-gap rule used by the HEX log pipeline.

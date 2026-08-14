@@ -681,6 +681,20 @@ public sealed class FileLogWriter : IFileLogWriter
                 cancellationToken);
         }
 
+        async Task TerminatePartialBeforeCloseAsync()
+        {
+            await FlushPendingAsync();
+            ClearBatchDeadline();
+            if (!state.PartialFraming.IsOpen)
+            {
+                return;
+            }
+
+            pendingBatch.AppendPartialBoundary(state.PartialFraming);
+            await FlushPendingAsync();
+            ClearBatchDeadline();
+        }
+
         void StartBatchDeadline()
         {
             if (pendingBatchStartedTimestamp.HasValue)
@@ -707,8 +721,7 @@ public sealed class FileLogWriter : IFileLogWriter
                     Interlocked.Decrement(ref _pendingRequestCount);
                     if (request.Naming.HasValue)
                     {
-                        await FlushPendingAsync();
-                        ClearBatchDeadline();
+                        await TerminatePartialBeforeCloseAsync();
                         await CloseActiveStreamAsync(state, cancellationToken);
                         ApplyLogFileNamingState(request.Naming.Value);
                         state.Reset();
@@ -759,8 +772,7 @@ public sealed class FileLogWriter : IFileLogWriter
                     if (rotationRequested ||
                         !string.Equals(state.LogIdentity, lineLogIdentity, StringComparison.Ordinal))
                     {
-                        await FlushPendingAsync();
-                        ClearBatchDeadline();
+                        await TerminatePartialBeforeCloseAsync();
                         await CloseActiveStreamAsync(state, cancellationToken);
                         PrepareWriterState(state, lineDate, rotationIndex: 0, naming);
                     }
@@ -778,6 +790,7 @@ public sealed class FileLogWriter : IFileLogWriter
                         ClearBatchDeadline();
                         if (state.SizeBytes >= maxFileSizeBytes)
                         {
+                            await TerminatePartialBeforeCloseAsync();
                             await CloseActiveStreamAsync(state, cancellationToken);
                             PrepareWriterState(
                                 state,
@@ -787,7 +800,11 @@ public sealed class FileLogWriter : IFileLogWriter
                         }
                     }
 
-                    pendingBatch.AppendLine(line.Formatted);
+                    pendingBatch.AppendLine(
+                        line,
+                        pendingBatch.HasContent
+                            ? pendingBatch.EndingPartialFraming
+                            : state.PartialFraming);
                     StartBatchDeadline();
                     if (pendingBatch.LineCount >= _flushLineInterval)
                     {
@@ -850,7 +867,7 @@ public sealed class FileLogWriter : IFileLogWriter
                 }
             }
 
-            await FlushPendingAsync();
+            await TerminatePartialBeforeCloseAsync();
         }
         catch (FileIoOperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
@@ -926,6 +943,7 @@ public sealed class FileLogWriter : IFileLogWriter
         state.RotationIndex = rotationIndex;
         state.Naming = naming;
         state.AllowExistingExplicitFileRecovery = allowExistingExplicitFileRecovery;
+        state.PartialFraming = PartialFileFramingState.Closed;
     }
 
     private async Task<PooledBatchBuffer> FlushPendingBatchWithRecoveryAsync(
@@ -934,7 +952,7 @@ public sealed class FileLogWriter : IFileLogWriter
         AcceptedLineTracker acceptedLineTracker,
         CancellationToken cancellationToken)
     {
-        if (pendingBatch.LineCount == 0)
+        if (!pendingBatch.HasContent)
         {
             return pendingBatch;
         }
@@ -960,19 +978,22 @@ public sealed class FileLogWriter : IFileLogWriter
 
             try
             {
-                await RunIoWithTimeoutAsync(
-                    token => state.Stream!.WriteAsync(pendingBatch.Memory, token).AsTask(),
-                    "write",
-                    cancellationToken,
-                    pendingBatch,
-                    recoveryBudget,
-                    initialAttemptStartedTimestamp);
-                await RunIoWithTimeoutAsync(
-                    token => state.Stream!.FlushAsync(token),
-                    "flush",
-                    cancellationToken,
-                    recoveryBudget: recoveryBudget,
-                    initialAttemptStartedTimestamp: initialAttemptStartedTimestamp);
+                if (pendingBatch.Length > 0)
+                {
+                    await RunIoWithTimeoutAsync(
+                        token => state.Stream!.WriteAsync(pendingBatch.Memory, token).AsTask(),
+                        "write",
+                        cancellationToken,
+                        pendingBatch,
+                        recoveryBudget,
+                        initialAttemptStartedTimestamp);
+                    await RunIoWithTimeoutAsync(
+                        token => state.Stream!.FlushAsync(token),
+                        "flush",
+                        cancellationToken,
+                        recoveryBudget: recoveryBudget,
+                        initialAttemptStartedTimestamp: initialAttemptStartedTimestamp);
+                }
 
                 recoveryBudget?.ThrowIfExpired("committing the recovered batch");
 
@@ -982,6 +1003,8 @@ public sealed class FileLogWriter : IFileLogWriter
                     Interlocked.Add(ref _writtenLineCount, pendingBatch.LineCount);
                     Interlocked.Add(ref _writtenByteCount, pendingBatch.Length);
                 }
+
+                state.PartialFraming = pendingBatch.EndingPartialFraming;
 
                 if (pendingBatch.TryResetForReuse())
                 {
@@ -1011,6 +1034,12 @@ public sealed class FileLogWriter : IFileLogWriter
                 recoveryBudget.RecordFailure(ex, "write/flush");
                 state.RotationIndex++;
                 state.SizeBytes = 0;
+                if (!pendingBatch.TryReencode(PartialFileFramingState.Closed))
+                {
+                    var replacement = pendingBatch.CloneReencoded(PartialFileFramingState.Closed);
+                    pendingBatch.Dispose();
+                    pendingBatch = replacement;
+                }
             }
         }
     }
@@ -1257,6 +1286,7 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         var stream = state.Stream;
         state.Stream = null;
+        state.PartialFraming = PartialFileFramingState.Closed;
         if (stream is null)
         {
             return;
@@ -1355,6 +1385,7 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         var stream = state.Stream;
         state.Stream = null;
+        state.PartialFraming = PartialFileFramingState.Closed;
         if (stream is null)
         {
             return;
@@ -1994,6 +2025,8 @@ public sealed class FileLogWriter : IFileLogWriter
 
         public bool AllowExistingExplicitFileRecovery { get; set; }
 
+        public PartialFileFramingState PartialFraming { get; set; } = PartialFileFramingState.Closed;
+
         public void Reset()
         {
             Stream = null;
@@ -2004,7 +2037,13 @@ public sealed class FileLogWriter : IFileLogWriter
             RotationIndex = 0;
             Naming = default;
             AllowExistingExplicitFileRecovery = false;
+            PartialFraming = PartialFileFramingState.Closed;
         }
+    }
+
+    private readonly record struct PartialFileFramingState(bool IsOpen, LogRuleMatchMode ContentMode)
+    {
+        public static PartialFileFramingState Closed { get; } = new(false, LogRuleMatchMode.Terminal);
     }
 
     private enum FileInfoByHandleClass
@@ -2047,9 +2086,11 @@ public sealed class FileLogWriter : IFileLogWriter
     private sealed class PooledBatchBuffer : IDisposable
     {
         private readonly ArrayPool<byte> _pool;
+        private readonly List<LogLine> _lines = new();
         private byte[]? _buffer;
         private int _referenceCount = 1;
         private int _ownerReleased;
+        private bool _appendPartialBoundary;
 
         public PooledBatchBuffer(ArrayPool<byte> pool, int initialCapacity)
         {
@@ -2059,25 +2100,70 @@ public sealed class FileLogWriter : IFileLogWriter
 
         public int Length { get; private set; }
 
-        public int LineCount { get; private set; }
+        public int LineCount => _lines.Count;
+
+        public bool HasContent => Length > 0 || LineCount > 0;
+
+        public PartialFileFramingState EndingPartialFraming { get; private set; } =
+            PartialFileFramingState.Closed;
 
         public ReadOnlyMemory<byte> Memory => new(GetBuffer(), 0, Length);
 
-        public void AppendLine(string text)
+        public void AppendLine(LogLine line, PartialFileFramingState startingPartialFraming)
+        {
+            ArgumentNullException.ThrowIfNull(line);
+            if (Volatile.Read(ref _referenceCount) != 1 || Volatile.Read(ref _ownerReleased) != 0)
+            {
+                throw new InvalidOperationException("Cannot mutate a pooled batch while an I/O operation owns it.");
+            }
+
+            if (_lines.Count == 0 && Length == 0)
+            {
+                EndingPartialFraming = startingPartialFraming;
+            }
+
+            _lines.Add(line);
+            EncodeLine(line);
+        }
+
+        public void AppendPartialBoundary(PartialFileFramingState startingPartialFraming)
         {
             if (Volatile.Read(ref _referenceCount) != 1 || Volatile.Read(ref _ownerReleased) != 0)
             {
                 throw new InvalidOperationException("Cannot mutate a pooled batch while an I/O operation owns it.");
             }
 
-            var encodedLength = Encoding.UTF8.GetByteCount(text);
-            var requiredLength = checked(Length + encodedLength + LineEndingBytes.Length);
-            EnsureCapacity(requiredLength);
-            var buffer = GetBuffer();
-            Length += Encoding.UTF8.GetBytes(text.AsSpan(), buffer.AsSpan(Length, encodedLength));
-            LineEndingBytes.CopyTo(buffer, Length);
-            Length += LineEndingBytes.Length;
-            LineCount++;
+            if (_lines.Count == 0 && Length == 0)
+            {
+                EndingPartialFraming = startingPartialFraming;
+            }
+
+            _appendPartialBoundary = true;
+            if (EndingPartialFraming.IsOpen)
+            {
+                AppendBytes(LineEndingBytes);
+                EndingPartialFraming = PartialFileFramingState.Closed;
+            }
+        }
+
+        public bool TryReencode(PartialFileFramingState startingPartialFraming)
+        {
+            if (Volatile.Read(ref _ownerReleased) != 0 || Volatile.Read(ref _referenceCount) != 1)
+            {
+                return false;
+            }
+
+            Reencode(startingPartialFraming);
+            return true;
+        }
+
+        public PooledBatchBuffer CloneReencoded(PartialFileFramingState startingPartialFraming)
+        {
+            var replacement = new PooledBatchBuffer(_pool, Math.Max(InitialBatchBufferSize, Length));
+            replacement._lines.AddRange(_lines);
+            replacement._appendPartialBoundary = _appendPartialBoundary;
+            replacement.Reencode(startingPartialFraming);
+            return replacement;
         }
 
         public void AddOperationReference()
@@ -2107,7 +2193,9 @@ public sealed class FileLogWriter : IFileLogWriter
             }
 
             Length = 0;
-            LineCount = 0;
+            _lines.Clear();
+            _appendPartialBoundary = false;
+            EndingPartialFraming = PartialFileFramingState.Closed;
             return true;
         }
 
@@ -2140,6 +2228,94 @@ public sealed class FileLogWriter : IFileLogWriter
             current.AsSpan(0, Length).CopyTo(replacement);
             _buffer = replacement;
             _pool.Return(current);
+        }
+
+        private void Reencode(PartialFileFramingState startingPartialFraming)
+        {
+            Length = 0;
+            EndingPartialFraming = startingPartialFraming;
+            foreach (var line in _lines)
+            {
+                EncodeLine(line);
+            }
+
+            if (_appendPartialBoundary && EndingPartialFraming.IsOpen)
+            {
+                AppendBytes(LineEndingBytes);
+                EndingPartialFraming = PartialFileFramingState.Closed;
+            }
+        }
+
+        private void EncodeLine(LogLine line)
+        {
+            if (line.IsPartialRxTerminator)
+            {
+                if (EndingPartialFraming.IsOpen)
+                {
+                    AppendBytes(LineEndingBytes);
+                    EndingPartialFraming = PartialFileFramingState.Closed;
+                }
+
+                return;
+            }
+
+            if (line.IsPartialRxSegment && line.Direction == LogDirection.Rx)
+            {
+                if (!EndingPartialFraming.IsOpen)
+                {
+                    AppendUtf8(line.Formatted);
+                    EndingPartialFraming = new PartialFileFramingState(true, line.ContentMode);
+                    return;
+                }
+
+                if (EndingPartialFraming.ContentMode == LogRuleMatchMode.Hex &&
+                    line.DisplayText.Length > 0)
+                {
+                    AppendUtf8(" ");
+                }
+
+                AppendUtf8(line.DisplayText);
+                return;
+            }
+
+            if (EndingPartialFraming.IsOpen)
+            {
+                AppendBytes(LineEndingBytes);
+            }
+
+            AppendUtf8WithLineEnding(line.Formatted);
+            EndingPartialFraming = PartialFileFramingState.Closed;
+        }
+
+        private void AppendUtf8(string text)
+        {
+            var encodedLength = Encoding.UTF8.GetByteCount(text);
+            var requiredLength = checked(Length + encodedLength);
+            EnsureCapacity(requiredLength);
+            Length += Encoding.UTF8.GetBytes(
+                text.AsSpan(),
+                GetBuffer().AsSpan(Length, encodedLength));
+        }
+
+        private void AppendUtf8WithLineEnding(string text)
+        {
+            var encodedLength = Encoding.UTF8.GetByteCount(text);
+            var requiredLength = checked(Length + encodedLength + LineEndingBytes.Length);
+            EnsureCapacity(requiredLength);
+            var buffer = GetBuffer();
+            Length += Encoding.UTF8.GetBytes(
+                text.AsSpan(),
+                buffer.AsSpan(Length, encodedLength));
+            LineEndingBytes.CopyTo(buffer, Length);
+            Length += LineEndingBytes.Length;
+        }
+
+        private void AppendBytes(ReadOnlySpan<byte> bytes)
+        {
+            var requiredLength = checked(Length + bytes.Length);
+            EnsureCapacity(requiredLength);
+            bytes.CopyTo(GetBuffer().AsSpan(Length, bytes.Length));
+            Length += bytes.Length;
         }
 
         private byte[] GetBuffer() =>

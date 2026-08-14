@@ -26,6 +26,7 @@ internal sealed class BridgeDeviceChunkGrouper
     private long? _firstReceivedTimestamp;
     private long? _lastReceivedTimestamp;
     private int _groupTimeoutMs;
+    private long _sourceSerialSessionGeneration;
     private bool _endsAtNativeIdleBoundary;
 
     public bool HasData => _byteCount > 0;
@@ -48,6 +49,7 @@ internal sealed class BridgeDeviceChunkGrouper
             }
 
             _groupTimeoutMs = chunk.DeviceToVirtualGroupTimeoutMs;
+            _sourceSerialSessionGeneration = chunk.SourceSerialSessionGeneration;
             _firstReceivedTimestamp = chunk.ReceivedTimestamp;
         }
 
@@ -72,6 +74,11 @@ internal sealed class BridgeDeviceChunkGrouper
         }
 
         if (chunk.DeviceToVirtualGroupTimeoutMs != _groupTimeoutMs)
+        {
+            return BridgeGroupFlushReason.ConfigurationChanged;
+        }
+
+        if (chunk.SourceSerialSessionGeneration != _sourceSerialSessionGeneration)
         {
             return BridgeGroupFlushReason.ConfigurationChanged;
         }
@@ -174,7 +181,8 @@ internal sealed class BridgeDeviceChunkGrouper
             AppliedIdleTimeoutMs: hasNativeIdleBoundary ? _groupTimeoutMs : 0)
         {
             DeviceToVirtualGroupTimeoutMs = _groupTimeoutMs,
-            ReplayIdleGapMs = hasRealIdleBoundary ? _groupTimeoutMs : 0
+            ReplayIdleGapMs = hasRealIdleBoundary ? _groupTimeoutMs : 0,
+            SourceSerialSessionGeneration = _sourceSerialSessionGeneration
         };
 
         _chunks.Clear();
@@ -182,6 +190,7 @@ internal sealed class BridgeDeviceChunkGrouper
         _firstReceivedTimestamp = null;
         _lastReceivedTimestamp = null;
         _groupTimeoutMs = 0;
+        _sourceSerialSessionGeneration = 0;
         _endsAtNativeIdleBoundary = false;
         return grouped;
     }

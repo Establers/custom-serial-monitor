@@ -70,7 +70,12 @@ public interface ISerialBridgeService : IAsyncDisposable
         BridgeSettings settings,
         SerialSettings deviceSettings,
         Func<byte[], CancellationToken, Task> writeToDeviceAsync,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        long sourceSerialSessionGeneration = 0);
+
+    void CancelPendingStart();
+
+    void BeginStop();
 
     Task StopAsync(CancellationToken cancellationToken);
 

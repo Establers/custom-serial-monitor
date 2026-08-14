@@ -134,6 +134,14 @@ real hardware when available.
   or View filter rules.
 - [ ] Stop the bridge while a COM5 read is completing and confirm normal stop
   does not increase virtual-to-device drop/overflow counters or set a fault.
+- [ ] Disconnect immediately after a native RX completion and confirm the final
+  chunk appears before the old session input closes. Reconnect, then let an old
+  cancellation-ignoring RX/bridge operation finish and confirm it neither adds
+  bytes to nor completes the new session.
+- [ ] Pause an old receive failure/raw callback immediately before publication,
+  reconnect and restart the bridge, then release it. Confirm the new serial
+  state stays Connected and only chunks tagged with the new receive generation
+  reach the new virtual port.
 - [ ] Confirm command sequences cannot start while Bridge is ON.
 - [ ] Saturate the device-to-virtual queue and confirm the bridge alone stops
   with `Bridge stopped: virtual COM consumer too slow`, while the device COM and
@@ -146,6 +154,16 @@ real hardware when available.
 ## Xterm Log View
 
 - [ ] Confirm xterm log lines append smoothly.
+- [ ] For a maximum-capacity soak, set the visible line limit to 500,000, feed
+  enough mixed visible and filter-hidden traffic to reach the 256 MiB proxy or
+  line limit, and leave it running through several retention reconciliations.
+  Confirm current live deltas remain responsive, old filtered-visible prefixes
+  disappear after reconciliation, pending UI counts stay bounded, and memory
+  returns to a stable band rather than growing per reconciliation.
+- [ ] Inspect the full-render diagnostic state after that soak and record line
+  count, snapshot character count, 64-KiB transport chunk count, and duration.
+  Compare multiple 30-second-cooldown renders; the automated transport test does
+  not cover WebView2/xterm JavaScript, layout, GPU, or frame-time performance.
 - [ ] Resize the app and confirm the xterm area fits the available space.
 - [ ] In Settings > Font, change the xterm font family and size; confirm both
   apply immediately without clearing or duplicating visible log lines.

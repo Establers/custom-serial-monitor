@@ -68,6 +68,8 @@ public sealed class LogPipeline : ILogPipeline
 
     public ChannelReader<LogLine> Logs => _logs.Reader;
 
+    public bool IsRunning => Volatile.Read(ref _pipelineTask) is { IsCompleted: false };
+
     public long ParsedLineCount => Interlocked.Read(ref _parsedLineCount);
 
     public long DecodeErrorCount => Interlocked.Read(ref _decodeErrorCount);
@@ -150,7 +152,7 @@ public sealed class LogPipeline : ILogPipeline
         await _lifecycleGate.WaitAsync(cancellationToken);
         try
         {
-            await StopCurrentPipelineAsync(CancellationToken.None);
+            await StopCurrentPipelineAsync(CancellationToken.None, requestAbort: true);
             _lineParser.Clear();
             _hexPendingBytes.Clear();
             Volatile.Write(ref _hexPendingByteCount, 0);
@@ -173,7 +175,10 @@ public sealed class LogPipeline : ILogPipeline
             Interlocked.Exchange(ref _partialDuplicateSuppressionCount, 0);
             _lastPartialRxFlushTimeText = "(none)";
             _logs = CreateLogChannel();
-            _pipelineCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            // The start token protects lifecycle entry only. Established input
+            // is drained by source completion; Abort is reserved for a bounded
+            // cleanup deadline or a failed prerequisite stage.
+            _pipelineCancellation = new CancellationTokenSource();
             _pipelineTask = Task.Run(() => ProcessAsync(source, settings.Clone(), _pipelineCancellation.Token), CancellationToken.None);
             RaiseStatusChanged();
         }
@@ -188,7 +193,7 @@ public sealed class LogPipeline : ILogPipeline
         await _lifecycleGate.WaitAsync(cancellationToken);
         try
         {
-            await StopCurrentPipelineAsync(cancellationToken);
+            await StopCurrentPipelineAsync(cancellationToken, requestAbort: false);
         }
         finally
         {
@@ -484,6 +489,17 @@ public sealed class LogPipeline : ILogPipeline
         return TimeSpan.FromMilliseconds(Math.Clamp(HexGroupTimeoutMs, 1, 5_000));
     }
 
+    public void Abort()
+    {
+        try
+        {
+            _pipelineCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
     private TimeSpan GetHexRemainingDelay(long? lastReceivedTimestamp)
     {
         if (!lastReceivedTimestamp.HasValue)
@@ -542,10 +558,8 @@ public sealed class LogPipeline : ILogPipeline
                 await FlushHexGroupAsync(settings, cancellationToken);
             }
 
-            _hexPendingBytes.AddRange(bytes);
             Interlocked.Add(ref _processedRxByteCount, bytes.Length);
             Interlocked.Add(ref _hexAcceptedByteCount, bytes.Length);
-            Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
             Interlocked.Add(ref _hexCurrentGroupByteCount, bytes.Length);
             Volatile.Write(ref _hexGroupOpen, 1);
             RecordRxChunk(
@@ -554,11 +568,27 @@ public sealed class LogPipeline : ILogPipeline
                 ContainsLineEnding(bytes, settings.RxLineEnding),
                 receivedTimestamp);
 
-            // This is only a bounded-memory transport segment. No newline is
-            // emitted here, so segments still appear as one HEX packet line.
-            if (_hexPendingBytes.Count >= HexStreamingSegmentBytes)
+            // This is only a bounded-memory transport segment. Split even one
+            // oversized native completion at the UI transport boundary; no
+            // logical newline is emitted, so disk/event consumers still see
+            // one packet terminated by the later partial terminator.
+            var offset = 0;
+            while (offset < bytes.Length)
             {
-                await FlushHexSegmentAsync(settings, cancellationToken);
+                var count = Math.Min(
+                    HexStreamingSegmentBytes - _hexPendingBytes.Count,
+                    bytes.Length - offset);
+                for (var index = 0; index < count; index++)
+                {
+                    _hexPendingBytes.Add(bytes[offset + index]);
+                }
+
+                offset += count;
+                Volatile.Write(ref _hexPendingByteCount, _hexPendingBytes.Count);
+                if (_hexPendingBytes.Count >= HexStreamingSegmentBytes)
+                {
+                    await FlushHexSegmentAsync(settings, cancellationToken);
+                }
             }
 
             if (chunk.EndsAtNativeIdleBoundary)
@@ -750,24 +780,30 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
-    private async Task StopCurrentPipelineAsync(CancellationToken cancellationToken)
+    private async Task StopCurrentPipelineAsync(
+        CancellationToken cancellationToken,
+        bool requestAbort)
     {
-        _pipelineCancellation?.Cancel();
-
-        if (_pipelineTask is not null)
+        if (requestAbort)
         {
-            try
-            {
-                await _pipelineTask.WaitAsync(cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            Abort();
         }
 
-        _pipelineCancellation?.Dispose();
-        _pipelineCancellation = null;
-        _pipelineTask = null;
+        var pipelineTask = _pipelineTask;
+        if (pipelineTask is not null)
+        {
+            await pipelineTask.WaitAsync(cancellationToken);
+        }
+
+        // A caller timeout retains ownership. StartAsync aborts and joins this
+        // exact task before replacing the channel, so consumers from two
+        // sessions cannot overlap.
+        if (pipelineTask is null || pipelineTask.IsCompleted)
+        {
+            _pipelineCancellation?.Dispose();
+            _pipelineCancellation = null;
+            _pipelineTask = null;
+        }
     }
 
     private void AddParsedLine()

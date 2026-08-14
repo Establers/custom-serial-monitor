@@ -29,7 +29,6 @@ public sealed partial class MainWindow : Window
         "LineEndingHelpText",
         @"Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.");
     private const int LogRestoreOverlayLineThreshold = 1_000;
-    private const int XtermFullRenderTransportMaxChars = 64 * 1024;
     private const int XtermLiveAppendMaxLines = 2_000;
     private const int XtermLiveAppendMaxChars = 256 * 1024;
     private const int XtermBackpressureHighLines = 5_000;
@@ -41,6 +40,7 @@ public sealed partial class MainWindow : Window
     private const int DwmUseImmersiveDarkMode = 20;
     private static readonly TimeSpan XtermLiveAppendAckTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan XtermSearchTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan XtermRetentionResyncMinimumInterval = TimeSpan.FromSeconds(30);
     private static readonly string BundledCuteBackgroundPath =
         Path.Combine(AppContext.BaseDirectory, "Assets", "FunBackgrounds", "default_cute_bg.jpg");
     private static readonly string AppIconPath =
@@ -51,6 +51,7 @@ public sealed partial class MainWindow : Window
     private readonly Microsoft.UI.System.ThemeSettings _themeSettings;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _eventPopupTimer;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _trayIconTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _retentionResyncTimer;
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
     private readonly CancellationTokenSource _xtermSearchCancellation = new();
     private readonly LatestRequestAsyncOperation<XtermSearchRequest> _xtermSearchOperation;
@@ -85,12 +86,9 @@ public sealed partial class MainWindow : Window
     private int _suspendedXtermLineCount;
     private long _suspendedXtermCharacterCount;
     private bool _suspendedXtermClearRequested;
-    private readonly object _fullXtermRerenderGate = new();
-    private bool _fullXtermRerenderQueued;
-    private bool _fullXtermRerenderRunning;
-    private bool _fullXtermRerenderRequestedWhileRunning;
-    private bool _queuedFullXtermRerenderIsRestore;
-    private string _queuedFullXtermRerenderReason = "full re-render";
+    private readonly XtermFullRerenderRequestQueue _fullXtermRerenderRequests = new();
+    private readonly XtermRetentionResyncRateLimiter _retentionResyncRateLimiter =
+        new(XtermRetentionResyncMinimumInterval);
     private bool _xtermFullRerenderDeferredForBackpressure;
     private string _deferredXtermFullRerenderReason = "full re-render";
     private long _fullXtermRerenderGeneration;
@@ -126,6 +124,7 @@ public sealed partial class MainWindow : Window
     private static readonly TimeSpan XtermResizeShieldDuration = TimeSpan.FromMilliseconds(110);
 
     private readonly record struct XtermAppendChunk(string Text, int LineCount);
+    private readonly record struct XtermReplaceResult(bool Completed, int TransportChunkCount);
     private sealed record XtermScrollState(bool Ok, int ViewportY, int BaseY, int Rows, bool AtBottom);
 
     [DllImport("user32.dll")]
@@ -149,6 +148,9 @@ public sealed partial class MainWindow : Window
 
     public MainWindow()
     {
+        // Idempotent for the normal single-window app, and re-arms the bounded
+        // pump if a window is recreated in the same process after a drained close.
+        RuntimeDiagnostics.StartGeneralDiagnosticSession();
         InitializeComponent();
         _xtermSearchOperation = new LatestRequestAsyncOperation<XtermSearchRequest>(
             SearchXtermAsync,
@@ -166,6 +168,10 @@ public sealed partial class MainWindow : Window
         _trayIconTimer = dispatcherQueue.CreateTimer();
         _trayIconTimer.Interval = TimeSpan.FromSeconds(12);
         _trayIconTimer.Tick += OnTrayIconTimerTick;
+        _retentionResyncTimer = dispatcherQueue.CreateTimer();
+        _retentionResyncTimer.IsRepeating = false;
+        _retentionResyncTimer.Interval = XtermRetentionResyncMinimumInterval;
+        _retentionResyncTimer.Tick += OnRetentionResyncTimerTick;
         _viewModel = new MainViewModel(
             new SerialService(),
             new LogPipeline(new EncodingDecoder(), new LineParser()),
@@ -229,6 +235,7 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        CancelPendingRetentionResync();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
     }
@@ -245,6 +252,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            await RuntimeDiagnostics.FlushGeneralDiagnosticSessionAsync(TimeSpan.FromSeconds(2));
             _closeAllowed = true;
             Close();
         }
@@ -286,6 +294,7 @@ public sealed partial class MainWindow : Window
 
         if (isMinimized)
         {
+            PreservePendingRetentionResyncForRestore("window minimized during retention resync delay");
             _restoreRerenderRetryCount = 0;
             _viewModel.RecordRenderedSequenceState(
                 _xtermSyncedThroughDisplayedLineCount,
@@ -332,6 +341,8 @@ public sealed partial class MainWindow : Window
         _eventPopupTimer.Tick -= OnEventPopupTimerTick;
         _trayIconTimer.Stop();
         _trayIconTimer.Tick -= OnTrayIconTimerTick;
+        CancelPendingRetentionResync();
+        _retentionResyncTimer.Tick -= OnRetentionResyncTimerTick;
         _trayNotifier.Dispose();
 
         try
@@ -342,6 +353,8 @@ public sealed partial class MainWindow : Window
         {
             RuntimeDiagnostics.RecordError("MainWindow.OnClosed.Dispose", ex);
         }
+
+        await RuntimeDiagnostics.CompleteGeneralDiagnosticSessionAsync(TimeSpan.FromSeconds(2));
     }
 
     private void OnEventNotificationRequested(object? sender, EventNotificationRequest request)
@@ -1239,7 +1252,9 @@ public sealed partial class MainWindow : Window
                 _xtermLiveAppendQueue.RemoveFirst();
                 builder.Append(next.Batch.AppendedText);
                 lineCount += next.Batch.LineCount;
-                trimCharacterCount += next.Batch.TrimCharacterCount;
+                trimCharacterCount = (int)Math.Min(
+                    int.MaxValue,
+                    (long)trimCharacterCount + next.Batch.TrimCharacterCount);
                 endDisplayedLineCount = next.Batch.EndDisplayedLineCount;
             }
 
@@ -1415,12 +1430,9 @@ public sealed partial class MainWindow : Window
             _ = RunLiveXtermAppendPumpAsync();
         }
 
-        lock (_fullXtermRerenderGate)
+        if (_fullXtermRerenderRequests.HasQueuedRequestReady)
         {
-            if (_fullXtermRerenderQueued && !_fullXtermRerenderRunning)
-            {
-                ScheduleQueuedFullXtermRerender(debounce: false);
-            }
+            ScheduleQueuedFullXtermRerender(debounce: false);
         }
     }
 
@@ -1517,6 +1529,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        CancelPendingRetentionResync();
+
         _viewModel.RecordXtermSearchRequested();
         _ = _xtermSearchOperation.RunAsync(request);
     }
@@ -1528,6 +1542,7 @@ public sealed partial class MainWindow : Window
 
     private void MarkXtermFullRerenderNeeded(string reason, int coalescedLineCount = 0, int coalescedCharacterCount = 0)
     {
+        CancelPendingRetentionResync();
         _xtermNeedsFullRerenderAfterRestore = true;
         _pendingXtermFullRerenderReason = string.IsNullOrWhiteSpace(reason)
             ? "full re-render"
@@ -1556,6 +1571,18 @@ public sealed partial class MainWindow : Window
 
     private void EnqueueSuspendedXtermBatch(LogTextBatch batch)
     {
+        if (batch.TrimCharacterCount > 0)
+        {
+            MarkXtermFullRerenderNeeded(
+                "visible-log retention eviction while xterm rendering was suspended",
+                batch.LineCount,
+                batch.AppendedText.Length);
+            _viewModel.RecordRenderedSequenceState(
+                _xtermSyncedThroughDisplayedLineCount,
+                Math.Max(0, batch.EndDisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+            return;
+        }
+
         if (batch.LineCount <= 0 || string.IsNullOrEmpty(batch.AppendedText))
         {
             return;
@@ -2014,11 +2041,17 @@ public sealed partial class MainWindow : Window
     private void QueueFullXtermRerender(
         string reason,
         bool isRestoreRender = false,
-        bool debounce = true)
+        bool debounce = true,
+        bool isRetentionResync = false)
     {
         if (IsClosingOrClosed)
         {
             return;
+        }
+
+        if (!isRetentionResync)
+        {
+            CancelPendingRetentionResync();
         }
 
         var normalizedReason = NormalizeFullXtermRerenderReason(reason);
@@ -2048,42 +2081,17 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var shouldSchedule = false;
-        lock (_fullXtermRerenderGate)
+        _viewModel.RecordFullXtermRerenderRequested(normalizedReason);
+        var disposition = _fullXtermRerenderRequests.Request(
+            normalizedReason,
+            isRestoreRender);
+        if (disposition == XtermRerenderRequestDisposition.Coalesced)
         {
-            _viewModel.RecordFullXtermRerenderRequested(normalizedReason);
-
-            if (_fullXtermRerenderRunning)
-            {
-                _fullXtermRerenderRequestedWhileRunning = true;
-                _queuedFullXtermRerenderIsRestore |= isRestoreRender;
-                _queuedFullXtermRerenderReason = MergeFullXtermRerenderReason(
-                    _queuedFullXtermRerenderReason,
-                    normalizedReason);
-                _viewModel.RecordFullXtermRerenderCoalesced(normalizedReason);
-                return;
-            }
-
-            if (_fullXtermRerenderQueued)
-            {
-                _queuedFullXtermRerenderIsRestore |= isRestoreRender;
-                _queuedFullXtermRerenderReason = MergeFullXtermRerenderReason(
-                    _queuedFullXtermRerenderReason,
-                    normalizedReason);
-                _viewModel.RecordFullXtermRerenderCoalesced(normalizedReason);
-                return;
-            }
-
-            _fullXtermRerenderQueued = true;
-            _queuedFullXtermRerenderIsRestore = isRestoreRender;
-            _queuedFullXtermRerenderReason = normalizedReason;
-            shouldSchedule = true;
+            _viewModel.RecordFullXtermRerenderCoalesced(normalizedReason);
+            return;
         }
 
-        if (shouldSchedule)
-        {
-            ScheduleQueuedFullXtermRerender(debounce);
-        }
+        ScheduleQueuedFullXtermRerender(debounce);
     }
 
     private void ScheduleQueuedFullXtermRerender(bool debounce)
@@ -2106,43 +2114,30 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        string reason;
-        bool isRestoreRender;
-        lock (_fullXtermRerenderGate)
+        if (!_fullXtermRerenderRequests.TryStart(out var request))
         {
-            if (!_fullXtermRerenderQueued || _fullXtermRerenderRunning)
-            {
-                return;
-            }
-
-            _fullXtermRerenderQueued = false;
-            _fullXtermRerenderRunning = true;
-            reason = _queuedFullXtermRerenderReason;
-            isRestoreRender = _queuedFullXtermRerenderIsRestore;
-            _queuedFullXtermRerenderReason = "full re-render";
-            _queuedFullXtermRerenderIsRestore = false;
+            return;
         }
 
+        _retentionResyncTimer.Stop();
+        _retentionResyncRateLimiter.RecordSnapshotStarted();
         var renderGeneration = Interlocked.Increment(ref _fullXtermRerenderGeneration);
         try
         {
-            await SyncXtermFromVisibleLogAsync(isRestoreRender, reason, renderGeneration);
+            await SyncXtermFromVisibleLogAsync(
+                request.IsRestoreRender,
+                request.Reason,
+                renderGeneration);
         }
         finally
         {
-            var shouldScheduleAgain = false;
-            lock (_fullXtermRerenderGate)
+            var retentionDecision = _retentionResyncRateLimiter.RecordSnapshotCompleted();
+            if (retentionDecision.Disposition == XtermRetentionResyncDisposition.Schedule)
             {
-                _fullXtermRerenderRunning = false;
-                if (_fullXtermRerenderRequestedWhileRunning)
-                {
-                    _fullXtermRerenderRequestedWhileRunning = false;
-                    _fullXtermRerenderQueued = true;
-                    shouldScheduleAgain = true;
-                }
+                SchedulePendingRetentionResync(retentionDecision.Delay);
             }
 
-            if (shouldScheduleAgain)
+            if (_fullXtermRerenderRequests.Complete())
             {
                 ScheduleQueuedFullXtermRerender(debounce: true);
             }
@@ -2339,8 +2334,12 @@ public sealed partial class MainWindow : Window
         }
 
         if (args.PropertyName == nameof(MainViewModel.IsLogRenderingPaused) &&
-            !_viewModel.IsLogRenderingPaused &&
-            !_isVisualAppendSuspendedForMinimize)
+            _viewModel.IsLogRenderingPaused)
+        {
+            PreservePendingRetentionResyncForRestore("rendering paused during retention resync delay");
+        }
+        else if (args.PropertyName == nameof(MainViewModel.IsLogRenderingPaused) &&
+                 !_isVisualAppendSuspendedForMinimize)
         {
             if (_xtermNeedsFullRerenderAfterRestore)
             {
@@ -2896,10 +2895,10 @@ public sealed partial class MainWindow : Window
             suppressedIntermediateAutoScrollCount = 0;
 
             _viewModel.RecordXtermAppendQueued(text.Length);
-            var appendCompleted = false;
+            var replaceResult = default(XtermReplaceResult);
             try
             {
-                appendCompleted = await ReplaceXtermLogAsync(
+                replaceResult = await ReplaceXtermLogAsync(
                     text,
                     autoScroll: false,
                     expectedGeneration: xtermRenderGeneration);
@@ -2910,7 +2909,7 @@ public sealed partial class MainWindow : Window
                 _viewModel.RecordXtermAppendDequeued(text.Length);
             }
 
-            if (!appendCompleted)
+            if (!replaceResult.Completed)
             {
                 if (xtermRenderGeneration != Interlocked.Read(ref _xtermRenderGeneration))
                 {
@@ -2971,6 +2970,8 @@ public sealed partial class MainWindow : Window
 
             _viewModel.RecordFullXtermRerenderCompleted(
                 _viewModel.Log.CurrentVisibleLineCount,
+                text.Length,
+                replaceResult.TransportChunkCount,
                 DateTimeOffset.Now - renderStartedAt,
                 scrollRestoreAttempted,
                 finalScrollAction,
@@ -3017,23 +3018,36 @@ public sealed partial class MainWindow : Window
 
     private async Task<bool> AppendLogBatchToXtermAsync(LogTextBatch batch, long generation)
     {
-        if (!_isXtermReady || IsClosingOrClosed || string.IsNullOrEmpty(batch.AppendedText))
+        if (IsClosingOrClosed)
         {
-            return string.IsNullOrEmpty(batch.AppendedText) || IsClosingOrClosed;
+            return true;
         }
 
         var route = XtermAppendRoutingPolicy.GetRoute(
             batch.EndDisplayedLineCount,
             Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
-            IsXtermVisualAppendSuspended());
+            IsXtermVisualAppendSuspended() || _viewModel.IsLogRenderingPaused,
+            batch.TrimCharacterCount,
+            hasAppendedText: !string.IsNullOrEmpty(batch.AppendedText));
         if (route == XtermAppendRoute.AlreadyCovered)
         {
             return true;
         }
 
+        if (!_isXtermReady)
+        {
+            return false;
+        }
+
         if (route == XtermAppendRoute.Suspend)
         {
             EnqueueSuspendedXtermBatch(batch);
+            return true;
+        }
+
+        if (route == XtermAppendRoute.SnapshotResync)
+        {
+            RequestXtermRetentionResync(batch);
             return true;
         }
 
@@ -3043,7 +3057,9 @@ public sealed partial class MainWindow : Window
             route = XtermAppendRoutingPolicy.GetRoute(
                 batch.EndDisplayedLineCount,
                 Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
-                IsXtermVisualAppendSuspended());
+                IsXtermVisualAppendSuspended() || _viewModel.IsLogRenderingPaused,
+                batch.TrimCharacterCount,
+                hasAppendedText: !string.IsNullOrEmpty(batch.AppendedText));
             if (route == XtermAppendRoute.AlreadyCovered)
             {
                 return true;
@@ -3052,6 +3068,12 @@ public sealed partial class MainWindow : Window
             if (route == XtermAppendRoute.Suspend)
             {
                 EnqueueSuspendedXtermBatch(batch);
+                return true;
+            }
+
+            if (route == XtermAppendRoute.SnapshotResync)
+            {
+                RequestXtermRetentionResync(batch);
                 return true;
             }
 
@@ -3083,6 +3105,11 @@ public sealed partial class MainWindow : Window
             _viewModel.RecordRenderedSequenceState(
                 _xtermSyncedThroughDisplayedLineCount,
                 Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+            if (route == XtermAppendRoute.AppendAndScheduleSnapshotResync)
+            {
+                RequestXtermRetentionResync(batch);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -3106,6 +3133,93 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateXtermAppendBackpressure();
+    }
+
+    private void RequestXtermRetentionResync(LogTextBatch batch)
+    {
+        const string reason = "visible-log retention eviction requires xterm snapshot resync";
+        if (IsXtermVisualAppendSuspended() || _viewModel.IsLogRenderingPaused)
+        {
+            MarkXtermFullRerenderNeeded(
+                reason,
+                batch.LineCount,
+                batch.AppendedText.Length);
+        }
+        else
+        {
+            var decision = _retentionResyncRateLimiter.Request();
+            switch (decision.Disposition)
+            {
+                case XtermRetentionResyncDisposition.RunNow:
+                    QueueFullXtermRerender(
+                        reason,
+                        isRetentionResync: true);
+                    break;
+                case XtermRetentionResyncDisposition.Schedule:
+                    SchedulePendingRetentionResync(decision.Delay);
+                    break;
+            }
+        }
+
+        _viewModel.RecordRenderedSequenceState(
+            _xtermSyncedThroughDisplayedLineCount,
+            Math.Max(0, batch.EndDisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
+    }
+
+    private void OnRetentionResyncTimerTick(
+        Microsoft.UI.Dispatching.DispatcherQueueTimer sender,
+        object args)
+    {
+        sender.Stop();
+        var decision = _retentionResyncRateLimiter.ConsumeDelayedRequest();
+        if (decision.Disposition == XtermRetentionResyncDisposition.Schedule)
+        {
+            SchedulePendingRetentionResync(decision.Delay);
+            return;
+        }
+
+        if (decision.Disposition != XtermRetentionResyncDisposition.RunNow || IsClosingOrClosed)
+        {
+            return;
+        }
+
+        const string reason = "rate-limited visible-log retention snapshot resync";
+        if (IsXtermVisualAppendSuspended() || _viewModel.IsLogRenderingPaused)
+        {
+            MarkXtermFullRerenderNeeded(reason);
+            return;
+        }
+
+        QueueFullXtermRerender(reason, isRetentionResync: true);
+    }
+
+    private void SchedulePendingRetentionResync(TimeSpan delay)
+    {
+        if (IsClosingOrClosed)
+        {
+            CancelPendingRetentionResync();
+            return;
+        }
+
+        _retentionResyncTimer.Stop();
+        _retentionResyncTimer.Interval = delay > TimeSpan.Zero
+            ? delay
+            : TimeSpan.FromMilliseconds(1);
+        _retentionResyncTimer.Start();
+    }
+
+    private void CancelPendingRetentionResync()
+    {
+        _retentionResyncTimer.Stop();
+        _retentionResyncRateLimiter.CancelPendingRequest();
+    }
+
+    private void PreservePendingRetentionResyncForRestore(string reason)
+    {
+        if (_retentionResyncRateLimiter.HasPendingRequest)
+        {
+            MarkXtermFullRerenderNeeded(reason);
+        }
     }
 
     private void UpdateXtermAppendBackpressure()
@@ -3154,27 +3268,32 @@ public sealed partial class MainWindow : Window
             expectedGeneration);
     }
 
-    private async Task<bool> ReplaceXtermLogAsync(string text, bool autoScroll, long expectedGeneration)
+    private async Task<XtermReplaceResult> ReplaceXtermLogAsync(
+        string text,
+        bool autoScroll,
+        long expectedGeneration)
     {
         if (IsXtermVisualAppendSuspended() ||
             expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
         {
-            return false;
+            return new XtermReplaceResult(false, 0);
         }
 
         var beginResult = await XtermLogWebView.ExecuteScriptAsync(
             "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
         if (TryParseScriptBoolean(beginResult) != true)
         {
-            return false;
+            return new XtermReplaceResult(false, 0);
         }
 
-        foreach (var chunk in SplitXtermFullRenderTransportText(text))
+        var transportChunkCount = 0;
+        foreach (var chunk in XtermFullRenderTransport.Split(text))
         {
+            transportChunkCount++;
             if (IsXtermVisualAppendSuspended() ||
                 expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
             {
-                return false;
+                return new XtermReplaceResult(false, transportChunkCount);
             }
 
             var encodedText = JsonSerializer.Serialize(chunk);
@@ -3182,19 +3301,21 @@ public sealed partial class MainWindow : Window
                 $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
             if (TryParseScriptBoolean(queuedResult) != true)
             {
-                return false;
+                return new XtermReplaceResult(false, transportChunkCount);
             }
         }
 
         if (IsXtermVisualAppendSuspended() ||
             expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
         {
-            return false;
+            return new XtermReplaceResult(false, transportChunkCount);
         }
 
         var commitResult = await XtermLogWebView.ExecuteScriptAsync(
             $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}) : false;");
-        return TryParseScriptBoolean(commitResult) == true;
+        return new XtermReplaceResult(
+            TryParseScriptBoolean(commitResult) == true,
+            transportChunkCount);
     }
 
     private async Task<bool> ExecuteXtermAppendChunksAsync(
@@ -3633,34 +3754,6 @@ public sealed partial class MainWindow : Window
         {
             var lineCount = linesInChunk > 0 ? linesInChunk : Math.Max(1, fallbackLineCount);
             yield return new XtermAppendChunk(text[start..], lineCount);
-        }
-    }
-
-    private static IEnumerable<string> SplitXtermFullRenderTransportText(string text)
-    {
-        for (var start = 0; start < text.Length;)
-        {
-            var end = Math.Min(text.Length, start + XtermFullRenderTransportMaxChars);
-            if (end < text.Length)
-            {
-                var newline = text.LastIndexOf('\n', end - 1, end - start);
-                if (newline >= start)
-                {
-                    end = newline + 1;
-                }
-                else if (end > start && text[end - 1] == '\r' && text[end] == '\n')
-                {
-                    end--;
-                }
-            }
-
-            if (end <= start)
-            {
-                end = Math.Min(text.Length, start + XtermFullRenderTransportMaxChars);
-            }
-
-            yield return text[start..end];
-            start = end;
         }
     }
 
