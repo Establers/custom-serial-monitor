@@ -236,6 +236,7 @@ public sealed class SerialService : ISerialService
                     () => RunMockReceiverAsync(session, settings.Clone()),
                     CancellationToken.None);
                 SetConnectedIfCurrentSession(session);
+                await EnsureConnectedAfterStartupAsync(session);
                 return;
             }
 
@@ -282,6 +283,7 @@ public sealed class SerialService : ISerialService
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
             SetConnectedIfCurrentSession(session);
+            await EnsureConnectedAfterStartupAsync(session);
         }
         finally
         {
@@ -365,7 +367,9 @@ public sealed class SerialService : ISerialService
                     session.Channel.Writer.TryComplete();
                 }
 
-                _ = StartPortClose(serialPort);
+                _ = StartPortCloseAfterWriteIdle(
+                    session,
+                    WaitForWriteIdleAsync());
                 throw new InvalidOperationException(message, ex);
             }
         }
@@ -479,12 +483,11 @@ public sealed class SerialService : ISerialService
         StopMockStress();
 
         session.RequestStop();
-        var portCloseTask = StartPortClose(session.Port);
         var writeIdleTask = WaitForWriteIdleAsync();
+        var portCloseTask = StartPortCloseAfterWriteIdle(session, writeIdleTask);
         var teardownTask = Task.WhenAll(
             portCloseTask,
-            session.Worker ?? Task.CompletedTask,
-            writeIdleTask);
+            session.Worker ?? Task.CompletedTask);
 
         if (!await WaitForTeardownAsync(teardownTask))
         {
@@ -524,10 +527,7 @@ public sealed class SerialService : ISerialService
         BoundaryPreservingSerialPortStream? serialPort,
         Task? openTask)
     {
-        var closeTask = StartPortClose(serialPort);
-        var teardownTask = openTask is null
-            ? closeTask
-            : Task.WhenAll(openTask, closeTask);
+        var teardownTask = StartPortCloseAfterOpen(session, serialPort, openTask);
         if (await WaitForTeardownAsync(teardownTask))
         {
             CompleteReceiveSession(session);
@@ -569,6 +569,61 @@ public sealed class SerialService : ISerialService
             : Task.Run(() => SafeCloseAndDispose(serialPort));
     }
 
+    private Task StartPortCloseAfterOpen(
+        ReceiveSession session,
+        SerialPortStream? serialPort,
+        Task? openTask)
+    {
+        return session.StartPortRetirement(() => CloseAfterOpenAsync(serialPort, openTask));
+    }
+
+    private Task StartPortCloseAfterWriteIdle(
+        ReceiveSession session,
+        Task writeIdleTask)
+    {
+        return session.StartPortRetirement(() => CloseAfterWriteIdleAsync(session.Port, writeIdleTask));
+    }
+
+    private async Task CloseAfterOpenAsync(
+        SerialPortStream? serialPort,
+        Task? openTask)
+    {
+        if (openTask is not null)
+        {
+            try
+            {
+                await openTask.ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        }
+
+        await StartPortClose(serialPort).ConfigureAwait(false);
+    }
+
+    private async Task CloseAfterWriteIdleAsync(
+        SerialPortStream? serialPort,
+        Task writeIdleTask)
+    {
+        await writeIdleTask.ConfigureAwait(false);
+        await StartPortClose(serialPort).ConfigureAwait(false);
+    }
+
+    private async Task EnsureConnectedAfterStartupAsync(ReceiveSession session)
+    {
+        if (IsCurrentReceiveSession(session) &&
+            ConnectionState == SerialConnectionState.Connected)
+        {
+            return;
+        }
+
+        var message = LastError ?? "Serial receive worker faulted during connection startup.";
+        session.RequestStop();
+        await StopCurrentConnectionAsync(CancellationToken.None, publishDisconnected: false);
+        throw new InvalidOperationException(message);
+    }
+
     private static async Task WaitForWriteIdleAsyncCore(SemaphoreSlim writeGate)
     {
         await writeGate.WaitAsync(CancellationToken.None);
@@ -600,6 +655,10 @@ public sealed class SerialService : ISerialService
     private void CompleteReceiveSession(ReceiveSession session)
     {
         session.Channel.Writer.TryComplete();
+        while (session.Channel.Reader.TryRead(out _))
+        {
+        }
+
         session.Dispose();
     }
 
@@ -682,7 +741,9 @@ public sealed class SerialService : ISerialService
 
             if (!cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session))
             {
-                SafeCloseAndDispose(serialPort);
+                _ = StartPortCloseAfterWriteIdle(
+                    session,
+                    WaitForWriteIdleAsync());
             }
 
             session.Dispose();
@@ -1242,6 +1303,8 @@ public sealed class SerialService : ISerialService
     private sealed class ReceiveSession : IDisposable
     {
         private readonly CancellationTokenSource _cancellation;
+        private readonly object _portLifecycleGate = new();
+        private Task? _portRetirementTask;
         private int _disposed;
 
         public ReceiveSession(long generation, bool isMock, CancellationToken lifetimeToken)
@@ -1264,6 +1327,14 @@ public sealed class SerialService : ISerialService
         public BoundaryPreservingSerialPortStream? Port { get; set; }
 
         public Task? Worker { get; set; }
+
+        public Task StartPortRetirement(Func<Task> retirementFactory)
+        {
+            lock (_portLifecycleGate)
+            {
+                return _portRetirementTask ??= retirementFactory();
+            }
+        }
 
         public void RequestStop()
         {

@@ -6208,6 +6208,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 settings,
                 CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
                 _connectionCancellation.Token);
+            _lastSuccessfulSerialSettings = settings.Clone();
+            ArmAutoReconnect(settings);
+            if (_serialService.ConnectionState == SerialConnectionState.Faulted)
+            {
+                TryStartAutoReconnect();
+            }
+
+            EnsureSerialConnectedAfterStartup();
             ApplyRxDisplayRuntime(
                 requestedRxDisplayMode,
                 requestedHexGroupTimeoutMs,
@@ -6228,7 +6236,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(HexGroupTimeoutHeaderText));
             ClearPendingReconnectSettings();
             RecordConnectSucceeded(settings);
-            ArmAutoReconnect(settings);
             RestartSerialBusUtilizationMeasurement("serial connection started");
             SetStatus($"Connected to {settings.PortName} at {settings.BaudRate} bps");
             SetFooter(CreateFooterStatus());
@@ -6761,6 +6768,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         NotifyAutoReconnectPropertiesChanged();
     }
 
+    private void EnsureSerialConnectedAfterStartup()
+    {
+        if (_serialService.ConnectionState == SerialConnectionState.Connected)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            _serialService.LastError ?? "Serial connection faulted during startup.");
+    }
+
     private Task? CancelAutoReconnect()
     {
         try
@@ -6988,6 +7006,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             settings,
             CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
             _connectionCancellation.Token);
+        EnsureSerialConnectedAfterStartup();
         ApplyRxDisplayRuntime(
             requestedRxDisplayMode,
             requestedHexGroupTimeoutMs,

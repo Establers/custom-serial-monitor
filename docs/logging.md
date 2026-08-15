@@ -20,9 +20,11 @@ independent from file logging and does not create an event log file.
   separately. A write/flush failure retries the current uncommitted batch in a
   new segment up to three times; a successful retry can duplicate data because
   the completion state of the failed write is unknowable.
-- Open, write, flush, and close each have a 30-second timeout. A timed-out operation
-  faults the writer and quarantines its stream until the late operation ends;
-  the writer never reuses that stream or accumulates unbounded late operations.
+- Directory checks, file open, write, flush, and close each have a 30-second
+  timeout. A timed-out operation faults the writer and quarantines its stream
+  until the late operation ends; late opens and cleanup operations are tracked by
+  the same bounded four-operation ceiling. Naming changes and size rotations use
+  the same flush-and-recover path as periodic flushes.
 - `Durable` means the writer's flush completed and the data reached the
   operating-system file stream. It does not promise survival of power loss or
   kernel failure; WAL/fsync-on-every-batch is intentionally not part of this

@@ -250,6 +250,63 @@ public sealed class FileLogWriterTests
     }
 
     [Fact]
+    public async Task NamingRotation_FlushFailureReplaysBatchBeforeChangingFiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var streamNumber = 0;
+        await using var writer = new FileLogWriter((path, mode) =>
+        {
+            var stream = new FileStream(path, mode, FileAccess.Write, FileShare.Read);
+            return new FlushOnceFailsStream(stream, failFlush: Interlocked.Increment(ref streamNumber) == 1);
+        });
+        writer.UpdateLogFileName("first.log", requestNewFile: false);
+
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+        Assert.True(writer.TryEnqueue(LogLine.System("rotate safely")));
+        writer.UpdateLogFileName("second.log", requestNewFile: true);
+
+        await WaitUntilAsync(() => writer.RecoveryCount == 1, TimeSpan.FromSeconds(4));
+        await writer.StopAsync(CancellationToken.None);
+
+        Assert.Equal(1, writer.DurableLineCount);
+        Assert.Contains(
+            "rotate safely",
+            string.Join(Environment.NewLine, await Task.WhenAll(
+                Directory.GetFiles(directory.Path).Select(path => File.ReadAllTextAsync(path)))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HangingOpen_FaultsWithinIoTimeoutAndTracksLateCreation()
+    {
+        using var directory = new TemporaryDirectory();
+        var openRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var writer = new FileLogWriter(
+            (_, _) =>
+            {
+                SpinWait.SpinUntil(() => openRelease.Task.IsCompleted);
+                return new MemoryStream();
+            },
+            fileIoTimeout: TimeSpan.FromMilliseconds(100),
+            shutdownTimeout: TimeSpan.FromMilliseconds(200));
+
+        try
+        {
+            var exception = await Assert.ThrowsAnyAsync<Exception>(() =>
+                writer.StartAsync(directory.Path, CancellationToken.None));
+
+            Assert.Contains("timed out", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, writer.FileIoTimeoutCount);
+            Assert.Equal(1, writer.PendingLateOperationCount);
+        }
+        finally
+        {
+            openRelease.TrySetResult();
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(2));
+        }
+    }
+
+    [Fact]
     public async Task HangingWrite_FaultsWithinIoTimeoutAndQuarantinesLateStream()
     {
         using var directory = new TemporaryDirectory();
@@ -418,6 +475,62 @@ public sealed class FileLogWriterTests
         public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
+    }
+
+    private sealed class FlushOnceFailsStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly bool _failFlush;
+        private int _flushCount;
+
+        public FlushOnceFailsStream(Stream inner, bool failFlush)
+        {
+            _inner = inner;
+            _failFlush = failFlush;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => _inner.CanWrite;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override void Flush()
+        {
+            if (_failFlush && Interlocked.Increment(ref _flushCount) == 1)
+            {
+                throw new IOException("simulated flush failure");
+            }
+
+            _inner.Flush();
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            if (_failFlush && Interlocked.Increment(ref _flushCount) == 1)
+            {
+                return Task.FromException(new IOException("simulated flush failure"));
+            }
+
+            return _inner.FlushAsync(cancellationToken);
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+        public override ValueTask DisposeAsync() => _inner.DisposeAsync();
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.WriteAsync(buffer, cancellationToken);
     }
 
     private sealed class TemporaryDirectory : IDisposable

@@ -24,6 +24,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private readonly object _queueGate = new();
     private readonly object _lateOperationGate = new();
     private readonly HashSet<StreamWriter> _lateWriters = new();
+    private readonly HashSet<Task> _lateOperations = new();
     private Channel<FileLogWriteRequest> _queue = CreateQueue();
     private CancellationTokenSource? _writerCancellation;
     private Task? _writerTask;
@@ -172,7 +173,7 @@ public sealed class FileLogWriter : IFileLogWriter
         {
             lock (_lateOperationGate)
             {
-                return _lateWriters.Count;
+                return _lateOperations.Count;
             }
         }
     }
@@ -245,17 +246,27 @@ public sealed class FileLogWriter : IFileLogWriter
             var targetDirectory = string.IsNullOrWhiteSpace(directory)
                 ? CreateDefaultLogDirectory()
                 : directory;
-            Directory.CreateDirectory(targetDirectory);
-
             var naming = GetLogFileNamingSnapshot();
-            if (!string.IsNullOrWhiteSpace(naming.LogFileName))
-            {
-                var explicitPath = CreateLogFilePath(string.Empty, rotationIndex: 0, duplicateIndex: 0, naming, targetDirectory);
-                if (File.Exists(explicitPath) || Directory.Exists(explicitPath))
+            await RunBlockingFileOperationAsync(
+                () =>
                 {
-                    throw new IOException($"Log file already exists: {explicitPath}");
-                }
-            }
+                    Directory.CreateDirectory(targetDirectory);
+                    if (!string.IsNullOrWhiteSpace(naming.LogFileName))
+                    {
+                        var explicitPath = CreateLogFilePath(
+                            string.Empty,
+                            rotationIndex: 0,
+                            duplicateIndex: 0,
+                            naming,
+                            targetDirectory);
+                        if (File.Exists(explicitPath) || Directory.Exists(explicitPath))
+                        {
+                            throw new IOException($"Log file already exists: {explicitPath}");
+                        }
+                    }
+                },
+                "directory setup",
+                cancellationToken);
 
             var openedAt = DateTimeOffset.Now;
             lock (_stateGate)
@@ -538,11 +549,13 @@ public sealed class FileLogWriter : IFileLogWriter
                     }
 
                     var nextRotationIndex = rotationIndex + 1;
-                    var recoveryWriter = CreateNewWriter(
+                    var recovery = await CreateNewWriterAsync(
                         currentDate,
                         nextRotationIndex,
                         recoveryNaming,
-                        out var recoveryPath);
+                        cancellationToken);
+                    var recoveryWriter = recovery.Writer;
+                    var recoveryPath = recovery.Path;
                     try
                     {
                         foreach (var retryLine in retryLines)
@@ -603,12 +616,33 @@ public sealed class FileLogWriter : IFileLogWriter
             throw new IOException("File logging recovery failed after bounded retries.", lastFailure);
         }
 
+        async Task FlushBatchWithRecoveryAsync()
+        {
+            if (batch.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                await FlushBatchAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                await RecoverBatchAsync(ex);
+            }
+        }
+
         async Task HandleRequestAsync(FileLogWriteRequest request)
         {
             if (request.Naming.HasValue)
             {
                 ApplyLogFileNamingState(request.Naming.Value);
-                await FlushBatchAsync();
+                await FlushBatchWithRecoveryAsync();
                 await DisposeWriterAsync(writer, cancellationToken);
                 writer = null;
                 currentDate = string.Empty;
@@ -624,7 +658,13 @@ public sealed class FileLogWriter : IFileLogWriter
                 {
                     var openedDate = request.OpenedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
                     var openNaming = GetLogFileNamingSnapshot();
-                    writer = CreateNewWriter(openedDate, rotationIndex: 0, openNaming, out var path);
+                    var opened = await CreateNewWriterAsync(
+                        openedDate,
+                        rotationIndex: 0,
+                        openNaming,
+                        cancellationToken);
+                    writer = opened.Writer;
+                    var path = opened.Path;
                     currentDate = openedDate;
                     currentLogIdentity = CreateLogFileIdentity(openNaming);
                     currentSizeBytes = 0;
@@ -658,9 +698,15 @@ public sealed class FileLogWriter : IFileLogWriter
                     rotationRequested ||
                     !string.Equals(currentLogIdentity, lineLogIdentity, StringComparison.Ordinal))
                 {
-                    await FlushBatchAsync();
+                    await FlushBatchWithRecoveryAsync();
                     await DisposeWriterAsync(writer, cancellationToken);
-                    writer = CreateNewWriter(lineDate, rotationIndex: 0, naming, out var path);
+                    var opened = await CreateNewWriterAsync(
+                        lineDate,
+                        rotationIndex: 0,
+                        naming,
+                        cancellationToken);
+                    writer = opened.Writer;
+                    var path = opened.Path;
                     currentDate = lineDate;
                     currentLogIdentity = lineLogIdentity;
                     currentSizeBytes = 0;
@@ -671,10 +717,16 @@ public sealed class FileLogWriter : IFileLogWriter
                 var maxFileSizeBytes = MaximumFileSizeBytes;
                 if (maxFileSizeBytes > 0 && currentSizeBytes >= maxFileSizeBytes)
                 {
-                    await FlushBatchAsync();
+                    await FlushBatchWithRecoveryAsync();
                     await DisposeWriterAsync(writer, cancellationToken);
                     rotationIndex++;
-                    writer = CreateNewWriter(currentDate, rotationIndex, GetLogFileNamingSnapshot(), out var path);
+                    var rotated = await CreateNewWriterAsync(
+                        currentDate,
+                        rotationIndex,
+                        GetLogFileNamingSnapshot(),
+                        cancellationToken);
+                    writer = rotated.Writer;
+                    var path = rotated.Path;
                     currentSizeBytes = 0;
                     SetCurrentLogFilePath(path);
                 }
@@ -707,18 +759,7 @@ public sealed class FileLogWriter : IFileLogWriter
 
                 if (batch.Count >= FlushLineInterval)
                 {
-                    try
-                    {
-                        await FlushBatchAsync();
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        await RecoverBatchAsync(ex);
-                    }
+                    await FlushBatchWithRecoveryAsync();
                 }
             }
             catch (OperationCanceledException)
@@ -754,18 +795,7 @@ public sealed class FileLogWriter : IFileLogWriter
 
                     if (batchStartedAt.HasValue && DateTimeOffset.UtcNow - batchStartedAt.Value >= FlushTimeInterval)
                     {
-                        try
-                        {
-                            await FlushBatchAsync();
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            await RecoverBatchAsync(ex);
-                        }
+                        await FlushBatchWithRecoveryAsync();
                     }
 
                     timerTask = flushTimer.WaitForNextTickAsync(cancellationToken).AsTask();
@@ -785,18 +815,7 @@ public sealed class FileLogWriter : IFileLogWriter
                 readTask = _queue.Reader.WaitToReadAsync(cancellationToken).AsTask();
             }
 
-            try
-            {
-                await FlushBatchAsync();
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                await RecoverBatchAsync(ex);
-            }
+            await FlushBatchWithRecoveryAsync();
 
             await DisposeWriterAsync(writer, cancellationToken);
             writer = null;
@@ -877,6 +896,38 @@ public sealed class FileLogWriter : IFileLogWriter
         }
 
         throw new IOException("Could not create a unique timestamped serial log file.");
+    }
+
+    private async Task<(StreamWriter Writer, string Path)> CreateNewWriterAsync(
+        string dateText,
+        int rotationIndex,
+        LogFileNamingSnapshot naming,
+        CancellationToken cancellationToken)
+    {
+        EnsureLateOperationCapacity();
+        var openTask = Task.Run(() =>
+        {
+            var writer = CreateNewWriter(dateText, rotationIndex, naming, out var path);
+            return (Writer: writer, Path: path);
+        }, CancellationToken.None);
+
+        try
+        {
+            return await openTask.WaitAsync(_fileIoTimeout, cancellationToken);
+        }
+        catch (TimeoutException ex)
+        {
+            Interlocked.Increment(ref _fileIoTimeoutCount);
+            TrackLateWriterCreation(openTask);
+            throw new FileIoTimeoutException(
+                $"File open timed out after {_fileIoTimeout}.",
+                ex);
+        }
+        catch (OperationCanceledException) when (!openTask.IsCompleted)
+        {
+            TrackLateWriterCreation(openTask);
+            throw;
+        }
     }
 
     private string CreateLogFilePath(
@@ -1005,6 +1056,32 @@ public sealed class FileLogWriter : IFileLogWriter
         return new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 64 * 1024);
     }
 
+    private async Task RunBlockingFileOperationAsync(
+        Action operation,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        EnsureLateOperationCapacity();
+        var operationTask = Task.Run(operation, CancellationToken.None);
+        try
+        {
+            await operationTask.WaitAsync(_fileIoTimeout, cancellationToken);
+        }
+        catch (TimeoutException ex)
+        {
+            Interlocked.Increment(ref _fileIoTimeoutCount);
+            TrackLateTask(operationTask);
+            throw new FileIoTimeoutException(
+                $"File {operationName} timed out after {_fileIoTimeout}.",
+                ex);
+        }
+        catch (OperationCanceledException) when (!operationTask.IsCompleted)
+        {
+            TrackLateTask(operationTask);
+            throw;
+        }
+    }
+
     private static Stream OpenFileStream(string path, FileMode fileMode)
     {
         return new FileStream(
@@ -1037,10 +1114,50 @@ public sealed class FileLogWriter : IFileLogWriter
 
         try
         {
+            EnsureLateOperationCapacity();
+        }
+        catch (FileIoTimeoutException)
+        {
+            // ponytail: the late-operation ceiling is deliberate; release this
+            // last stream on a pool thread instead of blocking the writer worker.
+            _ = Task.Run(() => DisposeAbandonedWriter(writer));
+            return;
+        }
+
+        var cleanupTask = Task.Run(() => DisposeAbandonedWriter(writer));
+        lock (_lateOperationGate)
+        {
+            _lateOperations.Add(cleanupTask);
+            _lateWriters.Add(writer);
+        }
+
+        _ = CompleteAbandonedWriterAsync(writer, cleanupTask);
+    }
+
+    private static void DisposeAbandonedWriter(StreamWriter writer)
+    {
+        try
+        {
             writer.BaseStream.Dispose();
         }
         catch
         {
+        }
+    }
+
+    private async Task CompleteAbandonedWriterAsync(StreamWriter writer, Task cleanupTask)
+    {
+        try
+        {
+            await cleanupTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_lateOperationGate)
+            {
+                _lateOperations.Remove(cleanupTask);
+                _lateWriters.Remove(writer);
+            }
         }
     }
 
@@ -1098,10 +1215,10 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         lock (_lateOperationGate)
         {
-            if (_lateWriters.Count >= MaximumLateOperationCount)
+            if (_lateOperations.Count >= MaximumLateOperationCount)
             {
                 throw new FileIoTimeoutException(
-                    $"File writer has {_lateWriters.Count} late I/O operation(s); refusing another operation.");
+                    $"File writer has {_lateOperations.Count} late I/O operation(s); refusing another operation.");
             }
         }
     }
@@ -1113,6 +1230,7 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         lock (_lateOperationGate)
         {
+            _lateOperations.Add(operationTask);
             _lateWriters.Add(writer);
         }
 
@@ -1143,10 +1261,69 @@ public sealed class FileLogWriter : IFileLogWriter
 
             lock (_lateOperationGate)
             {
+                _lateOperations.Remove(operationTask);
                 _lateWriters.Remove(writer);
             }
 
             operationCancellation.Dispose();
+        }
+    }
+
+    private void TrackLateWriterCreation(Task<(StreamWriter Writer, string Path)> openTask)
+    {
+        lock (_lateOperationGate)
+        {
+            _lateOperations.Add(openTask);
+        }
+
+        _ = CompleteLateWriterCreationAsync(openTask);
+    }
+
+    private async Task CompleteLateWriterCreationAsync(Task<(StreamWriter Writer, string Path)> openTask)
+    {
+        StreamWriter? writer = null;
+        try
+        {
+            writer = (await openTask.ConfigureAwait(false)).Writer;
+            AbandonWriter(writer);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            lock (_lateOperationGate)
+            {
+                _lateOperations.Remove(openTask);
+            }
+        }
+    }
+
+    private void TrackLateTask(Task operationTask)
+    {
+        lock (_lateOperationGate)
+        {
+            _lateOperations.Add(operationTask);
+        }
+
+        _ = ObserveLateTaskAsync(operationTask);
+    }
+
+    private async Task ObserveLateTaskAsync(Task operationTask)
+    {
+        try
+        {
+            await operationTask.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            lock (_lateOperationGate)
+            {
+                _lateOperations.Remove(operationTask);
+            }
         }
     }
 
