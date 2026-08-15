@@ -7,11 +7,23 @@ namespace SerialMonitor.WinUI.Services;
 public sealed class FileLogWriter : IFileLogWriter
 {
     private const int QueueCapacity = 100_000;
+    private const long QueueByteCapacity = 64L * 1024 * 1024;
     private const int FlushLineInterval = 100;
+    private const int MaximumRecoveryAttempts = 3;
+    private const int MaximumLateOperationCount = 4;
+    private static readonly TimeSpan DefaultFileIoTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FlushTimeInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan FlushCheckInterval = TimeSpan.FromMilliseconds(100);
 
+    private readonly Func<string, FileMode, Stream> _streamFactory;
+    private readonly TimeSpan _fileIoTimeout;
+    private readonly TimeSpan _shutdownTimeout;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateGate = new();
+    private readonly object _queueGate = new();
+    private readonly object _lateOperationGate = new();
+    private readonly HashSet<StreamWriter> _lateWriters = new();
     private Channel<FileLogWriteRequest> _queue = CreateQueue();
     private CancellationTokenSource? _writerCancellation;
     private Task? _writerTask;
@@ -19,33 +31,63 @@ public sealed class FileLogWriter : IFileLogWriter
     private string? _currentLogFilePath;
     private string? _lastLogFilePath;
     private string? _lastFileError;
-    private long _writtenLineCount;
-    private long _writtenByteCount;
+    private FileLogWriterState _state = FileLogWriterState.Stopped;
+    private FileLogWriterFaultInfo? _lastFault;
+    private long _acceptedLineCount;
+    private long _durableLineCount;
+    private long _durableByteCount;
+    private long _uncertainLineCount;
+    private long _abandonedLineCount;
     private long _fileErrorCount;
     private long _droppedLineCount;
+    private long _recoveryCount;
     private int _pendingRequestCount;
+    private long _pendingByteCount;
     private long _startCount;
     private long _stopCount;
     private long _lifecycleErrorCount;
+    private long _fileIoTimeoutCount;
     private long _maximumFileSizeBytes;
     private string _lastLifecycleAction = "File logging has not started.";
     private string _logFileName = string.Empty;
     private string _logRunTimeText = string.Empty;
     private bool _rotationRequested;
-    private bool _isRunning;
     private bool _disposed;
+
+    public FileLogWriter(
+        Func<string, FileMode, Stream>? streamFactory = null,
+        TimeSpan? fileIoTimeout = null,
+        TimeSpan? shutdownTimeout = null)
+    {
+        _streamFactory = streamFactory ?? OpenFileStream;
+        _fileIoTimeout = ValidateTimeout(fileIoTimeout ?? DefaultFileIoTimeout, nameof(fileIoTimeout));
+        _shutdownTimeout = ValidateTimeout(shutdownTimeout ?? DefaultShutdownTimeout, nameof(shutdownTimeout));
+    }
 
     public event EventHandler<string>? Error;
 
     public event EventHandler? StatusChanged;
 
-    public bool IsRunning
+    public bool IsRunning => State is FileLogWriterState.Starting or FileLogWriterState.Running;
+
+    public FileLogWriterState State
     {
         get
         {
             lock (_stateGate)
             {
-                return _isRunning;
+                return _state;
+            }
+        }
+    }
+
+    public FileLogWriterFaultInfo? LastFault
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return _lastFault;
             }
         }
     }
@@ -94,13 +136,25 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
-    public long WrittenLineCount => Interlocked.Read(ref _writtenLineCount);
+    public long WrittenLineCount => DurableLineCount;
 
-    public long WrittenByteCount => Interlocked.Read(ref _writtenByteCount);
+    public long AcceptedLineCount => Interlocked.Read(ref _acceptedLineCount);
+
+    public long DurableLineCount => Interlocked.Read(ref _durableLineCount);
+
+    public long WrittenByteCount => DurableByteCount;
+
+    public long DurableByteCount => Interlocked.Read(ref _durableByteCount);
+
+    public long UncertainLineCount => Interlocked.Read(ref _uncertainLineCount);
+
+    public long AbandonedLineCount => Interlocked.Read(ref _abandonedLineCount);
 
     public long FileErrorCount => Interlocked.Read(ref _fileErrorCount);
 
     public long DroppedLineCount => Interlocked.Read(ref _droppedLineCount);
+
+    public long RecoveryCount => Interlocked.Read(ref _recoveryCount);
 
     public int PendingRequestCount => Volatile.Read(ref _pendingRequestCount);
 
@@ -109,6 +163,19 @@ public sealed class FileLogWriter : IFileLogWriter
     public long StopCount => Interlocked.Read(ref _stopCount);
 
     public long LifecycleErrorCount => Interlocked.Read(ref _lifecycleErrorCount);
+
+    public long FileIoTimeoutCount => Interlocked.Read(ref _fileIoTimeoutCount);
+
+    public int PendingLateOperationCount
+    {
+        get
+        {
+            lock (_lateOperationGate)
+            {
+                return _lateWriters.Count;
+            }
+        }
+    }
 
     public string LastLifecycleAction
     {
@@ -131,22 +198,19 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         var normalizedLogFileName = LogFileNamePolicy.Validate(exactLogFileName);
         var naming = new LogFileNamingSnapshot(normalizedLogFileName);
-        if (requestNewFile && IsRunning && _writerTask is not null)
+
+        if (requestNewFile && TryQueueNamingChange(naming))
         {
-            if (_queue.Writer.TryWrite(FileLogWriteRequest.ForNaming(naming)))
-            {
-                Interlocked.Increment(ref _pendingRequestCount);
-                SetLifecycleAction(string.IsNullOrWhiteSpace(normalizedLogFileName)
-                    ? "Log file name cleared; creating a new timestamped log."
-                    : $"Log file name active: {normalizedLogFileName}");
-                return;
-            }
+            SetLifecycleAction(string.IsNullOrWhiteSpace(normalizedLogFileName)
+                ? "Log file name cleared; creating a new timestamped log."
+                : $"Log file name active: {normalizedLogFileName}");
+            return;
         }
 
         lock (_stateGate)
         {
-            ApplyLogFileNamingState(naming);
-            if (requestNewFile && _isRunning)
+            _logFileName = naming.LogFileName;
+            if (requestNewFile && IsRunning)
             {
                 _rotationRequested = true;
                 _lastLifecycleAction = string.IsNullOrWhiteSpace(normalizedLogFileName)
@@ -167,23 +231,26 @@ public sealed class FileLogWriter : IFileLogWriter
         {
             ThrowIfDisposed();
 
-            if (_writerTask is not null && !_writerTask.IsCompleted)
-            {
-                SetLifecycleAction("Start ignored: file logging is already running.");
-                return;
-            }
-
             if (_writerTask is not null)
             {
-                await StopWriterAsync(CancellationToken.None);
+                if (!_writerTask.IsCompleted)
+                {
+                    SetLifecycleAction("Start ignored: file logging is already running.");
+                    return;
+                }
+
+                await StopWriterCoreAsync(CancellationToken.None, preserveFault: false);
             }
 
-            _directory = string.IsNullOrWhiteSpace(directory) ? CreateDefaultLogDirectory() : directory;
-            Directory.CreateDirectory(_directory);
+            var targetDirectory = string.IsNullOrWhiteSpace(directory)
+                ? CreateDefaultLogDirectory()
+                : directory;
+            Directory.CreateDirectory(targetDirectory);
+
             var naming = GetLogFileNamingSnapshot();
             if (!string.IsNullOrWhiteSpace(naming.LogFileName))
             {
-                var explicitPath = CreateLogFilePath(string.Empty, rotationIndex: 0, duplicateIndex: 0, naming);
+                var explicitPath = CreateLogFilePath(string.Empty, rotationIndex: 0, duplicateIndex: 0, naming, targetDirectory);
                 if (File.Exists(explicitPath) || Directory.Exists(explicitPath))
                 {
                     throw new IOException($"Log file already exists: {explicitPath}");
@@ -193,30 +260,52 @@ public sealed class FileLogWriter : IFileLogWriter
             var openedAt = DateTimeOffset.Now;
             lock (_stateGate)
             {
+                _directory = targetDirectory;
                 _logRunTimeText = openedAt.LocalDateTime.ToString("HHmmss");
-            }
-            SetCurrentLogFilePath(null);
-            _queue = CreateQueue();
-            Volatile.Write(ref _pendingRequestCount, 0);
-            var openCompletion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!_queue.Writer.TryWrite(FileLogWriteRequest.ForOpen(openedAt, openCompletion)))
-            {
-                throw new InvalidOperationException("Could not queue the initial serial log file open request.");
+                _lastFault = null;
+                _lastFileError = null;
             }
 
-            Interlocked.Increment(ref _pendingRequestCount);
+            SetCurrentLogFilePath(null);
+            var openCompletion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_queueGate)
+            {
+                _queue = CreateQueue();
+                Volatile.Write(ref _pendingRequestCount, 0);
+                Interlocked.Exchange(ref _pendingByteCount, 0);
+                if (!_queue.Writer.TryWrite(FileLogWriteRequest.ForOpen(openedAt, openCompletion)))
+                {
+                    throw new InvalidOperationException("Could not queue the initial serial log file open request.");
+                }
+
+                Interlocked.Increment(ref _pendingRequestCount);
+            }
+
             _writerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Interlocked.Increment(ref _startCount);
-            SetLifecycleAction($"Starting file logging: {_directory}", raiseStatusChanged: false);
-            SetRunningState(isRunning: true, clearLastError: true);
+            SetLifecycleAction($"Starting file logging: {targetDirectory}", raiseStatusChanged: false);
+            SetState(FileLogWriterState.Starting);
             _writerTask = Task.Run(() => ProcessAsync(_writerCancellation.Token), CancellationToken.None);
-            await openCompletion.Task.WaitAsync(cancellationToken);
+
+            await openCompletion.Task.WaitAsync(_fileIoTimeout, cancellationToken);
+            if (State == FileLogWriterState.Starting)
+            {
+                SetState(FileLogWriterState.Running);
+            }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (State != FileLogWriterState.Faulted)
+            {
+                SetFault(ex, ClassifyFault(ex));
+            }
+
             RecordLifecycleError($"File logging start failed: {ex.Message}");
-            ReportFileError($"File logging start failed: {ex.Message}");
-            await StopWriterAsync(CancellationToken.None);
+            await StopWriterCoreAsync(CancellationToken.None, preserveFault: true);
             throw;
         }
         finally
@@ -227,32 +316,38 @@ public sealed class FileLogWriter : IFileLogWriter
 
     public bool TryEnqueue(LogLine line)
     {
-        if (!IsRunning || _writerTask is null)
+        var request = FileLogWriteRequest.ForLine(line);
+        var state = State;
+        if (state is not (FileLogWriterState.Starting or FileLogWriterState.Running))
         {
+            if (state == FileLogWriterState.Faulted)
+            {
+                RecordDroppedLine("File log writer is faulted");
+            }
+
             return false;
         }
 
-        if (_queue.Writer.TryWrite(FileLogWriteRequest.ForLine(line)))
+        var queued = false;
+        lock (_queueGate)
         {
-            Interlocked.Increment(ref _pendingRequestCount);
-            return true;
+            if (Volatile.Read(ref _pendingRequestCount) < QueueCapacity &&
+                Interlocked.Read(ref _pendingByteCount) + request.ByteCount <= QueueByteCapacity &&
+                _queue.Writer.TryWrite(request))
+            {
+                Interlocked.Increment(ref _pendingRequestCount);
+                Interlocked.Add(ref _pendingByteCount, request.ByteCount);
+                Interlocked.Increment(ref _acceptedLineCount);
+                queued = true;
+            }
         }
 
-        RecordDroppedLine("File log queue is full. Dropped log lines");
-        return false;
-    }
+        if (!queued)
+        {
+            RecordDroppedLine("File log queue is full");
+        }
 
-    private void RecordDroppedLine(string reason)
-    {
-        var dropped = Interlocked.Increment(ref _droppedLineCount);
-        if (dropped == 1 || dropped % 1000 == 0)
-        {
-            ReportFileError($"{reason}: {dropped:N0}");
-        }
-        else
-        {
-            RaiseStatusChanged();
-        }
+        return queued;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -265,7 +360,7 @@ public sealed class FileLogWriter : IFileLogWriter
         await _lifecycleGate.WaitAsync(cancellationToken);
         try
         {
-            await StopWriterAsync(cancellationToken);
+            await StopWriterCoreAsync(cancellationToken, preserveFault: false);
         }
         finally
         {
@@ -284,7 +379,7 @@ public sealed class FileLogWriter : IFileLogWriter
         await _lifecycleGate.WaitAsync(CancellationToken.None);
         try
         {
-            await StopWriterAsync(CancellationToken.None);
+            await StopWriterCoreAsync(CancellationToken.None, preserveFault: false);
         }
         finally
         {
@@ -293,37 +388,92 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
-    private async Task StopWriterAsync(CancellationToken cancellationToken)
+    private async Task StopWriterCoreAsync(CancellationToken cancellationToken, bool preserveFault)
     {
         var writerTask = _writerTask;
         if (writerTask is null)
         {
-            if (IsRunning)
+            if (!preserveFault)
             {
-                SetRunningState(isRunning: false);
+                SetState(FileLogWriterState.Stopped);
             }
 
             SetLifecycleAction("Stop ignored: file logging is not running.");
             return;
         }
 
-        SetLifecycleAction("Stopping file logging.");
-        _queue.Writer.TryComplete();
+        if (State != FileLogWriterState.Faulted)
+        {
+            SetLifecycleAction("Stopping file logging.");
+            SetState(FileLogWriterState.Stopping);
+        }
 
+        _queue.Writer.TryComplete();
+        var cancellationRequested = false;
+        var stopped = false;
         try
         {
-            await writerTask.WaitAsync(cancellationToken);
+            await writerTask.WaitAsync(_shutdownTimeout, cancellationToken);
+            stopped = true;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            cancellationRequested = true;
+            _writerCancellation?.Cancel();
+            stopped = await WaitForWriterCompletionAsync(writerTask);
+        }
+        catch (TimeoutException)
+        {
+            _writerCancellation?.Cancel();
+            stopped = await WaitForWriterCompletionAsync(writerTask);
+            if (!stopped)
+            {
+                SetFault(
+                    new TimeoutException($"File writer did not stop within {_shutdownTimeout}."),
+                    FileLogWriterFaultCategory.RetryableIo);
+                SetLifecycleAction("File writer stop timed out; the writer remains quarantined.");
+                return;
+            }
+        }
+
+        if (!stopped)
+        {
+            return;
         }
 
         _writerCancellation?.Dispose();
         _writerCancellation = null;
         _writerTask = null;
         Interlocked.Increment(ref _stopCount);
+        if (!preserveFault && State != FileLogWriterState.Faulted)
+        {
+            SetState(FileLogWriterState.Stopped);
+        }
+
         SetLifecycleAction("Stopped file logging.", raiseStatusChanged: false);
-        SetRunningState(isRunning: false);
+        RaiseStatusChanged();
+
+        if (cancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+    }
+
+    private async Task<bool> WaitForWriterCompletionAsync(Task writerTask)
+    {
+        try
+        {
+            await writerTask.WaitAsync(_shutdownTimeout);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private async Task ProcessAsync(CancellationToken cancellationToken)
@@ -333,60 +483,173 @@ public sealed class FileLogWriter : IFileLogWriter
         var currentLogIdentity = string.Empty;
         var currentSizeBytes = 0L;
         var rotationIndex = 0;
-        var writtenSinceFlush = 0;
-        var lastFlush = DateTimeOffset.UtcNow;
+        var batch = new List<LogLine>(FlushLineInterval);
+        var batchBytes = 0L;
+        DateTimeOffset? batchStartedAt = null;
 
-        try
+        async Task FlushBatchAsync()
         {
-            await foreach (var request in _queue.Reader.ReadAllAsync(cancellationToken))
+            if (batch.Count == 0)
             {
-                Interlocked.Decrement(ref _pendingRequestCount);
-                if (request.Naming.HasValue)
-                {
-                    ApplyLogFileNamingState(request.Naming.Value);
-                    await FlushAndDisposeAsync(writer);
-                    writer = null;
-                    currentDate = string.Empty;
-                    currentLogIdentity = string.Empty;
-                    currentSizeBytes = 0;
-                    rotationIndex = 0;
-                    writtenSinceFlush = 0;
-                    lastFlush = DateTimeOffset.UtcNow;
-                    RaiseStatusChanged();
-                    continue;
-                }
+                return;
+            }
 
-                if (request.OpenedAt.HasValue)
+            await RunFileOperationAsync(
+                writer!,
+                "flush",
+                operationCancellation => writer!.FlushAsync(operationCancellation),
+                cancellationToken);
+            Interlocked.Add(ref _durableLineCount, batch.Count);
+            Interlocked.Add(ref _durableByteCount, batchBytes);
+            batch.Clear();
+            batchBytes = 0;
+            batchStartedAt = null;
+            RaiseStatusChanged();
+        }
+
+        async Task RecoverBatchAsync(Exception failure)
+        {
+            if (failure is FileIoTimeoutException)
+            {
+                throw failure;
+            }
+
+            if (batch.Count == 0 || writer is null)
+            {
+                throw failure;
+            }
+
+            var retryLines = batch.ToArray();
+            var retryBytes = batchBytes;
+            var recoveryNaming = GetLogFileNamingSnapshot();
+            Interlocked.Add(ref _uncertainLineCount, retryLines.Length);
+            ReportFileError($"File I/O failed; retrying {retryLines.Length:N0} accepted line(s): {failure.Message}");
+            AbandonWriter(writer);
+            writer = null;
+
+            Exception? lastFailure = failure;
+            for (var attempt = 0; attempt < MaximumRecoveryAttempts; attempt++)
+            {
+                try
                 {
+                    if (attempt > 0)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(250 * (1 << (attempt - 1))), cancellationToken);
+                    }
+
+                    var nextRotationIndex = rotationIndex + 1;
+                    var recoveryWriter = CreateNewWriter(
+                        currentDate,
+                        nextRotationIndex,
+                        recoveryNaming,
+                        out var recoveryPath);
                     try
                     {
-                        var openedDate = request.OpenedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
-                        var openNaming = GetLogFileNamingSnapshot();
-                        writer = CreateNewWriter(openedDate, rotationIndex: 0, openNaming, out var path);
-                        currentDate = openedDate;
-                        currentLogIdentity = CreateLogFileIdentity(openNaming);
-                        currentSizeBytes = 0;
-                        rotationIndex = 0;
-                        writtenSinceFlush = 0;
-                        lastFlush = DateTimeOffset.UtcNow;
-                        SetCurrentLogFilePath(path);
-                        request.OpenCompletion?.TrySetResult(path);
+                        foreach (var retryLine in retryLines)
+                        {
+                            await RunFileOperationAsync(
+                                recoveryWriter,
+                                "write",
+                                operationCancellation => recoveryWriter.WriteLineAsync(
+                                    retryLine.Formatted.AsMemory(),
+                                    operationCancellation),
+                                cancellationToken);
+                        }
+
+                        await RunFileOperationAsync(
+                            recoveryWriter,
+                            "flush",
+                            operationCancellation => recoveryWriter.FlushAsync(operationCancellation),
+                            cancellationToken);
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        request.OpenCompletion?.TrySetException(ex);
+                        AbandonWriter(recoveryWriter);
                         throw;
                     }
 
-                    continue;
+                    writer = recoveryWriter;
+                    rotationIndex = nextRotationIndex;
+                    currentLogIdentity = CreateLogFileIdentity(recoveryNaming);
+                    currentSizeBytes = retryBytes;
+                    batch.Clear();
+                    batchBytes = 0;
+                    batchStartedAt = null;
+                    Interlocked.Add(ref _durableLineCount, retryLines.Length);
+                    Interlocked.Add(ref _durableByteCount, retryBytes);
+                    Interlocked.Increment(ref _recoveryCount);
+                    SetCurrentLogFilePath(recoveryPath);
+                    SetLifecycleAction("Recovered file logging in a new segment.");
+                    return;
                 }
-
-                var line = request.Line;
-                if (line is null)
+                catch (OperationCanceledException)
                 {
-                    continue;
+                    throw;
+                }
+                catch (FileIoTimeoutException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    lastFailure = ex;
+                }
+            }
+
+            batch.Clear();
+            batchBytes = 0;
+            batchStartedAt = null;
+            Interlocked.Add(ref _abandonedLineCount, retryLines.Length);
+            throw new IOException("File logging recovery failed after bounded retries.", lastFailure);
+        }
+
+        async Task HandleRequestAsync(FileLogWriteRequest request)
+        {
+            if (request.Naming.HasValue)
+            {
+                ApplyLogFileNamingState(request.Naming.Value);
+                await FlushBatchAsync();
+                await DisposeWriterAsync(writer, cancellationToken);
+                writer = null;
+                currentDate = string.Empty;
+                currentLogIdentity = string.Empty;
+                currentSizeBytes = 0;
+                rotationIndex = 0;
+                return;
+            }
+
+            if (request.OpenedAt.HasValue)
+            {
+                try
+                {
+                    var openedDate = request.OpenedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
+                    var openNaming = GetLogFileNamingSnapshot();
+                    writer = CreateNewWriter(openedDate, rotationIndex: 0, openNaming, out var path);
+                    currentDate = openedDate;
+                    currentLogIdentity = CreateLogFileIdentity(openNaming);
+                    currentSizeBytes = 0;
+                    rotationIndex = 0;
+                    SetCurrentLogFilePath(path);
+                    request.OpenCompletion?.TrySetResult(path);
+                }
+                catch (Exception ex)
+                {
+                    request.OpenCompletion?.TrySetException(ex);
+                    throw;
                 }
 
+                return;
+            }
+
+            var line = request.Line;
+            if (line is null)
+            {
+                return;
+            }
+
+            var lineWasAddedToBatch = false;
+            try
+            {
                 var lineDate = line.Timestamp.LocalDateTime.ToString("yyyy-MM-dd");
                 var naming = GetLogFileNamingSnapshot();
                 var lineLogIdentity = CreateLogFileIdentity(naming);
@@ -395,64 +658,180 @@ public sealed class FileLogWriter : IFileLogWriter
                     rotationRequested ||
                     !string.Equals(currentLogIdentity, lineLogIdentity, StringComparison.Ordinal))
                 {
-                    await FlushAndDisposeAsync(writer);
-                    writer = null;
-
+                    await FlushBatchAsync();
+                    await DisposeWriterAsync(writer, cancellationToken);
+                    writer = CreateNewWriter(lineDate, rotationIndex: 0, naming, out var path);
                     currentDate = lineDate;
                     currentLogIdentity = lineLogIdentity;
-                    rotationIndex = 0;
-                    writer = CreateNewWriter(currentDate, rotationIndex, naming, out var path);
                     currentSizeBytes = 0;
+                    rotationIndex = 0;
                     SetCurrentLogFilePath(path);
-                    writtenSinceFlush = 0;
-                    lastFlush = DateTimeOffset.UtcNow;
                 }
 
-                // A value of 0 disables optional size-based rotation.
                 var maxFileSizeBytes = MaximumFileSizeBytes;
                 if (maxFileSizeBytes > 0 && currentSizeBytes >= maxFileSizeBytes)
                 {
-                    await FlushAndDisposeAsync(writer);
+                    await FlushBatchAsync();
+                    await DisposeWriterAsync(writer, cancellationToken);
                     rotationIndex++;
                     writer = CreateNewWriter(currentDate, rotationIndex, GetLogFileNamingSnapshot(), out var path);
                     currentSizeBytes = 0;
                     SetCurrentLogFilePath(path);
-                    writtenSinceFlush = 0;
-                    lastFlush = DateTimeOffset.UtcNow;
                 }
 
                 var formatted = line.Formatted;
-                await writer!.WriteLineAsync(formatted);
-
                 var bytesWritten = Encoding.UTF8.GetByteCount(formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
-                currentSizeBytes += bytesWritten;
-                Interlocked.Increment(ref _writtenLineCount);
-                Interlocked.Add(ref _writtenByteCount, bytesWritten);
-                writtenSinceFlush++;
-
-                if (writtenSinceFlush >= FlushLineInterval || DateTimeOffset.UtcNow - lastFlush >= FlushTimeInterval)
+                batch.Add(line);
+                lineWasAddedToBatch = true;
+                batchBytes += bytesWritten;
+                batchStartedAt ??= DateTimeOffset.UtcNow;
+                try
                 {
-                    await writer.FlushAsync();
-                    writtenSinceFlush = 0;
-                    lastFlush = DateTimeOffset.UtcNow;
-                    RaiseStatusChanged();
+                    await RunFileOperationAsync(
+                        writer!,
+                        "write",
+                        operationCancellation => writer!.WriteLineAsync(
+                            formatted.AsMemory(),
+                            operationCancellation),
+                        cancellationToken);
+                    currentSizeBytes += bytesWritten;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    await RecoverBatchAsync(ex);
+                }
+
+                if (batch.Count >= FlushLineInterval)
+                {
+                    try
+                    {
+                        await FlushBatchAsync();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        await RecoverBatchAsync(ex);
+                    }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                if (!lineWasAddedToBatch)
+                {
+                    Interlocked.Increment(ref _abandonedLineCount);
+                }
+
+                throw;
+            }
         }
-        catch (OperationCanceledException)
+
+        try
         {
+            using var flushTimer = new PeriodicTimer(FlushCheckInterval);
+            var readTask = _queue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            var timerTask = flushTimer.WaitForNextTickAsync(cancellationToken).AsTask();
+
+            while (true)
+            {
+                var completed = await Task.WhenAny(readTask, timerTask);
+                if (ReferenceEquals(completed, timerTask))
+                {
+                    if (!await timerTask)
+                    {
+                        break;
+                    }
+
+                    if (batchStartedAt.HasValue && DateTimeOffset.UtcNow - batchStartedAt.Value >= FlushTimeInterval)
+                    {
+                        try
+                        {
+                            await FlushBatchAsync();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            await RecoverBatchAsync(ex);
+                        }
+                    }
+
+                    timerTask = flushTimer.WaitForNextTickAsync(cancellationToken).AsTask();
+                    continue;
+                }
+
+                if (!await readTask)
+                {
+                    break;
+                }
+
+                while (TryReadRequest(out var request))
+                {
+                    await HandleRequestAsync(request);
+                }
+
+                readTask = _queue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            }
+
+            try
+            {
+                await FlushBatchAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                await RecoverBatchAsync(ex);
+            }
+
+            await DisposeWriterAsync(writer, cancellationToken);
+            writer = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _queue.Writer.TryComplete();
         }
         catch (Exception ex)
         {
-            ReportFileError($"File logging failed: {ex.Message}");
+            if (State != FileLogWriterState.Faulted)
+            {
+                SetFault(ex, ClassifyFault(ex));
+            }
+
+            _queue.Writer.TryComplete(ex);
         }
         finally
         {
-            await FlushAndDisposeAsync(writer);
-            Volatile.Write(ref _pendingRequestCount, 0);
+            AbandonWriter(writer);
+            if (batch.Count > 0)
+            {
+                Interlocked.Add(ref _abandonedLineCount, batch.Count);
+                batch.Clear();
+            }
+
+            DrainAcceptedRequests();
             SetCurrentLogFilePath(null);
+            if (State != FileLogWriterState.Faulted)
+            {
+                SetState(FileLogWriterState.Stopped);
+            }
+
             SetLifecycleAction("File writer task stopped.", raiseStatusChanged: false);
-            SetRunningState(isRunning: false);
+            RaiseStatusChanged();
         }
     }
 
@@ -466,7 +845,7 @@ public sealed class FileLogWriter : IFileLogWriter
         {
             if (rotationIndex == 0)
             {
-                path = CreateLogFilePath(dateText, rotationIndex, duplicateIndex: 0, naming);
+                path = CreateLogFilePath(dateText, rotationIndex: 0, duplicateIndex: 0, naming);
                 return CreateWriter(path, FileMode.CreateNew);
             }
 
@@ -504,19 +883,21 @@ public sealed class FileLogWriter : IFileLogWriter
         string dateText,
         int rotationIndex,
         int duplicateIndex,
-        LogFileNamingSnapshot naming)
+        LogFileNamingSnapshot naming,
+        string? directory = null)
     {
+        directory ??= LogDirectory;
         if (!string.IsNullOrWhiteSpace(naming.LogFileName))
         {
             if (rotationIndex == 0)
             {
-                return Path.Combine(_directory, naming.LogFileName);
+                return Path.Combine(directory, naming.LogFileName);
             }
 
             var extension = Path.GetExtension(naming.LogFileName);
             var stem = Path.GetFileNameWithoutExtension(naming.LogFileName);
             var explicitDuplicatePart = duplicateIndex == 0 ? string.Empty : $"_dup{duplicateIndex:D3}";
-            return Path.Combine(_directory, $"{stem}_{rotationIndex:D3}{explicitDuplicatePart}{extension}");
+            return Path.Combine(directory, $"{stem}_{rotationIndex:D3}{explicitDuplicatePart}{extension}");
         }
 
         string runTimeText;
@@ -528,7 +909,7 @@ public sealed class FileLogWriter : IFileLogWriter
         var rotationPart = rotationIndex == 0 ? string.Empty : $"_{rotationIndex:D3}";
         var duplicatePart = duplicateIndex == 0 ? string.Empty : $"_dup{duplicateIndex:D3}";
         var fileName = $"{dateText}_{runTimeText}_serial{rotationPart}{duplicatePart}.log";
-        return Path.Combine(_directory, fileName);
+        return Path.Combine(directory, fileName);
     }
 
     private static string CreateLogFileIdentity(LogFileNamingSnapshot naming)
@@ -542,8 +923,65 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         lock (_stateGate)
         {
-            return new LogFileNamingSnapshot(
-                _logFileName);
+            return new LogFileNamingSnapshot(_logFileName);
+        }
+    }
+
+    private bool TryQueueNamingChange(LogFileNamingSnapshot naming)
+    {
+        lock (_queueGate)
+        {
+            if (State is not (FileLogWriterState.Starting or FileLogWriterState.Running))
+            {
+                return false;
+            }
+
+            if (!_queue.Writer.TryWrite(FileLogWriteRequest.ForNaming(naming)))
+            {
+                return false;
+            }
+
+            Interlocked.Increment(ref _pendingRequestCount);
+            return true;
+        }
+    }
+
+    private bool TryReadRequest(out FileLogWriteRequest request)
+    {
+        lock (_queueGate)
+        {
+            if (!_queue.Reader.TryRead(out request))
+            {
+                return false;
+            }
+
+            Interlocked.Decrement(ref _pendingRequestCount);
+            Interlocked.Add(ref _pendingByteCount, -request.ByteCount);
+            return true;
+        }
+    }
+
+    private void DrainAcceptedRequests()
+    {
+        while (TryReadRequest(out var request))
+        {
+            if (request.Line is not null)
+            {
+                Interlocked.Increment(ref _abandonedLineCount);
+            }
+
+            request.OpenCompletion?.TrySetException(new IOException("File logging stopped before the request was processed."));
+        }
+
+        Volatile.Write(ref _pendingRequestCount, 0);
+        Interlocked.Exchange(ref _pendingByteCount, 0);
+    }
+
+    private void ApplyLogFileNamingState(LogFileNamingSnapshot naming)
+    {
+        lock (_stateGate)
+        {
+            _logFileName = naming.LogFileName;
         }
     }
 
@@ -561,52 +999,202 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
-    private void ApplyLogFileNamingState(LogFileNamingSnapshot naming)
+    private StreamWriter CreateWriter(string path, FileMode fileMode)
     {
-        lock (_stateGate)
-        {
-            _logFileName = naming.LogFileName;
-        }
+        var stream = _streamFactory(path, fileMode);
+        return new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 64 * 1024);
     }
 
-    private static StreamWriter CreateWriter(string path, FileMode fileMode)
+    private static Stream OpenFileStream(string path, FileMode fileMode)
     {
-        var stream = new FileStream(
+        return new FileStream(
             path,
             fileMode,
             FileAccess.Write,
             FileShare.Read,
             bufferSize: 64 * 1024,
             options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-        return new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 64 * 1024);
     }
 
-    private static async Task FlushAndDisposeAsync(StreamWriter? writer)
+    private async Task DisposeWriterAsync(StreamWriter? writer, CancellationToken cancellationToken)
     {
-        if (writer is null)
+        if (writer is not null)
+        {
+            await RunFileOperationAsync(
+                writer,
+                "close",
+                _ => writer.DisposeAsync().AsTask(),
+                cancellationToken);
+        }
+    }
+
+    private void AbandonWriter(StreamWriter? writer)
+    {
+        if (writer is null || IsLateWriter(writer))
         {
             return;
         }
 
-        await writer.FlushAsync();
-        await writer.DisposeAsync();
+        try
+        {
+            writer.BaseStream.Dispose();
+        }
+        catch
+        {
+        }
     }
 
-    private void SetRunningState(bool isRunning, bool clearLastError = false)
+    private async Task RunFileOperationAsync(
+        StreamWriter writer,
+        string operationName,
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken)
+    {
+        EnsureLateOperationCapacity();
+        var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task operationTask;
+        try
+        {
+            operationTask = operation(operationCancellation.Token);
+        }
+        catch
+        {
+            operationCancellation.Dispose();
+            throw;
+        }
+
+        var lateWriterTracked = false;
+        try
+        {
+            await operationTask.WaitAsync(_fileIoTimeout, cancellationToken);
+        }
+        catch (TimeoutException ex)
+        {
+            Interlocked.Increment(ref _fileIoTimeoutCount);
+            operationCancellation.Cancel();
+            TrackLateWriter(writer, operationTask, operationCancellation);
+            lateWriterTracked = true;
+            throw new FileIoTimeoutException(
+                $"File {operationName} timed out after {_fileIoTimeout}.",
+                ex);
+        }
+        catch (OperationCanceledException) when (!operationTask.IsCompleted)
+        {
+            operationCancellation.Cancel();
+            TrackLateWriter(writer, operationTask, operationCancellation);
+            lateWriterTracked = true;
+            throw;
+        }
+        finally
+        {
+            if (!lateWriterTracked)
+            {
+                operationCancellation.Dispose();
+            }
+        }
+    }
+
+    private void EnsureLateOperationCapacity()
+    {
+        lock (_lateOperationGate)
+        {
+            if (_lateWriters.Count >= MaximumLateOperationCount)
+            {
+                throw new FileIoTimeoutException(
+                    $"File writer has {_lateWriters.Count} late I/O operation(s); refusing another operation.");
+            }
+        }
+    }
+
+    private void TrackLateWriter(
+        StreamWriter writer,
+        Task operationTask,
+        CancellationTokenSource operationCancellation)
+    {
+        lock (_lateOperationGate)
+        {
+            _lateWriters.Add(writer);
+        }
+
+        _ = CompleteLateWriterAsync(writer, operationTask, operationCancellation);
+    }
+
+    private async Task CompleteLateWriterAsync(
+        StreamWriter writer,
+        Task operationTask,
+        CancellationTokenSource operationCancellation)
+    {
+        try
+        {
+            await operationTask.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            try
+            {
+                writer.BaseStream.Dispose();
+            }
+            catch
+            {
+            }
+
+            lock (_lateOperationGate)
+            {
+                _lateWriters.Remove(writer);
+            }
+
+            operationCancellation.Dispose();
+        }
+    }
+
+    private bool IsLateWriter(StreamWriter writer)
+    {
+        lock (_lateOperationGate)
+        {
+            return _lateWriters.Contains(writer);
+        }
+    }
+
+    private void SetState(FileLogWriterState state)
     {
         lock (_stateGate)
         {
-            _isRunning = isRunning;
-            if (clearLastError)
+            _state = state;
+            if (state == FileLogWriterState.Starting)
             {
-                _lastFileError = null;
+                _lastFault = null;
             }
-
-            _lastLifecycleAction = isRunning ? "File logging running." : _lastLifecycleAction;
         }
 
         RaiseStatusChanged();
+    }
+
+    private void SetFault(Exception exception, FileLogWriterFaultCategory category)
+    {
+        var message = $"File logging faulted: {exception.Message}";
+        lock (_stateGate)
+        {
+            _state = FileLogWriterState.Faulted;
+            _lastFault = new FileLogWriterFaultInfo(
+                category,
+                message,
+                exception.GetType().Name,
+                DateTimeOffset.Now,
+                category == FileLogWriterFaultCategory.RetryableIo);
+            _lastLifecycleAction = message;
+        }
+
+        ReportFileError(message);
+    }
+
+    private static FileLogWriterFaultCategory ClassifyFault(Exception exception)
+    {
+        return exception is ArgumentException or UnauthorizedAccessException
+            ? FileLogWriterFaultCategory.DeterministicConfiguration
+            : FileLogWriterFaultCategory.RetryableIo;
     }
 
     private void SetCurrentLogFilePath(string? path)
@@ -642,6 +1230,19 @@ public sealed class FileLogWriter : IFileLogWriter
         lock (_stateGate)
         {
             _lastLifecycleAction = message;
+        }
+    }
+
+    private void RecordDroppedLine(string reason)
+    {
+        var dropped = Interlocked.Increment(ref _droppedLineCount);
+        if (dropped == 1 || dropped % 1000 == 0)
+        {
+            ReportFileError($"{reason}: {dropped:N0}");
+        }
+        else
+        {
+            RaiseStatusChanged();
         }
     }
 
@@ -701,20 +1302,48 @@ public sealed class FileLogWriter : IFileLogWriter
         });
     }
 
+    private static TimeSpan ValidateTimeout(TimeSpan value, string parameterName)
+    {
+        if (value <= TimeSpan.Zero || value == Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, "Timeout must be positive and finite.");
+        }
+
+        return value;
+    }
+
+    private sealed class FileIoTimeoutException : IOException
+    {
+        public FileIoTimeoutException(string message)
+            : base(message)
+        {
+        }
+
+        public FileIoTimeoutException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
+
     private readonly record struct LogFileNamingSnapshot(string LogFileName);
 
     private readonly record struct FileLogWriteRequest(
         LogLine? Line,
         LogFileNamingSnapshot? Naming,
         DateTimeOffset? OpenedAt,
-        TaskCompletionSource<string>? OpenCompletion)
+        TaskCompletionSource<string>? OpenCompletion,
+        long ByteCount)
     {
-        public static FileLogWriteRequest ForLine(LogLine line) => new(line, null, null, null);
+        public static FileLogWriteRequest ForLine(LogLine line)
+        {
+            var byteCount = Encoding.UTF8.GetByteCount(line.Formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
+            return new(line, null, null, null, byteCount);
+        }
 
-        public static FileLogWriteRequest ForNaming(LogFileNamingSnapshot naming) => new(null, naming, null, null);
+        public static FileLogWriteRequest ForNaming(LogFileNamingSnapshot naming) => new(null, naming, null, null, 0);
 
         public static FileLogWriteRequest ForOpen(
             DateTimeOffset openedAt,
-            TaskCompletionSource<string> completion) => new(null, null, openedAt, completion);
+            TaskCompletionSource<string> completion) => new(null, null, openedAt, completion, 0);
     }
 }

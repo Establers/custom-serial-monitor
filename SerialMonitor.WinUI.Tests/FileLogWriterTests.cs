@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -204,6 +205,219 @@ public sealed class FileLogWriterTests
         var contents = await File.ReadAllTextAsync(file);
         Assert.Contains("day one", contents, StringComparison.Ordinal);
         Assert.Contains("day two", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TimeBasedFlush_CommitsOneLineWithoutAdditionalInput()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var writer = new FileLogWriter();
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+
+        Assert.True(writer.TryEnqueue(LogLine.System("deadline")));
+        await WaitUntilAsync(() => writer.DurableLineCount == 1, TimeSpan.FromSeconds(4));
+
+        var activePath = writer.CurrentLogFilePath!;
+        await writer.StopAsync(CancellationToken.None);
+        var contents = await File.ReadAllTextAsync(activePath);
+        Assert.Contains("deadline", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteFailure_ReplaysAcceptedBatchInRecoverySegment()
+    {
+        using var directory = new TemporaryDirectory();
+        var streamNumber = 0;
+        await using var writer = new FileLogWriter((path, mode) =>
+            Interlocked.Increment(ref streamNumber) == 1
+                ? new FailingWriteStream()
+                : new FileStream(path, mode, FileAccess.Write, FileShare.Read));
+
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+        Assert.True(writer.TryEnqueue(LogLine.System("recover me")));
+        await WaitUntilAsync(() => writer.RecoveryCount == 1, TimeSpan.FromSeconds(4));
+        await writer.StopAsync(CancellationToken.None);
+
+        Assert.Equal(1, writer.AcceptedLineCount);
+        Assert.Equal(1, writer.DurableLineCount);
+        Assert.Equal(1, writer.UncertainLineCount);
+        Assert.Equal(0, writer.DroppedLineCount);
+        Assert.Contains(
+            "recover me",
+            string.Join(Environment.NewLine, await Task.WhenAll(
+                Directory.GetFiles(directory.Path).Select(path => File.ReadAllTextAsync(path)))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HangingWrite_FaultsWithinIoTimeoutAndQuarantinesLateStream()
+    {
+        using var directory = new TemporaryDirectory();
+        var writeRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var writer = new FileLogWriter(
+            (_, _) => new HangingWriteStream(writeRelease.Task),
+            fileIoTimeout: TimeSpan.FromMilliseconds(100),
+            shutdownTimeout: TimeSpan.FromMilliseconds(200));
+
+        try
+        {
+            await writer.StartAsync(directory.Path, CancellationToken.None);
+            Assert.True(writer.TryEnqueue(LogLine.System(new string('x', 100_000))));
+            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(3));
+
+            Assert.Equal(1, writer.FileIoTimeoutCount);
+            Assert.Equal(1, writer.PendingLateOperationCount);
+            Assert.Contains("timed out", writer.LastFault?.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            writeRelease.TrySetResult();
+            await writer.StopAsync(CancellationToken.None);
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(2));
+        }
+    }
+
+    [Fact]
+    public async Task HangingFlush_FaultsWithinIoTimeoutWithoutBlockingStop()
+    {
+        using var directory = new TemporaryDirectory();
+        var flushRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var writer = new FileLogWriter(
+            (_, _) => new HangingFlushStream(flushRelease.Task),
+            fileIoTimeout: TimeSpan.FromMilliseconds(100),
+            shutdownTimeout: TimeSpan.FromMilliseconds(200));
+
+        try
+        {
+            await writer.StartAsync(directory.Path, CancellationToken.None);
+            for (var index = 0; index < 100; index++)
+            {
+                Assert.True(writer.TryEnqueue(LogLine.System($"flush-{index}")));
+            }
+
+            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(3));
+            Assert.Equal(1, writer.FileIoTimeoutCount);
+            Assert.Equal(1, writer.PendingLateOperationCount);
+        }
+        finally
+        {
+            flushRelease.TrySetResult();
+            await writer.StopAsync(CancellationToken.None);
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(2));
+        }
+    }
+
+    [Fact]
+    public async Task HangingFlush_StopAsyncCancelsWorkerWithinShutdownTimeout()
+    {
+        using var directory = new TemporaryDirectory();
+        var flushRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var writer = new FileLogWriter(
+            (_, _) => new HangingFlushStream(flushRelease.Task),
+            fileIoTimeout: TimeSpan.FromSeconds(30),
+            shutdownTimeout: TimeSpan.FromMilliseconds(200));
+
+        try
+        {
+            await writer.StartAsync(directory.Path, CancellationToken.None);
+            for (var index = 0; index < 100; index++)
+            {
+                Assert.True(writer.TryEnqueue(LogLine.System($"stop-{index}")));
+            }
+
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromMilliseconds(100));
+            var startedAt = Stopwatch.GetTimestamp();
+            await writer.StopAsync(CancellationToken.None);
+            var elapsed = Stopwatch.GetElapsedTime(startedAt);
+
+            Assert.True(elapsed < TimeSpan.FromSeconds(2), $"Stop took {elapsed}.");
+            Assert.Equal(FileLogWriterState.Stopped, writer.State);
+            Assert.True(writer.AbandonedLineCount > 0);
+        }
+        finally
+        {
+            flushRelease.TrySetResult();
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(2));
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25);
+        }
+
+        Assert.True(condition(), "Condition was not met before the timeout.");
+    }
+
+    private sealed class FailingWriteStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => 0;
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("simulated write failure");
+        public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException(new IOException("simulated write failure"));
+    }
+
+    private sealed class HangingWriteStream : Stream
+    {
+        private readonly Task _release;
+
+        public HangingWriteStream(Task release)
+        {
+            _release = release;
+        }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => 0;
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            new(_release);
+    }
+
+    private sealed class HangingFlushStream : Stream
+    {
+        private readonly Task _release;
+
+        public HangingFlushStream(Task release)
+        {
+            _release = release;
+        }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => 0;
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => _release;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) { }
+        public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class TemporaryDirectory : IDisposable

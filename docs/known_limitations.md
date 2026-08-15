@@ -47,6 +47,9 @@ This file tracks current intentional limits and validation gaps.
 - Real COM long-running 72-hour validation is still pending.
 - Real-device disconnect/reconnect behavior still needs coverage across common
   USB-UART adapters and Windows driver states.
+- The opt-in COM0COM soak test runs for the number of hours in
+  `SERIAL_COM0COM_SOAK_HOURS` when `SERIAL_COM0COM_SOAK_TEST=1`; run it for at
+  least `72` before treating a build as hardware-ready.
 
 ## HEX RX Bus Utilization
 

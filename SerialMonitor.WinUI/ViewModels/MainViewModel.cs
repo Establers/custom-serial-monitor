@@ -12664,6 +12664,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                $"UI {Log.TotalRetainedLineCount:N0}/{Log.Capacity:N0} | " +
                $"Q F/E/U {_fileLogWriter.PendingRequestCount:N0}/{_eventDetector.PendingInputLineCount:N0}/{TotalPendingUiCount:N0} | " +
                $"Drop RX/F/UI {RecordedRxDropCount:N0}/{_fileLogWriter.DroppedLineCount:N0}/{RecordedUiDropCount:N0} | " +
+               $"Lost F {_fileLogWriter.AbandonedLineCount:N0} | " +
                $"PS {TotalViewPauseOmittedLineCount:N0}";
     }
 
@@ -12672,6 +12673,21 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!FileLoggingEnabled)
         {
             return "File OFF";
+        }
+
+        if (_fileLogWriter.State == FileLogWriterState.Faulted)
+        {
+            return "File FAULT";
+        }
+
+        if (_fileLogWriter.State == FileLogWriterState.Starting)
+        {
+            return "File STARTING";
+        }
+
+        if (_fileLogWriter.State == FileLogWriterState.Stopping)
+        {
+            return "File STOPPING";
         }
 
         if (!string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath))

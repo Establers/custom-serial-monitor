@@ -13,6 +13,20 @@ independent from file logging and does not create an event log file.
 - Turning Log Save OFF immediately stops new file-log enqueues, drains lines
   already accepted by the bounded writer queue, flushes, closes the file, and
   retains the completed file path for Open and Copy path actions.
+- The file writer bounds both queue records (100,000) and queued UTF-8 bytes
+  (64 MiB). It flushes every 100 records or by a wall-clock two-second deadline,
+  including when no new line arrives.
+- `Accepted`, `Durable`, `Uncertain`, and `Abandoned` counts are tracked
+  separately. A write/flush failure retries the current uncommitted batch in a
+  new segment up to three times; a successful retry can duplicate data because
+  the completion state of the failed write is unknowable.
+- Open, write, flush, and close each have a 30-second timeout. A timed-out operation
+  faults the writer and quarantines its stream until the late operation ends;
+  the writer never reuses that stream or accumulates unbounded late operations.
+- `Durable` means the writer's flush completed and the data reached the
+  operating-system file stream. It does not promise survival of power loss or
+  kernel failure; WAL/fsync-on-every-batch is intentionally not part of this
+  plain-text logger.
 - RX, TX, MARK, and system lines use the same ordered serial log stream.
 - Terminal rendering and event detection continue while Log Save is OFF.
 

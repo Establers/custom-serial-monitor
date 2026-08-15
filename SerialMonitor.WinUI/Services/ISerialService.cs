@@ -15,6 +15,8 @@ public interface ISerialService : IAsyncDisposable
 
     SerialConnectionState ConnectionState { get; }
 
+    long ReceiveSessionGeneration { get; }
+
     string? LastError { get; }
 
     long ReceivedByteCount { get; }

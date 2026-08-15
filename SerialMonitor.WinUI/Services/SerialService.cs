@@ -9,15 +9,16 @@ public sealed class SerialService : ISerialService
 {
     private const int SerialReadBufferBytes = 1024 * 1024;
     private const int MockVisualPacketOverheadBytes = 16;
+    private static readonly TimeSpan ReceiveTeardownTimeout = TimeSpan.FromSeconds(10);
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly object _stateGate = new();
     private readonly SerialErrorAccumulator _serialErrors = new();
-    private Channel<ReceivedByteChunk> _receivedBytes = CreateChannel();
-    private CancellationTokenSource? _receiveCancellation;
-    private SerialPortStream? _serialPort;
-    private Task? _receiveTask;
+    private static readonly Channel<ReceivedByteChunk> EmptyReceivedBytes = CreateCompletedChannel();
+    private ReceiveSession? _currentReceiveSession;
+    private Task? _pendingReceiveTeardown;
+    private long _receiveGeneration;
     private SerialConnectionState _connectionState = SerialConnectionState.Disconnected;
     private string? _lastError;
     private long _receivedByteCount;
@@ -39,8 +40,8 @@ public sealed class SerialService : ISerialService
     private bool _mockStressInjectEvents = true;
     private bool _mockStressInjectInvalidBytes;
     private bool _mockStressRunning;
-    private bool _isMockConnection;
     private bool _disposed;
+    private int _writeGateDisposed;
 
     public event EventHandler<string>? Error;
 
@@ -60,6 +61,9 @@ public sealed class SerialService : ISerialService
             }
         }
     }
+
+    public long ReceiveSessionGeneration =>
+        Volatile.Read(ref _currentReceiveSession)?.Generation ?? Interlocked.Read(ref _receiveGeneration);
 
     public string? LastError
     {
@@ -103,7 +107,8 @@ public sealed class SerialService : ISerialService
 
     public long BridgePriorityDroppedPipelineChunkCount => Interlocked.Read(ref _bridgePriorityDroppedPipelineChunkCount);
 
-    public ChannelReader<ReceivedByteChunk> ReceivedBytes => _receivedBytes.Reader;
+    public ChannelReader<ReceivedByteChunk> ReceivedBytes =>
+        Volatile.Read(ref _currentReceiveSession)?.Channel.Reader ?? EmptyReceivedBytes.Reader;
 
     public bool IsMockStressRunning => Volatile.Read(ref _mockStressRunning);
 
@@ -201,6 +206,7 @@ public sealed class SerialService : ISerialService
         try
         {
             ThrowIfDisposed();
+            await EnsureNoPendingReceiveTeardownAsync();
 
             if (ConnectionState is SerialConnectionState.Connected or SerialConnectionState.Connecting)
             {
@@ -217,63 +223,65 @@ public sealed class SerialService : ISerialService
             Volatile.Write(ref _appliedReceiveIdleTimeoutMs, 0);
             Volatile.Write(ref _usesNativeReceiveIdleTimeout, 0);
 
-            _receivedBytes = CreateChannel();
-            _receiveCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var receiveToken = _receiveCancellation.Token;
+            var session = new ReceiveSession(
+                Interlocked.Increment(ref _receiveGeneration),
+                IsMockPort(settings.PortName),
+                cancellationToken);
+            SetCurrentReceiveSession(session);
             SetConnectionState(SerialConnectionState.Connecting, clearLastError: true);
 
-            if (IsMockPort(settings.PortName))
+            if (session.IsMock)
             {
-                _isMockConnection = true;
-                _receiveTask = Task.Run(
-                    () => RunMockReceiverAsync(settings.Clone(), receiveToken),
+                session.Worker = Task.Run(
+                    () => RunMockReceiverAsync(session, settings.Clone()),
                     CancellationToken.None);
-                SetConnectionState(SerialConnectionState.Connected, clearLastError: true);
+                SetConnectedIfCurrentSession(session);
                 return;
             }
 
-            _isMockConnection = false;
-            var serialPort = CreateSerialPort(settings, normalizedReceiveOptions);
-            // Subscribe before Open(). Some adapters can report errors as
-            // soon as DTR/RTS and the driver state are applied during open.
-            serialPort.ErrorReceived += OnSerialErrorReceived;
-
+            BoundaryPreservingSerialPortStream? serialPort = null;
+            Task? openTask = null;
             try
             {
-                await Task.Run(serialPort.Open, cancellationToken);
+                serialPort = CreateSerialPort(settings, normalizedReceiveOptions);
+                session.Port = serialPort;
+                // Subscribe before Open(). Some adapters can report errors as
+                // soon as DTR/RTS and the driver state are applied during open.
+                serialPort.ErrorReceived += OnSerialErrorReceived;
+                openTask = Task.Run(serialPort.Open, CancellationToken.None);
+                await openTask.WaitAsync(ReceiveTeardownTimeout, cancellationToken);
             }
             catch (OperationCanceledException)
             {
-                SafeDispose(serialPort);
+                ClearCurrentReceiveSession(session);
+                session.RequestStop();
+                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask);
+                SetConnectionState(SerialConnectionState.Disconnected);
                 throw;
             }
             catch (Exception ex)
             {
-                SafeDispose(serialPort);
-                _receiveCancellation.Dispose();
-                _receiveCancellation = null;
-                _receivedBytes.Writer.TryComplete();
+                ClearCurrentReceiveSession(session);
+                session.RequestStop();
+                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask);
 
                 var message = $"Failed to open {settings.PortName}: {ex.Message}";
                 ReportError(message, countConnectionError: true, state: SerialConnectionState.Faulted);
                 throw new InvalidOperationException(message, ex);
             }
 
-            _serialPort = serialPort;
             Volatile.Write(
                 ref _appliedReceiveIdleTimeoutMs,
                 normalizedReceiveOptions.UseNativeIdleTimeout ? normalizedReceiveOptions.IdleTimeoutMs : 0);
             Volatile.Write(
                 ref _usesNativeReceiveIdleTimeout,
                 normalizedReceiveOptions.UseNativeIdleTimeout ? 1 : 0);
-            _receiveTask = Task.Factory.StartNew(
-                () => RunSerialReceiver(
-                    serialPort,
-                    receiveToken),
+            session.Worker = Task.Factory.StartNew(
+                () => RunSerialReceiver(session),
                 CancellationToken.None,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
-            SetConnectionState(SerialConnectionState.Connected, clearLastError: true);
+            SetConnectedIfCurrentSession(session);
         }
         finally
         {
@@ -321,18 +329,19 @@ public sealed class SerialService : ISerialService
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            if (!IsConnected)
+            var session = Volatile.Read(ref _currentReceiveSession);
+            if (!IsConnected || session is null)
             {
                 const string message = "Write failed: serial service is disconnected.";
                 ReportError(message, countConnectionError: false);
                 throw new InvalidOperationException(message);
             }
 
-            var serialPort = _serialPort;
+            var serialPort = session.Port;
             if (serialPort is null)
             {
                 var responseBytes = Encoding.UTF8.GetBytes(mockResponse);
-                await PublishReceivedBytesAsync(responseBytes, cancellationToken, countReceived: false);
+                await PublishReceivedBytesAsync(session, responseBytes, cancellationToken, countReceived: false);
                 AddWrittenBytes(payload.Length);
                 return;
             }
@@ -349,11 +358,14 @@ public sealed class SerialService : ISerialService
             catch (Exception ex)
             {
                 var message = $"Serial write failed: {ex.Message}";
-                ReportError(message, countConnectionError: true, state: SerialConnectionState.Faulted);
-                _receiveCancellation?.Cancel();
-                SafeCloseAndDispose(serialPort);
-                ClearCurrentPortReference(serialPort);
-                _receivedBytes.Writer.TryComplete();
+                if (IsCurrentReceiveSession(session))
+                {
+                    ReportError(message, countConnectionError: true, state: SerialConnectionState.Faulted);
+                    session.RequestStop();
+                    session.Channel.Writer.TryComplete();
+                }
+
+                _ = StartPortClose(serialPort);
                 throw new InvalidOperationException(message, ex);
             }
         }
@@ -380,7 +392,10 @@ public sealed class SerialService : ISerialService
         {
             _lifecycleGate.Release();
             _lifecycleGate.Dispose();
-            _writeGate.Dispose();
+            if (Volatile.Read(ref _pendingReceiveTeardown) is null)
+            {
+                DisposeWriteGate();
+            }
         }
     }
 
@@ -401,7 +416,7 @@ public sealed class SerialService : ISerialService
 
     public void StartMockStress()
     {
-        if (!_isMockConnection || !IsConnected)
+        if (!IsCurrentMockConnection())
         {
             ReportError("Mock stress start ignored: connect to MOCK first.", countConnectionError: false);
             return;
@@ -429,20 +444,25 @@ public sealed class SerialService : ISerialService
     {
         ThrowIfDisposed();
 
-        if (!_isMockConnection || !IsConnected)
+        if (!IsCurrentMockConnection())
         {
             ReportError("Mock CRLF ignored: connect to MOCK first.", countConnectionError: false);
             return;
         }
 
         var bytes = Encoding.UTF8.GetBytes("\r\n");
-        await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
+        var session = Volatile.Read(ref _currentReceiveSession)
+            ?? throw new InvalidOperationException("Mock receive session is unavailable.");
+        await PublishReceivedBytesAsync(session, bytes, cancellationToken, countReceived: true);
     }
 
     private async Task StopCurrentConnectionAsync(CancellationToken cancellationToken, bool publishDisconnected)
     {
-        var hasResources = _receiveCancellation is not null || _receiveTask is not null || _serialPort is not null;
-        if (!hasResources)
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnsureNoPendingReceiveTeardownAsync();
+
+        var session = TakeCurrentReceiveSession();
+        if (session is null)
         {
             if (publishDisconnected && ConnectionState != SerialConnectionState.Disconnected)
             {
@@ -453,43 +473,28 @@ public sealed class SerialService : ISerialService
         }
 
         SetConnectionState(SerialConnectionState.Disconnecting);
-
-        var receiveCancellation = _receiveCancellation;
-        var receiveTask = _receiveTask;
-        var serialPort = _serialPort;
-
-        _receiveCancellation = null;
-        _receiveTask = null;
-        _serialPort = null;
-        _isMockConnection = false;
         Volatile.Write(ref _appliedReceiveIdleTimeoutMs, 0);
         Volatile.Write(ref _usesNativeReceiveIdleTimeout, 0);
         Volatile.Write(ref _rawBridgePriorityEnabled, 0);
         StopMockStress();
 
-        try
-        {
-            receiveCancellation?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
+        session.RequestStop();
+        var portCloseTask = StartPortClose(session.Port);
+        var writeIdleTask = WaitForWriteIdleAsync();
+        var teardownTask = Task.WhenAll(
+            portCloseTask,
+            session.Worker ?? Task.CompletedTask,
+            writeIdleTask);
 
-        SafeCloseAndDispose(serialPort);
-        _receivedBytes.Writer.TryComplete();
-
-        if (receiveTask is not null)
+        if (!await WaitForTeardownAsync(teardownTask))
         {
-            try
-            {
-                await receiveTask.WaitAsync(cancellationToken);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-            }
+            Volatile.Write(ref _pendingReceiveTeardown, teardownTask);
+            SetFaultedConnection("Serial disconnect timed out; the previous session is still shutting down.");
+            _ = FinishTimedOutReceiveTeardownAsync(session, teardownTask);
+            return;
         }
 
-        receiveCancellation?.Dispose();
+        CompleteReceiveSession(session);
 
         if (publishDisconnected)
         {
@@ -497,10 +502,144 @@ public sealed class SerialService : ISerialService
         }
     }
 
-    private void RunSerialReceiver(
-        BoundaryPreservingSerialPortStream serialPort,
-        CancellationToken cancellationToken)
+    private async Task EnsureNoPendingReceiveTeardownAsync()
     {
+        var pending = Volatile.Read(ref _pendingReceiveTeardown);
+        if (pending is null)
+        {
+            return;
+        }
+
+        if (!await WaitForTeardownAsync(pending))
+        {
+            SetFaultedConnection("Previous serial session is still shutting down.");
+            throw new InvalidOperationException("Previous serial session is still shutting down.");
+        }
+
+        _ = Interlocked.CompareExchange(ref _pendingReceiveTeardown, null, pending);
+    }
+
+    private async Task CleanupFailedReceiveSessionAsync(
+        ReceiveSession session,
+        BoundaryPreservingSerialPortStream? serialPort,
+        Task? openTask)
+    {
+        var closeTask = StartPortClose(serialPort);
+        var teardownTask = openTask is null
+            ? closeTask
+            : Task.WhenAll(openTask, closeTask);
+        if (await WaitForTeardownAsync(teardownTask))
+        {
+            CompleteReceiveSession(session);
+            return;
+        }
+
+        Volatile.Write(ref _pendingReceiveTeardown, teardownTask);
+        _ = FinishTimedOutReceiveTeardownAsync(session, teardownTask);
+    }
+
+    private async Task FinishTimedOutReceiveTeardownAsync(ReceiveSession session, Task teardownTask)
+    {
+        try
+        {
+            await teardownTask.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            CompleteReceiveSession(session);
+            _ = Interlocked.CompareExchange(ref _pendingReceiveTeardown, null, teardownTask);
+            if (_disposed)
+            {
+                DisposeWriteGate();
+            }
+            else if (Volatile.Read(ref _currentReceiveSession) is null)
+            {
+                SetConnectionState(SerialConnectionState.Disconnected);
+            }
+        }
+    }
+
+    private Task StartPortClose(SerialPortStream? serialPort)
+    {
+        return serialPort is null
+            ? Task.CompletedTask
+            : Task.Run(() => SafeCloseAndDispose(serialPort));
+    }
+
+    private static async Task WaitForWriteIdleAsyncCore(SemaphoreSlim writeGate)
+    {
+        await writeGate.WaitAsync(CancellationToken.None);
+        writeGate.Release();
+    }
+
+    private Task WaitForWriteIdleAsync()
+    {
+        return WaitForWriteIdleAsyncCore(_writeGate);
+    }
+
+    private static async Task<bool> WaitForTeardownAsync(Task teardownTask)
+    {
+        try
+        {
+            await teardownTask.WaitAsync(ReceiveTeardownTimeout);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void CompleteReceiveSession(ReceiveSession session)
+    {
+        session.Channel.Writer.TryComplete();
+        session.Dispose();
+    }
+
+    private void SetFaultedConnection(string message)
+    {
+        ReportError(message, countConnectionError: true, state: SerialConnectionState.Faulted);
+    }
+
+    private void SetConnectedIfCurrentSession(ReceiveSession session)
+    {
+        var changed = false;
+        lock (_stateGate)
+        {
+            if (ReferenceEquals(Volatile.Read(ref _currentReceiveSession), session) &&
+                _connectionState == SerialConnectionState.Connecting)
+            {
+                _connectionState = SerialConnectionState.Connected;
+                _lastError = null;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            RaiseStatusChanged();
+        }
+    }
+
+    private void DisposeWriteGate()
+    {
+        if (Interlocked.Exchange(ref _writeGateDisposed, 1) == 0)
+        {
+            _writeGate.Dispose();
+        }
+    }
+
+    private void RunSerialReceiver(ReceiveSession session)
+    {
+        var serialPort = session.Port!;
+        var cancellationToken = session.CancellationToken;
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -512,6 +651,7 @@ public sealed class SerialService : ISerialService
                 }
 
                 PublishReceivedChunkAsync(
+                        session,
                         ReceivedByteChunk.CaptureAt(
                             completion.Bytes,
                             completion.CompletedTimestamp,
@@ -531,25 +671,27 @@ public sealed class SerialService : ISerialService
         }
         catch (Exception ex)
         {
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session))
             {
                 ReportError($"Serial receive failed: {ex.Message}", countConnectionError: true, state: SerialConnectionState.Faulted);
             }
         }
         finally
         {
-            _receivedBytes.Writer.TryComplete();
+            session.Channel.Writer.TryComplete();
 
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session))
             {
                 SafeCloseAndDispose(serialPort);
-                ClearCurrentPortReference(serialPort);
             }
+
+            session.Dispose();
         }
     }
 
-    private async Task RunMockReceiverAsync(SerialSettings settings, CancellationToken cancellationToken)
+    private async Task RunMockReceiverAsync(ReceiveSession session, SerialSettings settings)
     {
+        var cancellationToken = session.CancellationToken;
         var counter = 0;
         var timedRandom = new Random(384_009_600);
         var timedGroup = 0;
@@ -563,7 +705,7 @@ public sealed class SerialService : ISerialService
                 if (!IsMockStressRunning)
                 {
                     var bytes = Encoding.UTF8.GetBytes(CreateMockMessage(counter, settings));
-                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
+                    await PublishReceivedBytesAsync(session, bytes, cancellationToken, countReceived: true);
                     counter++;
                     await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
                     continue;
@@ -578,7 +720,7 @@ public sealed class SerialService : ISerialService
                         timedGroup,
                         timedPacketIndex,
                         timedPacketsInGroup);
-                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
+                    await PublishReceivedBytesAsync(session, bytes, cancellationToken, countReceived: true);
 
                     double timedDelayMilliseconds;
                     if (timedPacketIndex == timedPacketsInGroup)
@@ -600,7 +742,7 @@ public sealed class SerialService : ISerialService
                 if (pattern is MockGeneratorPattern.NoNewlineZzz or MockGeneratorPattern.NoNewlineZzzBurst)
                 {
                     var bytes = CreateMockNoNewlineChunk(pattern);
-                    await PublishReceivedBytesAsync(bytes, cancellationToken, countReceived: true);
+                    await PublishReceivedBytesAsync(session, bytes, cancellationToken, countReceived: true);
                     var delay = pattern == MockGeneratorPattern.NoNewlineZzzBurst
                         ? TimeSpan.FromMilliseconds(100)
                         : TimeSpan.FromMilliseconds(50);
@@ -609,7 +751,7 @@ public sealed class SerialService : ISerialService
                 }
 
                 var stressBytes = CreateMockStressChunk();
-                await PublishReceivedBytesAsync(stressBytes, cancellationToken, countReceived: true);
+                await PublishReceivedBytesAsync(session, stressBytes, cancellationToken, countReceived: true);
 
                 var linesPerSecond = Math.Max(1, MockStressLinesPerSecond);
                 var burstSize = Math.Max(1, MockStressBurstSize);
@@ -622,14 +764,15 @@ public sealed class SerialService : ISerialService
         }
         catch (Exception ex)
         {
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session))
             {
                 ReportError($"Mock serial receive failed: {ex.Message}", countConnectionError: false, state: SerialConnectionState.Faulted);
             }
         }
         finally
         {
-            _receivedBytes.Writer.TryComplete();
+            session.Channel.Writer.TryComplete();
+            session.Dispose();
         }
     }
 
@@ -736,15 +879,29 @@ public sealed class SerialService : ISerialService
         return serialPort;
     }
 
-    private void ClearCurrentPortReference(SerialPortStream serialPort)
+    private void SetCurrentReceiveSession(ReceiveSession session)
     {
-        if (!ReferenceEquals(_serialPort, serialPort))
-        {
-            return;
-        }
+        Volatile.Write(ref _currentReceiveSession, session);
+    }
 
-        _serialPort = null;
-        _receiveCancellation?.Cancel();
+    private ReceiveSession? TakeCurrentReceiveSession()
+    {
+        return Interlocked.Exchange(ref _currentReceiveSession, null);
+    }
+
+    private void ClearCurrentReceiveSession(ReceiveSession session)
+    {
+        Interlocked.CompareExchange(ref _currentReceiveSession, null, session);
+    }
+
+    private bool IsCurrentReceiveSession(ReceiveSession session)
+    {
+        return ReferenceEquals(Volatile.Read(ref _currentReceiveSession), session);
+    }
+
+    private bool IsCurrentMockConnection()
+    {
+        return IsConnected && Volatile.Read(ref _currentReceiveSession)?.IsMock == true;
     }
 
     private void AddReceivedChunk(int byteCount)
@@ -760,6 +917,12 @@ public sealed class SerialService : ISerialService
 
     private void OnSerialErrorReceived(object? sender, SerialErrorReceivedEventArgs args)
     {
+        var session = Volatile.Read(ref _currentReceiveSession);
+        if (session is null || !ReferenceEquals(session.Port, sender))
+        {
+            return;
+        }
+
         _serialErrors.Record(
             args.EventType,
             DateTimeOffset.Now,
@@ -780,44 +943,71 @@ public sealed class SerialService : ISerialService
     }
 
     private async ValueTask PublishReceivedBytesAsync(
+        ReceiveSession session,
         byte[] bytes,
         CancellationToken cancellationToken,
         bool countReceived)
     {
         await PublishReceivedChunkAsync(
+            session,
             ReceivedByteChunk.Capture(bytes),
             cancellationToken,
             countReceived);
     }
 
     private async ValueTask PublishReceivedChunkAsync(
+        ReceiveSession session,
         ReceivedByteChunk receivedChunk,
         CancellationToken cancellationToken,
         bool countReceived)
     {
-        var bytes = receivedChunk.Bytes;
-        if (IsRawBridgePriorityEnabled)
+        if (!IsCurrentReceiveSession(session))
         {
-            PublishRawBytesReceived(new BridgeRxChunk(
-                bytes,
-                receivedChunk.ReceivedTimestamp,
-                receivedChunk.EndsAtNativeIdleBoundary,
-                AppliedReceiveIdleTimeoutMs));
-            if (!_receivedBytes.Writer.TryWrite(receivedChunk))
-            {
-                Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
-                Interlocked.Increment(ref _bridgePriorityDroppedPipelineChunkCount);
-                RaiseStatusChanged();
-            }
-        }
-        else
-        {
-            await _receivedBytes.Writer.WriteAsync(receivedChunk, cancellationToken);
+            return;
         }
 
-        if (countReceived)
+        var sessionCancellation = session.CancellationToken;
+        CancellationTokenSource? linkedCancellation = null;
+        if (cancellationToken.CanBeCanceled && cancellationToken != sessionCancellation)
         {
-            AddReceivedChunk(bytes.Length);
+            linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                sessionCancellation,
+                cancellationToken);
+            cancellationToken = linkedCancellation.Token;
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var bytes = receivedChunk.Bytes;
+            if (IsRawBridgePriorityEnabled)
+            {
+                PublishRawBytesReceived(new BridgeRxChunk(
+                    bytes,
+                    receivedChunk.ReceivedTimestamp,
+                    receivedChunk.EndsAtNativeIdleBoundary,
+                    AppliedReceiveIdleTimeoutMs));
+                if (!session.Channel.Writer.TryWrite(receivedChunk))
+                {
+                    Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
+                    Interlocked.Increment(ref _bridgePriorityDroppedPipelineChunkCount);
+                    RaiseStatusChanged();
+                }
+            }
+            else
+            {
+                await session.Channel.Writer.WriteAsync(receivedChunk, cancellationToken);
+            }
+
+            if (countReceived)
+            {
+                AddReceivedChunk(bytes.Length);
+            }
+        }
+        finally
+        {
+            linkedCancellation?.Dispose();
         }
     }
 
@@ -1040,5 +1230,60 @@ public sealed class SerialService : ISerialService
             SingleReader = true,
             SingleWriter = false
         });
+    }
+
+    private static Channel<ReceivedByteChunk> CreateCompletedChannel()
+    {
+        var channel = CreateChannel();
+        channel.Writer.TryComplete();
+        return channel;
+    }
+
+    private sealed class ReceiveSession : IDisposable
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private int _disposed;
+
+        public ReceiveSession(long generation, bool isMock, CancellationToken lifetimeToken)
+        {
+            Generation = generation;
+            IsMock = isMock;
+            Channel = CreateChannel();
+            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetimeToken);
+            CancellationToken = _cancellation.Token;
+        }
+
+        public long Generation { get; }
+
+        public bool IsMock { get; }
+
+        public Channel<ReceivedByteChunk> Channel { get; }
+
+        public CancellationToken CancellationToken { get; }
+
+        public BoundaryPreservingSerialPortStream? Port { get; set; }
+
+        public Task? Worker { get; set; }
+
+        public void RequestStop()
+        {
+            try
+            {
+                _cancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            _cancellation.Dispose();
+        }
     }
 }

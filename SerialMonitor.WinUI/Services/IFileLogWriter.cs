@@ -10,6 +10,10 @@ public interface IFileLogWriter : IAsyncDisposable
 
     bool IsRunning { get; }
 
+    FileLogWriterState State { get; }
+
+    FileLogWriterFaultInfo? LastFault { get; }
+
     string LogDirectory { get; }
 
     string? CurrentLogFilePath { get; }
@@ -20,11 +24,21 @@ public interface IFileLogWriter : IAsyncDisposable
 
     long WrittenLineCount { get; }
 
+    long AcceptedLineCount { get; }
+
+    long DurableLineCount { get; }
+
+    long UncertainLineCount { get; }
+
+    long AbandonedLineCount { get; }
+
     long WrittenByteCount { get; }
 
     long FileErrorCount { get; }
 
     long DroppedLineCount { get; }
+
+    long RecoveryCount { get; }
 
     int PendingRequestCount { get; }
 

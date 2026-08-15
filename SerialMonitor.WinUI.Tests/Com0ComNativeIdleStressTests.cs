@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Globalization;
+using System.Threading.Channels;
 using RJCP.IO.Ports;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
@@ -76,6 +78,189 @@ public sealed class Com0ComNativeIdleStressTests
         Assert.Equal(0, receiver.SerialOverrunErrorCount);
         Assert.Equal(0, receiver.SerialRxOverErrorCount);
         await receiver.DisconnectAsync(timeout.Token);
+    }
+
+    [Fact]
+    public async Task Com4Com5_LongRunningSoak_PreservesBoundedSequence()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("SERIAL_COM0COM_SOAK_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var duration = ReadSoakDuration();
+        const int baudRate = 460_800;
+        const int idleTimeoutMs = 15;
+        using var timeout = new CancellationTokenSource(duration + TimeSpan.FromMinutes(1));
+        await using var receiver = new SerialService();
+        await receiver.ConnectAsync(
+            new SerialSettings
+            {
+                PortName = "COM4",
+                BaudRate = baudRate,
+                DataBits = 8,
+                Parity = SerialParityMode.None,
+                StopBits = SerialStopBitsMode.One,
+                Handshake = SerialHandshakeMode.None,
+                Encoding = RxEncodingMode.Hex
+            },
+            new SerialReceiveOptions
+            {
+                UseNativeIdleTimeout = true,
+                IdleTimeoutMs = idleTimeoutMs
+            },
+            timeout.Token);
+
+        using var sender = new SerialPortStream("COM5", baudRate, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            WriteBufferSize = 128 * 1024,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 2_000
+        };
+        sender.Open();
+        sender.DiscardOutBuffer();
+
+        var expectedGroups = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = true
+        });
+        var producer = Task.Run(
+            () => ProduceSoakGroupsAsync(sender, expectedGroups.Writer, duration, timeout.Token),
+            CancellationToken.None);
+        var receivedGroups = 0L;
+        var heartbeat = Stopwatch.StartNew();
+        var pendingActual = Array.Empty<byte>();
+        var pendingActualOffset = 0;
+
+        try
+        {
+            while (await expectedGroups.Reader.WaitToReadAsync(timeout.Token))
+            {
+                while (expectedGroups.Reader.TryRead(out var expected))
+                {
+                    var expectedOffset = 0;
+                    while (expectedOffset < expected.Length)
+                    {
+                        if (pendingActualOffset == pendingActual.Length)
+                        {
+                            var actual = await receiver.ReceivedBytes.ReadAsync(timeout.Token);
+                            pendingActual = actual.Bytes;
+                            pendingActualOffset = 0;
+                        }
+
+                        var expectedRemaining = expected.Length - expectedOffset;
+                        var actualRemaining = pendingActual.Length - pendingActualOffset;
+                        var compareLength = Math.Min(expectedRemaining, actualRemaining);
+                        Assert.Equal(
+                            expected.AsSpan(expectedOffset, compareLength).ToArray(),
+                            pendingActual.AsSpan(pendingActualOffset, compareLength).ToArray());
+                        expectedOffset += compareLength;
+                        pendingActualOffset += compareLength;
+                    }
+
+                    receivedGroups++;
+
+                    if (heartbeat.Elapsed >= TimeSpan.FromSeconds(30))
+                    {
+                        Console.WriteLine(
+                            $"soak heartbeat groups={receivedGroups:N0} bytes={receiver.ReceivedByteCount:N0} " +
+                            $"chunks={receiver.ReceivedChunkCount:N0} errors={receiver.ConnectionErrorCount:N0}");
+                        heartbeat.Restart();
+                    }
+                }
+            }
+
+            await producer;
+        }
+        finally
+        {
+            timeout.Cancel();
+            expectedGroups.Writer.TryComplete();
+            try
+            {
+                await producer.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            await receiver.DisconnectAsync(CancellationToken.None);
+        }
+
+        Assert.True(receivedGroups > 0);
+        Assert.Equal(0, receiver.ConnectionErrorCount);
+        Assert.Equal(0, receiver.SerialFrameErrorCount);
+        Assert.Equal(0, receiver.SerialParityErrorCount);
+        Assert.Equal(0, receiver.SerialOverrunErrorCount);
+        Assert.Equal(0, receiver.SerialRxOverErrorCount);
+    }
+
+    private static async Task ProduceSoakGroupsAsync(
+        SerialPortStream sender,
+        ChannelWriter<byte[]> expectedWriter,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
+        var random = new Random(384_009_600);
+        var sequence = 0;
+        var group = 0;
+        var deadline = DateTimeOffset.UtcNow + duration;
+        try
+        {
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                var expected = SendSoakGroup(sender, ref sequence, group++, random, cancellationToken);
+                await expectedWriter.WriteAsync(expected, cancellationToken);
+                PreciseDelay(TimeSpan.FromMilliseconds(32 + random.NextDouble() * 8), cancellationToken);
+            }
+        }
+        finally
+        {
+            expectedWriter.TryComplete();
+        }
+    }
+
+    private static byte[] SendSoakGroup(
+        SerialPortStream sender,
+        ref int sequence,
+        int group,
+        Random random,
+        CancellationToken cancellationToken)
+    {
+        using var expectedGroup = new MemoryStream();
+        var packetCount = random.Next(2, 9);
+        for (var packetIndex = 0; packetIndex < packetCount; packetIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var packet = CreatePacket(random.Next(24, 97), sequence++, group, random);
+            sender.Write(packet, 0, packet.Length);
+            expectedGroup.Write(packet);
+
+            if (packetIndex + 1 < packetCount)
+            {
+                PreciseDelay(TimeSpan.FromMilliseconds(3 + random.NextDouble() * 2), cancellationToken);
+            }
+        }
+
+        return expectedGroup.ToArray();
+    }
+
+    private static TimeSpan ReadSoakDuration()
+    {
+        var value = Environment.GetEnvironmentVariable("SERIAL_COM0COM_SOAK_HOURS");
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var hours) || hours <= 0)
+        {
+            throw new InvalidOperationException(
+                "SERIAL_COM0COM_SOAK_HOURS must be a positive invariant-culture number.");
+        }
+
+        return TimeSpan.FromHours(hours);
     }
 
     private static IReadOnlyList<byte[]> SendDeterministicGroups(
