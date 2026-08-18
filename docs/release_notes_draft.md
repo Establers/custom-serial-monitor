@@ -1,6 +1,18 @@
 # Release Notes Draft
 
-Date: 2026-08-06
+Date: 2026-08-18
+
+## Released in v1.3.2
+
+- Hardened long-running file logging with bounded record/byte queues, periodic
+  flush deadlines, durable/uncertain/abandoned counters, and bounded recovery
+  into a new segment after write or flush failures.
+- Added timeouts and late-operation quarantine for directory setup, open, write,
+  flush, and close operations so a stuck file system cannot block shutdown
+  indefinitely.
+- Isolated serial receive sessions and their channels across disconnect/reconnect
+  cycles, including startup verification before the log pipeline begins.
+- Added file-writer failure, recovery, timeout, and receive-session coverage.
 
 ## Released in v1.3.1
 
