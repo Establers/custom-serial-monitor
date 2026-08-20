@@ -56,4 +56,16 @@ public sealed class XtermAppendRoutingPolicyTests
                 syncedThroughDisplayedLineCount: 5_000,
                 isVisualAppendSuspended: false));
     }
+
+    [Fact]
+    public void PostClearBatch_IsDeferredDuringBackpressure()
+    {
+        Assert.Equal(
+            XtermAppendRoute.Defer,
+            XtermAppendRoutingPolicy.GetRoute(
+                batchEndDisplayedLineCount: 5_001,
+                syncedThroughDisplayedLineCount: 5_000,
+                isVisualAppendSuspended: false,
+                isAppendBackpressureActive: true));
+    }
 }

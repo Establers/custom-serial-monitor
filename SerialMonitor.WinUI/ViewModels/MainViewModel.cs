@@ -10429,7 +10429,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         _isXtermAppendBackpressureActive = active;
-        _logBatchDispatcher.IsPaused = IsViewFullyPaused || _isXtermAppendBackpressureActive;
+        _logBatchDispatcher.IsPaused = IsViewFullyPaused;
         OnPropertyChanged(nameof(IsXtermAppendBackpressureActive));
         OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
         OnPropertyChanged(nameof(IsEventAutoScrollSuppressedByXtermBackpressure));
@@ -11726,7 +11726,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         // During Pausing, accepted pre-boundary work must continue draining. The dispatcher is
         // suspended only after the xterm/UI boundary has completed.
-        _logBatchDispatcher.IsPaused = IsViewFullyPaused || _isXtermAppendBackpressureActive;
+        _logBatchDispatcher.IsPaused = IsViewFullyPaused;
         OnPropertyChanged(nameof(IsLogRenderingPaused));
         OnPropertyChanged(nameof(IsManualLogRenderingPaused));
         OnPropertyChanged(nameof(IsViewPauseTransitioning));

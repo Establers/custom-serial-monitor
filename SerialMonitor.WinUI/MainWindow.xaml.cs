@@ -1107,15 +1107,40 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (IsXtermVisualAppendSuspended())
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => RouteLiveXtermBatch(batch));
+            return;
+        }
+
+        RouteLiveXtermBatch(batch);
+    }
+
+    private void RouteLiveXtermBatch(LogTextBatch batch)
+    {
+        var route = XtermAppendRoutingPolicy.GetRoute(
+            batch.EndDisplayedLineCount,
+            Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
+            IsXtermVisualAppendSuspended(),
+            _viewModel.IsXtermAppendBackpressureActive);
+        if (route == XtermAppendRoute.AlreadyCovered)
+        {
+            return;
+        }
+
+        if (route == XtermAppendRoute.Suspend)
         {
             EnqueueSuspendedXtermBatch(batch);
             return;
         }
 
-        if (!DispatcherQueue.HasThreadAccess)
+        if (route == XtermAppendRoute.Defer)
         {
-            DispatcherQueue.TryEnqueue(() => EnqueueLiveXtermBatch(batch));
+            if (!_xtermFullRerenderDeferredForBackpressure)
+            {
+                DeferFullXtermRerenderForBackpressure("live append skipped during xterm backlog");
+            }
+
             return;
         }
 
