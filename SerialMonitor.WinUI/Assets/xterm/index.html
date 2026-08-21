@@ -552,7 +552,6 @@
     let replaceWriting = false;
     let replaceOperationId = 0;
     let autoScrollEnabled = true;
-    let tailFollowActive = true;
     let contextMenuSelection = '';
     let hexSelectionHintEnabled = false;
     let pointerSelectionGesture = false;
@@ -712,10 +711,9 @@
       try {
         terminal.write(item.text, () => {
           onTerminalWriteParsed();
-          // Re-check both the live setting and tail-follow state at completion.
-          // The user can disable Auto Scroll or scroll upward while xterm is
-          // asynchronously parsing a large write.
-          if (item.autoScroll && autoScrollEnabled && tailFollowActive && appendQueueLength() === 0) {
+          // Re-check the live setting because the user can disable Auto Scroll
+          // while xterm is asynchronously parsing a large write.
+          if (item.autoScroll && autoScrollEnabled && appendQueueLength() === 0) {
             terminal.scrollToBottom();
           }
           postAppendResult(item, true, '');
@@ -744,7 +742,7 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
-      if (autoScroll && autoScrollEnabled && tailFollowActive) {
+      if (autoScroll && autoScrollEnabled) {
         terminal.scrollToBottom();
       }
       queueAppendDrain();
@@ -789,12 +787,6 @@
       return buffer.viewportY >= buffer.baseY;
     }
 
-    terminal.onScroll(() => {
-      // Being at the tail is the user's resumable follow intent. Scrolling up
-      // suspends live following; manually returning to the bottom resumes it.
-      tailFollowActive = isAtBottom();
-    });
-
     function getScrollState() {
       const buffer = terminal.buffer && terminal.buffer.active;
       if (!buffer) {
@@ -830,7 +822,6 @@
       } else {
         return false;
       }
-      tailFollowActive = isAtBottom();
       return true;
     }
 
@@ -962,11 +953,7 @@
 
     window.serialMonitorSetAutoScrollEnabled = function (enabled) {
       const isEnabled = !!enabled;
-      const wasEnabled = autoScrollEnabled;
       autoScrollEnabled = isEnabled;
-      if (isEnabled && !wasEnabled) {
-        tailFollowActive = true;
-      }
       autoScrollMenuItem.setAttribute('aria-checked', String(isEnabled));
       autoScrollMenuItem.querySelector('.menu-check').textContent = isEnabled ? '\u2713' : '';
       autoScrollMenuItem.querySelector('.menu-state').textContent = isEnabled ? 'ON' : 'OFF';
@@ -1302,17 +1289,15 @@
 
     window.serialMonitorScrollToBottom = function () {
       terminal.scrollToBottom();
-      tailFollowActive = true;
       return isAtBottom();
     };
 
     window.serialMonitorScrollToBottomIfFollowing = function () {
-      if (!autoScrollEnabled || !tailFollowActive) {
+      if (!autoScrollEnabled) {
         return false;
       }
 
       terminal.scrollToBottom();
-      tailFollowActive = true;
       return isAtBottom();
     };
 
