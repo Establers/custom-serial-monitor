@@ -186,6 +186,7 @@ public sealed partial class MainWindow : Window
         _viewModel.XtermSearchRequested += OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested += OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested += OnEventNotificationRequested;
+        _viewModel.TxSent += OnTxSent;
         _viewModel.ViewPauseDrainRequested += DrainXtermForViewPauseAsync;
         AppWindow.Closing += OnAppWindowClosing;
         AppWindow.Changed += OnAppWindowChanged;
@@ -320,6 +321,7 @@ public sealed partial class MainWindow : Window
         _viewModel.XtermSearchRequested -= OnXtermSearchRequested;
         _viewModel.ConnectFailureDialogRequested -= OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested -= OnEventNotificationRequested;
+        _viewModel.TxSent -= OnTxSent;
         _viewModel.ViewPauseDrainRequested -= DrainXtermForViewPauseAsync;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Events.Events.CollectionChanged -= OnDetectedEventsCollectionChanged;
@@ -1534,6 +1536,17 @@ public sealed partial class MainWindow : Window
         }
 
         QueueXtermSearch(request);
+    }
+
+    private void OnTxSent(object? sender, EventArgs args)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => OnTxSent(sender, args));
+            return;
+        }
+
+        _ = ScrollXtermToBottomAsync("TX sent");
     }
 
     private void QueueXtermSearch(XtermSearchRequest request)

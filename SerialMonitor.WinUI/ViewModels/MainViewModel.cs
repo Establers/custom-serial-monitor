@@ -906,6 +906,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public event EventHandler<EventNotificationRequest>? EventNotificationRequested;
 
+    public event EventHandler? TxSent;
+
     public event Func<CancellationToken, Task<bool>>? ViewPauseDrainRequested;
 
     public ObservableCollection<string> PortNames { get; } = new();
@@ -7937,6 +7939,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                     : LogRuleMatchMode.Terminal);
             FanOutLogLine(txLine, fileEligible: true, detectEvent: true);
             RecordTxSuccess(txDisplayText, sendMode, command.CommandText, txByteCount, hexParseError);
+            TxSent?.Invoke(this, EventArgs.Empty);
             if (addToHistory)
             {
                 Commands.AddToHistory(command.CommandText);
