@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private const long XtermSuspendedBatchMaxChars = 32L * 1024 * 1024;
     private const int DwmUseImmersiveDarkModeBefore20H1 = 19;
     private const int DwmUseImmersiveDarkMode = 20;
+    private static readonly TimeSpan XtermScriptExecutionTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan XtermLiveAppendAckTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan XtermSearchTimeout = TimeSpan.FromSeconds(5);
     private static readonly string BundledCuteBackgroundPath =
@@ -1778,7 +1779,7 @@ public sealed partial class MainWindow : Window
             {
                 var titleJson = JsonSerializer.Serialize(LogRestoreOverlayTitle.Text);
                 var detailJson = JsonSerializer.Serialize(LogRestoreOverlayDetail.Text);
-                await XtermLogWebView.ExecuteScriptAsync(
+                await ExecuteXtermScriptAsync(
                     $"window.serialMonitorShowRestoreOverlay && window.serialMonitorShowRestoreOverlay({titleJson}, {detailJson});");
                 // Give WebView2 a paint opportunity before xterm starts parsing the bulk write.
                 await Task.Delay(50);
@@ -1819,7 +1820,7 @@ public sealed partial class MainWindow : Window
         {
             try
             {
-                await XtermLogWebView.ExecuteScriptAsync(
+                await ExecuteXtermScriptAsync(
                     "window.serialMonitorHideRestoreOverlay && window.serialMonitorHideRestoreOverlay();");
             }
             catch (Exception ex)
@@ -1893,7 +1894,7 @@ public sealed partial class MainWindow : Window
             if (drained.ClearRequested)
             {
                 Interlocked.Increment(ref _xtermRenderGeneration);
-                await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
+                await ExecuteXtermScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
                 _xtermSyncedThroughDisplayedLineCount = drained.Batches.Length == 0
                     ? _viewModel.Log.DisplayedLineCount
                     : 0;
@@ -3179,6 +3180,12 @@ public sealed partial class MainWindow : Window
             expectedGeneration);
     }
 
+    private async Task<string> ExecuteXtermScriptAsync(string script)
+    {
+        using var timeout = new CancellationTokenSource(XtermScriptExecutionTimeout);
+        return await XtermLogWebView.ExecuteScriptAsync(script).AsTask(timeout.Token);
+    }
+
     private async Task<bool> ReplaceXtermLogAsync(string text, bool autoScroll, long expectedGeneration)
     {
         if (IsXtermVisualAppendSuspended() ||
@@ -3187,7 +3194,7 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var beginResult = await XtermLogWebView.ExecuteScriptAsync(
+        var beginResult = await ExecuteXtermScriptAsync(
             "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
         if (TryParseScriptBoolean(beginResult) != true)
         {
@@ -3203,7 +3210,7 @@ public sealed partial class MainWindow : Window
             }
 
             var encodedText = JsonSerializer.Serialize(chunk);
-            var queuedResult = await XtermLogWebView.ExecuteScriptAsync(
+            var queuedResult = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
             if (TryParseScriptBoolean(queuedResult) != true)
             {
@@ -3217,7 +3224,7 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var commitResult = await XtermLogWebView.ExecuteScriptAsync(
+        var commitResult = await ExecuteXtermScriptAsync(
             $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}) : false;");
         return TryParseScriptBoolean(commitResult) == true;
     }
@@ -3255,7 +3262,7 @@ public sealed partial class MainWindow : Window
             var appendStartedAt = Stopwatch.GetTimestamp();
             try
             {
-                var queuedResult = await XtermLogWebView.ExecuteScriptAsync(
+                var queuedResult = await ExecuteXtermScriptAsync(
                     $"window.serialMonitorAppendLog ? window.serialMonitorAppendLog({encodedText}, {autoScrollLiteral}, {requestId}) : false;");
                 if (TryParseScriptBoolean(queuedResult) != true)
                 {
@@ -3331,7 +3338,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var scrollbackSize = Math.Max(1_000, _viewModel.EffectiveXtermScrollbackSize);
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorSetScrollback && window.serialMonitorSetScrollback({scrollbackSize});");
             if (TryParseScriptBoolean(result) != true)
             {
@@ -3339,7 +3346,7 @@ public sealed partial class MainWindow : Window
                 return false;
             }
 
-            var actualResult = await XtermLogWebView.ExecuteScriptAsync(
+            var actualResult = await ExecuteXtermScriptAsync(
                 "window.serialMonitorGetScrollback ? window.serialMonitorGetScrollback() : 0;");
             var actualSize = JsonSerializer.Deserialize<int>(actualResult);
             _viewModel.RecordXtermScrollbackApplied(actualSize);
@@ -3370,7 +3377,7 @@ public sealed partial class MainWindow : Window
         {
             var fontFamilyJson = JsonSerializer.Serialize(_viewModel.EffectiveXtermFontCssFamily);
             var fontSize = _viewModel.XtermFontSize;
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorSetFont && window.serialMonitorSetFont({fontFamilyJson}, {fontSize});");
             if (TryParseScriptBoolean(result) == true)
             {
@@ -3399,7 +3406,7 @@ public sealed partial class MainWindow : Window
             var enabled = _viewModel.SelectedRxDisplayMode == RxDisplayMode.Hex
                 ? "true"
                 : "false";
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorSetHexSelectionHintEnabled && window.serialMonitorSetHexSelectionHintEnabled({enabled});");
             if (TryParseScriptBoolean(result) == true)
             {
@@ -3428,7 +3435,7 @@ public sealed partial class MainWindow : Window
             var script = onlyIfFollowing
                 ? "window.serialMonitorScrollToBottomIfFollowing ? window.serialMonitorScrollToBottomIfFollowing() : false;"
                 : "window.serialMonitorScrollToBottom ? window.serialMonitorScrollToBottom() : false;";
-            var result = await XtermLogWebView.ExecuteScriptAsync(script);
+            var result = await ExecuteXtermScriptAsync(script);
             _viewModel.RecordAutoScrollAction(action, TryParseScriptBoolean(result));
         }
         catch (Exception ex)
@@ -3447,7 +3454,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var enabled = _viewModel.IsAutoScrollEnabled ? "true" : "false";
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorSetAutoScrollEnabled && window.serialMonitorSetAutoScrollEnabled({enabled});");
             return TryParseScriptBoolean(result) == true;
         }
@@ -3462,7 +3469,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 "window.serialMonitorGetScrollState ? window.serialMonitorGetScrollState() : null;");
             if (string.IsNullOrWhiteSpace(result) || string.Equals(result.Trim(), "null", StringComparison.Ordinal))
             {
@@ -3501,7 +3508,7 @@ public sealed partial class MainWindow : Window
                 rows = state.Rows,
                 atBottom = state.AtBottom
             });
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 $"window.serialMonitorRestoreScrollState ? window.serialMonitorRestoreScrollState({payload}) : false;");
             return TryParseScriptBoolean(result) == true;
         }
@@ -3524,7 +3531,7 @@ public sealed partial class MainWindow : Window
 
             try
             {
-                var result = await XtermLogWebView.ExecuteScriptAsync(
+                var result = await ExecuteXtermScriptAsync(
                     "window.serialMonitorGetAppendQueueState ? window.serialMonitorGetAppendQueueState() : { queueLength: 0, writing: false };");
                 using var document = JsonDocument.Parse(result);
                 var root = document.RootElement;
@@ -3698,7 +3705,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var result = await XtermLogWebView.ExecuteScriptAsync(
+            var result = await ExecuteXtermScriptAsync(
                 "window.serialMonitorCancelPendingWrites ? window.serialMonitorCancelPendingWrites() : false;");
             return TryParseScriptBoolean(result) == true;
         }
@@ -3741,7 +3748,7 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
-                await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
+                await ExecuteXtermScriptAsync("window.serialMonitorClear && window.serialMonitorClear();");
                 _xtermSyncedThroughDisplayedLineCount = clearedThroughDisplayedLineCount;
                 _viewModel.RecordRenderedSequenceState(
                     clearedThroughDisplayedLineCount,
@@ -3772,7 +3779,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await XtermLogWebView.ExecuteScriptAsync("window.serialMonitorFit && window.serialMonitorFit();");
+            await ExecuteXtermScriptAsync("window.serialMonitorFit && window.serialMonitorFit();");
             _viewModel.RecordXtermFitResizeSuccess();
         }
         catch (Exception ex)
