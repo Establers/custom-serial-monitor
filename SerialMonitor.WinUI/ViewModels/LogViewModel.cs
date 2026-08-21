@@ -645,8 +645,10 @@ public sealed class LogViewModel : ViewModelBase
     private int TrimRetainedLinesToCapacity(out int trimCharacterCount)
     {
         var droppedCount = 0;
+        var removedVisibleLineCount = 0;
         var previousVisibleCharacterCount = VisibleCharacterCount;
         var needsRebuild = _retainedVisibleLineContributions.Count != _retainedLines.Count;
+        var trimMaySplitPartialLine = false;
         while (_retainedLines.Count > _capacity)
         {
             var removedLine = _retainedLines.Dequeue().Line;
@@ -655,15 +657,26 @@ public sealed class LogViewModel : ViewModelBase
                 : 0;
 
             droppedCount++;
-
-            if (removedLine.IsPartialRxSegment || removedLine.IsPartialRxTerminator)
+            removedVisibleLineCount += visibleContribution;
+            if (removedLine.IsPartialRxSegment)
             {
-                needsRebuild = true;
+                trimMaySplitPartialLine = true;
             }
-
-            if (!needsRebuild && visibleContribution > 0)
+            else if (removedLine.IsPartialRxTerminator || visibleContribution > 0)
             {
-                for (var index = 0; index < visibleContribution; index++)
+                trimMaySplitPartialLine = false;
+            }
+        }
+
+        if (droppedCount > 0)
+        {
+            // Hidden normal lines do not end the visual partial line. Only a
+            // terminator or another visible line proves a safe trim boundary.
+            needsRebuild |= trimMaySplitPartialLine;
+
+            if (!needsRebuild)
+            {
+                for (var index = 0; index < removedVisibleLineCount; index++)
                 {
                     if (!RemoveFirstVisibleLine())
                     {
@@ -672,11 +685,11 @@ public sealed class LogViewModel : ViewModelBase
                     }
                 }
             }
-        }
 
-        if (droppedCount > 0 && needsRebuild)
-        {
-            RebuildVisibleLinesFromRetained();
+            if (needsRebuild)
+            {
+                RebuildVisibleLinesFromRetained();
+            }
         }
 
         trimCharacterCount = (int)Math.Min(

@@ -74,4 +74,57 @@ public sealed class LogViewModelModeSwitchTests
 
         Assert.DoesNotContain("\u001b[31m", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CompletedHexGroupTrim_DoesNotReformatRetainedBuffer()
+    {
+        var viewModel = new LogViewModel(capacity: 2);
+        viewModel.SetRxDisplayMode(RxDisplayMode.Hex);
+        viewModel.SetHighlightRules(new[]
+        {
+            new HighlightRule
+            {
+                Enabled = true,
+                Keyword = "AA",
+                Mode = LogRuleMatchMode.Hex,
+                ForegroundColor = "invalid"
+            }
+        });
+        var group = new[]
+        {
+            LogLine.Rx("", new byte[] { 0xAA }, isPartialRxSegment: true),
+            LogLine.RxPartialTerminator()
+        };
+
+        viewModel.AddRange(group);
+        viewModel.AddRange(group);
+
+        Assert.Equal(2, viewModel.XtermFormattingErrorCount);
+        Assert.Equal(1, viewModel.CurrentVisibleLineCount);
+    }
+
+    [Fact]
+    public void PartialTrim_AcrossHiddenNormalLine_KeepsRetainedContinuationVisible()
+    {
+        var viewModel = new LogViewModel(capacity: 2);
+        viewModel.SetViewFilter(new HighlightRule
+        {
+            Enabled = true,
+            Keyword = "KEEP",
+            Mode = LogRuleMatchMode.Terminal,
+            UseAsViewFilter = true
+        });
+
+        viewModel.AddRange(new[]
+        {
+            LogLine.Rx("KEEP-A", isPartialRxSegment: true),
+            LogLine.Rx("HIDDEN"),
+            LogLine.Rx("KEEP-B", isPartialRxSegment: true),
+            LogLine.RxPartialTerminator()
+        });
+
+        var snapshot = viewModel.GetVisibleTextSnapshot();
+        Assert.DoesNotContain("KEEP-A", snapshot, StringComparison.Ordinal);
+        Assert.Contains("KEEP-B", snapshot, StringComparison.Ordinal);
+    }
 }
