@@ -104,6 +104,39 @@ public sealed class LogViewModelModeSwitchTests
     }
 
     [Fact]
+    public void PartialHexGroupTrim_DropsThroughTerminatorWithoutReformattingRetainedBuffer()
+    {
+        var viewModel = new LogViewModel(capacity: 3);
+        viewModel.SetRxDisplayMode(RxDisplayMode.Hex);
+        viewModel.SetHighlightRules(new[]
+        {
+            new HighlightRule
+            {
+                Enabled = true,
+                Keyword = "AA",
+                Mode = LogRuleMatchMode.Hex,
+                ForegroundColor = "invalid"
+            }
+        });
+
+        viewModel.AddRange(new[]
+        {
+            LogLine.Rx("", new byte[] { 0xAA }, isPartialRxSegment: true),
+            LogLine.Rx("", new byte[] { 0xBB }, isPartialRxSegment: true),
+            LogLine.RxPartialTerminator()
+        });
+        viewModel.AddRange(new[]
+        {
+            LogLine.Rx("", new byte[] { 0xAA }, isPartialRxSegment: true),
+            LogLine.RxPartialTerminator()
+        });
+
+        Assert.Equal(2, viewModel.XtermFormattingErrorCount);
+        Assert.Equal(2, viewModel.TotalRetainedLineCount);
+        Assert.Equal(1, viewModel.CurrentVisibleLineCount);
+    }
+
+    [Fact]
     public void PartialTrim_AcrossHiddenNormalLine_KeepsRetainedContinuationVisible()
     {
         var viewModel = new LogViewModel(capacity: 2);
@@ -119,6 +152,7 @@ public sealed class LogViewModelModeSwitchTests
         {
             LogLine.Rx("KEEP-A", isPartialRxSegment: true),
             LogLine.Rx("HIDDEN"),
+            LogLine.RxPartialTerminator(),
             LogLine.Rx("KEEP-B", isPartialRxSegment: true),
             LogLine.RxPartialTerminator()
         });

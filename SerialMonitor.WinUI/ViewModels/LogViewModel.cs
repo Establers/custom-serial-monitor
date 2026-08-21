@@ -649,8 +649,21 @@ public sealed class LogViewModel : ViewModelBase
         var previousVisibleCharacterCount = VisibleCharacterCount;
         var needsRebuild = _retainedVisibleLineContributions.Count != _retainedLines.Count;
         var trimMaySplitPartialLine = false;
-        while (_retainedLines.Count > _capacity)
+        // Keep the retained prefix on a complete visual-line boundary. If the
+        // capacity falls inside a partial RX group, discard the rest of that
+        // oldest group instead of rebuilding every retained line.
+        while (_retainedLines.Count > _capacity ||
+               (trimMaySplitPartialLine && _retainedLines.Count > 0))
         {
+            if (_retainedLines.Count <= _capacity &&
+                trimMaySplitPartialLine &&
+                _retainedVisibleLineContributions.Count > 0 &&
+                _retainedVisibleLineContributions.Peek() > 0)
+            {
+                trimMaySplitPartialLine = false;
+                break;
+            }
+
             var removedLine = _retainedLines.Dequeue().Line;
             var visibleContribution = _retainedVisibleLineContributions.Count > 0
                 ? _retainedVisibleLineContributions.Dequeue()
