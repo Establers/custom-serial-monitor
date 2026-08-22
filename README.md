@@ -11,7 +11,7 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest"><strong>최신 버전 다운로드</strong></a>
     ·
-    <a href="docs/release_notes_v1.3.2.md">v1.3.2 릴리즈 노트</a>
+    <a href="docs/release_notes_v1.3.3.md">v1.3.3 릴리즈 노트</a>
     ·
     <a href="docs/manual_test_checklist.md">테스트 체크리스트</a>
   </p>
@@ -94,7 +94,7 @@ HEX 모드의 수신 데이터는 byte-exact 16진수 텍스트로 기록되며 
 | 이벤트 | Terminal/HEX 전용 규칙, 전후 문맥, 일치 문자열 강조, 트레이 알림 |
 | 검색 | 현재 보관 중인 로그 검색, F3/Shift+F3, 결과 목록, 1,000줄 단위 페이지 |
 | TX | 수동 전송, 줄 끝 설정, 저장 명령, quick button, 명령 history, 사용자 marker |
-| 자동화 | 지연 시간을 포함한 명령 시퀀스, 1~99회 반복, RX 룰 기반 안전한 1회 트리거 |
+| 자동화 | 지연 시간을 포함한 명령 시퀀스, 1~9,999회 반복, RX 룰 기반 안전한 1회 트리거 |
 | 프로필 | 설정·룰·명령·시퀀스 JSON 저장/불러오기/초기화, 이전 형식 정규화 |
 | Bridge | 물리 COM과 가상 COM 사이의 선택적 양방향 raw-byte 전달 및 상태 확인 |
 | 상태/장애 확인 | 하단 큐/drop/error 카운터, Health 원인 툴팁, 우클릭 상태 복사, 런타임 오류 파일 |
@@ -188,6 +188,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [수동 회귀 테스트](docs/manual_test_checklist.md)
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
+- [v1.3.3 릴리즈 노트](docs/release_notes_v1.3.3.md)
 - [v1.3.2 릴리즈 노트](docs/release_notes_v1.3.2.md)
 - [v1.3.1 릴리즈 노트](docs/release_notes_v1.3.1.md)
 - [v1.3.0 릴리즈 노트](docs/release_notes_v1.3.0.md)

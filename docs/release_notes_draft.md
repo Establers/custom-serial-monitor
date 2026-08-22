@@ -1,6 +1,16 @@
 # Release Notes Draft
 
-Date: 2026-08-18
+Date: 2026-08-22
+
+## Released in v1.3.3
+
+- Bounded xterm script execution and deferred full rerenders while append
+  backpressure is active, preventing WebView2 stalls from growing the UI queue.
+- Avoided repeated HEX visible-buffer rebuilds at trim boundaries while
+  preserving complete partial RX groups.
+- Scrolled the terminal to the latest log after successful TX.
+- Increased the profile-persisted command-sequence repeat limit to 9,999.
+- Added focused coverage for xterm routing and HEX mode-switch trimming.
 
 ## Released in v1.3.2
 
