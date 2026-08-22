@@ -97,7 +97,8 @@ public sealed class LogViewModelSearchContentTests
     [Fact]
     public void DirectionPrefixSetting_RebuildsRetainedRxAndTxWithoutChangingPayloadOrDirection()
     {
-        var timestamp = new DateTimeOffset(2026, 7, 28, 20, 30, 0, TimeSpan.FromHours(9));
+        var localTime = new DateTime(2026, 7, 28, 20, 30, 0, DateTimeKind.Unspecified);
+        var timestamp = new DateTimeOffset(localTime, TimeZoneInfo.Local.GetUtcOffset(localTime));
         var viewModel = new LogViewModel(100);
         viewModel.AddRange(
         [
