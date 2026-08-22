@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.configuration }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore SerialMonitor.WinUI\SerialMonitor.WinUI.sln
+      - run: dotnet build SerialMonitor.WinUI\SerialMonitor.WinUI.sln --configuration ${{ matrix.configuration }} --no-restore
+      - run: dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln --configuration ${{ matrix.configuration }} --no-build --no-restore
