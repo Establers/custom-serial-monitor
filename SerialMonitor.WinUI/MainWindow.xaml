@@ -1702,8 +1702,8 @@
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
                                     <TextBox x:Uid="StaticUi034" x:Name="SequenceRepeatCountTextBox"
                                              Grid.Column="2"
-                                             Width="32"
-                                             MaxLength="2"
+                                             Width="48"
+                                             MaxLength="4"
                                              InputScope="Number"
                                              Text="{Binding SelectedCommandSequence.RepeatCount, Mode=OneWay}"
                                              Style="{StaticResource CompactTextBoxStyle}"
@@ -1711,7 +1711,7 @@
                                              BeforeTextChanging="SequenceRepeatCountTextBox_BeforeTextChanging"
                                              TextChanged="SequenceRepeatCountTextBox_TextChanged"
                                              LostFocus="SequenceRepeatCountTextBox_LostFocus"
-                                             ToolTipService.ToolTip="Repeat the selected sequence 1 to 99 times" />
+                                             ToolTipService.ToolTip="Repeat the selected sequence 1 to 9,999 times" />
                                     <TextBlock Grid.Column="3"
                                                Text="times"
                                                VerticalAlignment="Center"

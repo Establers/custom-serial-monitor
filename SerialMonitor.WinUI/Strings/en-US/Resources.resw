@@ -153,7 +153,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi034.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Repeat the selected sequence 1 to 99 times</value>
+    <value>Repeat the selected sequence 1 to 9,999 times</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi036.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">

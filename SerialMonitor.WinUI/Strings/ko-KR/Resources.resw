@@ -153,8 +153,8 @@
     <comment>English: Create and run ordered command sequences with per-step delays.</comment>
   </data>
   <data name="StaticUi034.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>선택한 시퀀스를 1~99회 반복합니다.</value>
-    <comment>English: Repeat the selected sequence 1 to 99 times</comment>
+    <value>선택한 시퀀스를 1~9,999회 반복합니다.</value>
+    <comment>English: Repeat the selected sequence 1 to 9,999 times</comment>
   </data>
   <data name="StaticUi036.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>시퀀스 추가</value>

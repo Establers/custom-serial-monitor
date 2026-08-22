@@ -70,7 +70,7 @@ Date: 2026-08-18
   or on inline controls are ignored.
 - RX rules can trigger one selected non-empty command sequence through a bounded,
   dedicated control channel independent of the display event queue.
-- Command sequences support a profile-persisted repeat count from 1 to 99.
+- Command sequences support a profile-persisted repeat count from 1 to 9,999.
 - Duplicate or invalid sequence references, TX-only trigger assignments, and
   empty target sequences are normalized safely with diagnostics.
 - A missing default profile is created automatically on first startup.
