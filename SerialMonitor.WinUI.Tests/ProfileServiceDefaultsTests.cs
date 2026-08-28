@@ -104,6 +104,24 @@ public sealed class ProfileServiceDefaultsTests
             Assert.True(File.Exists(path));
             Assert.Equal(50_000, loaded.UiSettings.MaxVisibleLogLines);
 
+            string[] expectedKeywords = ["fault", "[E]", "Error", "[W]", "warn"];
+            string[] expectedColors = ["Red", "Red", "Red", "Orange", "Orange"];
+            foreach (var profile in new[] { service.CreateDefaultProfile(), loaded, await service.LoadAsync(path, CancellationToken.None) })
+            {
+                Assert.Equal(expectedKeywords, profile.LogRules.Select(rule => rule.Name));
+                Assert.Equal(expectedKeywords, profile.LogRules.Select(rule => rule.Keyword));
+                Assert.Equal(expectedColors, profile.LogRules.Select(rule => rule.ForegroundColor));
+                Assert.All(profile.LogRules, rule =>
+                {
+                    Assert.True(rule.Enabled);
+                    Assert.True(rule.UseForHighlight);
+                });
+                Assert.Equal(expectedKeywords, profile.EventRules.Select(rule => rule.Keyword));
+                Assert.Equal(expectedColors, profile.EventRules.Select(rule => rule.HighlightColor));
+                Assert.Equal(expectedKeywords, profile.HighlightRules.Select(rule => rule.Keyword));
+                Assert.Equal(expectedColors, profile.HighlightRules.Select(rule => rule.ForegroundColor));
+            }
+
             await using var stream = File.OpenRead(path);
             using var document = await JsonDocument.ParseAsync(stream);
             var uiSettings = document.RootElement.GetProperty(nameof(AppProfile.UiSettings));

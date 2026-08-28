@@ -120,8 +120,8 @@ public sealed class ProfileService : IProfileService
             {
                 new()
                 {
-                    Name = "ERROR",
-                    Keyword = "ERROR",
+                    Name = "fault",
+                    Keyword = "fault",
                     UseForEvent = true,
                     UseForHighlight = true,
                     UseAsViewFilter = true,
@@ -131,39 +131,63 @@ public sealed class ProfileService : IProfileService
                 },
                 new()
                 {
-                    Name = "WARN",
-                    Keyword = "WARN",
+                    Name = "[E]",
+                    Keyword = "[E]",
                     UseForEvent = true,
                     UseForHighlight = true,
                     UseAsViewFilter = true,
-                    ForegroundColor = "Yellow",
+                    ForegroundColor = "Red",
+                    Priority = 100,
+                    MatchDirection = HighlightMatchDirection.RxOnly
+                },
+                new()
+                {
+                    Name = "Error",
+                    Keyword = "Error",
+                    UseForEvent = true,
+                    UseForHighlight = true,
+                    UseAsViewFilter = true,
+                    ForegroundColor = "Red",
+                    Priority = 100,
+                    MatchDirection = HighlightMatchDirection.RxOnly
+                },
+                new()
+                {
+                    Name = "[W]",
+                    Keyword = "[W]",
+                    UseForEvent = true,
+                    UseForHighlight = true,
+                    UseAsViewFilter = true,
+                    ForegroundColor = "Orange",
                     Priority = 50,
                     MatchDirection = HighlightMatchDirection.RxOnly
                 },
                 new()
                 {
-                    Name = "FAULT",
-                    Keyword = "FAULT",
+                    Name = "warn",
+                    Keyword = "warn",
                     UseForEvent = true,
                     UseForHighlight = true,
                     UseAsViewFilter = true,
-                    ForegroundColor = "Magenta",
-                    Priority = 100,
+                    ForegroundColor = "Orange",
+                    Priority = 50,
                     MatchDirection = HighlightMatchDirection.RxOnly
                 }
             },
             EventRules = new List<EventRule>
             {
-                new() { Name = "ERROR", Keyword = "ERROR" },
-                new() { Name = "WARN", Keyword = "WARN" },
-                new() { Name = "FAULT", Keyword = "FAULT" }
+                new() { Name = "fault", Keyword = "fault", HighlightColor = "Red" },
+                new() { Name = "[E]", Keyword = "[E]", HighlightColor = "Red" },
+                new() { Name = "Error", Keyword = "Error", HighlightColor = "Red" },
+                new() { Name = "[W]", Keyword = "[W]", HighlightColor = "Orange" },
+                new() { Name = "warn", Keyword = "warn", HighlightColor = "Orange" }
             },
             HighlightRules = new List<HighlightRule>
             {
                 new()
                 {
-                    Name = "ERROR",
-                    Keyword = "ERROR",
+                    Name = "fault",
+                    Keyword = "fault",
                     UseAsViewFilter = true,
                     ForegroundColor = "Red",
                     Priority = 100,
@@ -171,20 +195,38 @@ public sealed class ProfileService : IProfileService
                 },
                 new()
                 {
-                    Name = "WARN",
-                    Keyword = "WARN",
+                    Name = "[E]",
+                    Keyword = "[E]",
                     UseAsViewFilter = true,
-                    ForegroundColor = "Yellow",
+                    ForegroundColor = "Red",
+                    Priority = 100,
+                    MatchDirection = HighlightMatchDirection.Both
+                },
+                new()
+                {
+                    Name = "Error",
+                    Keyword = "Error",
+                    UseAsViewFilter = true,
+                    ForegroundColor = "Red",
+                    Priority = 100,
+                    MatchDirection = HighlightMatchDirection.Both
+                },
+                new()
+                {
+                    Name = "[W]",
+                    Keyword = "[W]",
+                    UseAsViewFilter = true,
+                    ForegroundColor = "Orange",
                     Priority = 50,
                     MatchDirection = HighlightMatchDirection.Both
                 },
                 new()
                 {
-                    Name = "FAULT",
-                    Keyword = "FAULT",
+                    Name = "warn",
+                    Keyword = "warn",
                     UseAsViewFilter = true,
-                    ForegroundColor = "Magenta",
-                    Priority = 100,
+                    ForegroundColor = "Orange",
+                    Priority = 50,
                     MatchDirection = HighlightMatchDirection.Both
                 }
             },
