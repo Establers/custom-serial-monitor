@@ -769,7 +769,7 @@
     <comment>Help section title.</comment>
   </data>
   <data name="HelpCommandSequencesBody" xml:space="preserve">
-    <value>1. Press the upper + on the Sequences tab to create a sequence.&#x0A;2. Press the lower + to add command steps.&#x0A;3. Set Command, Line ending, and Delay after ms.&#x0A;4. Use Up and Dn to change the order.&#x0A;5. After connecting the device, press Run to start or Stop to cancel.&#x0A;&#x0A;A sequence uses the current Mode (Terminal/HEX) for every step.&#x0A;Per-step modes, device-response checks, and conditional branches are not supported.</value>
+    <value>1. Press the upper + on the Sequences tab to create a sequence.&#x0A;2. Press the lower + to add command steps.&#x0A;3. Set Command, Line ending, and Delay after ms.&#x0A;4. Use Up and Dn to change the order.&#x0A;5. After connecting the device, press Run to start or Stop to cancel.&#x0A;&#x0A;A sequence uses the current Mode (Terminal/HEX) for every step.&#x0A;Per-step modes, device-response checks, and conditional branches are not supported.&#x0A;&#x0A;AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.&#x0A;Examples: docs\sequence_examples.json. These are sequence fragments, not a complete profile.&#x0A;Close the app and back up default.json before merging. Standalone sequence import is not supported.</value>
     <comment>Help section body.</comment>
   </data>
   <data name="HelpComBridgeTitle" xml:space="preserve">

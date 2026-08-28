@@ -197,6 +197,8 @@ $requiredAssets = @(
     "Assets\context\index.html",
     "Assets\FunBackgrounds\default_cute_bg.jpg",
     "Assets\AppIcon\SerialMonitor.ico",
+    "docs\sequence_authoring.md",
+    "docs\sequence_examples.json",
     "LICENSE"
 )
 
@@ -233,6 +235,14 @@ Notes
 - WebView2 Runtime may still be required on the target PC for the xterm log view.
 - JetBrains Mono is bundled for the xterm log view under Assets\xterm\fonts.
 - Its SIL Open Font License is included at Assets\xterm\fonts\OFL.txt.
+
+AI sequence authoring
+---------------------
+- Open docs\sequence_authoring.md in a text editor (Korean guide with an AI prompt).
+- Attach the guide and your device command specification when asking AI for sequences.
+- docs\sequence_examples.json contains sequence fragments, NOT a complete profile.
+- Close the app and back up default.json before merging sequences; do not replace the whole profile.
+- There is no standalone sequence import, response wait, or branching support yet.
 
 If the app does not start
 -------------------------

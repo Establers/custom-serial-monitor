@@ -1,0 +1,37 @@
+{
+  "CommandSequences": [
+    {
+      "Name": "Example - Terminal status",
+      "RepeatCount": 3,
+      "Steps": [
+        {
+          "Name": "상태 조회",
+          "CommandText": "status",
+          "LineEndingMode": "Crlf",
+          "DelayAfterMs": 500,
+          "Comment": "Terminal 모드 예제. 실제 장비의 명령을 확인한 뒤 사용하세요."
+        },
+        {
+          "Name": "버전 조회",
+          "CommandText": "version",
+          "LineEndingMode": "Crlf",
+          "DelayAfterMs": 1000,
+          "Comment": "응답 판정 없이 고정 시간 대기. 처음에는 RepeatCount 1로 검증하세요."
+        }
+      ]
+    },
+    {
+      "Name": "Example - HEX packet",
+      "RepeatCount": 1,
+      "Steps": [
+        {
+          "Name": "패킷 전송",
+          "CommandText": "AA 55 01 00",
+          "LineEndingMode": "None",
+          "DelayAfterMs": 0,
+          "Comment": "HEX 모드 전용 형식 예제. 의미가 정의되지 않은 바이트이므로 실제 장비에 그대로 보내지 마세요."
+        }
+      ]
+    }
+  ]
+}

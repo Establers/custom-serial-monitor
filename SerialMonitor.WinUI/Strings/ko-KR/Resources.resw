@@ -769,7 +769,7 @@
     <comment>English: Command Sequences</comment>
   </data>
   <data name="HelpCommandSequencesBody" xml:space="preserve">
-    <value>1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.&#x0A;2. 아래쪽 +로 명령 Step을 추가합니다.&#x0A;3. Command, Line ending, Delay after ms를 설정합니다.&#x0A;4. Up과 Dn으로 순서를 조정합니다.&#x0A;5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.&#x0A;&#x0A;시퀀스는 실행 시 현재 Mode(Terminal/HEX)를 모든 Step에 공통 적용합니다.&#x0A;Step별 Mode 선택, 장비 응답 판정, 조건 분기는 지원하지 않습니다.</value>
+    <value>1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.&#x0A;2. 아래쪽 +로 명령 Step을 추가합니다.&#x0A;3. Command, Line ending, Delay after ms를 설정합니다.&#x0A;4. Up과 Dn으로 순서를 조정합니다.&#x0A;5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.&#x0A;&#x0A;시퀀스는 실행 시 현재 Mode(Terminal/HEX)를 모든 Step에 공통 적용합니다.&#x0A;Step별 Mode 선택, 장비 응답 판정, 조건 분기는 지원하지 않습니다.&#x0A;&#x0A;AI용 JSON 작성 가이드: 실행 파일 옆 docs\sequence_authoring.md를 메모장 등으로 열고 장비 명령어와 함께 AI에게 전달하세요.&#x0A;예제: docs\sequence_examples.json. 전체 프로필이 아닌 시퀀스 부분 예제입니다.&#x0A;적용 전 앱을 종료하고 default.json을 백업하세요. 시퀀스 전용 가져오기는 아직 지원하지 않습니다.</value>
     <comment>English help section body.</comment>
   </data>
   <data name="HelpComBridgeTitle" xml:space="preserve">

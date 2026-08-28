@@ -3970,6 +3970,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                     A sequence uses the current Mode (Terminal/HEX) for every step.
                     Per-step modes, device-response checks, and conditional branches are not supported.
+
+                    AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.
+                    Examples: docs\sequence_examples.json. These are sequence fragments, not a complete profile.
+                    Close the app and back up default.json before merging. Standalone sequence import is not supported.
                     """)),
             new HelpSection(
                 UiText.Get("HelpComBridgeTitle", "COM Bridge"),

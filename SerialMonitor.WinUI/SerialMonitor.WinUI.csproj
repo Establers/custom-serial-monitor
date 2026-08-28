@@ -40,6 +40,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\docs\sequence_authoring.md;..\docs\sequence_examples.json">
+      <Link>docs\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="Assets\xterm\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

@@ -182,6 +182,9 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 
 ## 문서
 
+- [AI용 시퀀스 JSON 작성 가이드](docs/sequence_authoring.md): 복사할 AI 요청문,
+  실제 필드 규격, 안전한 프로필 적용 방법. [JSON 예제](docs/sequence_examples.json)와
+  함께 빌드·배포 결과의 실행 파일 옆 `docs` 폴더에 포함됩니다.
 - [요구 사항](docs/requirements.md)
 - [아키텍처](docs/architecture.md)
 - [로깅 동작](docs/logging.md)

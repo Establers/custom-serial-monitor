@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -136,6 +138,49 @@ public sealed class ProfileServiceDefaultsTests
         finally
         {
             DeleteTemporaryProfileDirectory(profilePath);
+        }
+    }
+
+    [Fact]
+    public async Task BundledSequenceExamples_LoadAndRoundTripThroughProfileService()
+    {
+        var path = CreateTemporaryProfilePath();
+        try
+        {
+            var service = new ProfileService();
+            var profile = JsonSerializer.SerializeToNode(service.CreateDefaultProfile())!;
+            var examples = JsonNode.Parse(await File.ReadAllTextAsync(
+                Path.Combine(AppContext.BaseDirectory, "docs", "sequence_examples.json")))!;
+            profile["CommandSequences"] = examples["CommandSequences"]!.DeepClone();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, profile.ToJsonString());
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Null(service.LastError);
+            Assert.Equal(2, loaded.CommandSequences.Count);
+            var terminal = loaded.CommandSequences[0];
+            Assert.Equal("Example - Terminal status", terminal.Name);
+            Assert.Equal(3, terminal.RepeatCount);
+            Assert.Equal(["status", "version"], terminal.Steps.Select(step => step.CommandText));
+            Assert.Equal([500, 1000], terminal.Steps.Select(step => step.DelayAfterMs));
+            Assert.All(terminal.Steps, step => Assert.Equal(TxLineEndingMode.Crlf, step.LineEndingMode));
+            var hex = Assert.Single(loaded.CommandSequences[1].Steps);
+            Assert.Equal(TxLineEndingMode.None, hex.LineEndingMode);
+            Assert.Equal(0, hex.DelayAfterMs);
+            Assert.True(HexPayloadParser.TryParse(hex.CommandText, out var bytes, out var error), error);
+            Assert.Equal(new byte[] { 0xAA, 0x55, 0x01, 0x00 }, bytes);
+
+            await service.SaveAsync(path, loaded, CancellationToken.None);
+            var reloaded = await service.LoadAsync(path, CancellationToken.None);
+            Assert.Null(service.LastError);
+            Assert.Equal(
+                JsonSerializer.Serialize(loaded.CommandSequences),
+                JsonSerializer.Serialize(reloaded.CommandSequences));
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
         }
     }
 
