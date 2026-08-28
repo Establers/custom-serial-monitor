@@ -710,15 +710,19 @@
       appendWriting = true;
       try {
         terminal.write(item.text, () => {
-          onTerminalWriteParsed();
-          // Re-check the live setting because the user can disable Auto Scroll
-          // while xterm is asynchronously parsing a large write.
-          if (item.autoScroll && autoScrollEnabled && appendQueueLength() === 0) {
-            terminal.scrollToBottom();
-          }
-          postAppendResult(item, true, '');
-          appendWriting = false;
-          if (appendQueueLength() > 0) {
+          // This callback runs after write() returns, outside its try/catch.
+          try {
+            onTerminalWriteParsed();
+            // Re-check Auto Scroll because it can change while xterm parses.
+            if (item.autoScroll && autoScrollEnabled && appendQueueLength() === 0) {
+              terminal.scrollToBottom();
+            }
+            postAppendResult(item, true, '');
+          } catch (error) {
+            postAppendResult(item, false, error);
+            console.error('xterm append callback failed', error);
+          } finally {
+            appendWriting = false;
             queueAppendDrain();
           }
         });
@@ -732,9 +736,10 @@
       }
     }
 
-    function finishReplace(autoScroll, operationId) {
+    function finishReplace(autoScroll, operationId, requestId) {
       if (operationId !== replaceOperationId) {
         replaceWriting = false;
+        postAppendResult({ requestId }, false, 'replacement canceled');
         queueAppendDrain();
         return;
       }
@@ -742,20 +747,38 @@
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
-      if (autoScroll && autoScrollEnabled) {
-        terminal.scrollToBottom();
+      try {
+        if (autoScroll && autoScrollEnabled) {
+          terminal.scrollToBottom();
+        }
+        postAppendResult({ requestId }, true, '');
+      } catch (error) {
+        failReplace(error, requestId);
+      } finally {
+        queueAppendDrain();
       }
-      queueAppendDrain();
     }
 
-    function commitReplaceQueue(autoScroll, operationId) {
+    function failReplace(error, requestId) {
+      replaceWriting = false;
+      replaceQueue.length = 0;
+      replaceQueueHead = 0;
+      console.error('xterm bulk replace failed', error);
+      try {
+        postAppendResult({ requestId }, false, error);
+      } finally {
+        queueAppendDrain();
+      }
+    }
+
+    function commitReplaceQueue(autoScroll, operationId, requestId) {
       if (operationId !== replaceOperationId) {
-        finishReplace(false, operationId);
+        finishReplace(false, operationId, requestId);
         return;
       }
 
       if (replaceQueueHead >= replaceQueue.length) {
-        finishReplace(autoScroll, operationId);
+        finishReplace(autoScroll, operationId, requestId);
         return;
       }
 
@@ -766,15 +789,15 @@
         // instead of waiting for every chunk already queued inside xterm.
         const chunk = replaceQueue[replaceQueueHead++];
         terminal.write(chunk, () => {
-          onTerminalWriteParsed();
-          commitReplaceQueue(autoScroll, operationId);
+          try {
+            onTerminalWriteParsed();
+            commitReplaceQueue(autoScroll, operationId, requestId);
+          } catch (error) {
+            failReplace(error, requestId);
+          }
         });
       } catch (error) {
-        replaceWriting = false;
-        replaceQueue.length = 0;
-        replaceQueueHead = 0;
-        console.error('xterm bulk replace failed', error);
-        queueAppendDrain();
+        failReplace(error, requestId);
       }
     }
 
@@ -1262,13 +1285,13 @@
       return true;
     };
 
-    window.serialMonitorCommitReplaceLog = function (autoScroll) {
+    window.serialMonitorCommitReplaceLog = function (autoScroll, requestId) {
       if (replaceWriting) {
         return false;
       }
 
       replaceWriting = true;
-      commitReplaceQueue(!!autoScroll, replaceOperationId);
+      commitReplaceQueue(!!autoScroll, replaceOperationId, requestId);
       return true;
     };
 
@@ -1315,7 +1338,9 @@
 
     window.serialMonitorGetAppendQueueState = function () {
       return {
-        queueLength: appendQueueLength() + replaceQueue.length - replaceQueueHead,
+        // Staged chunks cannot drain before Commit. An interrupted host transfer
+        // must not keep the next recovery waiting for work that never started.
+        queueLength: appendQueueLength() + (replaceWriting ? replaceQueue.length - replaceQueueHead : 0),
         writing: appendWriting || replaceWriting
       };
     };

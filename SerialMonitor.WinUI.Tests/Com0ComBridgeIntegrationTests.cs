@@ -10,6 +10,94 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class Com0ComBridgeIntegrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TwoPairs_ForwardDeviceRxAndExternalTx_ButDoNotMirrorManualTx(bool nativeIdleTimeout)
+    {
+        if (Environment.GetEnvironmentVariable("SERIAL_COM0COM_ROUTING_TEST") != "1")
+        {
+            return;
+        }
+
+        // CNCA0 <-> CNCB0 replaces the hardware; COM4 <-> COM5 is the bridge pair.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var device = new SerialPortStream("CNCB0", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        using var partner = new SerialPortStream("COM5", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        device.Open();
+        partner.Open();
+
+        await using var serial = new SerialService();
+        await using var bridge = new SerialBridgeService();
+        var errors = new ConcurrentQueue<string>();
+        serial.Error += (_, message) => errors.Enqueue(message);
+        bridge.Error += (_, message) => errors.Enqueue(message);
+        serial.RawBytesReceived += chunk => bridge.TryEnqueueDeviceChunk(chunk);
+        var settings = new SerialSettings { PortName = "CNCA0", BaudRate = 115200 };
+        await serial.ConnectAsync(settings, new SerialReceiveOptions
+        {
+            UseNativeIdleTimeout = nativeIdleTimeout,
+            IdleTimeoutMs = 10
+        }, timeout.Token);
+        await bridge.StartAsync(
+            new BridgeSettings { VirtualPortName = "COM4" },
+            settings,
+            (bytes, token) => serial.SendBytesAsync(bytes, string.Empty, token),
+            timeout.Token);
+        serial.SetRawBridgePriorityEnabled(true);
+
+        // An additional consumer must not be able to share an occupied endpoint.
+        foreach (var portName in new[] { "CNCA0", "COM4", "COM5" })
+        {
+            using var duplicate = new SerialPortStream(portName, 115200);
+            Assert.Throws<UnauthorizedAccessException>(duplicate.Open);
+        }
+
+        var random = new Random(20260828);
+        var deviceRx = new byte[16 * 1024];
+        var externalTx = new byte[12 * 1024];
+        random.NextBytes(deviceRx);
+        random.NextBytes(externalTx);
+        var partnerRead = ReadExactlyAsync(partner, deviceRx.Length, timeout.Token);
+        var deviceRead = ReadExactlyAsync(device, externalTx.Length, timeout.Token);
+        await Task.WhenAll(
+            device.WriteAsync(deviceRx, timeout.Token).AsTask(),
+            partner.WriteAsync(externalTx, timeout.Token).AsTask());
+        Assert.Equal(deviceRx, await partnerRead);
+        Assert.Equal(externalTx, await deviceRead);
+
+        var manualTx = new byte[] { 0xA1, 0xA2, 0xA3 };
+        Assert.Equal(ManualTransmitResult.Sent, await bridge.QueueManualTransmitAsync(
+            token => serial.SendBytesAsync(manualTx, string.Empty, token),
+            timeout.Token));
+        Assert.Equal(manualTx, await ReadExactlyAsync(device, manualTx.Length, timeout.Token));
+
+        // Only the device's subsequent reply belongs in the external app's RX.
+        var reply = new byte[] { 0xB1, 0xB2, 0xB3 };
+        await device.WriteAsync(reply, timeout.Token);
+        Assert.Equal(reply, await ReadExactlyAsync(partner, reply.Length, timeout.Token));
+        await WaitUntilAsync(
+            () => bridge.DeviceToVirtualByteCount == deviceRx.Length + reply.Length &&
+                  bridge.VirtualToDeviceByteCount == externalTx.Length,
+            timeout.Token);
+        Assert.Equal(externalTx.Length + manualTx.Length, serial.WrittenByteCount);
+        Assert.Equal(0, bridge.DroppedDeviceToVirtualByteCount);
+        Assert.Equal(0, bridge.DroppedVirtualToDeviceByteCount);
+        Assert.Empty(errors);
+        await bridge.StopAsync(timeout.Token);
+        await serial.DisconnectAsync(timeout.Token);
+    }
+
     [Fact]
     public async Task Com4Com5_PreservesBytesBothWays_AndArbitratesOneManualTransmit()
     {

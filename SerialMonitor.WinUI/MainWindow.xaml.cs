@@ -245,6 +245,15 @@ public sealed partial class MainWindow : Window
         {
             RuntimeDiagnostics.RecordError("MainWindow.ShutdownAndCloseAsync", ex);
         }
+
+        try
+        {
+            await _viewModel.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.ShutdownAndCloseAsync.Dispose", ex);
+        }
         finally
         {
             _closeAllowed = true;
@@ -306,7 +315,7 @@ public sealed partial class MainWindow : Window
         QueueXtermDeltaCatchUpAfterRestore("window restored");
     }
 
-    private async void OnClosed(object sender, WindowEventArgs args)
+    private void OnClosed(object sender, WindowEventArgs args)
     {
         _xtermSearchCancellation.Cancel();
         CancelPendingXtermAppendAcknowledgements();
@@ -336,15 +345,6 @@ public sealed partial class MainWindow : Window
         _trayIconTimer.Stop();
         _trayIconTimer.Tick -= OnTrayIconTimerTick;
         _trayNotifier.Dispose();
-
-        try
-        {
-            await _viewModel.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex)
-        {
-            RuntimeDiagnostics.RecordError("MainWindow.OnClosed.Dispose", ex);
-        }
     }
 
     private void OnEventNotificationRequested(object? sender, EventNotificationRequest request)
@@ -2967,6 +2967,7 @@ public sealed partial class MainWindow : Window
                     "xterm sync append interrupted",
                     renderGeneration,
                     canceled: true);
+                QueueRestoreRerenderRetry();
                 return;
             }
 
@@ -3036,11 +3037,8 @@ public sealed partial class MainWindow : Window
                 "error",
                 ex.Message,
                 renderGeneration);
-            if (isRestoreRender)
-            {
-                MarkXtermFullRerenderNeeded("restore sync failed");
-                QueueRestoreRerenderRetry();
-            }
+            MarkXtermFullRerenderNeeded("xterm sync failed");
+            QueueRestoreRerenderRetry();
         }
         finally
         {
@@ -3207,39 +3205,68 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var beginResult = await ExecuteXtermScriptAsync(
-            "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
-        if (TryParseScriptBoolean(beginResult) != true)
+        var requestId = Interlocked.Increment(ref _nextXtermAppendRequestId);
+        var acknowledgement = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_xtermAppendAckGate)
         {
-            return false;
+            _xtermAppendAcknowledgements[requestId] = acknowledgement;
         }
 
-        foreach (var chunk in SplitXtermFullRenderTransportText(text))
+        var committed = false;
+        try
         {
+            var beginResult = await ExecuteXtermScriptAsync(
+                "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
+            if (TryParseScriptBoolean(beginResult) != true)
+            {
+                return false;
+            }
+
+            foreach (var chunk in SplitXtermFullRenderTransportText(text))
+            {
+                if (IsXtermVisualAppendSuspended() ||
+                    expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+                {
+                    return false;
+                }
+
+                var encodedText = JsonSerializer.Serialize(chunk);
+                var queuedResult = await ExecuteXtermScriptAsync(
+                    $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
+                if (TryParseScriptBoolean(queuedResult) != true)
+                {
+                    return false;
+                }
+            }
+
             if (IsXtermVisualAppendSuspended() ||
                 expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
             {
                 return false;
             }
 
-            var encodedText = JsonSerializer.Serialize(chunk);
-            var queuedResult = await ExecuteXtermScriptAsync(
-                $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
-            if (TryParseScriptBoolean(queuedResult) != true)
+            var commitResult = await ExecuteXtermScriptAsync(
+                $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}, {requestId}) : false;");
+            // ExecuteScript only acknowledges queuing. The snapshot is covered
+            // only after xterm has parsed every chunk, just like a live append.
+            committed = TryParseScriptBoolean(commitResult) == true &&
+                await acknowledgement.Task.WaitAsync(XtermLiveAppendAckTimeout);
+            return committed;
+        }
+        finally
+        {
+            lock (_xtermAppendAckGate)
             {
-                return false;
+                _xtermAppendAcknowledgements.Remove(requestId);
+            }
+
+            if (!committed)
+            {
+                // Discard remaining chunks when minimize, Clear, a script failure,
+                // or a missing acknowledgement interrupts the replacement.
+                await CancelPendingXtermWritesAsync();
             }
         }
-
-        if (IsXtermVisualAppendSuspended() ||
-            expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
-        {
-            return false;
-        }
-
-        var commitResult = await ExecuteXtermScriptAsync(
-            $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}) : false;");
-        return TryParseScriptBoolean(commitResult) == true;
     }
 
     private async Task<bool> ExecuteXtermAppendChunksAsync(

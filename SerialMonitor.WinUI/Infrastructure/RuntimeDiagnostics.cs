@@ -80,8 +80,14 @@ public static class RuntimeDiagnostics
     {
         lock (Gate)
         {
-            Directory.CreateDirectory(DirectoryPath);
-            File.WriteAllText(path, text);
+            try
+            {
+                Directory.CreateDirectory(DirectoryPath);
+                File.WriteAllText(path, text);
+            }
+            catch
+            {
+            }
         }
     }
 }

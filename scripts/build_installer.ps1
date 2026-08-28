@@ -131,11 +131,11 @@ if (-not $installer) {
         Select-Object -First 1
 }
 
-$installerChecksumPath = Write-Sha256File -FilePath $installer.FullName
-
 if (-not $installer) {
     throw "Installer output was not produced in: $installerOutputDir"
 }
+
+$installerChecksumPath = Write-Sha256File -FilePath $installer.FullName
 
 $packageExtensions = @(".msix", ".msixbundle", ".appx", ".appxbundle")
 $packageFiles = @(Get-ChildItem -LiteralPath $releaseRoot -Recurse -File |

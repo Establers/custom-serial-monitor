@@ -6,6 +6,29 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class LogViewModelMultiFilterTests
 {
     [Fact]
+    public void RxOnlyFilter_CanLeaveViewEmptyDespiteTxAndRxUntilFilterIsCleared()
+    {
+        var viewModel = new LogViewModel(capacity: 100);
+        var rule = CreateTerminalRule("ERROR");
+        rule.MatchDirection = HighlightMatchDirection.RxOnly;
+        viewModel.SetViewFilters([rule]);
+        viewModel.AddRange([LogLine.Rx("ERROR before reconnect")]);
+        viewModel.Clear();
+
+        viewModel.AddRange([LogLine.Tx("ERROR command"), LogLine.Rx("OK")]);
+
+        Assert.Equal(2, viewModel.TotalRetainedLineCount);
+        Assert.Equal(0, viewModel.CurrentVisibleLineCount);
+        Assert.Empty(viewModel.GetVisibleTextSnapshot());
+
+        viewModel.SetViewFilters([], rebuildExisting: false);
+        viewModel.AddRange([LogLine.Tx("new command"), LogLine.Rx("new reply")]);
+        var visible = viewModel.GetVisibleTextSnapshot();
+        Assert.Contains("new command", visible, StringComparison.Ordinal);
+        Assert.Contains("new reply", visible, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MultipleViewFilters_ShowLinesMatchingAnySelectedRule()
     {
         var viewModel = new LogViewModel(capacity: 100);

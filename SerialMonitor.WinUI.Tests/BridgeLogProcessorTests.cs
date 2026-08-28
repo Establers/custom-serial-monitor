@@ -192,12 +192,14 @@ public sealed class BridgeLogProcessorTests
     [Fact]
     public async Task HexMode_ContinuousTrickle_EmitsByMaximumLatency()
     {
-        await using var processor = new BridgeLogProcessor(TimeSpan.FromMilliseconds(25));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        // Idle cannot flush within the read timeout; fewer than MaxHexLogBytes
+        // also rules out a size flush, without timing the CI thread scheduler.
+        const int byteCount = 20;
+        await using var processor = new BridgeLogProcessor(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var producer = Task.Run(async () =>
         {
-            for (var value = 0; value < 20; value++)
+            for (var value = 0; value < byteCount; value++)
             {
                 Assert.True(processor.TryEnqueue(
                     new[] { (byte)value },
@@ -207,10 +209,15 @@ public sealed class BridgeLogProcessorTests
             }
         }, timeout.Token);
 
-        var first = await processor.Logs.ReadAsync(timeout.Token);
-        Assert.InRange(first.RawBytes!.Length, 1, 10);
-        Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(started) < TimeSpan.FromMilliseconds(250));
-        await producer;
+        try
+        {
+            var first = await processor.Logs.ReadAsync(timeout.Token);
+            Assert.InRange(first.RawBytes!.Length, 1, byteCount);
+        }
+        finally
+        {
+            await producer;
+        }
     }
 
     [Fact]

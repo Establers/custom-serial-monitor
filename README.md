@@ -145,6 +145,10 @@ background worker는 cancellation을 지원하고, 비정상 종료를 잡아 UI
   다시 시작하지 않습니다.
 - COM bridge는 byte를 그대로 전달하지만 modem-control line과 BREAK를 전달하지
   않으며, com0com 같은 가상 포트 드라이버는 별도로 준비해야 합니다.
+- bridge의 장치 → 가상 포트 방향은 실제 COM에서 **수신한 RX**를 전달합니다.
+  앱에서 실제 COM으로 보낸 TX 자체는 복사하지 않으며, 장치가 보낸 응답/echo는
+  RX로 들어오므로 전달됩니다. 같은 COM 포트를 여러 프로그램이 동시에 열 수는
+  없으며, 외부 프로그램은 앱이 연 가상 포트의 반대쪽 포트를 열어야 합니다.
 - MOCK/stress 검증은 실제 USB-UART adapter와 장치의 장시간 검증을 대체하지
   않습니다.
 

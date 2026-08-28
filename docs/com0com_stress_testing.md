@@ -37,6 +37,41 @@ The sender's internal MOCK side still bypasses native COM timing, but the raw
 bridge sends those bytes through `COM4 -> COM5`; therefore the receiver instance
 does exercise its real Win32/native idle-timeout path.
 
+### Physical Device Bridge: RX Versus TX
+
+For a device on `COM1` and a virtual pair `COM4 <-> COM5`, Serial Monitor opens
+`COM1` and bridges to `COM4`; the external application opens `COM5`.
+
+- Device RX on `COM1` is forwarded through `COM4` to the external application's RX.
+- The external application's TX on `COM5` is forwarded through `COM4` to `COM1`.
+- Manual TX in Serial Monitor goes to the device on `COM1`, not to `COM5`.
+  Only a reply or echo received from the device is forwarded to `COM5`.
+- MOCK generates a receive-side echo for manual TX, so seeing that echo at the
+  external application does not mean physical-port TX is mirrored.
+- Each endpoint is exclusive. A second application cannot also open `COM1`,
+  `COM4`, or the already occupied `COM5`. This bridge has one external endpoint,
+  not a multi-client broadcast feature.
+
+### Automated Bridge Routing Check
+
+Close applications using the test ports. With both `CNCA0 <-> CNCB0` and
+`COM4 <-> COM5` installed, run:
+
+```powershell
+$env:SERIAL_COM0COM_TEST = '1'
+$env:SERIAL_COM0COM_ROUTING_TEST = '1'
+dotnet test SerialMonitor.WinUI.Tests\SerialMonitor.WinUI.Tests.csproj -p:Platform=x64 --filter FullyQualifiedName~Com0ComBridgeIntegrationTests
+Remove-Item Env:SERIAL_COM0COM_TEST, Env:SERIAL_COM0COM_ROUTING_TEST
+```
+
+The routing test uses `SerialService` on `CNCA0` and `SerialBridgeService` on
+`COM4`; peer handles on `CNCB0` and `COM5` represent the device and external app.
+It checks simultaneous binary transfers in both directions, rejection of
+duplicate opens, manual TX reaching only the device, and device replies reaching
+the external endpoint, with native idle timeout both off and on. The two-pair
+test runs only when `SERIAL_COM0COM_ROUTING_TEST=1`; the original one-pair tests
+run only when `SERIAL_COM0COM_TEST=1`. No physical device is used.
+
 ### Reading The Visual HEX Frame
 
 Each intended packet has this byte layout:

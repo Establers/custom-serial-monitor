@@ -760,11 +760,13 @@ public sealed class LogPipeline : ILogPipeline
             {
                 await _pipelineTask.WaitAsync(cancellationToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
             }
         }
 
+        // If the caller stops waiting, retain the task so the next StartAsync
+        // joins it before replacing the channel that its finally block closes.
         _pipelineCancellation?.Dispose();
         _pipelineCancellation = null;
         _pipelineTask = null;
