@@ -103,6 +103,8 @@ public sealed class ProfileServiceDefaultsTests
 
             Assert.True(File.Exists(path));
             Assert.Equal(50_000, loaded.UiSettings.MaxVisibleLogLines);
+            Assert.Equal(["ps", "meminfo", "top", "top off", "reboot"], loaded.SavedCommands.Select(command => command.Name));
+            Assert.Equal(["ps", "meminfo", "top", "top -t 1", "reboot"], loaded.SavedCommands.Select(command => command.CommandText));
 
             string[] expectedKeywords = ["fault", "[E]", "Error", "[W]", "warn"];
             string[] expectedColors = ["Red", "Red", "Red", "Orange", "Orange"];
@@ -127,6 +129,54 @@ public sealed class ProfileServiceDefaultsTests
             var uiSettings = document.RootElement.GetProperty(nameof(AppProfile.UiSettings));
             Assert.True(uiSettings.TryGetProperty(nameof(UiSettings.MaxVisibleLogLines), out _));
             Assert.False(uiSettings.TryGetProperty("XtermScrollbackSize", out _));
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("name")]
+    [InlineData("text")]
+    [InlineData("ending")]
+    [InlineData("shortcut")]
+    [InlineData("empty")]
+    [InlineData("extra")]
+    public async Task LegacySavedCommands_UpgradeOnlyUntouchedExamples(string? customization)
+    {
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        profile.SavedCommands = [new("status", "status"), new("version", "version"), new("help", "help")];
+        switch (customization)
+        {
+            case "name": profile.SavedCommands[0].Name = "Device status"; break;
+            case "text": profile.SavedCommands[0].CommandText = "custom status"; break;
+            case "ending": profile.SavedCommands[0].LineEndingMode = TxLineEndingMode.Lf; break;
+            case "shortcut": profile.SavedCommands[0].OptionalShortcut = "Ctrl+1"; break;
+            case "empty": profile.SavedCommands.Clear(); break;
+            case "extra": profile.SavedCommands.Add(new("custom", "custom")); break;
+        }
+
+        var expected = JsonSerializer.Serialize(customization is null
+            ? service.CreateDefaultProfile().SavedCommands
+            : profile.SavedCommands);
+        var path = CreateTemporaryProfilePath();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(profile));
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Null(service.LastError);
+            Assert.Equal(expected, JsonSerializer.Serialize(loaded.SavedCommands));
+
+            await service.SaveAsync(path, loaded, CancellationToken.None);
+            var reloaded = await service.LoadAsync(path, CancellationToken.None);
+            Assert.Null(service.LastError);
+            Assert.Equal(expected, JsonSerializer.Serialize(reloaded.SavedCommands));
         }
         finally
         {

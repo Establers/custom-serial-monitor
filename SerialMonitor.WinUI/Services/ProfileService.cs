@@ -232,9 +232,11 @@ public sealed class ProfileService : IProfileService
             },
             SavedCommands = new List<TxCommand>
             {
-                new("status", "status"),
-                new("version", "version"),
-                new("help", "help")
+                new("ps", "ps"),
+                new("meminfo", "meminfo"),
+                new("top", "top"),
+                new("top off", "top -t 1"),
+                new("reboot", "reboot")
             },
             CommandHistory = new List<CommandHistoryEntry>(),
             CommandSequences = new List<CommandSequence>()
@@ -603,6 +605,16 @@ public sealed class ProfileService : IProfileService
         {
             profile.SavedCommands = defaults.SavedCommands;
             warnings.Add("Saved commands were missing.");
+        }
+        else if (profile.SavedCommands is
+                 [
+                     { Name: "status", CommandText: "status", LineEndingMode: null, OptionalShortcut: null },
+                     { Name: "version", CommandText: "version", LineEndingMode: null, OptionalShortcut: null },
+                     { Name: "help", CommandText: "help", LineEndingMode: null, OptionalShortcut: null }
+                 ])
+        {
+            // Replace only the untouched example set; preserve user-edited commands.
+            profile.SavedCommands = defaults.SavedCommands;
         }
         else
         {
