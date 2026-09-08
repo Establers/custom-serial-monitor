@@ -65,6 +65,10 @@ public sealed partial class MainWindow : Window
     private bool _xtermAppendRecoveryRetryQueued;
     private int _xtermAppendRecoveryRetryCount;
     private long _pendingLiveXtermCharacters;
+    private LogRestoreProgress? _logRestoreProgress;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _logRestoreProgressTimer;
+    private bool _updatingLogRestoreProgress;
+    private int _logRestoreProgressLineCount;
     private long _nextXtermAppendRequestId;
     private int _pendingLiveXtermLines;
     private bool _isXtermReady;
@@ -319,6 +323,8 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _logRestoreProgressTimer?.Stop();
+        _logRestoreProgress = null;
         _xtermSearchCancellation.Cancel();
         CancelPendingXtermAppendAcknowledgements();
         AppWindow.Closing -= OnAppWindowClosing;
@@ -1788,6 +1794,18 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _logRestoreProgress = new LogRestoreProgress(TimeProvider.System);
+        _logRestoreProgressLineCount = lineCount;
+        LogRestoreProgressBar.IsIndeterminate = true;
+        LogRestoreProgressBar.Value = 0;
+        if (_logRestoreProgressTimer is null)
+        {
+            _logRestoreProgressTimer = DispatcherQueue.CreateTimer();
+            _logRestoreProgressTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _logRestoreProgressTimer.Tick += async (_, _) => await UpdateLogRestoreProgressAsync();
+        }
+        _logRestoreProgressTimer.Start();
+
         LogRestoreOverlayTitle.Text = string.IsNullOrWhiteSpace(title)
             ? UiText.Get("LogRestoreTitle", "Restoring log view...")
             : title.Trim();
@@ -1814,6 +1832,48 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task UpdateLogRestoreProgressAsync()
+    {
+        if (_updatingLogRestoreProgress || _logRestoreProgress is null || IsClosingOrClosed) return;
+        _updatingLogRestoreProgress = true;
+        try
+        {
+            var progress = _logRestoreProgress.Snapshot();
+            var percent = progress.Percent.HasValue
+                ? $"{Math.Floor(progress.Percent.Value):0}%"
+                : UiText.Get("LogRestorePreparing", "Preparing log view");
+            var elapsed = FormatRestoreDuration(progress.Elapsed);
+            var remaining = progress.Remaining.HasValue
+                ? $"~{FormatRestoreDuration(progress.Remaining.Value)}"
+                : UiText.Get("LogRestoreEstimating", "Estimating...");
+            var detail = UiText.Format("LogRestoreProgressFormat",
+                "{0:N0} lines · {1}\nElapsed {2} · Remaining {3}",
+                _logRestoreProgressLineCount, percent, elapsed, remaining);
+            LogRestoreOverlayDetail.Text = detail;
+            LogRestoreProgressBar.IsIndeterminate = !progress.Percent.HasValue;
+            LogRestoreProgressBar.Value = progress.Percent ?? 0;
+            if (_isXtermReady)
+            {
+                await ExecuteXtermScriptAsync(
+                    $"window.serialMonitorUpdateRestoreProgress && window.serialMonitorUpdateRestoreProgress({JsonSerializer.Serialize(detail)}, {JsonSerializer.Serialize(progress.Percent)});");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Progress reporting must never cancel an otherwise healthy restore.
+            _viewModel.RecordXtermLayoutError($"xterm restore progress update failed: {ex.Message}");
+        }
+        finally
+        {
+            _updatingLogRestoreProgress = false;
+        }
+    }
+
+    private static string FormatRestoreDuration(TimeSpan duration) =>
+        duration.TotalHours >= 1
+            ? $"{(long)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
+            : $"{(long)duration.TotalMinutes:00}:{duration.Seconds:00}";
+
     private async Task HideLogRestoreOverlayAsync()
     {
         if (!DispatcherQueue.HasThreadAccess)
@@ -1839,6 +1899,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _logRestoreProgressTimer?.Stop();
+        _logRestoreProgress = null;
         if (_isXtermReady)
         {
             try
@@ -1884,6 +1946,7 @@ public sealed partial class MainWindow : Window
                 drained.LineCount);
         }
 
+        _logRestoreProgress?.SetTotal(drained.CharacterCount);
         _viewModel.RecordRestoreFullRerenderSuppressed(
             string.IsNullOrWhiteSpace(reason) ? "restore delta append" : reason);
         _viewModel.RecordRestoreRenderStarted(
@@ -1935,6 +1998,7 @@ public sealed partial class MainWindow : Window
 
                 if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount)
                 {
+                    _logRestoreProgress?.Advance(batch.AppendedText.Length);
                     continue;
                 }
 
@@ -1957,6 +2021,7 @@ public sealed partial class MainWindow : Window
                         return;
                     }
 
+                    _logRestoreProgress?.Advance(batch.AppendedText.Length);
                     _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
                 }
                 finally
@@ -3230,6 +3295,7 @@ public sealed partial class MainWindow : Window
 
     private async Task<bool> ReplaceXtermLogAsync(string text, bool autoScroll, long expectedGeneration)
     {
+        _logRestoreProgress?.SetTotal(text.Length);
         if (IsXtermVisualAppendSuspended() ||
             expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
         {
@@ -3266,6 +3332,7 @@ public sealed partial class MainWindow : Window
                         $"window.serialMonitorQueueReplaceChunk && window.serialMonitorCommitReplaceLog && window.serialMonitorQueueReplaceChunk({encodedText}) && window.serialMonitorCommitReplaceLog(false, {requestId});");
                     if (TryParseScriptBoolean(queuedResult) != true ||
                         !await acknowledgement.Task.WaitAsync(XtermLiveAppendAckTimeout)) return false;
+                    _logRestoreProgress?.Advance(chunk.Length);
                 }
                 finally
                 {

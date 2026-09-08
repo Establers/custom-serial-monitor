@@ -1370,8 +1370,14 @@
                                        Text="Preparing log view"
                                        Foreground="{ThemeResource LogRestoreSecondaryTextBrush}"
                                        FontSize="11"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="240"
                                        TextAlignment="Center"
                                        HorizontalAlignment="Center" />
+                            <ProgressBar x:Name="LogRestoreProgressBar"
+                                         Width="220"
+                                         Minimum="0" Maximum="100"
+                                         IsIndeterminate="True" />
                         </StackPanel>
                     </Border>
                 </Border>

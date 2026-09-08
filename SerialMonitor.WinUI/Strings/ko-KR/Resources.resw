@@ -820,4 +820,11 @@
     <value>하단 상태를 클립보드에 복사했습니다.</value>
     <comment>English: Footer status copied to clipboard.</comment>
   </data>
+  <data name="LogRestoreEstimating" xml:space="preserve">
+    <value>계산 중</value>
+  </data>
+  <data name="LogRestoreProgressFormat" xml:space="preserve">
+    <value>{0:N0}줄 · {1}
+경과 {2} · 예상 남은 시간 {3}</value>
+  </data>
 </root>

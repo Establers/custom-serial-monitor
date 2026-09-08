@@ -203,10 +203,13 @@
     }
 
     #restoreOverlayDetail {
+      white-space: pre-line;
       color: var(--overlay-detail);
       font-size: 11px;
       text-align: center;
     }
+
+    #restoreOverlayProgress { width: 220px; height: 6px; }
 
     #contextMenu {
       position: fixed;
@@ -294,6 +297,7 @@
       <img src="https://serialmonitor-loading.local/log_restore.png" alt="">
       <div id="restoreOverlayTitle">로그 화면 복원 중...</div>
       <div id="restoreOverlayDetail">Preparing log view</div>
+      <progress id="restoreOverlayProgress" max="100" aria-label="Restore progress"></progress>
     </div>
   </div>
   <div id="contextMenu" role="menu" aria-hidden="true">
@@ -1383,6 +1387,7 @@
     };
 
     window.serialMonitorShowRestoreOverlay = function (title, detail) {
+      document.getElementById('restoreOverlayProgress').removeAttribute('value');
       restoreOverlayTitle.textContent = String(title || '로그 화면 복원 중...');
       restoreOverlayDetail.textContent = String(detail || 'Preparing log view');
       restoreOverlay.classList.add('visible');
@@ -1393,6 +1398,16 @@
     window.serialMonitorHideRestoreOverlay = function () {
       restoreOverlay.classList.remove('visible');
       restoreOverlay.setAttribute('aria-hidden', 'true');
+      return true;
+    };
+
+    window.serialMonitorUpdateRestoreProgress = function (detail, percent) {
+      if (!restoreOverlay.classList.contains('visible')) return false;
+      restoreOverlayDetail.textContent = String(detail);
+      const bar = document.getElementById('restoreOverlayProgress');
+      bar.setAttribute('aria-label', restoreOverlayTitle.textContent);
+      if (percent === null || !Number.isFinite(percent)) bar.removeAttribute('value');
+      else bar.value = Math.max(0, Math.min(100, percent));
       return true;
     };
 

@@ -820,4 +820,11 @@
     <value>Footer status copied to clipboard.</value>
     <comment>Status shown after copying footer health.</comment>
   </data>
+  <data name="LogRestoreEstimating" xml:space="preserve">
+    <value>Estimating...</value>
+  </data>
+  <data name="LogRestoreProgressFormat" xml:space="preserve">
+    <value>{0:N0} lines · {1}
+Elapsed {2} · Remaining {3}</value>
+  </data>
 </root>

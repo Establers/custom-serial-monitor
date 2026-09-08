@@ -190,6 +190,7 @@ $requiredAssets = @(
     "SerialMonitor.WinUI.pri",
     "Assets\xterm\index.html",
     "Assets\xterm\xterm.js",
+    "Assets\xterm\compact-scrollback.js",
     "Assets\xterm\fonts\JetBrainsMono-Regular.woff2",
     "Assets\xterm\fonts\JetBrainsMono-Bold.woff2",
     "Assets\xterm\fonts\OFL.txt",
