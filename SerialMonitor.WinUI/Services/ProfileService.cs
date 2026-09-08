@@ -889,6 +889,12 @@ public sealed class ProfileService : IProfileService
             warnings.Add("xterm font family was invalid.");
         }
 
+        if (!Enum.IsDefined(settings.Theme))
+        {
+            settings.Theme = defaults.Theme;
+            warnings.Add("App theme was invalid.");
+        }
+
         if (settings.XtermFontSize is < UiSettings.MinXtermFontSize or > UiSettings.MaxXtermFontSize)
         {
             settings.XtermFontSize = defaults.XtermFontSize;

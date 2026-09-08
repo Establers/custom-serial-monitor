@@ -23,6 +23,9 @@ This file tracks current intentional limits and validation gaps.
 - Serial settings that are unsafe during an active connection require reconnect.
 - Terminal/HEX mode and HEX timeout changes apply inside the receive pipeline
   without disconnecting the active COM port.
+- Switching Terminal/HEX clears visible log history and search results. Existing
+  file logs are preserved and active file logging continues. Changing only the
+  HEX timeout does not clear history.
 - Some UI/log settings apply on the next app start or next new log file.
 - Apply hints in Settings should be treated as the source of truth for when a
   setting takes effect.

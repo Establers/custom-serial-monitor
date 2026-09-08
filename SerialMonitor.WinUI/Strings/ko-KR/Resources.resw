@@ -29,8 +29,8 @@
     <comment>English: Scroll log controls left</comment>
   </data>
   <data name="StaticUi007.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>표시 로그 검색(Enter: 새로 고침 및 다음 결과, 위/아래: 검색 기록)</value>
-    <comment>English: Search visible log (Enter refreshes and moves next, Up/Down history)</comment>
+    <value>표시 로그 검색 (검색 버튼 또는 Enter로 갱신 후 다음 결과로 이동, 위/아래 키로 검색 기록 탐색)</value>
+    <comment>English: Search visible log (click Search or press Enter to refresh and move next; Up/Down history)</comment>
   </data>
   <data name="StaticUi008.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>마지막 검색의 이전 결과(Shift+F3)</value>
@@ -826,5 +826,11 @@
   <data name="LogRestoreProgressFormat" xml:space="preserve">
     <value>{0:N0}줄 · {1}
 경과 {2} · 예상 남은 시간 {3}</value>
+  </data>
+  <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>검색</value>
+  </data>
+  <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>현재 검색 옵션으로 다시 검색하고 다음 결과로 이동합니다 (Enter)</value>
   </data>
 </root>

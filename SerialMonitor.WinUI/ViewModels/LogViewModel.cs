@@ -252,7 +252,7 @@ public sealed class LogViewModel : ViewModelBase
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetRxDisplayMode(RxDisplayMode mode)
+    public void SetRxDisplayMode(RxDisplayMode mode, bool clearExisting = false)
     {
         mode = NormalizeRxDisplayMode(mode);
 
@@ -262,6 +262,11 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         _rxDisplayMode = mode;
+        if (clearExisting)
+        {
+            Clear();
+            return;
+        }
         RebuildVisibleLinesFromRetained();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }

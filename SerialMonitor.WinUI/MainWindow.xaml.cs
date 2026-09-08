@@ -481,6 +481,7 @@ public sealed partial class MainWindow : Window
     private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
         await _viewModel.InitializeAsync();
+        ApplySelectedTheme();
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
         UpdateFileLoggingTextColor();
@@ -495,7 +496,43 @@ public sealed partial class MainWindow : Window
     {
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
+        ApplyWebViewColorScheme();
         UpdateFileLoggingTextColor();
+    }
+
+    private void ApplySelectedTheme()
+    {
+        Root.RequestedTheme = _viewModel.SelectedAppTheme switch
+        {
+            AppTheme.Dark => ElementTheme.Dark,
+            AppTheme.Light => ElementTheme.Light,
+            _ => ElementTheme.Default
+        };
+        ApplyTitleBarTheme();
+        ApplyXtermDefaultBackgroundColor();
+        ApplyWebViewColorScheme();
+    }
+
+    private void ApplyWebViewColorScheme()
+    {
+        if (XtermLogWebView.CoreWebView2 is not { } core)
+        {
+            return;
+        }
+
+        try
+        {
+            core.Profile.PreferredColorScheme = _viewModel.SelectedAppTheme switch
+            {
+                AppTheme.Dark => CoreWebView2PreferredColorScheme.Dark,
+                AppTheme.Light => CoreWebView2PreferredColorScheme.Light,
+                _ => CoreWebView2PreferredColorScheme.Auto
+            };
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.ApplyWebViewColorScheme", ex);
+        }
     }
 
     private void OnThemeSettingsChanged(Microsoft.UI.System.ThemeSettings sender, object args)
@@ -2349,6 +2386,7 @@ public sealed partial class MainWindow : Window
             }
 
             await XtermLogWebView.EnsureCoreWebView2Async();
+            ApplyWebViewColorScheme();
             XtermLogWebView.CoreWebView2.WebMessageReceived += OnXtermWebMessageReceived;
             XtermLogWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "serialmonitor.local",
@@ -2399,6 +2437,10 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.SelectedAppTheme))
+        {
+            ApplySelectedTheme();
+        }
         if (args.PropertyName == nameof(MainViewModel.FileLoggingEnabled))
         {
             UpdateFileLoggingTextColor();
@@ -5088,8 +5130,8 @@ public sealed partial class MainWindow : Window
         var panel = new Grid
         {
             MinWidth = 430,
-            ColumnSpacing = 8,
-            RowSpacing = 5
+            ColumnSpacing = 4,
+            RowSpacing = 4
         };
         for (var column = 0; column < 4; column++)
         {
@@ -5586,7 +5628,7 @@ public sealed partial class MainWindow : Window
     {
         return new StackPanel
         {
-            Spacing = 6,
+            Spacing = 4,
             MinWidth = 320
         };
     }
@@ -5695,7 +5737,7 @@ public sealed partial class MainWindow : Window
         var panel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 12
+            Spacing = 4
         };
         foreach (var child in children)
         {

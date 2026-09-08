@@ -81,7 +81,7 @@
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
 
-                    <Grid ColumnSpacing="5"
+                    <Grid ColumnSpacing="4"
                           VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16" />
@@ -413,6 +413,12 @@
                         Value="{StaticResource CompactSubtleButtonTemplate}" />
                 <Setter Property="UseSystemFocusVisuals"
                         Value="True" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
             </Style>
             <ControlTemplate x:Key="NavigationIconButtonTemplate"
                              TargetType="Button">
@@ -636,6 +642,8 @@
                         Value="24" />
                 <Setter Property="MinHeight"
                         Value="24" />
+                <Setter Property="MinWidth"
+                        Value="0" />
                 <Setter Property="Padding"
                         Value="0" />
                 <Setter Property="FontSize"
@@ -690,7 +698,7 @@
                 <Setter Property="BorderThickness"
                         Value="1" />
                 <Setter Property="CornerRadius"
-                        Value="5" />
+                        Value="4" />
                 <Setter Property="Padding"
                         Value="3,4" />
                 <Setter Property="BackgroundSizing"
@@ -834,6 +842,12 @@
                         Value="{StaticResource CompactSubtleButtonTemplate}" />
                 <Setter Property="UseSystemFocusVisuals"
                         Value="True" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
             </Style>
             <Style x:Key="RuleCheckBoxStyle"
                    TargetType="CheckBox">
@@ -861,11 +875,11 @@
                 <Setter Property="MinWidth"
                         Value="0" />
                 <Setter Property="Padding"
-                        Value="7,0" />
+                        Value="5,0" />
                 <Setter Property="FontSize"
                         Value="11" />
                 <Setter Property="CornerRadius"
-                        Value="6" />
+                        Value="4" />
                 <Setter Property="Background"
                         Value="{ThemeResource AppAccentTintBrush}" />
                 <Setter Property="BorderBrush"
@@ -878,6 +892,12 @@
                         Value="{StaticResource CompactSubtleButtonTemplate}" />
                 <Setter Property="UseSystemFocusVisuals"
                         Value="True" />
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Center" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
             </Style>
             <Style x:Key="SettingLabelTextStyle"
                    TargetType="TextBlock">
@@ -1030,7 +1050,7 @@
 
                 <Grid Grid.Column="6"
                       ColumnDefinitions="Auto,Auto,Auto,Auto"
-                      ColumnSpacing="8"
+                      ColumnSpacing="4"
                       MinWidth="0"
                       HorizontalAlignment="Left"
                       VerticalAlignment="Center">
@@ -1110,7 +1130,7 @@
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto"
-                          ColumnSpacing="5">
+                          ColumnSpacing="4">
                     <StackPanel Grid.Column="0"
                                 Orientation="Horizontal"
                                 Spacing="2"
@@ -1159,18 +1179,31 @@
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                     <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
                           MinWidth="1000"
-                          ColumnSpacing="5"
+                          ColumnSpacing="4"
                           ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,Auto,96">
-                        <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
-                                 Grid.Column="0"
-                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 PlaceholderText="Search visible log"
-                                 Style="{StaticResource CompactTextBoxStyle}"
-                                 MinWidth="310"
-                                 MaxWidth="495"
-                                 VerticalAlignment="Center"
-                                 KeyDown="SearchTextBox_KeyDown"
-                                 ToolTipService.ToolTip="Search visible log (Enter refreshes and moves next, Up/Down history)" />
+                        <Grid Grid.Column="0" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
+                                     Grid.Column="0"
+                                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="Search visible log"
+                                     Style="{StaticResource CompactTextBoxStyle}"
+                                     MinWidth="310"
+                                     MaxWidth="495"
+                                     VerticalAlignment="Center"
+                                     KeyDown="SearchTextBox_KeyDown"
+                                     ToolTipService.ToolTip="Search visible log (click Search or press Enter to refresh and move next; Up/Down history)" />
+                            <Button x:Uid="SearchVisibleLogButton"
+                                    Grid.Column="1"
+                                    Style="{StaticResource NavigationIconButtonStyle}"
+                                    Command="{Binding SearchVisibleLogCommand}"
+                                    AutomationProperties.Name="Search"
+                                    ToolTipService.ToolTip="Search with current options and move to the next match (Enter)">
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          FontSize="12"
+                                          UseLayoutRounding="False"
+                                          Glyph="&#xE721;" />
+                            </Button>
+                        </Grid>
                         <Button x:Uid="StaticUi008" Grid.Column="1"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
@@ -1218,7 +1251,7 @@
                                   ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                                   Style="{StaticResource CompactComboBoxStyle}"
                                   Width="96"
-                                  ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
+                                  ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                         <TextBlock x:Uid="VisibleFilterLabel"
                                    Grid.Column="9"
                                    Text="Filter"
@@ -1251,7 +1284,7 @@
                                         Closed="VisibleLogFilterFlyout_Closed">
                                     <Border MinWidth="180"
                                             MaxWidth="260">
-                                        <StackPanel Spacing="5">
+                                        <StackPanel Spacing="4">
                                             <TextBlock x:Uid="VisibleFilterFlyoutTitle"
                                                        Text="Filter"
                                                        FontSize="12"
@@ -1286,7 +1319,7 @@
                                                        Opacity="0.7"
                                                        TextWrapping="Wrap" />
                                             <Grid ColumnDefinitions="*,Auto,Auto"
-                                                  ColumnSpacing="6">
+                                                  ColumnSpacing="4">
                                                 <Button x:Uid="VisibleFilterCancelButton"
                                                         Grid.Column="1"
                                                         Content="Cancel"
@@ -1352,7 +1385,7 @@
                             CornerRadius="6"
                             Padding="16,12"
                             MaxWidth="280">
-                        <StackPanel Spacing="8"
+                        <StackPanel Spacing="4"
                                     HorizontalAlignment="Center">
                             <Image Source="ms-appx:///Assets/Loading/log_restore.png"
                                    Width="150"
@@ -1465,7 +1498,7 @@
                                 <Grid ColumnSpacing="4"
                                       ColumnDefinitions="*,Auto,Auto">
                                     <StackPanel Orientation="Horizontal"
-                                                Spacing="5"
+                                                Spacing="4"
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="Events"
                                                    Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -1503,7 +1536,7 @@
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid ColumnSpacing="5"
+                                        <Grid ColumnSpacing="4"
                                               MinHeight="24"
                                               ColumnDefinitions="76,58,28,*">
                                             <TextBlock Text="{Binding TimeText}"
@@ -1561,7 +1594,7 @@
                                       ColumnDefinitions="Auto,*,Auto">
                                     <TextBlock Text="Context"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
-                                               Margin="0,0,6,0" />
+                                               Margin="0,0,4,0" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding SelectedEventContextHeaderText}"
                                                FontFamily="Consolas"
@@ -1601,13 +1634,13 @@
                               MinWidth="0"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
-                                <Grid ColumnSpacing="5"
+                                <Grid ColumnSpacing="4"
                                       MinWidth="0"
                                       ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
                                       RowDefinitions="Auto">
                                     <TextBlock Text="Search"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}"
-                                               Margin="0,0,6,0" />
+                                               Margin="0,0,4,0" />
                                     <Button x:Uid="StaticUi029" Grid.Column="1"
                                             Content="Refresh"
                                             Style="{StaticResource RuleActionButtonStyle}"
@@ -1655,7 +1688,7 @@
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid ColumnSpacing="5"
+                                        <Grid ColumnSpacing="4"
                                               MinHeight="24"
                                               HorizontalAlignment="Stretch"
                                               ColumnDefinitions="76,42,42,*">
@@ -1810,7 +1843,7 @@
                                 <Grid RowSpacing="2"
                                       MinHeight="0"
                                       RowDefinitions="Auto,*">
-                                    <Grid ColumnSpacing="5"
+                                    <Grid ColumnSpacing="4"
                                           MinHeight="20"
                                           ColumnDefinitions="28,*,54,58,70">
                                         <TextBlock Text="#"
@@ -1847,7 +1880,7 @@
                                         </ListView.ItemContainerStyle>
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid ColumnSpacing="5"
+                                                <Grid ColumnSpacing="4"
                                                       MinHeight="24"
                                                       ColumnDefinitions="28,*,54,58,70"
                                                       ToolTipService.ToolTip="{Binding RowToolTip}">
@@ -1899,7 +1932,7 @@
                               RowDefinitions="Auto,*">
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
-                                <Grid ColumnSpacing="6"
+                                <Grid ColumnSpacing="4"
                                       ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Text="Log Rules"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
@@ -2106,18 +2139,20 @@
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="4">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="6">
+                                        Padding="4">
                                     <Grid ColumnDefinitions="*,Auto"
-                                          ColumnSpacing="8">
+                                          ColumnSpacing="4">
                                         <StackPanel Spacing="2">
                                             <TextBlock Text="Bidirectional Raw COM Bridge"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                              <TextBlock Text="{Binding BridgeStatusText}"
-                                                        TextWrapping="WrapWholeWords"
+                                                        TextWrapping="NoWrap"
+                                                        ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                         Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Text="{Binding ManualTxStateText}"
                                                        Foreground="{ThemeResource WarningTextBrush}"
-                                                       TextWrapping="WrapWholeWords"
+                                                       TextWrapping="NoWrap"
+                                                       ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                         </StackPanel>
                                         <TextBlock Grid.Column="1"
@@ -2129,13 +2164,13 @@
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="6">
-                                    <StackPanel Spacing="5">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <TextBlock Text="Connection"
                                                    Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                         <Grid ColumnDefinitions="Auto,130,*"
                                               RowDefinitions="Auto,Auto"
-                                              ColumnSpacing="5">
+                                              ColumnSpacing="4">
                                             <TextBlock x:Uid="StaticUi079" Text="Port"
                                                        Grid.Column="0"
                                                        Style="{StaticResource CompactLabelTextStyle}"
@@ -2157,7 +2192,7 @@
                                                         Grid.ColumnSpan="2"
                                                         Margin="0,4,0,0"
                                                         Orientation="Horizontal"
-                                                        Spacing="5">
+                                                        Spacing="4">
                                                 <Button Content="Start bridge"
                                                         Command="{Binding StartBridgeCommand}" />
                                                 <Button Content="Stop bridge"
@@ -2165,23 +2200,24 @@
                                             </StackPanel>
                                         </Grid>
                                         <TextBlock x:Uid="StaticUi083" Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
-                                                   TextWrapping="WrapWholeWords"
+                                                   TextWrapping="NoWrap"
+                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Opacity="0.82"
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                     </StackPanel>
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="6">
-                                    <StackPanel Spacing="5">
+                                        Padding="4">
+                                    <StackPanel Spacing="4">
                                         <TextBlock Text="Transfer"
                                                    Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                         <Grid ColumnDefinitions="140,*,*"
                                               RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                                              ColumnSpacing="8"
+                                              ColumnSpacing="4"
                                               RowSpacing="3">
                                             <TextBlock Text="Direction"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="Bytes"
                                                        Style="{StaticResource InspectorTableHeaderTextStyle}" />
@@ -2246,22 +2282,24 @@
                                         </Grid>
                                         <TextBlock Text="{Binding BridgeLastError}"
                                                    Foreground="{ThemeResource ErrorTextBrush}"
-                                                   TextWrapping="WrapWholeWords"
+                                                   TextWrapping="NoWrap"
+                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                         <TextBlock x:Uid="StaticUi092" Text="{Binding BridgeVisualLogStatusText}"
                                                    ToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                         <TextBlock x:Uid="StaticUi093" Text="{Binding BridgePriorityPipelineStatusText}"
-                                                   TextWrapping="WrapWholeWords"
+                                                   TextWrapping="NoWrap"
                                                    ToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                     </StackPanel>
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="6">
+                                        Padding="4">
                                     <TextBlock x:Uid="StaticUi094" Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
-                                               TextWrapping="WrapWholeWords"
+                                               TextWrapping="NoWrap"
+                                               ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                Style="{StaticResource CompactCellTextStyle}" />
                                 </Border>
                             </StackPanel>
@@ -2378,7 +2416,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <Grid Grid.Column="1"
                                                   ColumnDefinitions="2*,Auto,3*"
-                                                  ColumnSpacing="6">
+                                                  ColumnSpacing="4">
                                                 <TextBox x:Uid="StaticUi112" Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource CompactTextBoxStyle}"
                                                          HorizontalAlignment="Stretch"
@@ -2418,7 +2456,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
-                                                        Spacing="6">
+                                                        Spacing="4">
                                                 <CheckBox Content="Size rotation"
                                                           IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}" />
                                                 <TextBox Text="{Binding SizeRotationMegabytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
@@ -2533,7 +2571,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
-                                                        Spacing="8">
+                                                        Spacing="4">
                                                 <CheckBox Content="DTR"
                                                           IsChecked="{Binding DtrEnable, Mode=TwoWay}"
                                                           IsEnabled="{Binding CanEditConnectionSettings}" />
@@ -2585,7 +2623,7 @@
                                                       Style="{StaticResource CompactComboBoxStyle}"
                                                       Width="96"
                                                       HorizontalAlignment="Left"
-                                                      ToolTipService.ToolTip="Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes." />
+                                                      ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                                             <TextBlock x:Uid="StaticUi140" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
@@ -2625,10 +2663,10 @@
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            VerticalAlignment="Center" />
                                                 <TextBlock x:Uid="StaticUi145" Grid.Column="4"
-                                                           Margin="8,0,0,0"
+                                                           Margin="4,0,0,0"
                                                            Text="{Binding HexGroupTimeoutRecommendationText}"
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
-                                                           TextWrapping="Wrap"
+                                                           TextWrapping="NoWrap"
                                                            VerticalAlignment="Center"
                                                            ToolTipService.ToolTip="Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile." />
                                             </Grid>
@@ -2638,7 +2676,7 @@
                                             <TextBlock x:Uid="StaticUi146" Grid.Column="1"
                                                        Text="Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms)."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       TextWrapping="Wrap"
+                                                       TextWrapping="NoWrap"
                                                        ToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*"
@@ -2647,7 +2685,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
-                                                        Spacing="8">
+                                                        Spacing="4">
                                                 <CheckBox Content="Automatically reconnect after an unexpected disconnect"
                                                           IsChecked="{Binding AutoReconnectEnabled, Mode=TwoWay}"
                                                           ToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying." />
@@ -2672,15 +2710,28 @@
                                         Padding="4">
                                     <StackPanel Spacing="4">
                                         <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Font"
+                                            <TextBlock Text="Appearance"
                                                        Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
-                                                       Text="xterm log text"
+                                                       Text="Theme and log text"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right" />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
+                                            <TextBlock Text="Theme"
+                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                            <ComboBox Grid.Column="1"
+                                                      ItemsSource="{Binding AppThemeOptions}"
+                                                      SelectedItem="{Binding SelectedAppTheme, Mode=TwoWay}"
+                                                      Style="{StaticResource CompactComboBoxStyle}"
+                                                      MinWidth="190"
+                                                      HorizontalAlignment="Left"
+                                                      ToolTipService.ToolTip="System follows Windows. Dark and Light apply to the window and terminal immediately without clearing logs. Saved with the profile." />
+                                            <TextBlock Grid.Column="2" Text="Now"
+                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="86,*,58" ColumnSpacing="4">
                                             <TextBlock Text="xterm"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <ComboBox x:Uid="StaticUi152" Grid.Column="1"
@@ -3041,7 +3092,7 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
-                                                        Spacing="8">
+                                                        Spacing="4">
                                                 <CheckBox Content="Events"
                                                           IsChecked="{Binding IsMockStressEventInjectionEnabled, Mode=TwoWay}" />
                                                 <CheckBox Content="Bad bytes"
@@ -3117,17 +3168,17 @@
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Padding="8"
-                                                Spacing="8">
-                                        <Border Padding="12,10"
+                                    <StackPanel Padding="4"
+                                                Spacing="4">
+                                        <Border Padding="4"
                                                 Background="{ThemeResource HelpWarningBackgroundBrush}"
                                                 BorderBrush="{ThemeResource HelpWarningBorderBrush}"
                                                 BorderThickness="1"
-                                                CornerRadius="6">
+                                                CornerRadius="4">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="HEX TIMEOUT"
                                                            Foreground="{ThemeResource HelpWarningTitleBrush}"
-                                                           FontSize="13"
+                                                           FontSize="12"
                                                            FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding HexFtdiHelpNoticeText, Mode=OneWay}"
                                                            Foreground="{ThemeResource HelpWarningTextBrush}"
@@ -3141,10 +3192,10 @@
                                                       IsTabStop="False">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <StackPanel Margin="2,8,2,10"
-                                                                Spacing="6">
+                                                    <StackPanel Margin="2,4,2,4"
+                                                                Spacing="4">
                                                         <Grid ColumnDefinitions="3,*"
-                                                              ColumnSpacing="8">
+                                                              ColumnSpacing="4">
                                                             <Border Width="3"
                                                                     MinHeight="18"
                                                                     Background="{ThemeResource HelpAccentBrush}"
@@ -3152,7 +3203,7 @@
                                                             <TextBlock Grid.Column="1"
                                                                        Text="{Binding Title}"
                                                                        Foreground="{ThemeResource HelpTitleBrush}"
-                                                                       FontSize="14"
+                                                                       FontSize="12"
                                                                        FontWeight="SemiBold"
                                                                        VerticalAlignment="Center" />
                                                         </Grid>
@@ -3179,11 +3230,11 @@
                         <ScrollViewer Padding="4"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="8">
+                            <StackPanel Spacing="4">
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="10">
+                                        Padding="4">
                                     <Grid ColumnDefinitions="56,*"
-                                          ColumnSpacing="10">
+                                          ColumnSpacing="4">
                                         <Image Width="48"
                                                Height="48"
                                                HorizontalAlignment="Left"
@@ -3195,7 +3246,8 @@
                                                        FontSize="20"
                                                        FontWeight="SemiBold" />
                                             <TextBlock x:Uid="StaticUi238" Text="Windows serial monitor for embedded-device debugging"
-                                                       TextWrapping="WrapWholeWords"
+                                                       TextWrapping="NoWrap"
+                                                       ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                        Style="{StaticResource CompactCellTextStyle}" />
                                             <TextBlock Text="{Binding AboutVersionText}"
                                                        FontFamily="Consolas"
@@ -3205,21 +3257,27 @@
                                 </Border>
 
                                 <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="10">
+                                        Padding="4">
                                     <Grid ColumnDefinitions="80,*"
                                           RowDefinitions="Auto,Auto"
-                                          ColumnSpacing="8"
+                                          ColumnSpacing="4"
                                           RowSpacing="4">
                                         <TextBlock Text="Author"
+                                                   Style="{StaticResource CompactCellTextStyle}"
                                                    FontWeight="SemiBold" />
                                         <TextBlock Grid.Column="1"
+                                                   Style="{StaticResource CompactCellTextStyle}"
                                                    Text="박재환" />
                                         <TextBlock Grid.Row="1"
                                                    Text="GitHub"
+                                                   Style="{StaticResource CompactCellTextStyle}"
                                                    FontWeight="SemiBold" />
                                         <HyperlinkButton Grid.Row="1"
                                                          Grid.Column="1"
                                                          Padding="0"
+                                                         Height="24"
+                                                         MinHeight="24"
+                                                         FontSize="11"
                                                          HorizontalAlignment="Left"
                                                          Content="Establers/custom-serial-monitor"
                                                          NavigateUri="https://github.com/Establers/custom-serial-monitor" />
@@ -3329,7 +3387,7 @@
                         <Flyout x:Name="CommandHistoryFlyout"
                                 Opening="CommandHistoryFlyout_Opening"
                                 Placement="TopEdgeAlignedRight">
-                            <StackPanel Spacing="5"
+                            <StackPanel Spacing="4"
                                         MinWidth="340"
                                         MaxWidth="420">
                                 <Grid ColumnDefinitions="*,Auto,Auto"
@@ -3366,7 +3424,7 @@
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
                                             <Grid ColumnDefinitions="*,42,58"
-                                                  ColumnSpacing="6"
+                                                  ColumnSpacing="4"
                                                   MinHeight="24">
                                                 <TextBlock Text="{Binding CommandText}"
                                                            FontFamily="Consolas"
@@ -3460,7 +3518,7 @@
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                         <StackPanel x:Name="QuickCommandPanel"
                                     Orientation="Horizontal"
-                                    Spacing="5"
+                                    Spacing="4"
                                     SizeChanged="QuickCommandPanel_SizeChanged">
                             <TextBlock Text="Quick"
                                        Style="{StaticResource CompactLabelTextStyle}" />

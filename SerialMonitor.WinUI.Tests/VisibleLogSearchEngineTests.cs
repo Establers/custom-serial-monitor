@@ -6,6 +6,64 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class VisibleLogSearchEngineTests
 {
+    [Theory]
+    [InlineData(false, false, false, 6)]
+    [InlineData(true, false, false, 5)]
+    [InlineData(false, true, false, 3)]
+    [InlineData(true, true, false, 2)]
+    [InlineData(false, false, true, 6)]
+    [InlineData(true, false, true, 5)]
+    [InlineData(false, true, true, 3)]
+    [InlineData(true, true, true, 2)]
+    public void Build_AllOptionCombinations_PreserveMatchCountsAndNavigation(
+        bool matchCase, bool wholeWord, bool regex, int expectedCount)
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < mock MOCK mockery premock mock_1 (mock)", 5)],
+            regex ? "m[o]ck" : "mock",
+            new VisibleLogSearchOptions(matchCase, wholeWord, regex));
+
+        Assert.Equal(expectedCount, snapshot.TotalMatchCount);
+        Assert.True(snapshot.TryGetFirst(out var first));
+        var current = first;
+        for (var index = 0; index < expectedCount; index++)
+        {
+            Assert.Equal(index, current.GlobalMatchIndex);
+            Assert.Equal(4, current.MatchLength);
+            Assert.True(snapshot.TryGetNext(current, out var next));
+            Assert.True(snapshot.TryGetPrevious(next, out var previous));
+            Assert.Equal(current, previous);
+            current = next;
+        }
+        Assert.Equal(first, current);
+    }
+
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 2)]
+    public void Build_RegexToggle_ControlsMetacharacterInterpretation(bool regex, int expectedCount)
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < mock. mockX", 5)],
+            "mock.", new VisibleLogSearchOptions(UseRegularExpression: regex));
+
+        Assert.Equal(expectedCount, snapshot.TotalMatchCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_WholeWord_RejectedCandidateDoesNotSkipOverlappingValidMatch(bool regex)
+    {
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "RX < xa-a-a", 5)],
+            "a-a", new VisibleLogSearchOptions(MatchWholeWord: true, UseRegularExpression: regex));
+
+        Assert.Equal(1, snapshot.TotalMatchCount);
+        Assert.True(snapshot.TryGetFirst(out var match));
+        Assert.Equal(3, match.PayloadOffset);
+    }
+
     [Fact]
     public void Build_WholeWord_ExcludesIdentifierSubstrings()
     {

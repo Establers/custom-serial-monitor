@@ -303,7 +303,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly CancellationTokenSource _eventNotificationCancellation = new();
     private readonly CancellationTokenSource _bridgeVisualLogCancellation = new();
     private readonly CancellationTokenSource _searchShortcutCancellation = new();
-    private readonly Channel<LogLine> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
+    private readonly Channel<(long Generation, LogLine Line)> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
+    private long _visibleLogGeneration;
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
     private readonly object _viewPauseGate = new();
     private readonly ViewPauseStateMachine _viewPause = new();
@@ -819,6 +820,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync);
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
+        SearchVisibleLogCommand = new AsyncRelayCommand(
+            () => SearchFromInputAsync(previous: false, source: "search button"), CanSearch);
         RefreshSearchResultsCommand = new AsyncRelayCommand(RefreshSearchResultsAsync, CanSearch);
         PreviousSearchResultsPageCommand = new AsyncRelayCommand(
             ShowPreviousSearchResultsPageAsync,
@@ -1359,6 +1362,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public AsyncRelayCommand FindNextCommand { get; }
 
     public AsyncRelayCommand FindPreviousCommand { get; }
+
+    public AsyncRelayCommand SearchVisibleLogCommand { get; }
 
     public AsyncRelayCommand RefreshSearchResultsCommand { get; }
 
@@ -2007,9 +2012,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyRxDisplayRuntime(RxDisplayMode mode, int hexGroupTimeoutMs, string rebuildReason)
     {
         var normalizedMode = NormalizeRxDisplayMode(mode);
+        if (_appliedRxDisplayMode != normalizedMode)
+        {
+            ClearVisibleLogState();
+        }
         _logPipeline.ConfigureRxDisplay(normalizedMode, hexGroupTimeoutMs);
         SetVisibleLogRebuildReason(rebuildReason);
-        Log.SetRxDisplayMode(normalizedMode);
+        Log.SetRxDisplayMode(normalizedMode, clearExisting: true);
         MarkSearchResultsStale();
         _appliedRxDisplayMode = normalizedMode;
         _appliedHexGroupTimeoutMs = hexGroupTimeoutMs;
@@ -2757,6 +2766,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 "Show RX/TX direction prefixes in log view",
                 SettingsApplyBehavior.Immediate,
                 value ? "shown" : "hidden");
+        }
+    }
+
+    public IReadOnlyList<AppTheme> AppThemeOptions { get; } = Enum.GetValues<AppTheme>();
+
+    public AppTheme SelectedAppTheme
+    {
+        get => _currentUiSettings.Theme;
+        set
+        {
+            if (!Enum.IsDefined(value) || _currentUiSettings.Theme == value)
+            {
+                return;
+            }
+
+            _currentUiSettings.Theme = value;
+            OnPropertyChanged();
+            RecordSettingsChange("Theme", SettingsApplyBehavior.Immediate, value.ToString());
         }
     }
 
@@ -5086,7 +5113,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         var snapshot = _activeSearchSnapshot;
         if (snapshot is null || snapshot.TotalMatchCount == 0)
         {
-            SetStatus("Press Enter in the search box to search first.");
+            SetStatus("Click Search or press Enter in the search box to search first.");
             return;
         }
 
@@ -5555,7 +5582,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             AreSearchResultsStale = _activeSearchSnapshot is not null || SearchResults.Count > 0;
             SearchResultStatusText = AreSearchResultsStale
-                ? "Stale · Press Enter or Refresh to clear results"
+                ? "Stale · Use Search, Enter or Refresh to clear results"
                 : "Enter search text.";
             return;
         }
@@ -5684,7 +5711,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         if (_areSearchCriteriaStale)
         {
-            RecordSearchResultJumpError("Search result jump failed: press Enter or Refresh to update stale results first.");
+            RecordSearchResultJumpError("Search result jump failed: use Search, Enter or Refresh to update stale results first.");
             return;
         }
 
@@ -10462,19 +10489,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private Task ClearScreenAsync()
     {
-        _logBatchDispatcher.ClearPending();
-        Interlocked.Exchange(ref _pendingLogDropCount, 0);
-        Interlocked.Exchange(ref _ruleChangesSinceClearCount, 0);
-        Log.Clear();
-        ClearSearchResultsForVisibleLogReset();
-        OnPropertyChanged(nameof(PendingVisualLineCount));
-        OnPropertyChanged(nameof(RuleChangesSinceClearCount));
+        ClearVisibleLogState();
         if (IsHexRxViewSelected)
         {
             RestartSerialBusUtilizationMeasurement("visible log cleared");
         }
         SetFooter(CreateFooterStatus());
         return Task.CompletedTask;
+    }
+
+    private void ClearVisibleLogState()
+    {
+        lock (_viewPauseGate)
+        {
+            _visibleLogGeneration++;
+            _logBatchDispatcher.ClearPending();
+        }
+        Interlocked.Exchange(ref _pendingLogDropCount, 0);
+        Interlocked.Exchange(ref _ruleChangesSinceClearCount, 0);
+        Log.Clear();
+        ClearSearchResultsForVisibleLogReset();
+        OnPropertyChanged(nameof(PendingVisualLineCount));
+        OnPropertyChanged(nameof(RuleChangesSinceClearCount));
     }
 
     private Task CopyStatusAsync()
@@ -11421,7 +11457,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void TryEnqueueAcceptedBridgeVisualLog(LogLine line)
     {
         Interlocked.Increment(ref _bridgeVisualLogPendingCount);
-        if (_bridgeVisualLogQueue.Writer.TryWrite(line))
+        if (_bridgeVisualLogQueue.Writer.TryWrite((_visibleLogGeneration, line)))
         {
             return;
         }
@@ -11435,11 +11471,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            await foreach (var line in _bridgeVisualLogQueue.Reader.ReadAllAsync(cancellationToken))
+            await foreach (var entry in _bridgeVisualLogQueue.Reader.ReadAllAsync(cancellationToken))
             {
                 // Post before decrementing so a pause drain can never observe both queues as empty
                 // while an accepted bridge record is between them.
-                PostAcceptedVisualLog(line);
+                lock (_viewPauseGate)
+                {
+                    if (entry.Generation == _visibleLogGeneration)
+                    {
+                        PostAcceptedVisualLog(entry.Line);
+                    }
+                }
                 Interlocked.Decrement(ref _bridgeVisualLogPendingCount);
             }
         }
@@ -11457,9 +11499,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private static Channel<LogLine> CreateBridgeVisualLogQueue()
+    private static Channel<(long Generation, LogLine Line)> CreateBridgeVisualLogQueue()
     {
-        return Channel.CreateBounded<LogLine>(new BoundedChannelOptions(BridgeVisualLogQueueCapacity)
+        return Channel.CreateBounded<(long Generation, LogLine Line)>(new BoundedChannelOptions(BridgeVisualLogQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -11833,6 +11875,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings = profile.UiSettings.Clone();
             _hexGroupTimeoutDraftText = _currentUiSettings.HexGroupTimeoutMs.ToString(CultureInfo.InvariantCulture);
             _currentUiSettings.RxDisplayMode = NormalizeRxDisplayMode(_currentUiSettings.RxDisplayMode);
+            if (_appliedRxDisplayMode != _currentUiSettings.RxDisplayMode)
+            {
+                ClearVisibleLogState();
+            }
             _currentUiSettings.TxSendMode = _currentUiSettings.RxDisplayMode == RxDisplayMode.Hex
                 ? TxSendMode.Hex
                 : TxSendMode.Terminal;
@@ -11867,7 +11913,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             Log.SetShowRxTxDirectionPrefixInLogView(_currentUiSettings.ShowRxTxDirectionPrefixInLogView);
             Log.SetTimestampDisplayFormat(_currentUiSettings.TimestampDisplayFormat);
             SetVisibleLogRebuildReason("profile RX view restore");
-            Log.SetRxDisplayMode(_currentUiSettings.RxDisplayMode);
+            Log.SetRxDisplayMode(_currentUiSettings.RxDisplayMode, clearExisting: true);
             _logPipeline.ConfigureRxDisplay(
                 _currentUiSettings.RxDisplayMode,
                 _currentUiSettings.HexGroupTimeoutMs);
@@ -12055,6 +12101,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ShowRxTxDirectionPrefixInLogView));
         OnPropertyChanged(nameof(SelectedTimestampDisplayFormatOption));
         OnPropertyChanged(nameof(SelectedXtermFontOption));
+        OnPropertyChanged(nameof(SelectedAppTheme));
         OnPropertyChanged(nameof(EffectiveXtermFontCssFamily));
         OnPropertyChanged(nameof(XtermFontSize));
         if (includeBackgroundVisualSettings)
@@ -13270,6 +13317,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         FindNextCommand.NotifyCanExecuteChanged();
         FindPreviousCommand.NotifyCanExecuteChanged();
+        SearchVisibleLogCommand.NotifyCanExecuteChanged();
         RefreshSearchResultsCommand.NotifyCanExecuteChanged();
         PreviousSearchResultsPageCommand.NotifyCanExecuteChanged();
         NextSearchResultsPageCommand.NotifyCanExecuteChanged();

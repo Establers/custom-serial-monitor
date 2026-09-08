@@ -534,7 +534,9 @@ internal sealed class VisibleLogSearchMatcher
                 return true;
             }
 
-            absoluteStart = absoluteOffset + Math.Max(1, _searchText.Length);
+            // A rejected word boundary is not a match. An overlapping candidate
+            // can still have valid boundaries (for example, "a-a" in "xa-a-a").
+            absoluteStart = absoluteOffset + 1;
         }
 
         result = default;

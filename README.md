@@ -11,7 +11,7 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest"><strong>최신 버전 다운로드</strong></a>
     ·
-    <a href="docs/release_notes_v1.3.5.md">v1.3.5 릴리즈 노트</a>
+    <a href="docs/release_notes_v1.3.6.md">v1.3.6 릴리즈 노트</a>
     ·
     <a href="docs/manual_test_checklist.md">테스트 체크리스트</a>
   </p>
@@ -195,6 +195,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [수동 회귀 테스트](docs/manual_test_checklist.md)
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
+- [v1.3.6 릴리즈 노트](docs/release_notes_v1.3.6.md)
 - [v1.3.5 릴리즈 노트](docs/release_notes_v1.3.5.md)
 - [v1.3.3 릴리즈 노트](docs/release_notes_v1.3.3.md)
 - [v1.3.2 릴리즈 노트](docs/release_notes_v1.3.2.md)

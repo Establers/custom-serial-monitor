@@ -5,6 +5,24 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class UiSettingsTests
 {
+    [Theory]
+    [InlineData(AppTheme.System)]
+    [InlineData(AppTheme.Dark)]
+    [InlineData(AppTheme.Light)]
+    public void Theme_IsPreservedThroughCloneAndSaveLoad(AppTheme theme)
+    {
+        var settings = new UiSettings { Theme = theme };
+        var restored = JsonSerializer.Deserialize<UiSettings>(JsonSerializer.Serialize(settings.Clone()));
+        Assert.NotNull(restored);
+        Assert.Equal(theme, restored.Theme);
+    }
+
+    [Fact]
+    public void OlderSettingsWithoutTheme_FollowWindows()
+    {
+        Assert.Equal(AppTheme.System, JsonSerializer.Deserialize<UiSettings>("{}")!.Theme);
+    }
+
     [Fact]
     public void Clone_PreservesFileLoggingWhileViewPaused()
     {

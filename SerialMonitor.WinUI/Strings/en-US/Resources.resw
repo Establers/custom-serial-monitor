@@ -29,7 +29,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi007.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Search visible log (Enter refreshes and moves next, Up/Down history)</value>
+    <value>Search visible log (click Search or press Enter to refresh and move next; Up/Down history)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi008.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -826,5 +826,11 @@
   <data name="LogRestoreProgressFormat" xml:space="preserve">
     <value>{0:N0} lines · {1}
 Elapsed {2} · Remaining {3}</value>
+  </data>
+  <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Search with current options and move to the next match (Enter)</value>
   </data>
 </root>

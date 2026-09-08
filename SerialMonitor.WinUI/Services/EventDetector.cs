@@ -236,7 +236,7 @@ public sealed class EventDetector : IEventDetector
 
     public bool TryEnqueue(LogLine line)
     {
-        if (!IsRunning || _detectorTask is null)
+        if (!IsRunning || _detectorTask is not { IsCompleted: false })
         {
             return false;
         }
@@ -401,7 +401,7 @@ public sealed class EventDetector : IEventDetector
                 AddBeforeContext(line);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
@@ -410,8 +410,33 @@ public sealed class EventDetector : IEventDetector
         }
         finally
         {
-            CompletePendingContextCaptures();
-            RaiseStatusChanged();
+            // Close input before draining so a failed worker cannot retain new logs.
+            _input.Writer.TryComplete();
+            try
+            {
+                CompletePendingContextCaptures();
+            }
+            catch (Exception ex)
+            {
+                ReportError($"Event context finalization failed: {ex.Message}");
+            }
+            finally
+            {
+                while (_input.Reader.TryRead(out _))
+                {
+                    Interlocked.Decrement(ref _pendingInputLineCount);
+                    Interlocked.Increment(ref _droppedInputLineCount);
+                }
+
+                _beforeContextBuffer.Clear();
+                _pendingContextCaptures.Clear();
+                SetActivePendingContextCount();
+                UpdateContextCaptureOverloadState();
+                SetRunning(false);
+                _events.Writer.TryComplete();
+                _sequenceTriggerEvents.Writer.TryComplete();
+                _completedContexts.Writer.TryComplete();
+            }
         }
     }
 

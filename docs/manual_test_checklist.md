@@ -1,5 +1,11 @@
 # Manual Regression Test Checklist
 
+- [ ] In Settings, select System, Dark, and Light under Appearance. Verify window,
+  title bar, terminal, selection and menus follow the choice without clearing logs
+  or restarting serial/file logging. Restart normally and verify the choice is
+  restored. With System selected, change the Windows theme; also check Windows
+  high contrast remains legible.
+
 Use this checklist before release candidates and after UI/layout changes. Prefer
 `MOCK` for repeatable checks, then repeat critical connect/TX/logging checks on
 real hardware when available.
@@ -36,6 +42,11 @@ real hardware when available.
 - [ ] Connect and confirm RX logs arrive.
 - [ ] While connected, switch Terminal/HEX mode repeatedly and confirm the same
   COM port remains selected and connected while new data uses the active mode.
+- [ ] With LOG ON, switch Terminal/HEX in both directions: visible history and
+  search results clear, the same log file retains pre-switch records and receives
+  post-switch records, and pending bridge/xterm batches do not restore old history.
+  Repeat while the view is paused, then resume. Selecting the current mode or
+  changing only the HEX timeout must not clear history.
 - [ ] In Terminal mode, drag across two timestamped log lines and confirm the
   tooltip shows only `Δt: <duration>`; selecting within one logical line shows
   `Δt: 0ms`.
@@ -348,6 +359,10 @@ real hardware when available.
   right-hand occurrence is counted; save/reload the profile and confirm the
   leading space is preserved.
 - [ ] Click Next and Prev.
+- [ ] Confirm the magnifying-glass Search button sits immediately left of Prev,
+  within the existing search field area, without increasing toolbar padding or gaps.
+  Click it and compare with Enter: both refresh the visible-log snapshot using the
+  current options, select the next match, and add the query to search history.
 - [ ] Confirm xterm jumps/selects matches.
 - [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3;
   confirm the total match count remains the last Enter-search snapshot.
@@ -372,6 +387,8 @@ real hardware when available.
   them normally.
 - [ ] Toggle Whole Word and confirm `error` matches `error-error` but not
   `errorCode` or `preerror`.
+- [ ] With Whole Word enabled, search `a-a` in `xa-a-a`: confirm the trailing
+  `a-a` is found with Regex both off and on.
 - [ ] Toggle Regex, search for `id=\d+`, and confirm variable-length matches
   are counted, highlighted, and selected at the correct xterm range.
 - [ ] Combine Case, Whole Word, and Regex and confirm all three constraints

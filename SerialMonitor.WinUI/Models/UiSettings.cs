@@ -1,5 +1,12 @@
 namespace SerialMonitor.WinUI.Models;
 
+public enum AppTheme
+{
+    System,
+    Dark,
+    Light
+}
+
 public enum MockGeneratorPattern
 {
     NormalLines,
@@ -28,6 +35,8 @@ public enum XtermFontFamily
 
 public sealed class UiSettings
 {
+    public AppTheme Theme { get; set; } = AppTheme.System;
+
     public const int DefaultVisibleLogLines = 1_000_000;
     public const int MaxVisibleLogLinesLimit = 1_000_000;
     public const int FixedMaxVisibleEventCount = 100;
@@ -100,6 +109,7 @@ public sealed class UiSettings
     {
         return new UiSettings
         {
+            Theme = Theme,
             MaxVisibleLogLines = MaxVisibleLogLines,
             MaxVisibleEventCount = MaxVisibleEventCount,
             AutoScrollEnabled = AutoScrollEnabled,
