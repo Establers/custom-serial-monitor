@@ -321,6 +321,7 @@
   <script src="./xterm.js"></script>
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
+  <script src="./compact-scrollback.js"></script>
   <script>
     const darkTerminalTheme = {
       background: '#0c0d0e',
@@ -480,7 +481,7 @@
       fontWeight: 400,
       fontWeightBold: 700,
       minimumContrastRatio: 4.5,
-      scrollback: 50000,
+      scrollback: 1000000,
       theme: getTerminalTheme()
     });
 
@@ -490,6 +491,18 @@
     terminal.loadAddon(searchAddon);
     terminal.open(document.getElementById('terminal'));
     fitAddon.fit();
+
+    const reportCompactScrollbackError = error => {
+      console.error('Compact scrollback failed', error);
+      window.chrome?.webview?.postMessage({ type: 'xtermHistoryError', error: String(error) });
+    };
+    let compactScrollback = { compact() {}, dispose() {} };
+    try {
+      compactScrollback = SerialMonitorCompactScrollback.install(terminal, { onError: reportCompactScrollbackError });
+    } catch (error) {
+      reportCompactScrollbackError(error);
+    }
+    window.addEventListener('unload', () => compactScrollback.dispose());
 
     const applyBundledTerminalFont = async () => {
       try {
@@ -542,11 +555,12 @@
 
     const appendQueue = [];
     const replaceQueue = [];
-    const parsedLogLineIds = [];
-    const parsedLogLineTimestamps = [];
+    let parsedLogLineIds = [];
+    let parsedLogLineTimestamps = [];
     let appendQueueHead = 0;
     let replaceQueueHead = 0;
     let parsedLogLineIdHead = 0;
+    let parsedLogLineIdCount = 0;
     let appendDrainScheduled = false;
     let appendWriting = false;
     let replaceWriting = false;
@@ -573,24 +587,44 @@
       parsedLogLineIds.length = 0;
       parsedLogLineTimestamps.length = 0;
       parsedLogLineIdHead = 0;
+      parsedLogLineIdCount = 0;
     }
 
     function trimParsedLogLineIds() {
       const maxRetainedIds = Math.max(1, Number(terminal.options.scrollback || 0) + terminal.rows + 1);
-      if (parsedLogLineIds.length - parsedLogLineIdHead > maxRetainedIds) {
-        parsedLogLineIdHead = parsedLogLineIds.length - maxRetainedIds;
+      if (parsedLogLineIds.length === maxRetainedIds) {
+        return;
       }
 
-      if (parsedLogLineIdHead > 4096 && parsedLogLineIdHead * 2 > parsedLogLineIds.length) {
-        parsedLogLineIds.splice(0, parsedLogLineIdHead);
-        parsedLogLineTimestamps.splice(0, parsedLogLineIdHead);
-        parsedLogLineIdHead = 0;
+      const count = Math.min(parsedLogLineIdCount, maxRetainedIds);
+      const ids = new Array(maxRetainedIds);
+      const timestamps = new Array(maxRetainedIds);
+      for (let index = 0; index < count; index++) {
+        const source = (parsedLogLineIdHead + parsedLogLineIdCount - count + index) % parsedLogLineIds.length;
+        ids[index] = parsedLogLineIds[source];
+        timestamps[index] = parsedLogLineTimestamps[source];
+      }
+      parsedLogLineIds = ids;
+      parsedLogLineTimestamps = timestamps;
+      parsedLogLineIdHead = 0;
+      parsedLogLineIdCount = count;
+    }
+
+    function appendParsedLogLineId(lineId, timestamp) {
+      trimParsedLogLineIds();
+      const index = (parsedLogLineIdHead + parsedLogLineIdCount) % parsedLogLineIds.length;
+      parsedLogLineIds[index] = lineId;
+      parsedLogLineTimestamps[index] = timestamp;
+      if (parsedLogLineIdCount === parsedLogLineIds.length) {
+        parsedLogLineIdHead = (parsedLogLineIdHead + 1) % parsedLogLineIds.length;
+      } else {
+        parsedLogLineIdCount++;
       }
     }
 
     function getParsedLogLineIdCount() {
       trimParsedLogLineIds();
-      return parsedLogLineIds.length - parsedLogLineIdHead;
+      return parsedLogLineIdCount;
     }
 
     function compareDecimalIds(left, right) {
@@ -607,14 +641,15 @@
 
     function findParsedLogLineIdIndex(targetLineId) {
       trimParsedLogLineIds();
-      let low = parsedLogLineIdHead;
-      let high = parsedLogLineIds.length - 1;
+      let low = 0;
+      let high = parsedLogLineIdCount - 1;
 
       while (low <= high) {
         const middle = low + Math.floor((high - low) / 2);
-        const comparison = compareDecimalIds(parsedLogLineIds[middle], targetLineId);
+        const physicalIndex = (parsedLogLineIdHead + middle) % parsedLogLineIds.length;
+        const comparison = compareDecimalIds(parsedLogLineIds[physicalIndex], targetLineId);
         if (comparison === 0) {
-          return middle - parsedLogLineIdHead;
+          return middle;
         }
 
         if (comparison < 0) {
@@ -644,9 +679,7 @@
         return false;
       }
 
-      parsedLogLineIds.push(lineId);
-      parsedLogLineTimestamps.push(timestamp);
-      trimParsedLogLineIds();
+      appendParsedLogLineId(lineId, timestamp);
       return true;
     });
 
@@ -690,6 +723,7 @@
     }
 
     function onTerminalWriteParsed() {
+      compactScrollback.compact();
       // terminal.write parses asynchronously. A drag can rebuild the logical
       // row cache after the write was queued but before its OSC metadata and
       // buffer rows are committed, so invalidate again at the parse boundary.
@@ -705,7 +739,8 @@
         return;
       }
 
-      const item = appendQueue[appendQueueHead++];
+      const item = appendQueue[appendQueueHead];
+      appendQueue[appendQueueHead++] = null;
       compactAppendQueueIfNeeded();
       appendWriting = true;
       try {
@@ -787,7 +822,8 @@
         // normal frame pacing, but submit only one transport chunk at a time.
         // Clear can then stop a long restore after the current bounded chunk
         // instead of waiting for every chunk already queued inside xterm.
-        const chunk = replaceQueue[replaceQueueHead++];
+        const chunk = replaceQueue[replaceQueueHead];
+        replaceQueue[replaceQueueHead++] = null;
         terminal.write(chunk, () => {
           try {
             onTerminalWriteParsed();
@@ -1020,16 +1056,17 @@
 
     function getTimestampForLogicalLineIndex(logicalLineIndex, logicalLineCount) {
       trimParsedLogLineIds();
-      const retainedMetadataCount = parsedLogLineIds.length - parsedLogLineIdHead;
+      const retainedMetadataCount = parsedLogLineIdCount;
       const retainedMetadataStart = retainedMetadataCount - logicalLineCount;
-      const metadataIndex = parsedLogLineIdHead + retainedMetadataStart + logicalLineIndex;
+      const logicalIndex = retainedMetadataStart + logicalLineIndex;
       if (retainedMetadataStart < 0 ||
           logicalLineIndex < 0 ||
-          metadataIndex < parsedLogLineIdHead ||
-          metadataIndex >= parsedLogLineTimestamps.length) {
+          logicalIndex < 0 ||
+          logicalIndex >= parsedLogLineIdCount) {
         return null;
       }
 
+      const metadataIndex = (parsedLogLineIdHead + logicalIndex) % parsedLogLineIds.length;
       const timestamp = parsedLogLineTimestamps[metadataIndex];
       return Number.isSafeInteger(timestamp) ? timestamp : null;
     }
@@ -1380,7 +1417,7 @@
         return false;
       }
 
-      terminal.options.scrollback = Math.min(500000, Math.floor(parsedSize));
+      terminal.options.scrollback = Math.min(1000000, Math.floor(parsedSize));
       invalidateLogicalLineStartRows();
       trimParsedLogLineIds();
       return true;

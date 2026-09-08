@@ -29,6 +29,7 @@ function createBridge() {
     chrome: { webview: { postMessage: message => messages.push(message) } }
   };
   const context = {
+    compactScrollback: { compact() {} },
     window, terminal, console: { error() {} },
     invalidateLogicalLineStartRows() {},
     queueHexSelectionHintUpdate() {},
@@ -171,4 +172,22 @@ test('an empty startup snapshot acknowledges completion without waiting for a wr
   assert.equal(bridge.messages[0].requestId, 100);
   assert.equal(bridge.messages[0].success, true);
   assert.equal(bridge.window.serialMonitorGetAppendQueueState().writing, false);
+});
+
+test('streamed replacement commits consecutive chunks without clearing earlier chunks or retaining consumed text', () => {
+  const bridge = createBridge();
+  bridge.window.serialMonitorBeginReplaceLog();
+  for (let i = 0; i < 200; i++) {
+    bridge.window.serialMonitorQueueReplaceChunk(`chunk ${i}\n`);
+    assert.equal(bridge.window.serialMonitorCommitReplaceLog(false, i + 1), true);
+    bridge.flush();
+    assert.equal(bridge.messages[i].success, true);
+    assert.equal(bridge.messages[i].requestId, i + 1);
+    assert.equal(runInNewContext('replaceQueue.length', bridge.context), 0);
+  }
+  assert.equal(bridge.renderedText(), Array.from({ length: 200 }, (_, i) => `chunk ${i}\r\n`).join(''));
+  bridge.window.serialMonitorAppendLog('live after snapshot', true, 201);
+  bridge.flush();
+  assert.equal(runInNewContext('appendQueue.filter(Boolean).length', bridge.context), 0);
+  assert.equal(bridge.messages[200].success, true);
 });

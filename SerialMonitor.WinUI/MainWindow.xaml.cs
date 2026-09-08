@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
         "LineEndingHelpText",
         @"Global = use the TX ending selected in the main TX area; None = send without a line ending; CR = \r; LF = \n; CRLF = \r\n.");
     private const int LogRestoreOverlayLineThreshold = 1_000;
-    private const int XtermFullRenderTransportMaxChars = 64 * 1024;
+    private const int XtermFullRenderTransportMaxChars = 256 * 1024;
     private const int XtermLiveAppendMaxLines = 2_000;
     private const int XtermLiveAppendMaxChars = 256 * 1024;
     private const int XtermBackpressureHighLines = 5_000;
@@ -63,6 +63,8 @@ public sealed partial class MainWindow : Window
     private bool _xtermLiveAppendPumpRunning;
     private bool _xtermAppendRecoveryPending;
     private bool _xtermAppendRecoveryRetryQueued;
+    private int _xtermAppendRecoveryRetryCount;
+    private long _pendingLiveXtermCharacters;
     private long _nextXtermAppendRequestId;
     private int _pendingLiveXtermLines;
     private bool _isXtermReady;
@@ -1125,7 +1127,9 @@ public sealed partial class MainWindow : Window
             batch.EndDisplayedLineCount,
             Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
             IsXtermVisualAppendSuspended(),
-            _viewModel.IsXtermAppendBackpressureActive);
+            XtermRecoveryPolicy.WouldOverflow(
+                Interlocked.Read(ref _pendingLiveXtermCharacters), batch.AppendedText.Length,
+                Volatile.Read(ref _pendingLiveXtermLines), batch.LineCount, _viewModel.MaxVisibleLogLines));
         if (route == XtermAppendRoute.AlreadyCovered)
         {
             return;
@@ -1153,6 +1157,7 @@ public sealed partial class MainWindow : Window
     private void EnqueueLiveXtermBatch(LogTextBatch batch)
     {
         _viewModel.RecordXtermAppendQueued(batch.AppendedText.Length);
+        Interlocked.Add(ref _pendingLiveXtermCharacters, batch.AppendedText.Length);
         Interlocked.Add(ref _pendingLiveXtermLines, batch.LineCount);
         UpdateXtermAppendBackpressure();
         var startPump = false;
@@ -1314,6 +1319,7 @@ public sealed partial class MainWindow : Window
 
             _xtermAppendRecoveryPending = false;
             _xtermAppendRecoveryRetryQueued = false;
+            _xtermAppendRecoveryRetryCount = 0;
             if (!IsClosingOrClosed &&
                 _xtermClearBarrier.ShouldStartPump(
                     _xtermLiveAppendPumpRunning,
@@ -1340,9 +1346,10 @@ public sealed partial class MainWindow : Window
     {
         lock (_xtermLiveAppendQueueGate)
         {
-            if (!_xtermAppendRecoveryPending ||
-                _xtermAppendRecoveryRetryQueued ||
-                IsClosingOrClosed)
+            if (!XtermRecoveryPolicy.ShouldRetry(
+                _xtermAppendRecoveryPending, _xtermAppendRecoveryRetryQueued,
+                _fullXtermRerenderRunning, _fullXtermRerenderQueued, IsClosingOrClosed,
+                _xtermAppendRecoveryRetryCount))
             {
                 return;
             }
@@ -1356,12 +1363,15 @@ public sealed partial class MainWindow : Window
             lock (_xtermLiveAppendQueueGate)
             {
                 _xtermAppendRecoveryRetryQueued = false;
-                if (!_xtermAppendRecoveryPending || IsClosingOrClosed)
+                if (!XtermRecoveryPolicy.ShouldRetry(
+                    _xtermAppendRecoveryPending, false, _fullXtermRerenderRunning,
+                    _fullXtermRerenderQueued, IsClosingOrClosed, _xtermAppendRecoveryRetryCount))
                 {
                     return;
                 }
             }
 
+            _xtermAppendRecoveryRetryCount++;
             QueueFullXtermRerender("xterm append acknowledgement recovery retry", debounce: false);
         });
     }
@@ -2185,6 +2195,10 @@ public sealed partial class MainWindow : Window
             {
                 ScheduleQueuedFullXtermRerender(debounce: true);
             }
+            else
+            {
+                QueueXtermAppendRecoveryRetry();
+            }
         }
     }
 
@@ -2246,6 +2260,8 @@ public sealed partial class MainWindow : Window
         {
             await Task.Delay(750);
             if (!IsClosingOrClosed &&
+                !_fullXtermRerenderRunning &&
+                !_fullXtermRerenderQueued &&
                 !_isVisualAppendSuspendedForMinimize &&
                 !_viewModel.IsLogRenderingPaused &&
                 _xtermNeedsFullRerenderAfterRestore)
@@ -2619,6 +2635,15 @@ public sealed partial class MainWindow : Window
                 var success = !root.TryGetProperty("success", out var successElement) ||
                     successElement.ValueKind == JsonValueKind.True;
                 CompleteXtermAppendAcknowledgement(requestId, success);
+                return;
+            }
+
+            if (string.Equals(messageType, "xtermHistoryError", StringComparison.Ordinal))
+            {
+                var error = root.TryGetProperty("error", out var errorElement)
+                    ? errorElement.GetString()
+                    : "unknown error";
+                _viewModel.RecordXtermLayoutError($"xterm history compression failed: {error}");
                 return;
             }
 
@@ -3019,12 +3044,14 @@ public sealed partial class MainWindow : Window
                 clearCount,
                 visibilityToggleCount);
 
+            // Every successful snapshot resolves a pending restore, regardless
+            // of which recovery path requested it.
+            _xtermNeedsFullRerenderAfterRestore = false;
+            _pendingXtermFullRerenderReason = "full re-render";
+            _restoreRerenderRetryCount = 0;
+            _viewModel.SetXtermNeedsFullRerenderAfterRestore(false);
             if (isRestoreRender)
             {
-                _xtermNeedsFullRerenderAfterRestore = false;
-                _pendingXtermFullRerenderReason = "full re-render";
-                _restoreRerenderRetryCount = 0;
-                _viewModel.SetXtermNeedsFullRerenderAfterRestore(false);
                 _viewModel.RecordRestoreRenderCompleted(
                     _viewModel.Log.CurrentVisibleLineCount,
                     DateTimeOffset.Now - restoreStartedAt);
@@ -3136,6 +3163,10 @@ public sealed partial class MainWindow : Window
     private void CompleteLiveXtermBatch(LogTextBatch batch)
     {
         _viewModel.RecordXtermAppendDequeued(batch.AppendedText.Length);
+        if (Interlocked.Add(ref _pendingLiveXtermCharacters, -batch.AppendedText.Length) < 0)
+        {
+            Interlocked.Exchange(ref _pendingLiveXtermCharacters, 0);
+        }
         var pendingLines = Interlocked.Add(ref _pendingLiveXtermLines, -batch.LineCount);
         if (pendingLines < 0)
         {
@@ -3154,7 +3185,7 @@ public sealed partial class MainWindow : Window
         }
 
         var pendingLines = Math.Max(0, Volatile.Read(ref _pendingLiveXtermLines));
-        var pendingCharacters = Math.Max(0, _viewModel.XtermPendingCharacterCount);
+        var pendingCharacters = Math.Max(0, Interlocked.Read(ref _pendingLiveXtermCharacters));
         var highLineWatermark = Math.Min(
             XtermBackpressureHighLines,
             Math.Max(100, _viewModel.MaxVisibleLogLines / 2));
@@ -3205,67 +3236,54 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var requestId = Interlocked.Increment(ref _nextXtermAppendRequestId);
-        var acknowledgement = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        lock (_xtermAppendAckGate)
-        {
-            _xtermAppendAcknowledgements[requestId] = acknowledgement;
-        }
-
-        var committed = false;
+        var completed = false;
         try
         {
             var beginResult = await ExecuteXtermScriptAsync(
                 "window.serialMonitorBeginReplaceLog ? window.serialMonitorBeginReplaceLog() : false;");
-            if (TryParseScriptBoolean(beginResult) != true)
-            {
-                return false;
-            }
+            if (TryParseScriptBoolean(beginResult) != true) return false;
 
+            // Stream a bounded chunk, wait until it is parsed, then release it.
+            // Never queue a second full copy of the million-line snapshot in JS.
+            // The 30-second deadline applies to each chunk's progress, not to
+            // the total restore. Normal live appends remain behind _xtermAppendGate.
             foreach (var chunk in SplitXtermFullRenderTransportText(text))
             {
-                if (IsXtermVisualAppendSuspended() ||
-                    expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
+                if (IsClosingOrClosed || IsXtermVisualAppendSuspended() ||
+                    expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration)) return false;
+
+                var requestId = Interlocked.Increment(ref _nextXtermAppendRequestId);
+                var acknowledgement = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                lock (_xtermAppendAckGate)
                 {
-                    return false;
+                    _xtermAppendAcknowledgements[requestId] = acknowledgement;
                 }
 
-                var encodedText = JsonSerializer.Serialize(chunk);
-                var queuedResult = await ExecuteXtermScriptAsync(
-                    $"window.serialMonitorQueueReplaceChunk ? window.serialMonitorQueueReplaceChunk({encodedText}) : false;");
-                if (TryParseScriptBoolean(queuedResult) != true)
+                try
                 {
-                    return false;
+                    var encodedText = JsonSerializer.Serialize(chunk);
+                    var queuedResult = await ExecuteXtermScriptAsync(
+                        $"window.serialMonitorQueueReplaceChunk && window.serialMonitorCommitReplaceLog && window.serialMonitorQueueReplaceChunk({encodedText}) && window.serialMonitorCommitReplaceLog(false, {requestId});");
+                    if (TryParseScriptBoolean(queuedResult) != true ||
+                        !await acknowledgement.Task.WaitAsync(XtermLiveAppendAckTimeout)) return false;
+                }
+                finally
+                {
+                    lock (_xtermAppendAckGate)
+                    {
+                        _xtermAppendAcknowledgements.Remove(requestId);
+                    }
                 }
             }
 
-            if (IsXtermVisualAppendSuspended() ||
-                expectedGeneration != Interlocked.Read(ref _xtermRenderGeneration))
-            {
-                return false;
-            }
-
-            var commitResult = await ExecuteXtermScriptAsync(
-                $"window.serialMonitorCommitReplaceLog ? window.serialMonitorCommitReplaceLog({(autoScroll ? "true" : "false")}, {requestId}) : false;");
-            // ExecuteScript only acknowledges queuing. The snapshot is covered
-            // only after xterm has parsed every chunk, just like a live append.
-            committed = TryParseScriptBoolean(commitResult) == true &&
-                await acknowledgement.Task.WaitAsync(XtermLiveAppendAckTimeout);
-            return committed;
+            completed = !IsClosingOrClosed &&
+                expectedGeneration == Interlocked.Read(ref _xtermRenderGeneration);
+            if (completed && autoScroll) await ScrollXtermToBottomAsync("Full re-render final chunk");
+            return completed;
         }
         finally
         {
-            lock (_xtermAppendAckGate)
-            {
-                _xtermAppendAcknowledgements.Remove(requestId);
-            }
-
-            if (!committed)
-            {
-                // Discard remaining chunks when minimize, Clear, a script failure,
-                // or a missing acknowledgement interrupts the replacement.
-                await CancelPendingXtermWritesAsync();
-            }
+            if (!completed) await CancelPendingXtermWritesAsync();
         }
     }
 

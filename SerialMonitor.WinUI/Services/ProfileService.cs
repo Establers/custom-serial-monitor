@@ -10,7 +10,7 @@ namespace SerialMonitor.WinUI.Services;
 public sealed class ProfileService : IProfileService
 {
     private const int MinVisibleLogLines = 1_000;
-    private const int MaxVisibleLogLines = 500_000;
+    private const int MaxVisibleLogLines = UiSettings.MaxVisibleLogLinesLimit;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
     private const int MinMockStressLinesPerSecond = 1;

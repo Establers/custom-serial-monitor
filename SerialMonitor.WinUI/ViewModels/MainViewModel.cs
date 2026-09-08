@@ -247,9 +247,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int SmoothVisualAppendMaxLines = 40;
     private const int SmoothVisualAppendMaxChars = 32 * 1024;
     private const int BridgeVisualLogQueueCapacity = 4_096;
-    private const int DefaultVisibleLogLines = 50_000;
+    private const int DefaultVisibleLogLines = UiSettings.DefaultVisibleLogLines;
     private const int MinVisibleLogLines = 1_000;
-    private const int MaxVisibleLogLinesLimit = 500_000;
+    private const int MaxVisibleLogLinesLimit = UiSettings.MaxVisibleLogLinesLimit;
     private const int MinHexGroupTimeoutMs = 1;
     private const int MaxHexGroupTimeoutMs = 5_000;
     private const int DefaultVisibleEventCount = UiSettings.FixedMaxVisibleEventCount;
@@ -1006,7 +1006,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         50_000,
         100_000,
         200_000,
-        500_000
+        500_000,
+        1_000_000
     };
 
     public ObservableCollection<int> MockStressLineRatePresets { get; } = new()

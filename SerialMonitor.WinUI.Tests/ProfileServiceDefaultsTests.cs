@@ -102,7 +102,7 @@ public sealed class ProfileServiceDefaultsTests
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
             Assert.True(File.Exists(path));
-            Assert.Equal(50_000, loaded.UiSettings.MaxVisibleLogLines);
+            Assert.Equal(1_000_000, loaded.UiSettings.MaxVisibleLogLines);
             Assert.Equal(["ps", "meminfo", "top", "top off", "reboot"], loaded.SavedCommands.Select(command => command.Name));
             Assert.Equal(["ps", "meminfo", "top", "top -t 1", "reboot"], loaded.SavedCommands.Select(command => command.CommandText));
 
