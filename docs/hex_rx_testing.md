@@ -3,6 +3,32 @@
 HEX RX packet boundaries are variable-length and timeout-only. Tests must never
 assume an 11-byte packet, a header, a delimiter, or a baud-specific timeout.
 
+## Current application transport (verified 2026-09-11)
+
+MainViewModel connection and reconnection use `CreateLiveModeReceiveOptions`,
+which sets `UseNativeIdleTimeout = false` to support live Terminal/HEX switching
+without reopening the port. The active application path therefore uses immediate
+transport draining and LogPipeline's receive-timestamp idle grouping. The native
+idle behavior documented below is conditional on explicitly enabling that service
+option; passing its tests does not prove the application enables native idle.
+
+Preserve the timeout/framing code when improving HEX UI performance. In particular,
+do not lower the timeout or change partial-output timing to hide rendering delays.
+
+`LogPipelineLiveTimeoutTests` additionally checks that an open source flushes on
+idle, shortening wakes the existing wait and uses elapsed receive time, and
+lengthening cancels the previous deadline while preserving pending bytes. These
+wall-clock tests allow generous completion deadlines and 2ms of early timer
+tolerance, as millisecond-scale rounding is acceptable for this application.
+They do not certify physical UART timing.
+
+Review finding: repeated 200ms open-source idle samples reproduced a group closing
+at 199.0932ms. This difference is accepted by the user and is not a blocking issue.
+Production timeout code was left unchanged. Additional tests cover rapid repeated
+configuration, empty-source updates, fresh-byte deadline renewal, and mode changes
+with pending bytes. See `timeout_application_review.md` for the separate findings
+about reconnect snapshots and same-value Set application.
+
 ## Automated tests
 
 Run both maintained test projects:

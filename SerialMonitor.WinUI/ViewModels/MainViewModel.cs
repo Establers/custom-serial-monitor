@@ -777,7 +777,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             maxItemsPerTick: SmoothVisualAppendMaxLines,
             dropOldestWhenFull: true,
             catchUpMaxItemsPerTick: 400,
-            catchUpPendingThreshold: 1_000);
+            catchUpPendingThreshold: 1_000,
+            maxBatchCost: SmoothVisualAppendMaxChars,
+            getItemCost: line => 64L + (SelectedRxDisplayMode == RxDisplayMode.Hex && line.Direction == LogDirection.Rx
+                ? (line.RawBytes?.LongLength ?? 0) * 3
+                : line.Text.Length));
 
         _eventBatchDispatcher = new UiBatchDispatcher<DetectedEvent>(
             dispatcherQueue,

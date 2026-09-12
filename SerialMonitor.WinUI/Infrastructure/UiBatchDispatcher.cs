@@ -13,6 +13,8 @@ public sealed class UiBatchDispatcher<T> : IDisposable
     private readonly int _catchUpMaxItemsPerTick;
     private readonly int _catchUpPendingThreshold;
     private readonly bool _dropOldestWhenFull;
+    private readonly long _maxBatchCost;
+    private readonly Func<T, long>? _getItemCost;
     private readonly SemaphoreSlim? _pendingSlots;
     private readonly List<T> _batch = new();
     private int _pendingItemCount;
@@ -29,9 +31,13 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         int maxItemsPerTick = 0,
         bool dropOldestWhenFull = true,
         int catchUpMaxItemsPerTick = 0,
-        int catchUpPendingThreshold = 0)
+        int catchUpPendingThreshold = 0,
+        long maxBatchCost = 0,
+        Func<T, long>? getItemCost = null)
     {
         _onBatch = onBatch;
+        _maxBatchCost = maxBatchCost;
+        _getItemCost = getItemCost;
         _maxPendingItems = maxPendingItems <= 0 ? 1 : maxPendingItems;
         _maxItemsPerTick = maxItemsPerTick <= 0 ? int.MaxValue : maxItemsPerTick;
         _catchUpMaxItemsPerTick = catchUpMaxItemsPerTick <= 0
@@ -148,11 +154,13 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         var batchLimit = pendingCount >= _catchUpPendingThreshold
             ? _catchUpMaxItemsPerTick
             : _maxItemsPerTick;
-        while (_batch.Count < batchLimit && _queue.TryDequeue(out var item))
+        var budget = new UiBatchCostBudget(_maxBatchCost);
+        while (_batch.Count < batchLimit && budget.HasRoom && _queue.TryDequeue(out var item))
         {
             Interlocked.Decrement(ref _pendingItemCount);
             _pendingSlots?.Release();
             _batch.Add(item);
+            budget.Add(_getItemCost?.Invoke(item) ?? 1);
         }
 
         if (_batch.Count > 0)

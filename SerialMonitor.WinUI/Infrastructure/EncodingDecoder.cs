@@ -17,7 +17,7 @@ public sealed class EncodingDecoder
         if (mode == RxEncodingMode.Hex)
         {
             return new DecodeResult(
-                string.Join(' ', bytes.ToArray().Select(value => value.ToString("X2"))),
+                HexFormatter.Format(bytes),
                 HadError: false);
         }
 

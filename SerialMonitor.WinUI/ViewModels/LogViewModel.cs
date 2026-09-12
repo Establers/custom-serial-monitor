@@ -927,7 +927,8 @@ public sealed class LogViewModel : ViewModelBase
                 _showRxTxDirectionPrefixInLogView,
                 _timestampDisplayFormat,
                 _rxDisplayMode,
-                out var payloadStart);
+                out var payloadStart,
+                formattedText: text);
             (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 highlightRules,
@@ -1083,9 +1084,10 @@ public sealed class LogViewModel : ViewModelBase
         bool showRxTxDirectionPrefix,
         TimestampDisplayFormat timestampDisplayFormat,
         RxDisplayMode rxDisplayMode,
-        out int payloadStart)
+        out int payloadStart,
+        string? formattedText = null)
     {
-        var text = FormatDisplayText(line, rxDisplayMode);
+        var text = formattedText ?? FormatDisplayText(line, rxDisplayMode);
         var directionText = showRxTxDirectionPrefix ||
             line.Direction is not (LogDirection.Rx or LogDirection.Tx)
                 ? $"{line.DirectionText} "
@@ -1166,7 +1168,7 @@ public sealed class LogViewModel : ViewModelBase
 
         return rxDisplayMode switch
         {
-            RxDisplayMode.Hex => FormatRawBytesAsHex(line.RawBytes),
+            RxDisplayMode.Hex => HexFormatter.Format(line.RawBytes),
             _ => SanitizeForXtermText(line.Text, preserveTabs: true)
         };
     }
@@ -1176,27 +1178,6 @@ public sealed class LogViewModel : ViewModelBase
         return mode == RxDisplayMode.Hex
             ? RxDisplayMode.Hex
             : RxDisplayMode.Terminal;
-    }
-
-    private static string FormatRawBytesAsHex(byte[]? bytes)
-    {
-        if (bytes is null || bytes.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        var builder = new StringBuilder(bytes.Length * 3);
-        for (var index = 0; index < bytes.Length; index++)
-        {
-            if (index > 0)
-            {
-                builder.Append(' ');
-            }
-
-            builder.Append(bytes[index].ToString("X2", CultureInfo.InvariantCulture));
-        }
-
-        return builder.ToString();
     }
 
     private static LogRuleMatcher.CompiledHighlightRule? ResolveHighlightRule(
