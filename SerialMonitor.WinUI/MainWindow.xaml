@@ -803,8 +803,21 @@
                 <Setter Property="Opacity"
                         Value="0.75" />
             </Style>
+            <!-- Live lists must update immediately, including bulk resets and evictions. -->
+            <Style TargetType="ListView">
+                <Setter Property="ItemContainerTransitions">
+                    <Setter.Value>
+                        <TransitionCollection />
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <Style x:Key="CompactListViewItemStyle"
                    TargetType="ListViewItem">
+                <Setter Property="ContentTransitions">
+                    <Setter.Value>
+                        <TransitionCollection />
+                    </Setter.Value>
+                </Setter>
                 <Setter Property="HorizontalAlignment"
                         Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment"

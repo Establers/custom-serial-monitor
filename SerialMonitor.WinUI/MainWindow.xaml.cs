@@ -955,7 +955,7 @@ public sealed partial class MainWindow : Window
             scrollViewer.HorizontalOffset + (direction * step),
             0,
             scrollViewer.ScrollableWidth);
-        scrollViewer.ChangeView(targetOffset, null, null, disableAnimation: false);
+        scrollViewer.ChangeView(targetOffset, null, null, disableAnimation: true);
     }
 
     private void UpdateToolbarScrollButtons(ScrollViewer scrollViewer)
