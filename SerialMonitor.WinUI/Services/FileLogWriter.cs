@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using SerialMonitor.WinUI.Models;
@@ -9,6 +10,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private const int QueueCapacity = 100_000;
     private const long QueueByteCapacity = 64L * 1024 * 1024;
     private const int FlushLineInterval = 100;
+    private const long FlushByteInterval = 1024 * 1024;
     private const int MaximumRecoveryAttempts = 3;
     private const int MaximumLateOperationCount = 4;
     private static readonly TimeSpan DefaultFileIoTimeout = TimeSpan.FromSeconds(30);
@@ -19,6 +21,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private readonly Func<string, FileMode, Stream> _streamFactory;
     private readonly TimeSpan _fileIoTimeout;
     private readonly TimeSpan _shutdownTimeout;
+    private readonly long _queueByteCapacity;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateGate = new();
     private readonly object _queueGate = new();
@@ -41,6 +44,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private long _abandonedLineCount;
     private long _fileErrorCount;
     private long _droppedLineCount;
+    private long _lastDropReportTimestamp;
     private long _recoveryCount;
     private int _pendingRequestCount;
     private long _pendingByteCount;
@@ -58,11 +62,14 @@ public sealed class FileLogWriter : IFileLogWriter
     public FileLogWriter(
         Func<string, FileMode, Stream>? streamFactory = null,
         TimeSpan? fileIoTimeout = null,
-        TimeSpan? shutdownTimeout = null)
+        TimeSpan? shutdownTimeout = null,
+        long queueByteCapacity = QueueByteCapacity)
     {
         _streamFactory = streamFactory ?? OpenFileStream;
         _fileIoTimeout = ValidateTimeout(fileIoTimeout ?? DefaultFileIoTimeout, nameof(fileIoTimeout));
         _shutdownTimeout = ValidateTimeout(shutdownTimeout ?? DefaultShutdownTimeout, nameof(shutdownTimeout));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(queueByteCapacity);
+        _queueByteCapacity = queueByteCapacity;
     }
 
     public event EventHandler<string>? Error;
@@ -292,13 +299,15 @@ public sealed class FileLogWriter : IFileLogWriter
                 Interlocked.Increment(ref _pendingRequestCount);
             }
 
-            _writerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            // The start command's token must not cancel an already running capture.
+            _writerCancellation = new CancellationTokenSource();
             Interlocked.Increment(ref _startCount);
             SetLifecycleAction($"Starting file logging: {targetDirectory}", raiseStatusChanged: false);
             SetState(FileLogWriterState.Starting);
             _writerTask = Task.Run(() => ProcessAsync(_writerCancellation.Token), CancellationToken.None);
 
-            await openCompletion.Task.WaitAsync(_fileIoTimeout, cancellationToken);
+            // File open has its own timeout and late-operation cleanup.
+            await openCompletion.Task.WaitAsync(cancellationToken);
             if (State == FileLogWriterState.Starting)
             {
                 SetState(FileLogWriterState.Running);
@@ -306,6 +315,8 @@ public sealed class FileLogWriter : IFileLogWriter
         }
         catch (OperationCanceledException)
         {
+            _writerCancellation?.Cancel();
+            await StopWriterCoreAsync(CancellationToken.None, preserveFault: true);
             throw;
         }
         catch (Exception ex)
@@ -327,7 +338,6 @@ public sealed class FileLogWriter : IFileLogWriter
 
     public bool TryEnqueue(LogLine line)
     {
-        var request = FileLogWriteRequest.ForLine(line);
         var state = State;
         if (state is not (FileLogWriterState.Starting or FileLogWriterState.Running))
         {
@@ -339,11 +349,18 @@ public sealed class FileLogWriter : IFileLogWriter
             return false;
         }
 
+        var request = FileLogWriteRequest.ForLine(line);
         var queued = false;
         lock (_queueGate)
         {
+            // Recheck after acquiring the gate: stop/fault may have closed admission.
+            if (State is not (FileLogWriterState.Starting or FileLogWriterState.Running))
+            {
+                return false;
+            }
+
             if (Volatile.Read(ref _pendingRequestCount) < QueueCapacity &&
-                Interlocked.Read(ref _pendingByteCount) + request.ByteCount <= QueueByteCapacity &&
+                Interlocked.Read(ref _pendingByteCount) + request.ByteCount <= _queueByteCapacity &&
                 _queue.Writer.TryWrite(request))
             {
                 Interlocked.Increment(ref _pendingRequestCount);
@@ -356,6 +373,9 @@ public sealed class FileLogWriter : IFileLogWriter
         if (!queued)
         {
             RecordDroppedLine("File log queue is full");
+            SetFault(new IOException("File log queue capacity exceeded; capture is incomplete. Restart logging after checking storage throughput."),
+                FileLogWriterFaultCategory.Unexpected);
+            _queue.Writer.TryComplete();
         }
 
         return queued;
@@ -494,9 +514,9 @@ public sealed class FileLogWriter : IFileLogWriter
         var currentLogIdentity = string.Empty;
         var currentSizeBytes = 0L;
         var rotationIndex = 0;
-        var batch = new List<LogLine>(FlushLineInterval);
+        var batch = new List<string>(FlushLineInterval);
         var batchBytes = 0L;
-        DateTimeOffset? batchStartedAt = null;
+        long? batchStartedAt = null;
 
         async Task FlushBatchAsync()
         {
@@ -505,11 +525,9 @@ public sealed class FileLogWriter : IFileLogWriter
                 return;
             }
 
-            await RunFileOperationAsync(
-                writer!,
-                "flush",
-                operationCancellation => writer!.FlushAsync(operationCancellation),
-                cancellationToken);
+            // Snapshot ownership is essential: a timed-out operation can finish
+            // after the worker clears its batch. Schedule once per batch, not line.
+            await WriteBatchAsync(writer!, batch.ToArray(), cancellationToken);
             Interlocked.Add(ref _durableLineCount, batch.Count);
             Interlocked.Add(ref _durableByteCount, batchBytes);
             batch.Clear();
@@ -520,7 +538,7 @@ public sealed class FileLogWriter : IFileLogWriter
 
         async Task RecoverBatchAsync(Exception failure)
         {
-            if (failure is FileIoTimeoutException)
+            if (failure is FileIoTimeoutException || ClassifyFault(failure) == FileLogWriterFaultCategory.StorageFull)
             {
                 throw failure;
             }
@@ -558,22 +576,7 @@ public sealed class FileLogWriter : IFileLogWriter
                     var recoveryPath = recovery.Path;
                     try
                     {
-                        foreach (var retryLine in retryLines)
-                        {
-                            await RunFileOperationAsync(
-                                recoveryWriter,
-                                "write",
-                                operationCancellation => recoveryWriter.WriteLineAsync(
-                                    retryLine.Formatted.AsMemory(),
-                                    operationCancellation),
-                                cancellationToken);
-                        }
-
-                        await RunFileOperationAsync(
-                            recoveryWriter,
-                            "flush",
-                            operationCancellation => recoveryWriter.FlushAsync(operationCancellation),
-                            cancellationToken);
+                        await WriteBatchAsync(recoveryWriter, retryLines, cancellationToken);
                     }
                     catch
                     {
@@ -645,6 +648,7 @@ public sealed class FileLogWriter : IFileLogWriter
                 await FlushBatchWithRecoveryAsync();
                 await DisposeWriterAsync(writer, cancellationToken);
                 writer = null;
+                SetCurrentLogFilePath(null);
                 currentDate = string.Empty;
                 currentLogIdentity = string.Empty;
                 currentSizeBytes = 0;
@@ -733,38 +737,17 @@ public sealed class FileLogWriter : IFileLogWriter
 
                 var formatted = line.Formatted;
                 var bytesWritten = Encoding.UTF8.GetByteCount(formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
-                batch.Add(line);
+                batch.Add(formatted);
                 lineWasAddedToBatch = true;
                 batchBytes += bytesWritten;
-                batchStartedAt ??= DateTimeOffset.UtcNow;
-                try
-                {
-                    await RunFileOperationAsync(
-                        writer!,
-                        "write",
-                        operationCancellation => writer!.WriteLineAsync(
-                            formatted.AsMemory(),
-                            operationCancellation),
-                        cancellationToken);
-                    currentSizeBytes += bytesWritten;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    await RecoverBatchAsync(ex);
-                }
+                batchStartedAt ??= Stopwatch.GetTimestamp();
+                currentSizeBytes += bytesWritten;
 
-                if (batch.Count >= FlushLineInterval)
+                if (batch.Count >= FlushLineInterval || batchBytes >= FlushByteInterval ||
+                    (batchStartedAt.HasValue && Stopwatch.GetElapsedTime(batchStartedAt.Value) >= FlushTimeInterval))
                 {
                     await FlushBatchWithRecoveryAsync();
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
             }
             catch
             {
@@ -793,7 +776,7 @@ public sealed class FileLogWriter : IFileLogWriter
                         break;
                     }
 
-                    if (batchStartedAt.HasValue && DateTimeOffset.UtcNow - batchStartedAt.Value >= FlushTimeInterval)
+                    if (batchStartedAt.HasValue && Stopwatch.GetElapsedTime(batchStartedAt.Value) >= FlushTimeInterval)
                     {
                         await FlushBatchWithRecoveryAsync();
                     }
@@ -822,6 +805,11 @@ public sealed class FileLogWriter : IFileLogWriter
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            if (batch.Count > 0 || PendingRequestCount > 0)
+            {
+                SetFault(new IOException("File logging was interrupted before all accepted lines could be flushed."),
+                    FileLogWriterFaultCategory.Unexpected);
+            }
             _queue.Writer.TryComplete();
         }
         catch (Exception ex)
@@ -1161,6 +1149,20 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
+    private Task WriteBatchAsync(StreamWriter writer, string[] lines, CancellationToken cancellationToken)
+    {
+        return RunFileOperationAsync(writer, "batch write/flush", async operationCancellation =>
+        {
+            foreach (var line in lines)
+            {
+                operationCancellation.ThrowIfCancellationRequested();
+                await writer.WriteLineAsync(line.AsMemory(), operationCancellation).ConfigureAwait(false);
+            }
+
+            await writer.FlushAsync(operationCancellation).ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
     private async Task RunFileOperationAsync(
         StreamWriter writer,
         string operationName,
@@ -1172,7 +1174,8 @@ public sealed class FileLogWriter : IFileLogWriter
         Task operationTask;
         try
         {
-            operationTask = operation(operationCancellation.Token);
+            // Even an Async stream implementation may block before returning its Task.
+            operationTask = Task.Run(() => operation(operationCancellation.Token), CancellationToken.None);
         }
         catch
         {
@@ -1369,6 +1372,12 @@ public sealed class FileLogWriter : IFileLogWriter
 
     private static FileLogWriterFaultCategory ClassifyFault(Exception exception)
     {
+        // HRESULT_FROM_WIN32(ERROR_DISK_FULL / ERROR_HANDLE_DISK_FULL).
+        if (exception.HResult is unchecked((int)0x80070070) or unchecked((int)0x80070027))
+        {
+            return FileLogWriterFaultCategory.StorageFull;
+        }
+
         return exception is ArgumentException or UnauthorizedAccessException
             ? FileLogWriterFaultCategory.DeterministicConfiguration
             : FileLogWriterFaultCategory.RetryableIo;
@@ -1413,13 +1422,14 @@ public sealed class FileLogWriter : IFileLogWriter
     private void RecordDroppedLine(string reason)
     {
         var dropped = Interlocked.Increment(ref _droppedLineCount);
-        if (dropped == 1 || dropped % 1000 == 0)
+        var now = Stopwatch.GetTimestamp();
+        var previous = Interlocked.Read(ref _lastDropReportTimestamp);
+        // A full disk must not turn every incoming line into a UI/error event.
+        // Counters remain exact; publish an aggregate at most once per second.
+        if ((dropped == 1 || Stopwatch.GetElapsedTime(previous, now) >= TimeSpan.FromSeconds(1)) &&
+            Interlocked.CompareExchange(ref _lastDropReportTimestamp, now, previous) == previous)
         {
             ReportFileError($"{reason}: {dropped:N0}");
-        }
-        else
-        {
-            RaiseStatusChanged();
         }
     }
 
@@ -1514,7 +1524,10 @@ public sealed class FileLogWriter : IFileLogWriter
         public static FileLogWriteRequest ForLine(LogLine line)
         {
             var byteCount = Encoding.UTF8.GetByteCount(line.Formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
-            return new(line, null, null, null, byteCount);
+            // Bound retained memory as well as encoded output (HEX/raw payloads
+            // and UTF-16 strings can be much larger than the saved text).
+            var retainedBytes = 128L + 2L * line.Text.Length + 2L * line.DisplayText.Length + (line.RawBytes?.LongLength ?? 0);
+            return new(line, null, null, null, Math.Max(byteCount, retainedBytes));
         }
 
         public static FileLogWriteRequest ForNaming(LogFileNamingSnapshot naming) => new(null, naming, null, null, 0);

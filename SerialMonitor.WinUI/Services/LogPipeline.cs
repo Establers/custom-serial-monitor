@@ -196,6 +196,34 @@ public sealed class LogPipeline : ILogPipeline
         }
     }
 
+    // The serial producer must be closed first. Keep consuming its queued bytes
+    // and flush the final partial line before completing the output channel.
+    public async Task DrainAsync(CancellationToken cancellationToken)
+    {
+        await _lifecycleGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_pipelineTask is not null)
+            {
+                try
+                {
+                    await _pipelineTask.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+                }
+                catch
+                {
+                    _pipelineCancellation?.Cancel();
+                    throw;
+                }
+            }
+
+            await StopCurrentPipelineAsync(cancellationToken);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
     private async Task ProcessAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken)
     {
         try
@@ -293,7 +321,9 @@ public sealed class LogPipeline : ILogPipeline
                             cancellationToken,
                             configurationSnapshot.Token);
                         var waitForHexDataTask = source.WaitToReadAsync(hexWaitCancellation.Token).AsTask();
-                        var hexFlushTask = Task.Delay(hexDelay, hexWaitCancellation.Token);
+                        // Round up so sub-millisecond remainders yield instead of
+                        // repeatedly completing a zero-length delay.
+                        var hexFlushTask = Task.Delay(TimeSpan.FromMilliseconds(Math.Ceiling(hexDelay.TotalMilliseconds)), hexWaitCancellation.Token);
                         var hexCompletedTask = await Task.WhenAny(waitForHexDataTask, hexFlushTask);
                         if (hexCompletedTask == hexFlushTask)
                         {
@@ -305,7 +335,9 @@ public sealed class LogPipeline : ILogPipeline
                                 lastHexReceiveTimestamp,
                                 cancellationToken);
                             lastHexReceiveTimestamp = timedDrain.LastReceivedTimestamp;
-                            if (timedDrain.DrainedAny)
+                            // A timer wakeup is only a prompt to check the deadline.
+                            // Recheck the monotonic clock before closing the group.
+                            if (timedDrain.DrainedAny || GetHexRemainingDelay(lastHexReceiveTimestamp) > TimeSpan.Zero)
                             {
                                 continue;
                             }

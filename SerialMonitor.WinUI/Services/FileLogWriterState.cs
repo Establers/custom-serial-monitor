@@ -13,7 +13,8 @@ public enum FileLogWriterFaultCategory
 {
     RetryableIo,
     DeterministicConfiguration,
-    Unexpected
+    Unexpected,
+    StorageFull
 }
 
 public sealed record FileLogWriterFaultInfo(

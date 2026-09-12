@@ -66,4 +66,6 @@ public interface ILogPipeline
     Task StartAsync(ChannelReader<ReceivedByteChunk> source, SerialSettings settings, CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);
+
+    Task DrainAsync(CancellationToken cancellationToken);
 }

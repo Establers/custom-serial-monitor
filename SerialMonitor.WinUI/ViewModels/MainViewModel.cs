@@ -326,6 +326,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _autoReconnectSessionServicesPreserved;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
+    private int _fileLogStatusSnapshotDirty;
+    private (bool Active, string Status, string? Path, string? Error)? _lastFileLogUiSnapshot;
     private string? _selectedPort;
     private long _portRefreshGeneration;
     private int _selectedBaudRate = 115200;
@@ -2253,13 +2255,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool FileLoggingActive => FileLoggingEnabled && _fileLogWriter.IsRunning;
+    public bool FileLoggingActive => FileLoggingEnabled && _fileLogWriter.State == FileLogWriterState.Running &&
+        !string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath) && !(IsLogRenderingPaused && !FileLoggingWhileViewPaused);
 
-    public string FileLoggingToggleText => FileLoggingEnabled ? "LOG ON" : "LOG OFF";
+    private string FileLoggingStatus => FileLogStatus.Describe(FileLoggingEnabled, _fileLogWriter.State,
+        !string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath), !string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError),
+        IsLogRenderingPaused && !FileLoggingWhileViewPaused);
 
-    public string FileLoggingMainStatusText => FileLoggingEnabled ? "Log Save: ON" : "Log Save: OFF";
+    public string FileLoggingToggleText => $"LOG {FileLoggingStatus}";
 
-    public string FileLoggingToolTip => FileLoggingEnabled
+    public string FileLoggingMainStatusText => $"Log Save: {FileLoggingStatus}";
+
+    public string FileLoggingToolTip => !string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError)
+        ? $"{_fileLogWriter.LastFileError} | Flushed: {_fileLogWriter.DurableLineCount:N0}; pending: {_fileLogWriter.PendingRequestCount:N0}; rejected: {_fileLogWriter.DroppedLineCount:N0}; unsaved: {_fileLogWriter.AbandonedLineCount:N0}; uncertain/replayed: {_fileLogWriter.UncertainLineCount:N0}. Toggle OFF then ON to restart saving."
+        : FileLoggingEnabled
         ? "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted."
         : "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
 
@@ -2280,6 +2289,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 value ? "enabled" : "disabled");
             OnPropertyChanged();
             OnPropertyChanged(nameof(PauseRenderingToolTip));
+            RefreshLogFileActionProperties();
             SetFooter(CreateFooterStatus());
         }
     }
@@ -6251,10 +6261,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 requestedRxDisplayMode,
                 requestedHexGroupTimeoutMs,
                 "serial connection mode applied");
-            await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, _connectionCancellation.Token);
+            await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, CancellationToken.None);
             ClearActiveBackgroundHealthError(_logPipeline);
             ClearActiveBackgroundHealthError(LogObserverHealthKey);
-            _observeLogsTask = Task.Run(() => ObserveLogsAsync(_connectionCancellation.Token), CancellationToken.None);
+            _observeLogsTask = Task.Run(() => ObserveLogsAsync(CancellationToken.None), CancellationToken.None);
             ClearActiveBackgroundHealthError(EventObserverHealthKey);
             _observeEventsTask = Task.Run(() => ObserveEventsAsync(CancellationToken.None), CancellationToken.None);
             ClearActiveBackgroundHealthError(SequenceTriggerObserverHealthKey);
@@ -6580,9 +6590,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             await RunDisconnectCleanupAsync("Serial bridge stop", () => StopBridgeCoreAsync(disableRequested: true, cancellationToken), cleanupErrors);
 
-            _connectionCancellation?.Cancel();
-            await RunDisconnectCleanupAsync("Log pipeline stop", () => _logPipeline.StopAsync(cancellationToken), cleanupErrors);
             await RunDisconnectCleanupAsync("Serial disconnect", () => _serialService.DisconnectAsync(cancellationToken), cleanupErrors);
+            await RunDisconnectCleanupAsync("Log pipeline drain", () => _logPipeline.DrainAsync(cancellationToken), cleanupErrors);
+            _connectionCancellation?.Cancel();
 
             if (_observeLogsTask is not null)
             {
@@ -6996,15 +7006,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             () => StopBridgeCoreAsync(disableRequested: true, cancellationToken),
             cleanupErrors);
 
-        _connectionCancellation?.Cancel();
-        await RunDisconnectCleanupAsync(
-            "Log pipeline stop for reconnect",
-            () => _logPipeline.StopAsync(cancellationToken),
-            cleanupErrors);
         await RunDisconnectCleanupAsync(
             "Serial disconnect for reconnect",
             () => _serialService.DisconnectAsync(cancellationToken),
             cleanupErrors);
+        await RunDisconnectCleanupAsync(
+            "Log pipeline drain for reconnect",
+            () => _logPipeline.DrainAsync(cancellationToken),
+            cleanupErrors);
+        _connectionCancellation?.Cancel();
 
         if (_observeLogsTask is not null)
         {
@@ -7046,11 +7056,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await _logPipeline.StartAsync(
             _serialService.ReceivedBytes,
             settings,
-            _connectionCancellation.Token);
+            CancellationToken.None);
         ClearActiveBackgroundHealthError(_logPipeline);
         ClearActiveBackgroundHealthError(LogObserverHealthKey);
         _observeLogsTask = Task.Run(
-            () => ObserveLogsAsync(_connectionCancellation.Token),
+            () => ObserveLogsAsync(CancellationToken.None),
             CancellationToken.None);
 
         IsConnected = true;
@@ -11782,6 +11792,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         // suspended only after the xterm/UI boundary has completed.
         _logBatchDispatcher.IsPaused = IsViewFullyPaused;
         OnPropertyChanged(nameof(IsLogRenderingPaused));
+        RefreshLogFileActionProperties();
         OnPropertyChanged(nameof(IsManualLogRenderingPaused));
         OnPropertyChanged(nameof(IsViewPauseTransitioning));
         OnPropertyChanged(nameof(IsViewFullyPaused));
@@ -12172,6 +12183,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         NotifyLogFileActionCommandStates();
     }
 
+    private void RefreshFileLogRuntimeProperties()
+    {
+        var snapshot = (FileLoggingActive, FileLoggingStatus, _fileLogWriter.CurrentLogFilePath, _fileLogWriter.LastFileError);
+        if (_lastFileLogUiSnapshot == snapshot)
+        {
+            return;
+        }
+
+        _lastFileLogUiSnapshot = snapshot;
+        OnPropertyChanged(nameof(FileLoggingActive));
+        OnPropertyChanged(nameof(FileLoggingToggleText));
+        OnPropertyChanged(nameof(FileLoggingMainStatusText));
+        OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(CurrentSerialLogPath));
+    }
+
     private void RefreshMockStressProperties()
     {
         OnPropertyChanged(nameof(ShowMockTestPort));
@@ -12516,6 +12543,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ClearActiveBackgroundHealthError(_fileLogWriter);
         }
 
+        Volatile.Write(ref _fileLogStatusSnapshotDirty, 1);
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
     }
 
@@ -12598,6 +12626,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
+        if (Interlocked.Exchange(ref _fileLogStatusSnapshotDirty, 0) != 0)
+        {
+            RefreshFileLogRuntimeProperties();
+        }
         if (backgroundStatusChanged)
         {
             IsConnected = _serialService.IsConnected;
@@ -12742,32 +12774,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string CreateLogFileStatusText()
     {
-        if (!FileLoggingEnabled)
-        {
-            return "File OFF";
-        }
-
-        if (_fileLogWriter.State == FileLogWriterState.Faulted)
-        {
-            return "File FAULT";
-        }
-
-        if (_fileLogWriter.State == FileLogWriterState.Starting)
-        {
-            return "File STARTING";
-        }
-
-        if (_fileLogWriter.State == FileLogWriterState.Stopping)
-        {
-            return "File STOPPING";
-        }
-
-        if (!string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath))
-        {
-            return $"File ON {Path.GetFileName(_fileLogWriter.CurrentLogFilePath)}";
-        }
-
-        return "File ON waiting";
+        var status = FileLoggingStatus;
+        var path = _fileLogWriter.CurrentLogFilePath;
+        return string.IsNullOrWhiteSpace(path)
+            ? $"File {status}"
+            : $"File {status} {Path.GetFileName(path)}";
     }
 
     private void RefreshHealthSummary()
