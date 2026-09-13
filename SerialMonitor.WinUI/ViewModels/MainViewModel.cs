@@ -484,6 +484,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private CommandSequence? _selectedCommandSequence;
     private CommandSequenceStep? _selectedCommandSequenceStep;
     private CancellationTokenSource? _sequenceCancellation;
+    private readonly ICommandSequenceRunner _sequenceRunner = new CommandSequenceRunner();
     private bool _isSequenceRunning;
     private string _runningSequenceName = "(none)";
     private string _currentSequenceStepText = "(none)";
@@ -532,6 +533,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private long _ruleEditErrorCount;
     private long _commandEditErrorCount;
     private long _eventContextUiDroppedCount;
+    private long _eventUiDroppedCount;
+    private double _lastEventUiBatchDurationMs;
+    private double _maxEventUiBatchDurationMs;
     private string _lastEventContextUiError = string.Empty;
     private string _lastEventSelectionError = string.Empty;
     private string _lastEventListScrollError = string.Empty;
@@ -3643,6 +3647,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long EventUiFlushCount => _eventBatchDispatcher.FlushCount;
 
+    public long EventUiDroppedCount => Interlocked.Read(ref _eventUiDroppedCount);
+
     public int MaxEventUiBatchSize => _eventBatchDispatcher.MaxBatchSize;
 
     public string DetectedEventUiCountText => $"{DetectedEventUiItemCount:N0} visible";
@@ -4012,6 +4018,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
                     A sequence uses the current Mode (Terminal/HEX) for every step.
                     Per-step modes, device-response checks, and conditional branches are not supported.
+                    With Auto reconnect enabled, an interrupted connection pauses the sequence until recovery.
+                    Successful steps are not replayed; a failed write is retried and may have reached the device already.
+                    Stop or manual Disconnect cancels the run, including reconnect waiting.
 
                     AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.
                     Examples: docs\sequence_examples.json. These are sequence fragments, not a complete profile.
@@ -4135,7 +4144,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public long RecordedUiDropCount =>
         Log.DroppedPendingLineCount +
         Interlocked.Read(ref _pendingLogDropCount) +
-        BridgeVisualLogDroppedCount;
+        BridgeVisualLogDroppedCount + EventUiDroppedCount + EventContextUiDroppedCount;
 
     public string LastShutdownStartTimeText => _lastShutdownStartTimeText;
 
@@ -6537,6 +6546,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectAsync(CancellationToken cancellationToken)
     {
+        _sequenceCancellation?.Cancel();
         Volatile.Write(ref _autoReconnectArmed, 0);
         var reconnectTask = CancelAutoReconnect();
         if (reconnectTask is not null)
@@ -6713,7 +6723,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 VerifyMockSequence(line);
                 if (line.IsPartialRxTerminator)
                 {
-                    FanOutLogLine(line, fileEligible: false, detectEvent: false);
+                    FanOutLogLine(line, fileEligible: false, detectEvent: true);
                     continue;
                 }
 
@@ -6742,7 +6752,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 var routing = DetectedEventRoutingPolicy.Decide(detectedEvent);
                 if (routing.ShowInEventList)
                 {
-                    _eventBatchDispatcher.Post(detectedEvent);
+                    var dropped = _eventBatchDispatcher.Post(detectedEvent);
+                    if (dropped > 0)
+                    {
+                        Interlocked.Add(ref _eventUiDroppedCount, dropped);
+                    }
                 }
 
                 if (routing.QueueNotification)
@@ -6876,11 +6890,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (IsSequenceRunning)
-        {
-            _ = StopCommandSequenceAsync();
-        }
-
         var cancellation = new CancellationTokenSource();
         _autoReconnectCancellation = cancellation;
         Volatile.Write(ref _autoReconnectSessionServicesPreserved, 1);
@@ -7000,7 +7009,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task CleanupTransportForAutoReconnectAsync(CancellationToken cancellationToken)
     {
         var cleanupErrors = new List<string>();
-        _sequenceCancellation?.Cancel();
         await RunDisconnectCleanupAsync(
             "Serial bridge stop for reconnect",
             () => StopBridgeCoreAsync(disableRequested: true, cancellationToken),
@@ -7027,6 +7035,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _connectionCancellation?.Dispose();
         _connectionCancellation = null;
         _observeLogsTask = null;
+        // The detector survives automatic reconnect. End the old RX text before
+        // accepting bytes from the next transport session.
+        _eventDetector.TryEnqueue(LogLine.RxPartialTerminator());
         IsConnected = false;
         RestartSerialBusUtilizationMeasurement("serial reconnect cleanup");
 
@@ -7805,6 +7816,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var sequence = CloneCommandSequence(sourceSequence);
+        foreach (var step in sequence.Steps)
+        {
+            step.LineEndingMode ??= SelectedTxLineEnding;
+        }
         var runSource = request?.Source ?? "manual run";
         var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
         if (sequenceSendMode == TxSendMode.Hex &&
@@ -7834,39 +7849,35 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
-            for (var repeatIndex = 0; repeatIndex < sequence.RepeatCount; repeatIndex++)
-            {
-                for (var index = 0; index < sequence.Steps.Count; index++)
+            await _sequenceRunner.RunAsync(
+                sequence,
+                WaitForSequenceConnectionAsync,
+                (step, token) => SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (!IsConnected)
+                    LineEndingMode = step.LineEndingMode
+                }, addToHistory: false, modeOverride: sequenceSendMode, cancellationToken: token),
+                () =>
+                {
+                    var retry = CanWaitForSequenceReconnect();
+                    if (retry)
                     {
-                        RecordSequenceError("Sequence stopped: serial port is disconnected.");
-                        return;
+                        var message = $"Sequence '{sequence.Name}' TX failed during disconnect at step {CompletedSequenceSteps + 1}; waiting to retry after reconnect. Device receipt is unconfirmed; retry may duplicate the command.";
+                        RecordSequenceStatus(message);
+                        AppendAutoReconnectSystemLine(message);
                     }
-
+                    return retry;
+                },
+                position =>
+                {
+                    var index = position % sequence.Steps.Count;
+                    var repeatIndex = position / sequence.Steps.Count;
                     var step = sequence.Steps[index];
                     CurrentSequenceStepText = sequence.RepeatCount == 1
                         ? $"{index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}"
                         : $"repeat {repeatIndex + 1:N0}/{sequence.RepeatCount:N0}, step {index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}";
-                    var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
-                    {
-                        LineEndingMode = step.LineEndingMode
-                    }, addToHistory: false, modeOverride: sequenceSendMode);
-
-                    if (!sent)
-                    {
-                        RecordSequenceError($"Sequence stopped: step failed ({step.DisplayName}).");
-                        return;
-                    }
-
-                    CompletedSequenceSteps = (repeatIndex * sequence.Steps.Count) + index + 1;
-                    if (step.DelayAfterMs > 0)
-                    {
-                        await Task.Delay(step.DelayAfterMs, cancellationToken);
-                    }
-                }
-            }
+                },
+                completed => CompletedSequenceSteps = completed,
+                cancellationToken);
 
             RecordSequenceStatus($"Sequence completed: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})");
         }
@@ -7906,8 +7917,56 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null)
+    private bool CanWaitForSequenceReconnect()
     {
+        return AutoReconnectEnabled &&
+            Volatile.Read(ref _autoReconnectArmed) != 0 &&
+            Volatile.Read(ref _shutdownStarted) == 0 &&
+            _autoReconnectCancellation?.IsCancellationRequested != true &&
+            (IsAutoReconnectRunning || AutoReconnectPolicy.ShouldStart(
+                AutoReconnectEnabled,
+                true,
+                IsMockPortName(_lastSuccessfulSerialSettings?.PortName),
+                false,
+                _serialService.ConnectionState));
+    }
+
+    private async Task<bool> WaitForSequenceConnectionAsync(CancellationToken cancellationToken)
+    {
+        var waiting = false;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsConnected && _serialService.ConnectionState == SerialConnectionState.Connected &&
+                !IsAutoReconnectRunning && !IsBusy && !IsBridgeActive)
+            {
+                if (waiting)
+                {
+                    var message = $"Sequence resumed after reconnect: {RunningSequenceName}, next step {CompletedSequenceSteps + 1}.";
+                    RecordSequenceStatus(message);
+                    AppendAutoReconnectSystemLine(message);
+                }
+                return true;
+            }
+
+            if (!CanWaitForSequenceReconnect())
+                return false;
+
+            if (!waiting)
+            {
+                waiting = true;
+                CurrentSequenceStepText = "Waiting for automatic reconnect...";
+                var message = $"Sequence paused for automatic reconnect: {RunningSequenceName}, completed steps {CompletedSequenceSteps}.";
+                RecordSequenceStatus(message);
+                AppendAutoReconnectSystemLine(message);
+            }
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+
+    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var commandText = sourceCommand.CommandText.Trim();
         if (string.IsNullOrWhiteSpace(commandText))
         {
@@ -7958,7 +8017,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 var transmitResult = await _bridgeService.QueueManualTransmitAsync(
                     token => _serialService.SendBytesAsync(txRawBytes, txDisplayText, token),
-                    CancellationToken.None);
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (transmitResult != ManualTransmitResult.Sent)
                 {
                     var message = transmitResult switch
@@ -7974,7 +8034,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
             else
             {
-                await _serialService.SendBytesAsync(txRawBytes, txDisplayText, CancellationToken.None);
+                await _serialService.SendBytesAsync(txRawBytes, txDisplayText, cancellationToken);
             }
 
             var txLine = LogLine.Tx(
@@ -7993,6 +8053,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             SetFooter(CreateFooterStatus());
             return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -8208,7 +8272,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    public bool UpdateLogRuleColorFromUi(LogRule rule, string foregroundColor)
+    public bool UpdateLogRuleColorFromUi(LogRule rule, string color, bool isBackground = false)
     {
         if (rule is null)
         {
@@ -8223,9 +8287,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
-        var previousColor = LogRules[index].ForegroundColor;
+        var previousColor = isBackground ? LogRules[index].BackgroundColor ?? "(none)" : LogRules[index].ForegroundColor;
         var replacement = CloneLogRule(LogRules[index]);
-        replacement.ForegroundColor = NormalizeHighlightColorName(foregroundColor, out var usedFallback);
+        bool usedFallback;
+        if (isBackground)
+            replacement.BackgroundColor = NormalizeOptionalHighlightColorName(color == "(none)" ? null : color, out usedFallback);
+        else
+            replacement.ForegroundColor = NormalizeHighlightColorName(color, out usedFallback);
         if (usedFallback)
         {
             Interlocked.Increment(ref _invalidRuleColorFallbackCount);
@@ -8240,11 +8308,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         LogRules[index] = normalized;
         SelectedLogRule = normalized;
-        _lastRuleColorChange = $"{normalized.Name}: {previousColor} -> {normalized.ForegroundColor}";
+        var selectedColor = isBackground ? normalized.BackgroundColor ?? "(none)" : normalized.ForegroundColor;
+        var colorKind = isBackground ? "background" : "foreground";
+        _lastRuleColorChange = $"{normalized.Name} {colorKind}: {previousColor} -> {selectedColor}";
         _lastRuleColorChangeError = string.Empty;
         OnPropertyChanged(nameof(LastRuleColorChange));
         OnPropertyChanged(nameof(LastRuleColorChangeError));
-        ApplyLogRuleChanges($"Updated log rule color: {normalized.Name} -> {normalized.ForegroundColor}");
+        ApplyLogRuleChanges($"Updated log rule {colorKind} color: {normalized.Name} -> {selectedColor}");
         return true;
     }
 
@@ -10535,7 +10605,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             package.SetText(
                 $"{FooterStatusText}{Environment.NewLine}" +
                 $"{UiText.Get("HealthReasonLabel", "Health reason")}:" +
-                $"{Environment.NewLine}{HealthReasonDetails}");
+                $"{Environment.NewLine}{HealthReasonDetails}" +
+                $"{Environment.NewLine}Event UI: interval {EventRenderIntervalMs} ms; " +
+                $"pending {PendingEventUiCount:N0}; batches {EventUiFlushCount:N0}; " +
+                $"max batch {MaxEventUiBatchSize:N0}; queue drops {EventUiDroppedCount:N0}; " +
+                $"apply last/max {_lastEventUiBatchDurationMs:0.###}/{_maxEventUiBatchDurationMs:0.###} ms " +
+                "(synchronous batch work only; excludes deferred layout/paint)");
             Clipboard.SetContent(package);
             Clipboard.Flush();
             SetStatus(UiText.Get("FooterStatusCopied", "Footer status copied to clipboard."));
@@ -11554,6 +11629,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        var startedAt = Stopwatch.GetTimestamp();
         try
         {
             var previouslySelectedEvent = SelectedEvent;
@@ -11581,6 +11657,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             RecordListUpdateError($"Event list update failed: {ex.Message}");
+        }
+        finally
+        {
+            _lastEventUiBatchDurationMs = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+            _maxEventUiBatchDurationMs = Math.Max(_maxEventUiBatchDurationMs, _lastEventUiBatchDurationMs);
         }
     }
 
@@ -12909,6 +12990,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             hasWarning = true;
             reasons.Add($"Event contexts skipped during overload: {_eventDetector.ContextCaptureOverloadSkippedCount:N0}");
+        }
+
+        if (EventUiDroppedCount > 0)
+        {
+            hasWarning = true;
+            reasons.Add($"UI event list updates dropped: {EventUiDroppedCount:N0}");
         }
 
         if (EventContextUiDroppedCount > 0)

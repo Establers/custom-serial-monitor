@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -185,7 +184,7 @@ public sealed partial class MainWindow : Window
 
         Root.DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        _viewModel.Events.Events.CollectionChanged += OnDetectedEventsCollectionChanged;
+        _viewModel.Events.BatchApplied += OnDetectedEventsBatchApplied;
         _viewModel.Log.TextBatchAppended += OnLogTextBatchAppended;
         _viewModel.Log.TextCleared += OnLogTextCleared;
         _viewModel.Log.TextRebuilt += OnLogTextRebuilt;
@@ -341,7 +340,7 @@ public sealed partial class MainWindow : Window
         _viewModel.TxSent -= OnTxSent;
         _viewModel.ViewPauseDrainRequested -= DrainXtermForViewPauseAsync;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        _viewModel.Events.Events.CollectionChanged -= OnDetectedEventsCollectionChanged;
+        _viewModel.Events.BatchApplied -= OnDetectedEventsBatchApplied;
         XtermLogWebView.NavigationCompleted -= OnXtermNavigationCompleted;
         if (XtermLogWebView.CoreWebView2 is not null)
         {
@@ -2694,7 +2693,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnDetectedEventsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    private void OnDetectedEventsBatchApplied(object? sender, EventArgs args)
     {
         if (_viewModel.IsEventAutoScrollSuppressedByXtermBackpressure)
         {
@@ -4807,7 +4806,11 @@ public sealed partial class MainWindow : Window
         LogRuleListView.SelectedItem = rule;
 
         var flyout = new MenuFlyout();
-        foreach (var color in _viewModel.HighlightColorPresets)
+        var isBackground = string.Equals(button.Tag as string, "Background", StringComparison.Ordinal);
+        var colors = isBackground
+            ? new[] { "(none)" }.Concat(_viewModel.HighlightColorPresets.Where(color => color != "Default"))
+            : _viewModel.HighlightColorPresets.AsEnumerable();
+        foreach (var color in colors)
         {
             var item = new MenuFlyoutItem
             {
@@ -4825,7 +4828,7 @@ public sealed partial class MainWindow : Window
             {
                 if (item.Tag is string selectedColor)
                 {
-                    _viewModel.UpdateLogRuleColorFromUi(rule, selectedColor);
+                    _viewModel.UpdateLogRuleColorFromUi(rule, selectedColor, isBackground);
                 }
             };
             flyout.Items.Add(item);

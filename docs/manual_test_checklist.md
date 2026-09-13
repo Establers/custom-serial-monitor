@@ -505,6 +505,19 @@ real hardware when available.
 
 ## Health And Footer Status
 
+- [ ] During sustained mock event bursts, confirm the event list updates without
+  entry/exit fades, retains the configured visible limit, and follows the latest
+  event only when auto-scroll is enabled and the pointer is outside the list.
+- [ ] Select a retained event during a burst and verify its selection and context
+  stay on that event; verify safe selection clearing when it leaves the buffer.
+- [ ] Copy footer status during a burst and confirm `Event UI` reports pending
+  items, batch count, maximum batch size, queue drops, and last/maximum synchronous
+  batch time. These times exclude deferred XAML layout, paint, and scrolling.
+- [ ] Overload the event UI queue in mock mode and verify a nonzero queue-drop
+  count appears in the footer UI-drop total and `UI event list updates dropped`
+  appears in health details. Normal visible-history eviction must not produce
+  this warning. Check event detection and file logging separately for loss.
+
 - [ ] Confirm bottom status shows `HEALTH OK` during a clean mock session.
 - [ ] Confirm hovering over the footer shows the current health reasons.
 - [ ] Right-click the footer, copy status, and paste it into Notepad.

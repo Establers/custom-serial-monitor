@@ -14,6 +14,7 @@ public sealed class EventDetector : IEventDetector
     private const int ContextCaptureOverloadLowWatermarkValue = 100;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateGate = new();
+    private readonly StreamingEventRuleMatcher _streamingMatcher = new();
     private Channel<LogLine> _input = CreateInputQueue();
     private Channel<DetectedEvent> _events = CreateEventQueue();
     private Channel<DetectedEvent> _sequenceTriggerEvents = CreateSequenceTriggerQueue();
@@ -211,6 +212,7 @@ public sealed class EventDetector : IEventDetector
             UpdateRules(rules);
             Volatile.Write(ref _contextSettings, NormalizeContextSettings(contextSettings));
             _beforeContextBuffer.Clear();
+            _streamingMatcher.Reset();
             _pendingContextCaptures.Clear();
             Volatile.Write(ref _isContextCaptureOverloadActive, 0);
             SetActivePendingContextCount();
@@ -370,6 +372,11 @@ public sealed class EventDetector : IEventDetector
             await foreach (var line in _input.Reader.ReadAllAsync(cancellationToken))
             {
                 Interlocked.Decrement(ref _pendingInputLineCount);
+                if (line.IsPartialRxTerminator)
+                {
+                    _streamingMatcher.Reset();
+                    continue;
+                }
                 CaptureAfterContext(line);
 
                 var captureContextForNewEvents = !IsContextCaptureOverloadActive;
@@ -429,6 +436,7 @@ public sealed class EventDetector : IEventDetector
                 }
 
                 _beforeContextBuffer.Clear();
+                _streamingMatcher.Reset();
                 _pendingContextCaptures.Clear();
                 SetActivePendingContextCount();
                 UpdateContextCaptureOverloadState();
@@ -443,20 +451,22 @@ public sealed class EventDetector : IEventDetector
     private IEnumerable<DetectedEvent> Detect(LogLine line, bool captureContextForNewEvents)
     {
         var rules = Volatile.Read(ref _rules);
+        var activeMode = ActiveRuleMode;
+        _streamingMatcher.BeginLine(line, rules, activeMode);
         if (rules.Length == 0)
         {
             yield break;
         }
 
         IReadOnlyList<LogLine>? beforeContext = null;
-        var activeMode = ActiveRuleMode;
         foreach (var rule in rules)
         {
             bool isMatch;
             string? matchError;
+            LogLine matchedLine;
             try
             {
-                isMatch = LogRuleMatcher.IsMatch(line, rule, activeMode, out matchError);
+                isMatch = _streamingMatcher.IsMatch(line, rule, activeMode, out matchedLine, out matchError);
             }
             catch (Exception ex)
             {
@@ -489,7 +499,7 @@ public sealed class EventDetector : IEventDetector
 
                 var buildMessageSegments = sourceRule.ShowInEventList;
                 var matchRanges = buildMessageSegments
-                    ? EventMatchRangeResolver.Resolve(line, sourceRule)
+                    ? EventMatchRangeResolver.Resolve(matchedLine, sourceRule)
                     : Array.Empty<TextMatchRange>();
 
                 yield return new DetectedEvent(
@@ -497,8 +507,8 @@ public sealed class EventDetector : IEventDetector
                     string.IsNullOrWhiteSpace(sourceRule.Name) ? sourceRule.Keyword : sourceRule.Name,
                     sourceRule.Keyword,
                     line.Direction,
-                    line.DisplayText,
-                    line,
+                    matchedLine.DisplayText,
+                    matchedLine,
                     eventBeforeContext,
                     trayNotificationEnabled: sourceRule.TrayNotificationEnabled,
                     soundNotificationEnabled: sourceRule.SoundNotificationEnabled,

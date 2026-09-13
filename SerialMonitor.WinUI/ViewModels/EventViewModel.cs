@@ -17,6 +17,9 @@ public sealed class EventViewModel : ViewModelBase
 
     public ObservableCollection<DetectedEvent> Events => _buffer.Items;
 
+    // UI follow-up work runs once per batch, not for every insertion and eviction.
+    public event EventHandler? BatchApplied;
+
     public int Capacity => _buffer.Capacity;
 
     public long DisplayedEventCount
@@ -39,6 +42,10 @@ public sealed class EventViewModel : ViewModelBase
         DisplayedEventCount += result.AcceptedCount;
         DroppedVisibleEventCount += result.DroppedCount;
         OnPropertyChanged(nameof(CurrentVisibleEventCount));
+        if (result.AcceptedCount > 0)
+        {
+            BatchApplied?.Invoke(this, EventArgs.Empty);
+        }
         return result;
     }
 

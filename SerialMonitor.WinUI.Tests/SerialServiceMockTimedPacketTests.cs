@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -6,8 +7,10 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class SerialServiceMockTimedPacketTests
 {
-    [Fact]
-    public async Task VisualHexPattern_EmitsSelfDescribingFirstMiddleLastPackets()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VisualHexPattern_EmitsSelfDescribingFirstMiddleLastPackets(bool queueNormalSampleBeforeStart)
     {
         await using var service = new SerialService();
         service.ConfigureMockStress(
@@ -20,19 +23,29 @@ public sealed class SerialServiceMockTimedPacketTests
             new SerialSettings { PortName = "MOCK" },
             new SerialReceiveOptions(),
             CancellationToken.None);
-        while (service.ReceivedBytes.TryRead(out _))
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        if (queueNormalSampleBeforeStart)
         {
+            // Exercise the transition with a normal sample still queued.
+            Assert.True(await service.ReceivedBytes.WaitToReadAsync(timeout.Token));
         }
 
         service.StartMockStress();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var observedLengths = new HashSet<int>();
         var currentGroup = -1;
         var expectedPacketIndex = 0;
         var expectedPacketsInGroup = 0;
         for (long expectedSequence = 1; expectedSequence <= 12; expectedSequence++)
         {
-            var chunk = await service.ReceivedBytes.ReadAsync(timeout.Token);
+            ReceivedByteChunk chunk;
+            do
+            {
+                chunk = await service.ReceivedBytes.ReadAsync(timeout.Token);
+                // Starting stress does not discard normal samples already queued
+                // or being published by the receiver. Only allow them before HEX starts.
+            }
+            while (expectedSequence == 1 && Encoding.UTF8.GetString(chunk.Bytes)
+                .StartsWith("INFO mock serial sample #", StringComparison.Ordinal));
             var packet = chunk.Bytes;
             observedLengths.Add(packet.Length);
 

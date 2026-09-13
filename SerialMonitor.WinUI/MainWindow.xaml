@@ -1976,7 +1976,7 @@
                                               HorizontalContentAlignment="Stretch"
                                               VerticalContentAlignment="Stretch"
                                               VerticalAlignment="Stretch">
-                                    <Grid MinWidth="728"
+                                    <Grid MinWidth="806"
                                           RowDefinitions="Auto,*"
                                           MinHeight="0">
                                         <Border Grid.Row="0"
@@ -1985,9 +1985,9 @@
                                                 Padding="2,0,0,1"
                                                 MinHeight="22">
                                             <Grid ColumnSpacing="2"
-                                                  MinWidth="708"
+                                                  MinWidth="786"
                                                   MinHeight="22"
-                                                  ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,76">
+                                                  ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,78,76">
                                                 <TextBlock Text="En"
                                                            Style="{StaticResource RuleHeaderTextStyle}"
                                                            HorizontalAlignment="Center" />
@@ -2021,6 +2021,9 @@
                                                            Text="Color"
                                                            Style="{StaticResource RuleHeaderTextStyle}" />
                                                 <TextBlock Grid.Column="10"
+                                                           Text="Background"
+                                                           Style="{StaticResource RuleHeaderTextStyle}" />
+                                                <TextBlock Grid.Column="11"
                                                            Text="Actions"
                                                            Style="{StaticResource RuleHeaderTextStyle}" />
                                             </Grid>
@@ -2048,9 +2051,9 @@
                                                 <DataTemplate>
                                                     <Grid ColumnSpacing="2"
                                                           HorizontalAlignment="Stretch"
-                                                          MinWidth="708"
+                                                          MinWidth="786"
                                                           MinHeight="22"
-                                                          ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,76">
+                                                          ColumnDefinitions="28,44,58,42,90,130,48,64,42,78,78,76">
                                                         <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Enabled"
@@ -2121,7 +2124,25 @@
                                                                            VerticalAlignment="Center" />
                                                             </Grid>
                                                         </Button>
-                                                        <StackPanel Grid.Column="10"
+                                                        <Button Grid.Column="10"
+                                                                Width="72" Height="22" MinHeight="22" Padding="3,0"
+                                                                HorizontalAlignment="Left"
+                                                                Tag="Background"
+                                                                Click="LogRuleColorButton_Click"
+                                                                ToolTipService.ToolTip="Change the highlight background color. Choose (none) to remove it.">
+                                                            <Grid ColumnSpacing="3" VerticalAlignment="Center" ColumnDefinitions="10,*">
+                                                                <Border Width="10" Height="10" CornerRadius="2"
+                                                                        BorderThickness="1"
+                                                                        BorderBrush="{ThemeResource ColorPreviewBorderBrush}"
+                                                                        Background="{Binding BackgroundColor, Converter={StaticResource HighlightColorBrushConverter}}"
+                                                                        VerticalAlignment="Center" />
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{Binding BackgroundColor, TargetNullValue='(none)'}"
+                                                                           FontSize="10" TextTrimming="CharacterEllipsis"
+                                                                           VerticalAlignment="Center" />
+                                                            </Grid>
+                                                        </Button>
+                                                        <StackPanel Grid.Column="11"
                                                                     Orientation="Horizontal"
                                                                     Spacing="2"
                                                                     VerticalAlignment="Center">
