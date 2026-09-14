@@ -169,19 +169,19 @@ public sealed class FileLogWriterTests
         using var directory = new TemporaryDirectory();
         using var release = new ManualResetEventSlim();
         await using var writer = new FileLogWriter((_, _) => new BlockingWriteStream(release),
-            TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(200));
+            TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(200));
         try
         {
             await writer.StartAsync(directory.Path, CancellationToken.None);
             Assert.True(writer.TryEnqueue(LogLine.System(new string('x', 100_000))));
-            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(3));
+            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(10));
             await writer.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
             Assert.Equal(1, writer.FileIoTimeoutCount);
         }
         finally
         {
             release.Set();
-            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(3));
+            await WaitUntilAsync(() => writer.PendingLateOperationCount == 0, TimeSpan.FromSeconds(10));
         }
     }
 
@@ -490,16 +490,20 @@ public sealed class FileLogWriterTests
     {
         using var directory = new TemporaryDirectory();
         var writeRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stream = new HangingWriteStream(writeRelease.Task);
         await using var writer = new FileLogWriter(
-            (_, _) => new HangingWriteStream(writeRelease.Task),
-            fileIoTimeout: TimeSpan.FromMilliseconds(100),
+            (_, _) => stream,
+            // The same deadline covers Task.Run scheduling during file open.
+            // Leave CI startup headroom while keeping the blocked write bounded.
+            fileIoTimeout: TimeSpan.FromSeconds(2),
             shutdownTimeout: TimeSpan.FromMilliseconds(200));
 
         try
         {
             await writer.StartAsync(directory.Path, CancellationToken.None);
             Assert.True(writer.TryEnqueue(LogLine.System(new string('x', 100_000))));
-            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(3));
+            await stream.WriteEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(10));
 
             Assert.Equal(1, writer.FileIoTimeoutCount);
             Assert.Equal(1, writer.PendingLateOperationCount);
@@ -520,7 +524,7 @@ public sealed class FileLogWriterTests
         var flushRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var writer = new FileLogWriter(
             (_, _) => new HangingFlushStream(flushRelease.Task),
-            fileIoTimeout: TimeSpan.FromMilliseconds(100),
+            fileIoTimeout: TimeSpan.FromSeconds(2),
             shutdownTimeout: TimeSpan.FromMilliseconds(200));
 
         try
@@ -531,7 +535,7 @@ public sealed class FileLogWriterTests
                 Assert.True(writer.TryEnqueue(LogLine.System($"flush-{index}")));
             }
 
-            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(3));
+            await WaitUntilAsync(() => writer.State == FileLogWriterState.Faulted, TimeSpan.FromSeconds(10));
             Assert.Equal(1, writer.FileIoTimeoutCount);
             Assert.Equal(1, writer.PendingLateOperationCount);
         }
@@ -633,6 +637,7 @@ public sealed class FileLogWriterTests
     private sealed class HangingWriteStream : Stream
     {
         private readonly Task _release;
+        public TaskCompletionSource WriteEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public HangingWriteStream(Task release)
         {
@@ -651,8 +656,11 @@ public sealed class FileLogWriterTests
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
-            new(_release);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            WriteEntered.TrySetResult();
+            return new(_release);
+        }
     }
 
     private sealed class HangingFlushStream : Stream
