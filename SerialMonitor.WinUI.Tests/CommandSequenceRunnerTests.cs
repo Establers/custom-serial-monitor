@@ -5,6 +5,48 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class CommandSequenceRunnerTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SynchronousZeroDelayLoop_YieldsToQueuedStopOnCallerContext(bool success)
+    {
+        var previous = SynchronizationContext.Current;
+        var context = new PumpContext();
+        SynchronizationContext.SetSynchronizationContext(context);
+        try
+        {
+            using var stop = new CancellationTokenSource();
+            var attempts = 0;
+            var sequence = Sequence(CommandSequence.MaxRepeatCount);
+            var run = new CommandSequenceRunner().RunAsync(sequence,
+                _ => Task.FromResult(true),
+                (_, _) =>
+                {
+                    Assert.Same(context, SynchronizationContext.Current);
+                    attempts++;
+                    return Task.FromResult(success);
+                }, () => true, _ => { }, _ => { }, stop.Token);
+            Assert.False(run.IsCompleted);
+            Assert.InRange(attempts, 0, CommandSequenceRunner.MaxAttemptsPerSlice);
+            context.Post(_ => stop.Cancel(), null);
+            var timeout = System.Diagnostics.Stopwatch.StartNew();
+            while (!run.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(5)) context.Pump();
+            Assert.True(run.IsCanceled);
+            Assert.InRange(attempts, 0, 2 * CommandSequenceRunner.MaxAttemptsPerSlice);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
+
+    private sealed class PumpContext : SynchronizationContext
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<Action> _queue = new();
+        public override void Post(SendOrPostCallback callback, object? state) => _queue.Add(() => callback(state));
+        public void Pump()
+        {
+            if (_queue.TryTake(out var action, 100)) action();
+        }
+    }
+
     [Fact]
     public async Task ReconnectAfterSuccessfulSend_ContinuesAtNextStepAndPreservesRepeats()
     {

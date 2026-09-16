@@ -54,6 +54,7 @@ public sealed partial class MainWindow : Window
     private readonly SemaphoreSlim _xtermAppendGate = new(1, 1);
     private readonly CancellationTokenSource _xtermSearchCancellation = new();
     private readonly LatestRequestAsyncOperation<XtermSearchRequest> _xtermSearchOperation;
+    private readonly LatestRequestAsyncOperation<bool> _txScrollOperation;
     private readonly object _xtermLiveAppendQueueGate = new();
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
     private readonly XtermClearBarrier _xtermClearBarrier = new();
@@ -159,6 +160,11 @@ public sealed partial class MainWindow : Window
         _xtermSearchOperation = new LatestRequestAsyncOperation<XtermSearchRequest>(
             SearchXtermAsync,
             _xtermSearchCancellation.Token);
+        // Preserve the UI context and retain only one follow-up scroll during TX bursts.
+        // ScrollXtermToBottomAsync handles errors and skips work while closing/minimized.
+        _txScrollOperation = new LatestRequestAsyncOperation<bool>(
+            (_, _) => ScrollXtermToBottomAsync("TX sent"),
+            CancellationToken.None);
         _themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(AppWindow.Id);
 #if !DEBUG
         InspectorTabView.TabItems.Remove(TestTabViewItem);
@@ -484,6 +490,7 @@ public sealed partial class MainWindow : Window
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
         UpdateFileLoggingTextColor();
+        UpdateSequenceStateVisuals();
         ApplyInspectorLayout();
         UpdateToolbarScrollButtons(ConnectionToolbarScrollViewer);
         UpdateToolbarScrollButtons(LogToolbarScrollViewer);
@@ -497,6 +504,7 @@ public sealed partial class MainWindow : Window
         ApplyXtermDefaultBackgroundColor();
         ApplyWebViewColorScheme();
         UpdateFileLoggingTextColor();
+        UpdateSequenceStateVisuals();
     }
 
     private void ApplySelectedTheme()
@@ -1598,7 +1606,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _ = ScrollXtermToBottomAsync("TX sent");
+        if (!IsClosingOrClosed)
+        {
+            _ = _txScrollOperation.RunAsync(true);
+        }
     }
 
     private void QueueXtermSearch(XtermSearchRequest request)
@@ -2440,6 +2451,10 @@ public sealed partial class MainWindow : Window
         {
             ApplySelectedTheme();
         }
+        if (args.PropertyName == nameof(MainViewModel.IsSequenceRunning))
+        {
+            UpdateSequenceStateVisuals();
+        }
         if (args.PropertyName == nameof(MainViewModel.FileLoggingEnabled))
         {
             UpdateFileLoggingTextColor();
@@ -2518,6 +2533,23 @@ public sealed partial class MainWindow : Window
             args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
         {
             UpdateCuteBackgroundImage();
+        }
+    }
+
+    private void UpdateSequenceStateVisuals()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(UpdateSequenceStateVisuals);
+            return;
+        }
+
+        var brushKey = _viewModel.IsSequenceRunning
+            ? "FileLoggingEnabledTextBrush"
+            : "FileLoggingDisabledTextBrush";
+        if (Application.Current.Resources.TryGetValue(brushKey, out var resource) && resource is Brush brush)
+        {
+            SequenceStateText.Foreground = brush;
         }
     }
 
@@ -4885,6 +4917,93 @@ public sealed partial class MainWindow : Window
         {
             _viewModel.DeleteSelectedSavedCommand();
         }
+    }
+
+    private async void ShowSequenceAiGuide_Click(object sender, RoutedEventArgs args)
+    {
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(
+            status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        var content = new StackPanel { Spacing = 12, MaxWidth = 420 };
+        content.Children.Add(new TextBlock
+        {
+            Text = UiText.Get("SequenceTipsBody", "Copy the prompt and JSON template into your AI chat. Describe your device commands, delays and repeats. Save the result as UTF-8 JSON and load it from Sequence options."),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12
+        });
+        content.Children.Add(status);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            RequestedTheme = Root.ActualTheme,
+            Title = UiText.Get("SequenceTipsTitle", "Create sequences with AI"),
+            Content = new ScrollViewer { Content = content, MaxHeight = 360, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
+            PrimaryButtonText = UiText.Get("SequenceTipsCopy", "Copy AI prompt + JSON template"),
+            CloseButtonText = UiText.Get("SequenceTipsClose", "Close"),
+            DefaultButton = ContentDialogButton.Close
+        };
+        dialog.PrimaryButtonClick += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            CopySequenceAiPrompt(status);
+        };
+        try { await dialog.ShowAsync(); }
+        catch (Exception ex) { RuntimeDiagnostics.RecordError("ShowSequenceAiGuide", ex); }
+    }
+
+    private void CopySequenceAiPrompt(TextBlock status)
+    {
+        try
+        {
+            var prompt = UiText.Get("SequenceAiPrompt", "Create one sequence JSON using the attached _manual. Ask for the device commands, line ending, delays and repeat count. Do not invent commands or unsupported fields. Return only valid JSON.");
+            var template = CommandSequenceFileService.Serialize(new CommandSequence
+            {
+                Name = "My sequence",
+                RepeatCount = 1
+            });
+            var package = new DataPackage();
+            package.SetText(prompt + Environment.NewLine + Environment.NewLine + template);
+            Clipboard.SetContent(package);
+            status.Text = UiText.Get("SequenceTipsCopied", "Copied. Paste into your AI chat.");
+        }
+        catch (Exception)
+        {
+            status.Text = UiText.Get("SequenceTipsCopyFailed", "Could not copy. Please try again.");
+        }
+    }
+
+    private async void LoadCommandSequences_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+            picker.FileTypeFilter.Add(".json");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var files = await picker.PickMultipleFilesAsync();
+            await _viewModel.LoadCommandSequenceFilesAsync(files.Select(file => file.Path).ToArray());
+        }
+        catch (Exception ex) { _viewModel.RecordSequenceFilePickerError($"Load sequence files failed: {ex.Message}"); }
+    }
+
+    private async void ExportCommandSequence_Click(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel.SelectedCommandSequence is not { } selected) return;
+        var snapshot = CloneCommandSequence(selected);
+        try
+        {
+            var safeName = string.Concat(snapshot.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+            var picker = new FileSavePicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = string.IsNullOrWhiteSpace(safeName) ? "sequence" : safeName,
+                DefaultFileExtension = ".json"
+            };
+            picker.FileTypeChoices.Add("Sequence JSON", new List<string> { ".json" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is not null) await _viewModel.ExportCommandSequenceFileAsync(file.Path, snapshot);
+        }
+        catch (Exception ex) { _viewModel.RecordSequenceFilePickerError($"Export sequence failed: {ex.Message}"); }
     }
 
     private async void AddCommandSequence_Click(object sender, RoutedEventArgs args)

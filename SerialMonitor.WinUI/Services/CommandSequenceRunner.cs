@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
 
 public sealed class CommandSequenceRunner : ICommandSequenceRunner
 {
+    internal const int MaxAttemptsPerSlice = 16;
+    private static readonly TimeSpan MaxSliceDuration = TimeSpan.FromMilliseconds(8);
     public async Task RunAsync(
         CommandSequence sequence,
         Func<CancellationToken, Task<bool>> waitUntilReady,
@@ -14,12 +17,25 @@ public sealed class CommandSequenceRunner : ICommandSequenceRunner
         CancellationToken cancellationToken)
     {
         var total = checked(sequence.Steps.Count * sequence.RepeatCount);
+        var attemptsInSlice = 0;
+        var sliceStarted = Stopwatch.GetTimestamp();
         for (var position = 0; position < total; position++)
         {
             var step = sequence.Steps[position % sequence.Steps.Count];
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (attemptsInSlice >= MaxAttemptsPerSlice || Stopwatch.GetElapsedTime(sliceStarted) >= MaxSliceDuration)
+                {
+                    // Preserve the caller's UI context: callbacks access UI-owned state.
+                    // Task.Yield alone can continuously refill the UI dispatch queue.
+                    // A real timer wait also covers synchronously completed sends/retries.
+                    await Task.Delay(1, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    attemptsInSlice = 0;
+                    sliceStarted = Stopwatch.GetTimestamp();
+                }
+                attemptsInSlice++;
                 if (!await waitUntilReady(cancellationToken))
                     throw new InvalidOperationException("Sequence stopped: serial connection is unavailable and automatic reconnect is not active.");
 

@@ -216,28 +216,21 @@ public sealed class ProfileServiceDefaultsTests
         try
         {
             var service = new ProfileService();
-            var profile = JsonSerializer.SerializeToNode(service.CreateDefaultProfile())!;
-            var examples = JsonNode.Parse(await File.ReadAllTextAsync(
-                Path.Combine(AppContext.BaseDirectory, "docs", "sequence_examples.json")))!;
-            profile["CommandSequences"] = examples["CommandSequences"]!.DeepClone();
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, profile.ToJsonString());
+            var profile = service.CreateDefaultProfile();
+            var examples = await new CommandSequenceFileService().LoadAsync(
+                [Path.Combine(AppContext.BaseDirectory, "docs", "sequence_examples.json")], CancellationToken.None);
+            profile.CommandSequences = examples.ToList();
+            await service.SaveAsync(path, profile, CancellationToken.None);
 
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
             Assert.Null(service.LastError);
-            Assert.Equal(2, loaded.CommandSequences.Count);
-            var terminal = loaded.CommandSequences[0];
-            Assert.Equal("Example - Terminal status", terminal.Name);
+            var terminal = Assert.Single(loaded.CommandSequences);
+            Assert.Equal("상태 확인 3회", terminal.Name);
             Assert.Equal(3, terminal.RepeatCount);
             Assert.Equal(["status", "version"], terminal.Steps.Select(step => step.CommandText));
             Assert.Equal([500, 1000], terminal.Steps.Select(step => step.DelayAfterMs));
             Assert.All(terminal.Steps, step => Assert.Equal(TxLineEndingMode.Crlf, step.LineEndingMode));
-            var hex = Assert.Single(loaded.CommandSequences[1].Steps);
-            Assert.Equal(TxLineEndingMode.None, hex.LineEndingMode);
-            Assert.Equal(0, hex.DelayAfterMs);
-            Assert.True(HexPayloadParser.TryParse(hex.CommandText, out var bytes, out var error), error);
-            Assert.Equal(new byte[] { 0xAA, 0x55, 0x01, 0x00 }, bytes);
 
             await service.SaveAsync(path, loaded, CancellationToken.None);
             var reloaded = await service.LoadAsync(path, CancellationToken.None);

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$StopRunning,
     [switch]$NoZip,
@@ -241,9 +241,11 @@ AI sequence authoring
 ---------------------
 - Open docs\sequence_authoring.md in a text editor (Korean guide with an AI prompt).
 - Attach the guide and your device command specification when asking AI for sequences.
-- docs\sequence_examples.json contains sequence fragments, NOT a complete profile.
-- Close the app and back up default.json before merging sequences; do not replace the whole profile.
-- There is no standalone sequence import, response wait, or branching support yet.
+- Use Sequence options > Create sequences with AI for a prompt and a JSON template.
+- docs\sequence_examples.json is one importable sequence. Each JSON file contains one sequence.
+- Use Sequence options > Load JSON files to select multiple files; Export shares the selected sequence with its _manual.
+- Invalid formats or duplicate names cancel the entire import. Limit: 100 files, 10000 total steps, 16 MiB total (2 MiB/file).
+- Response waits and branching are not supported. TX OK does not verify device receipt or execution.
 
 If the app does not start
 -------------------------

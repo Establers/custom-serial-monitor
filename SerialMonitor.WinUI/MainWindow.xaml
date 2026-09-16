@@ -1,4 +1,4 @@
-<Window
+﻿<Window
     x:Class="SerialMonitor.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -1741,7 +1741,7 @@
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="4"
-                                      ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                      ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
                                     <TextBlock Text="Sequence"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                     <ComboBox Grid.Column="1"
@@ -1753,7 +1753,7 @@
                                               Style="{StaticResource CompactComboBoxStyle}"
                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
                                     <TextBox x:Uid="StaticUi034" x:Name="SequenceRepeatCountTextBox"
-                                             Grid.Column="2"
+                                             Grid.Column="4"
                                              Width="48"
                                              MaxLength="4"
                                              InputScope="Number"
@@ -1764,38 +1764,65 @@
                                              TextChanged="SequenceRepeatCountTextBox_TextChanged"
                                              LostFocus="SequenceRepeatCountTextBox_LostFocus"
                                              ToolTipService.ToolTip="Repeat the selected sequence 1 to 9,999 times" />
-                                    <TextBlock Grid.Column="3"
+                                    <TextBlock Grid.Column="5"
                                                Text="times"
                                                VerticalAlignment="Center"
                                                Style="{StaticResource CompactCellTextStyle}" />
-                                    <Button x:Uid="StaticUi036" Grid.Column="4"
-                                            Content="+"
-                                            IsEnabled="{Binding CanEditCommandSequences}"
-                                            Style="{StaticResource ToolbarIconButtonStyle}"
-                                            Click="AddCommandSequence_Click"
-                                            ToolTipService.ToolTip="Add sequence" />
-                                    <Button x:Uid="StaticUi037" Grid.Column="5"
-                                            Content="Edit"
-                                            IsEnabled="{Binding CanEditSelectedCommandSequence}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="EditCommandSequence_Click"
-                                            ToolTipService.ToolTip="Edit sequence" />
-                                    <Button x:Uid="StaticUi038" Grid.Column="6"
-                                            Content="Del"
-                                            IsEnabled="{Binding CanEditSelectedCommandSequence}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="DeleteCommandSequence_Click"
-                                            ToolTipService.ToolTip="Delete sequence" />
-                                    <Button x:Uid="StaticUi039" Grid.Column="7"
-                                            Content="Run"
+                                    <Button x:Uid="SequenceManage" Grid.Column="2" Content="Sequence options"
+                                            Style="{StaticResource RuleActionButtonStyle}">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem x:Uid="SequenceAddMenu" Text="Add sequence…"
+                                                                Click="AddCommandSequence_Click"
+                                                                IsEnabled="{Binding CanEditCommandSequences}">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Add" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                                <MenuFlyoutItem x:Uid="SequenceLoad" Text="Load JSON files…"
+                                                                Click="LoadCommandSequences_Click"
+                                                                IsEnabled="{Binding CanEditCommandSequences}"
+                                                                ToolTipService.ToolTip="Load one or more sequence JSON files (all must be valid)">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="OpenFile" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem x:Uid="SequenceExport" Text="Export selected sequence…"
+                                                                Click="ExportCommandSequence_Click"
+                                                                IsEnabled="{Binding CanEditSelectedCommandSequence}"
+                                                                ToolTipService.ToolTip="Export selected sequence with an embedded authoring manual">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Save" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                                <MenuFlyoutItem x:Uid="SequenceEditMenu" Text="Edit selected sequence…"
+                                                                IsEnabled="{Binding CanEditSelectedCommandSequence}"
+                                                                Click="EditCommandSequence_Click">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Edit" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem x:Uid="SequenceDeleteMenu" Text="Delete selected sequence…"
+                                                                IsEnabled="{Binding CanEditSelectedCommandSequence}"
+                                                                Click="DeleteCommandSequence_Click">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Delete" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem x:Uid="SequenceAiGuideMenu" Text="Create sequences with AI…"
+                                                                Click="ShowSequenceAiGuide_Click">
+                                                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Help" /></MenuFlyoutItem.Icon>
+                                                </MenuFlyoutItem>
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <Button x:Uid="SequencePlay" Grid.Column="6"
                                             Command="{Binding RunCommandSequenceCommand}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            ToolTipService.ToolTip="Run sequence" />
-                                    <Button x:Uid="StaticUi040" Grid.Column="8"
-                                            Content="Stop"
+                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            AutomationProperties.Name="Run sequence"
+                                            ToolTipService.ToolTip="Run sequence">
+                                        <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                    </Button>
+                                    <Button x:Uid="SequenceStop" Grid.Column="7"
                                             Command="{Binding StopCommandSequenceCommand}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            ToolTipService.ToolTip="Stop sequence" />
+                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            AutomationProperties.Name="Stop running sequence"
+                                            ToolTipService.ToolTip="Stop the running sequence, regardless of dropdown selection">
+                                        <FontIcon Glyph="&#xE71A;" FontSize="14" />
+                                    </Button>
                                 </Grid>
                             </Border>
 
@@ -1803,38 +1830,30 @@
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="4"
                                       ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-                                    <TextBlock Text="{Binding SelectedCommandSequenceName}"
-                                               FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"
-                                               Style="{StaticResource InspectorSectionHeaderTextStyle}"
-                                               ToolTipService.ToolTip="{Binding LastSequenceActionStatus}" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding SequenceRuntimeStateText}"
-                                               Style="{StaticResource CompactCellTextStyle}"
-                                               ToolTipService.ToolTip="{Binding SequenceStatusText}" />
+                                    <TextBlock MinWidth="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               Style="{StaticResource CompactCellTextStyle}">
+                                        <Run x:Name="SequenceStateText" Text="{Binding SequenceRuntimeStateText}"
+                                             FontWeight="SemiBold" Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
+                                        <Run Text=" | " />
+                                        <Run Text="{Binding SequenceTxActivityText}" />
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock Text="{Binding SequenceTxActivityToolTip}"
+                                                           MaxWidth="520" TextWrapping="Wrap" />
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </TextBlock>
                                     <TextBlock x:Uid="StaticUi041" Grid.Column="2"
                                                Text="{Binding SelectedCommandSequenceStepCountText}"
                                                FontFamily="Consolas"
                                                Style="{StaticResource CompactCellTextStyle}"
                                                ToolTipService.ToolTip="Selected sequence step count" />
-                                    <Button x:Uid="StaticUi042" Grid.Column="3"
-                                            Content="+"
+                                    <Button x:Uid="SequenceAddStep" Grid.Column="3"
+                                            Content="+ Step"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
-                                            Style="{StaticResource ToolbarIconButtonStyle}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
                                             Click="AddCommandSequenceStep_Click"
                                             ToolTipService.ToolTip="Add step" />
-                                    <Button x:Uid="StaticUi043" Grid.Column="4"
-                                            Content="Edit"
-                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="EditCommandSequenceStep_Click"
-                                            ToolTipService.ToolTip="Edit step" />
-                                    <Button x:Uid="StaticUi044" Grid.Column="5"
-                                            Content="Del"
-                                            IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="DeleteCommandSequenceStep_Click"
-                                            ToolTipService.ToolTip="Delete step" />
                                     <Button x:Uid="StaticUi045" Grid.Column="6"
                                             Content="Up"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
@@ -1918,10 +1937,12 @@
                                                                 Spacing="2"
                                                                 VerticalAlignment="Center">
                                                         <Button x:Uid="StaticUi051" Content="Edit"
+                                                                AutomationProperties.Name="Edit this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="EditCommandSequenceStepRow_Click"
                                                                 ToolTipService.ToolTip="Edit step" />
                                                         <Button x:Uid="StaticUi052" Content="Del"
+                                                                AutomationProperties.Name="Delete this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="DeleteCommandSequenceStepRow_Click"
                                                                 ToolTipService.ToolTip="Delete step" />

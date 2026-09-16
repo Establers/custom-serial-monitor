@@ -1298,6 +1298,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private readonly SequenceTxActivity _sequenceTxActivity = new();
+    public string SequenceTxActivityText => _sequenceTxActivity.Summary;
+    public string SequenceTxActivityToolTip => _sequenceTxActivity.Details;
+
+    private void RefreshSequenceTxActivity()
+    {
+        OnPropertyChanged(nameof(SequenceTxActivityText));
+        OnPropertyChanged(nameof(SequenceTxActivityToolTip));
+    }
+
     public string LastSequenceError => _lastSequenceError;
 
     public string LastSequenceActionStatus => _lastSequenceActionStatus;
@@ -7838,6 +7848,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CurrentSequenceStepText = "(starting)";
         CompletedSequenceSteps = 0;
         _runningSequenceTotalSteps = sequence.Steps.Count * sequence.RepeatCount;
+        _sequenceTxActivity.Begin(sequence.Name, _runningSequenceTotalSteps);
+        RefreshSequenceTxActivity();
         _lastSequenceError = string.Empty;
         _lastSequenceActionStatus = $"Running sequence: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})";
         Interlocked.Increment(ref _sequenceRunCount);
@@ -7852,10 +7864,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             await _sequenceRunner.RunAsync(
                 sequence,
                 WaitForSequenceConnectionAsync,
-                (step, token) => SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
+                async (step, token) =>
                 {
-                    LineEndingMode = step.LineEndingMode
-                }, addToHistory: false, modeOverride: sequenceSendMode, cancellationToken: token),
+                    var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
+                    {
+                        LineEndingMode = step.LineEndingMode
+                    }, addToHistory: false, modeOverride: sequenceSendMode, cancellationToken: token);
+                    if (sent) _sequenceTxActivity.Sent(step.CommandText, step.DelayAfterMs);
+                    else _sequenceTxActivity.FailedAttempt();
+                    return sent;
+                },
                 () =>
                 {
                     var retry = CanWaitForSequenceReconnect();
@@ -7869,6 +7887,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 },
                 position =>
                 {
+                    _sequenceTxActivity.Sending(position, sequence.Steps.Count);
                     var index = position % sequence.Steps.Count;
                     var repeatIndex = position / sequence.Steps.Count;
                     var step = sequence.Steps[index];
@@ -7879,14 +7898,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 completed => CompletedSequenceSteps = completed,
                 cancellationToken);
 
+            _sequenceTxActivity.SetPhase("Completed");
             RecordSequenceStatus($"Sequence completed: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})");
         }
         catch (OperationCanceledException)
         {
+            _sequenceTxActivity.SetPhase("Stopped");
             RecordSequenceStatus($"Sequence stopped: {sequence.Name}");
         }
         catch (Exception ex)
         {
+            _sequenceTxActivity.SetPhase($"Error: {ex.Message}");
             RecordSequenceError($"Sequence failed: {ex.Message}");
         }
         finally
@@ -7897,6 +7919,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _runningSequenceTotalSteps = 0;
             _sequenceCancellation?.Dispose();
             _sequenceCancellation = null;
+            RefreshSequenceTxActivity();
             NotifyCommandStates();
             RefreshStatusBar();
         }
@@ -7912,6 +7935,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Interlocked.Increment(ref _sequenceStopCount);
         OnPropertyChanged(nameof(SequenceStopCount));
         _sequenceCancellation?.Cancel();
+        _sequenceTxActivity.SetPhase("Stopping");
+        RefreshSequenceTxActivity();
         RecordSequenceStatus("Stopping command sequence...");
         RefreshStatusBar();
         return Task.CompletedTask;
@@ -7955,6 +7980,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (!waiting)
             {
                 waiting = true;
+                _sequenceTxActivity.SetPhase("Waiting for reconnect");
                 CurrentSequenceStepText = "Waiting for automatic reconnect...";
                 var message = $"Sequence paused for automatic reconnect: {RunningSequenceName}, completed steps {CompletedSequenceSteps}.";
                 RecordSequenceStatus(message);
@@ -8527,6 +8553,51 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ApplySavedCommandChanges($"Deleted saved command: {deletedName}");
         return true;
     }
+
+    public async Task LoadCommandSequenceFilesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
+    {
+        if (paths.Count == 0 || !EnsureCanEditCommandSequences("Load sequences")) return;
+        IsBusy = true;
+        try
+        {
+            ICommandSequenceFileService service = new CommandSequenceFileService();
+            var loaded = await Task.Run(() => service.LoadAsync(paths, cancellationToken), cancellationToken);
+            var names = new HashSet<string>(CommandSequences.Select(sequence => sequence.Name), StringComparer.OrdinalIgnoreCase);
+            // Loaded objects are already validated, normalized and numbered on the worker.
+            // Check every name before publishing anything to the bound collections.
+            foreach (var sequence in loaded)
+            {
+                if (!names.Add(sequence.Name))
+                    throw new InvalidDataException($"A sequence named '{sequence.Name}' already exists. Change Name in the JSON before loading.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var sequence in loaded) CommandSequences.Add(sequence);
+            SelectedCommandSequence = loaded.FirstOrDefault();
+            SelectedCommandSequenceStep = SelectedCommandSequence?.Steps.FirstOrDefault();
+            ApplyCommandSequenceChanges($"Loaded {loaded.Count} sequence(s).");
+        }
+        catch (OperationCanceledException) { SetStatus("Sequence load cancelled."); }
+        catch (Exception ex) { RecordSequenceError($"Load failed; no sequences added. {ex.Message}"); }
+        finally { IsBusy = false; }
+    }
+
+    public async Task ExportCommandSequenceFileAsync(string path, CommandSequence sequence, CancellationToken cancellationToken = default)
+    {
+        if (!EnsureCanEditCommandSequences("Export sequence")) return;
+        var snapshot = CloneCommandSequence(sequence);
+        IsBusy = true;
+        try
+        {
+            ICommandSequenceFileService service = new CommandSequenceFileService();
+            await Task.Run(() => service.ExportAsync(path, snapshot, cancellationToken), cancellationToken);
+            SetStatus($"Exported sequence: {snapshot.Name}");
+        }
+        catch (OperationCanceledException) { SetStatus("Sequence export cancelled."); }
+        catch (Exception ex) { RecordSequenceError($"Export failed: {ex.Message}"); }
+        finally { IsBusy = false; }
+    }
+
+    public void RecordSequenceFilePickerError(string message) => RecordSequenceError(message);
 
     public bool AddCommandSequence(CommandSequence sequence)
     {
@@ -9712,15 +9783,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
-        normalized = CloneCommandSequence(sequence);
-        normalized.Name = normalized.Name.Trim();
+        normalized.Name = sequence.Name.Trim();
+        normalized.RepeatCount = sequence.RepeatCount;
         if (normalized.RepeatCount is < CommandSequence.MinRepeatCount or > CommandSequence.MaxRepeatCount)
         {
             error = $"Sequence repeat count must be between {CommandSequence.MinRepeatCount:N0} and {CommandSequence.MaxRepeatCount:N0}.";
             return false;
         }
 
-        normalized.Steps.Clear();
         for (var index = 0; index < sequence.Steps.Count; index++)
         {
             if (!TryNormalizeCommandSequenceStep(
@@ -12705,6 +12775,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnStatusTimerTick(DispatcherQueueTimer sender, object args)
     {
+        RefreshSequenceTxActivity();
         StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
         if (Interlocked.Exchange(ref _fileLogStatusSnapshotDirty, 0) != 0)

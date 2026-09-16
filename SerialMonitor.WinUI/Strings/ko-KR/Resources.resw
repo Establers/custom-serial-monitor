@@ -833,4 +833,33 @@
   <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>현재 검색 옵션으로 다시 검색하고 다음 결과로 이동합니다 (Enter)</value>
   </data>
+  <data name="SequenceLoad.Text" xml:space="preserve"><value>JSON 불러오기…</value></data>
+  <data name="SequenceExport.Text" xml:space="preserve"><value>선택한 시퀀스 내보내기…</value></data>
+  <data name="SequenceLoad.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>여러 시퀀스 JSON 선택 가능. 오류가 있으면 전체 불러오기 취소</value></data>
+  <data name="SequenceExport.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>선택한 시퀀스와 작성 설명서를 JSON 파일 하나로 내보내기</value></data>
+  <data name="SequenceManage.Content" xml:space="preserve"><value>시퀀스 관리</value></data>
+  <data name="SequenceEditMenu.Text" xml:space="preserve"><value>선택한 시퀀스 편집…</value></data>
+  <data name="SequenceDeleteMenu.Text" xml:space="preserve"><value>선택한 시퀀스 삭제…</value></data>
+  <data name="SequenceAddStep.Content" xml:space="preserve"><value>+ Step</value></data>
+  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시퀀스 실행</value></data>
+  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>시퀀스 실행</value></data>
+  <data name="SequenceStop.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>드롭다운 선택과 관계없이 현재 실행 중인 시퀀스 정지</value></data>
+  <data name="SequenceStop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>현재 실행 중인 시퀀스 정지</value></data>
+  <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>선택한 시퀀스에 명령 추가</value></data>
+  <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>선택한 시퀀스에 명령 추가</value></data>
+  <data name="StaticUi051.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>이 명령 편집</value></data>
+  <data name="StaticUi052.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>이 명령 삭제</value></data>
+  <data name="SequenceAddMenu.Text" xml:space="preserve"><value>시퀀스 추가…</value></data>
+  <data name="SequenceTipsTitle" xml:space="preserve"><value>AI로 시퀀스를 만들 수 있어요</value></data>
+  <data name="SequenceTipsBody" xml:space="preserve"><value>1. 아래 요청문을 복사해 AI에게 붙여 넣으세요.
+2. 장비 명령, 순서, 대기 시간, 반복 횟수를 알려 주세요.
+3. 결과를 .json으로 저장한 뒤 시퀀스 관리 → JSON 불러오기에서 선택하세요.
+
+실행 전 명령과 Terminal/HEX 모드를 확인하세요.</value></data>
+  <data name="SequenceTipsCopy" xml:space="preserve"><value>AI 요청문 + JSON 양식 복사</value></data>
+  <data name="SequenceTipsCopied" xml:space="preserve"><value>복사했습니다. AI 대화창에 붙여 넣으세요.</value></data>
+  <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>복사하지 못했습니다. 다시 시도해 주세요.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, Terminal/HEX 모드, 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. 명령이나 체크섬을 추측하지 마세요. 응답 대기·분기·변수 등 지원하지 않는 기능은 임의 필드로 만들지 마세요. Name은 기존 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. _manual은 유지하고, JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 양식의 Steps는 빈 배열이므로 요청에 맞는 실제 명령을 채워 주세요.</value></data>
+  <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>AI로 시퀀스 만들기…</value></data>
+  <data name="SequenceTipsClose" xml:space="preserve"><value>닫기</value></data>
 </root>

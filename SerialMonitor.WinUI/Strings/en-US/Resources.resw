@@ -833,4 +833,33 @@ Elapsed {2} · Remaining {3}</value>
   <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Search with current options and move to the next match (Enter)</value>
   </data>
+  <data name="SequenceLoad.Text" xml:space="preserve"><value>Load JSON files…</value></data>
+  <data name="SequenceExport.Text" xml:space="preserve"><value>Export selected sequence…</value></data>
+  <data name="SequenceLoad.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Load one or more sequence JSON files; any error cancels the entire batch</value></data>
+  <data name="SequenceExport.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Export selected sequence with authoring manual in one JSON file</value></data>
+  <data name="SequenceManage.Content" xml:space="preserve"><value>Sequence options</value></data>
+  <data name="SequenceEditMenu.Text" xml:space="preserve"><value>Edit selected sequence…</value></data>
+  <data name="SequenceDeleteMenu.Text" xml:space="preserve"><value>Delete selected sequence…</value></data>
+  <data name="SequenceAddStep.Content" xml:space="preserve"><value>+ Step</value></data>
+  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Run sequence</value></data>
+  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Run sequence</value></data>
+  <data name="SequenceStop.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop the running sequence, regardless of dropdown selection</value></data>
+  <data name="SequenceStop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Stop running sequence</value></data>
+  <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Add command to selected sequence</value></data>
+  <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add command to selected sequence</value></data>
+  <data name="StaticUi051.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Edit this command</value></data>
+  <data name="StaticUi052.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Delete this command</value></data>
+  <data name="SequenceAddMenu.Text" xml:space="preserve"><value>Add sequence…</value></data>
+  <data name="SequenceTipsTitle" xml:space="preserve"><value>Create sequences with AI</value></data>
+  <data name="SequenceTipsBody" xml:space="preserve"><value>1. Copy the prompt below into your AI chat.
+2. Provide device commands, order, delays and repeat count.
+3. Save the result as .json, then select Sequence options → Load JSON files.
+
+Review commands and Terminal/HEX mode before running.</value></data>
+  <data name="SequenceTipsCopy" xml:space="preserve"><value>Copy AI prompt + JSON template</value></data>
+  <data name="SequenceTipsCopied" xml:space="preserve"><value>Copied. Paste into your AI chat.</value></data>
+  <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>Create one Serial Monitor sequence following _manual in the JSON below. First ask for the actual device protocol, Terminal/HEX mode, command order, line ending (None/Cr/Lf/Crlf or null), post-send delays in ms, repeat count and existing sequence names. Never invent commands or checksums. Do not add unsupported response waits, branches or variables. Use a unique Name and include every required field. Preserve _manual. Return the final result as one standard JSON object without comments or Markdown fences, ready to save as UTF-8. The template has empty Steps; fill it with the actual requested commands.</value></data>
+  <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>Create sequences with AI…</value></data>
+  <data name="SequenceTipsClose" xml:space="preserve"><value>Close</value></data>
 </root>

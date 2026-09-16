@@ -1,37 +1,29 @@
 {
-  "CommandSequences": [
+  "_manual": [
+    "One file = one sequence. Load can select multiple JSON files. See sequence_authoring.md for the full guide.",
+    "Required: FormatVersion=1, Name=nonblank string, RepeatCount=integer 1..9999, Steps=array (0..10000).",
+    "Each step requires nonblank CommandText, LineEndingMode=null/None/Cr/Lf/Crlf, DelayAfterMs=integer 0..600000. Name and Comment are optional string/null.",
+    "No unknown fields, duplicate keys, comments or trailing commas. Any invalid file or duplicate sequence name cancels the entire batch.",
+    "Run uses the main Terminal/HEX mode. Delays are after sending. No response wait or branching. Commands here are examples; replace them with your device protocol.",
+    "Load limits: 100 files, 2 MiB per file, 10000 total steps and 16 MiB total input per batch. Exceeding a limit cancels the entire batch."
+  ],
+  "FormatVersion": 1,
+  "Name": "상태 확인 3회",
+  "RepeatCount": 3,
+  "Steps": [
     {
-      "Name": "Example - Terminal status",
-      "RepeatCount": 3,
-      "Steps": [
-        {
-          "Name": "상태 조회",
-          "CommandText": "status",
-          "LineEndingMode": "Crlf",
-          "DelayAfterMs": 500,
-          "Comment": "Terminal 모드 예제. 실제 장비의 명령을 확인한 뒤 사용하세요."
-        },
-        {
-          "Name": "버전 조회",
-          "CommandText": "version",
-          "LineEndingMode": "Crlf",
-          "DelayAfterMs": 1000,
-          "Comment": "응답 판정 없이 고정 시간 대기. 처음에는 RepeatCount 1로 검증하세요."
-        }
-      ]
+      "Name": "상태 조회",
+      "CommandText": "status",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 500,
+      "Comment": "전송 후 500ms 대기. 응답 성공 여부는 검사하지 않음."
     },
     {
-      "Name": "Example - HEX packet",
-      "RepeatCount": 1,
-      "Steps": [
-        {
-          "Name": "패킷 전송",
-          "CommandText": "AA 55 01 00",
-          "LineEndingMode": "None",
-          "DelayAfterMs": 0,
-          "Comment": "HEX 모드 전용 형식 예제. 의미가 정의되지 않은 바이트이므로 실제 장비에 그대로 보내지 마세요."
-        }
-      ]
+      "Name": "버전 조회",
+      "CommandText": "version",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 1000,
+      "Comment": null
     }
   ]
 }
