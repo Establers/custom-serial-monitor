@@ -26,6 +26,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             RuntimeDiagnostics.RecordError("App.OnLaunched", ex);
+            RuntimeDiagnostics.FlushBeforeFatalExit();
             throw;
         }
     }
@@ -33,6 +34,7 @@ public partial class App : Application
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
     {
         RuntimeDiagnostics.RecordError("Application.UnhandledException", args.Exception);
+        RuntimeDiagnostics.FlushBeforeFatalExit();
     }
 
     private static void OnAppDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs args)
@@ -40,6 +42,7 @@ public partial class App : Application
         if (args.ExceptionObject is Exception exception)
         {
             RuntimeDiagnostics.RecordError("AppDomain.UnhandledException", exception);
+            RuntimeDiagnostics.FlushBeforeFatalExit();
         }
     }
 

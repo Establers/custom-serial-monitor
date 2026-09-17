@@ -4,7 +4,7 @@ namespace SerialMonitor.WinUI.Infrastructure;
 
 public static class RuntimeDiagnostics
 {
-    private static readonly object Gate = new();
+    private static readonly DiagnosticFileWriter Writer = new(WriteTextAsync);
 
     public static string DirectoryPath { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SerialMonitor", "diagnostics");
@@ -18,24 +18,12 @@ public static class RuntimeDiagnostics
     public static void RecordStartup()
     {
         ClearLastError();
-        WriteText(StartupPath, $"Started: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}{Environment.NewLine}");
+        Writer.Enqueue(DiagnosticFile.Startup, $"Started: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}{Environment.NewLine}");
     }
 
     public static void ClearLastError()
     {
-        lock (Gate)
-        {
-            try
-            {
-                if (File.Exists(LastErrorPath))
-                {
-                    File.Delete(LastErrorPath);
-                }
-            }
-            catch
-            {
-            }
-        }
+        Writer.Enqueue(DiagnosticFile.Error, null);
     }
 
     public static void RecordError(string source, Exception exception)
@@ -44,7 +32,7 @@ public static class RuntimeDiagnostics
         builder.AppendLine($"Time: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}");
         builder.AppendLine($"Source: {source}");
         builder.AppendLine(exception.ToString());
-        WriteText(LastErrorPath, builder.ToString());
+        Writer.Enqueue(DiagnosticFile.Error, builder.ToString());
     }
 
     public static string ReadLastError()
@@ -61,7 +49,7 @@ public static class RuntimeDiagnostics
 
     public static void RecordShutdown(string text)
     {
-        WriteText(LastShutdownPath, text);
+        Writer.Enqueue(DiagnosticFile.Shutdown, text);
     }
 
     public static string ReadLastShutdown()
@@ -76,18 +64,23 @@ public static class RuntimeDiagnostics
         }
     }
 
-    private static void WriteText(string path, string text)
+    public static Task FlushAsync(TimeSpan timeout) => Writer.FlushAsync(timeout);
+
+    // Fatal handlers cannot await before the process exits. Bound their final wait.
+    public static void FlushBeforeFatalExit() =>
+        FlushAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
+
+    private static async Task WriteTextAsync(DiagnosticFile file, string? text)
     {
-        lock (Gate)
+        var path = file switch
         {
-            try
-            {
-                Directory.CreateDirectory(DirectoryPath);
-                File.WriteAllText(path, text);
-            }
-            catch
-            {
-            }
-        }
+            DiagnosticFile.Error => LastErrorPath,
+            DiagnosticFile.Startup => StartupPath,
+            DiagnosticFile.Shutdown => LastShutdownPath,
+            _ => throw new ArgumentOutOfRangeException(nameof(file))
+        };
+        if (text is null) { File.Delete(path); return; }
+        Directory.CreateDirectory(DirectoryPath);
+        await File.WriteAllTextAsync(path, text).ConfigureAwait(false);
     }
 }

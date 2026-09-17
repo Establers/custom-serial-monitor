@@ -267,6 +267,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            await RuntimeDiagnostics.FlushAsync(TimeSpan.FromSeconds(1));
             _closeAllowed = true;
             Close();
         }
