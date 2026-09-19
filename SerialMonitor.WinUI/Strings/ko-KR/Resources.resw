@@ -337,16 +337,16 @@
     <comment>English: The log file name can be changed only while LOG is OFF.</comment>
   </data>
   <data name="StaticUi116.Text" xml:space="preserve">
-    <value>LOG를 켤 때마다 새 파일 생성, 날짜 기준 분할 없음</value>
-    <comment>English: New file per LOG ON; no date-based split</comment>
+    <value>로그 저장을 시작할 때마다 새 파일 생성, 날짜 기준 분할 없음</value>
+    <comment>English: New file each time saving starts; no date-based split</comment>
   </data>
   <data name="StaticUi116.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>이름을 비워 두면 yyyy-MM-dd_HHmmss_serial.log가 생성됩니다. 선택적 크기 순환을 사용하지 않는 한 LOG를 끌 때까지 같은 파일을 사용합니다.</value>
-    <comment>English: An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until LOG OFF unless optional size rotation is enabled.</comment>
+    <value>이름을 비워 두면 yyyy-MM-dd_HHmmss_serial.log가 생성됩니다. 선택적 크기 순환을 사용하지 않는 한 로그 저장을 중지할 때까지 같은 파일을 사용합니다.</value>
+    <comment>English: An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled.</comment>
   </data>
   <data name="StaticUi117.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>LOG를 켤 때마다 이전 실행 파일에 이어 쓰지 않고 새 파일을 만듭니다.</value>
-    <comment>English: Every LOG ON creates a new file instead of appending to an earlier run.</comment>
+    <value>로그 저장을 시작할 때마다 이전 실행 파일에 이어 쓰지 않고 새 파일을 만듭니다.</value>
+    <comment>English: Starting log saving creates a new file instead of appending to an earlier run.</comment>
   </data>
   <data name="StaticUi121.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>이후 기록부터 즉시 적용됩니다.</value>
@@ -569,7 +569,7 @@
     <comment>English: Scroll TX controls left</comment>
   </data>
   <data name="StaticUi247.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>최근 전송한 TX 명령 표시</value>
+    <value>명령 기록</value>
     <comment>English: Show recently sent TX commands</comment>
   </data>
   <data name="StaticUi249.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -862,4 +862,18 @@
   <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, Terminal/HEX 모드, 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. 명령이나 체크섬을 추측하지 마세요. 응답 대기·분기·변수 등 지원하지 않는 기능은 임의 필드로 만들지 마세요. Name은 기존 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. _manual은 유지하고, JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 양식의 Steps는 빈 배열이므로 요청에 맞는 실제 명령을 채워 주세요.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>AI로 시퀀스 만들기…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>닫기</value></data>
+  <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>명령 히스토리 검색...</value></data>
+  <data name="CommandHistorySearch.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>명령 히스토리 검색</value></data>
+  <data name="CommandHistoryNoResults.Text" xml:space="preserve"><value>일치하는 명령 히스토리가 없습니다.</value></data>
+  <data name="StaticUi247.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>명령 기록</value></data>
+  <data name="CommandSendButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>명령 전송</value></data>
+  <data name="CommandSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>명령 전송</value></data>
+  <data name="FollowLatestLogButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>최신 로그 따라가기</value></data>
+  <data name="FollowLatestLogOn" xml:space="preserve"><value>최신 로그 따라가기: 켜짐. 클릭하면 따라가기를 멈춥니다. 로그에서 Enter로도 전환할 수 있습니다.</value></data>
+  <data name="FollowLatestLogOff" xml:space="preserve"><value>최신 로그 따라가기: 꺼짐. 클릭하면 새 로그를 따라갑니다. 로그에서 Enter로도 전환할 수 있습니다.</value></data>
+  <data name="StaticUi012.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>수신·송신 모드</value></data>
+  <data name="StartLogSaving" xml:space="preserve"><value>Start Logging</value></data>
+  <data name="StopLogSaving" xml:space="preserve"><value>Stop Logging</value></data>
+  <data name="StartLogSavingHelp" xml:space="preserve"><value>현재 파일에 저장하지 않습니다. 클릭하면 새 로그부터 파일에 저장합니다. 수신과 화면 표시는 별도로 계속됩니다.</value></data>
+  <data name="StopLogSavingHelp" xml:space="preserve"><value>현재 파일 저장 상태: {0}. 클릭하면 저장을 중지합니다. 기존 파일은 유지됩니다.</value></data>
 </root>

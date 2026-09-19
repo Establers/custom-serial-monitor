@@ -8,6 +8,9 @@ public sealed class CommandViewModel : ViewModelBase
 {
     public const int DefaultMaxHistoryCount = 100;
 
+    private string _historySearchText = string.Empty;
+    private IReadOnlyList<CommandHistoryEntry> _filteredCommandHistory = Array.Empty<CommandHistoryEntry>();
+
     private string _currentCommandText = string.Empty;
     private int _historyCursor = -1;
     private string _historyDraft = string.Empty;
@@ -20,6 +23,34 @@ public sealed class CommandViewModel : ViewModelBase
     public ObservableCollection<TxCommand> SavedCommands { get; } = new();
 
     public ObservableCollection<CommandHistoryEntry> CommandHistory { get; } = new();
+
+    public string HistorySearchText
+    {
+        get => _historySearchText;
+        set
+        {
+            if (SetProperty(ref _historySearchText, value ?? string.Empty))
+            {
+                RefreshHistorySearch();
+            }
+        }
+    }
+
+    public IReadOnlyList<CommandHistoryEntry> FilteredCommandHistory => _filteredCommandHistory;
+
+    public Microsoft.UI.Xaml.Visibility HistoryEmptyVisibility => _filteredCommandHistory.Count == 0
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    private void RefreshHistorySearch()
+    {
+        var query = HistorySearchText.Trim();
+        _filteredCommandHistory = CommandHistory
+            .Where(entry => entry.CommandText.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        OnPropertyChanged(nameof(FilteredCommandHistory));
+        OnPropertyChanged(nameof(HistoryEmptyVisibility));
+    }
 
     public string CurrentCommandText
     {
@@ -59,20 +90,12 @@ public sealed class CommandViewModel : ViewModelBase
             var existing = CommandHistory.FirstOrDefault(
                 entry => string.Equals(entry.CommandText, normalized, StringComparison.Ordinal));
 
-            if (existing is not null)
-            {
-                CommandHistory.Remove(existing);
-                existing.Count = Math.Max(1, existing.Count) + 1;
-                existing.LastSentTime = timestamp;
-                CommandHistory.Insert(0, existing);
-            }
-            else
+            if (existing is null)
             {
                 CommandHistory.Insert(0, new CommandHistoryEntry
                 {
                     CommandText = normalized,
-                    LastSentTime = timestamp,
-                    Count = 1
+                    LastSentTime = timestamp
                 });
             }
 
@@ -184,6 +207,7 @@ public sealed class CommandViewModel : ViewModelBase
                          .Select(CloneHistoryEntry)
                          .Where(entry => !string.IsNullOrWhiteSpace(entry.CommandText))
                          .OrderByDescending(entry => entry.LastSentTime)
+                         .DistinctBy(entry => entry.CommandText, StringComparer.Ordinal)
                          .Take(DefaultMaxHistoryCount))
             {
                 CommandHistory.Add(entry);
@@ -224,6 +248,7 @@ public sealed class CommandViewModel : ViewModelBase
 
     private void NotifyHistoryPropertiesChanged()
     {
+        RefreshHistorySearch();
         OnPropertyChanged(nameof(CommandHistoryCount));
         OnPropertyChanged(nameof(LastHistoryCommand));
         OnPropertyChanged(nameof(LastHistoryUpdateTimeText));
@@ -235,8 +260,7 @@ public sealed class CommandViewModel : ViewModelBase
         return new CommandHistoryEntry
         {
             CommandText = NormalizeCommandText(entry.CommandText),
-            LastSentTime = entry.LastSentTime == default ? DateTimeOffset.Now : entry.LastSentTime,
-            Count = Math.Max(1, entry.Count)
+            LastSentTime = entry.LastSentTime == default ? DateTimeOffset.Now : entry.LastSentTime
         };
     }
 

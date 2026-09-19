@@ -48,6 +48,7 @@
                     <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="#FFFF9FA5" />
                     <SolidColorBrush x:Key="HelpWarningTextBrush" Color="#FFFFD1D4" />
                     <SolidColorBrush x:Key="HelpAccentBrush" Color="#FF5B8DEF" />
+                    <SolidColorBrush x:Key="LoggingStartActionBrush" Color="#FF5B8DEF" />
                     <SolidColorBrush x:Key="HelpTitleBrush" Color="#FF8EB8FF" />
                     <SolidColorBrush x:Key="HelpBodyTextBrush" Color="#FFD7DCE3" />
                 </ResourceDictionary>
@@ -91,6 +92,7 @@
                     <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="#FFA4261D" />
                     <SolidColorBrush x:Key="HelpWarningTextBrush" Color="#FF5F1712" />
                     <SolidColorBrush x:Key="HelpAccentBrush" Color="#FF0067C0" />
+                    <SolidColorBrush x:Key="LoggingStartActionBrush" Color="#FF0067C0" />
                     <SolidColorBrush x:Key="HelpTitleBrush" Color="#FF005A9E" />
                     <SolidColorBrush x:Key="HelpBodyTextBrush" Color="#FF303030" />
                 </ResourceDictionary>
@@ -134,6 +136,7 @@
                     <SolidColorBrush x:Key="HelpWarningTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="HelpWarningTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="HelpAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="LoggingStartActionBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="HelpTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="HelpBodyTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>

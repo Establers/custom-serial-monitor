@@ -1093,10 +1093,6 @@ public sealed class ProfileService : IProfileService
                 entry.LastSentTime = DateTimeOffset.Now;
             }
 
-            if (entry.Count <= 0)
-            {
-                entry.Count = 1;
-            }
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);

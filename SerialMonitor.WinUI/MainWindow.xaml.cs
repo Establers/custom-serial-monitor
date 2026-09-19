@@ -490,8 +490,8 @@ public sealed partial class MainWindow : Window
         ApplySelectedTheme();
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
-        UpdateFileLoggingTextColor();
         UpdateSequenceStateVisuals();
+        UpdateFileLoggingActionColor();
         ApplyInspectorLayout();
         UpdateToolbarScrollButtons(ConnectionToolbarScrollViewer);
         UpdateToolbarScrollButtons(LogToolbarScrollViewer);
@@ -504,8 +504,8 @@ public sealed partial class MainWindow : Window
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
         ApplyWebViewColorScheme();
-        UpdateFileLoggingTextColor();
         UpdateSequenceStateVisuals();
+        UpdateFileLoggingActionColor();
     }
 
     private void ApplySelectedTheme()
@@ -2452,13 +2452,13 @@ public sealed partial class MainWindow : Window
         {
             ApplySelectedTheme();
         }
+        if (args.PropertyName == nameof(MainViewModel.FileLoggingEnabled))
+        {
+            UpdateFileLoggingActionColor();
+        }
         if (args.PropertyName == nameof(MainViewModel.IsSequenceRunning))
         {
             UpdateSequenceStateVisuals();
-        }
-        if (args.PropertyName == nameof(MainViewModel.FileLoggingEnabled))
-        {
-            UpdateFileLoggingTextColor();
         }
 
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
@@ -2554,22 +2554,26 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void UpdateFileLoggingTextColor()
+    private void UpdateFileLoggingActionColor()
     {
         if (!DispatcherQueue.HasThreadAccess)
         {
-            DispatcherQueue.TryEnqueue(UpdateFileLoggingTextColor);
+            DispatcherQueue.TryEnqueue(UpdateFileLoggingActionColor);
             return;
         }
 
+        // Color describes the button's action: start (accent), stop (red).
         var brushKey = _viewModel.FileLoggingEnabled
-            ? "FileLoggingEnabledTextBrush"
-            : "FileLoggingDisabledTextBrush";
-        if (Application.Current.Resources.TryGetValue(brushKey, out var resource) &&
-            resource is Brush brush)
+            ? "ErrorTextBrush"
+            : "LoggingStartActionBrush";
+        if (Root.Resources.TryGetValue(brushKey, out var resource) ||
+            Application.Current.Resources.TryGetValue(brushKey, out resource))
         {
-            FileLoggingToggleTextBlock.Foreground = brush;
-            FileLoggingSettingsToggleTextBlock.Foreground = brush;
+            if (resource is Brush brush)
+            {
+                FileLoggingToggleTextBlock.Foreground = brush;
+                FileLoggingSettingsToggleTextBlock.Foreground = brush;
+            }
         }
     }
 
@@ -4602,10 +4606,7 @@ public sealed partial class MainWindow : Window
 
     private void CommandHistoryFlyout_Opening(object sender, object args)
     {
-        CommandHistoryEmptyText.Visibility = _viewModel.Commands.CommandHistory.Count == 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        if (_viewModel.Commands.CommandHistory.Count > 0 && CommandHistoryListView.SelectedItem is null)
+        if (_viewModel.Commands.FilteredCommandHistory.Count > 0 && CommandHistoryListView.SelectedItem is null)
         {
             CommandHistoryListView.SelectedIndex = 0;
         }
@@ -4631,18 +4632,6 @@ public sealed partial class MainWindow : Window
             args.Handled = true;
             await SendSelectedHistoryCommandAsync();
         }
-    }
-
-    private async void SendSelectedHistoryCommand_Click(object sender, RoutedEventArgs args)
-    {
-        await SendSelectedHistoryCommandAsync();
-    }
-
-    private void ClearCommandHistory_Click(object sender, RoutedEventArgs args)
-    {
-        _viewModel.ClearCommandHistory();
-        CommandHistoryListView.SelectedItem = null;
-        CommandHistoryEmptyText.Visibility = Visibility.Visible;
     }
 
     private void SelectHistoryCommand(CommandHistoryEntry entry)

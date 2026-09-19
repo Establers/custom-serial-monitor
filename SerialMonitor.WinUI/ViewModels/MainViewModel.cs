@@ -2276,15 +2276,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         !string.IsNullOrWhiteSpace(_fileLogWriter.CurrentLogFilePath), !string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError),
         IsLogRenderingPaused && !FileLoggingWhileViewPaused);
 
-    public string FileLoggingToggleText => $"LOG {FileLoggingStatus}";
+    public string FileLoggingToggleText => FileLoggingEnabled
+        ? UiText.Get("StopLogSaving", "Stop Logging")
+        : UiText.Get("StartLogSaving", "Start Logging");
 
     public string FileLoggingMainStatusText => $"Log Save: {FileLoggingStatus}";
 
     public string FileLoggingToolTip => !string.IsNullOrWhiteSpace(_fileLogWriter.LastFileError)
-        ? $"{_fileLogWriter.LastFileError} | Flushed: {_fileLogWriter.DurableLineCount:N0}; pending: {_fileLogWriter.PendingRequestCount:N0}; rejected: {_fileLogWriter.DroppedLineCount:N0}; unsaved: {_fileLogWriter.AbandonedLineCount:N0}; uncertain/replayed: {_fileLogWriter.UncertainLineCount:N0}. Toggle OFF then ON to restart saving."
+        ? $"{_fileLogWriter.LastFileError} | Flushed: {_fileLogWriter.DurableLineCount:N0}; pending: {_fileLogWriter.PendingRequestCount:N0}; rejected: {_fileLogWriter.DroppedLineCount:N0}; unsaved: {_fileLogWriter.AbandonedLineCount:N0}; uncertain/replayed: {_fileLogWriter.UncertainLineCount:N0}. Stop logging, then start logging again to retry saving."
         : FileLoggingEnabled
-        ? "Log Save ON writes the serial stream to a text log. Click to stop saving; existing files are not deleted."
-        : "Log Save OFF keeps the terminal and event detection live without writing serial log files. Click to start saving.";
+        ? UiText.Format("StopLogSavingHelp", "File logging status: {0}. Click to stop saving; existing files are kept.", FileLoggingStatus)
+        : UiText.Get("StartLogSavingHelp", "Not saving to a file. Click to start saving new serial logs; receiving and display continue independently.");
 
     public bool FileLoggingWhileViewPaused
     {
@@ -2682,6 +2684,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool IsEventAutoScrollSuppressedByXtermBackpressure =>
         IsXtermAppendBackpressureActive && IsEventAutoScrollEnabled;
 
+    public string AutoScrollToolTip => IsAutoScrollEnabled
+        ? UiText.Get("FollowLatestLogOn", "Follow latest logs: on. Click to stop following. Enter in the log also toggles this.")
+        : UiText.Get("FollowLatestLogOff", "Follow latest logs: off. Click to follow new logs. Enter in the log also toggles this.");
+
     public bool IsAutoScrollEnabled
     {
         get => _isAutoScrollEnabled;
@@ -2690,6 +2696,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _isAutoScrollEnabled, value))
             {
                 _currentUiSettings.AutoScrollEnabled = value;
+                OnPropertyChanged(nameof(AutoScrollToolTip));
                 OnPropertyChanged(nameof(IsEffectiveXtermAutoScrollEnabled));
                 RecordSettingsChange("xterm auto-scroll", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
                 RecordAutoScrollAction(value ? "Auto Scroll enabled" : "Auto Scroll disabled", null);
@@ -12144,6 +12151,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         NotifyCommandEditorStateChanged();
         NotifyCommandSequenceStateChanged();
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
+        OnPropertyChanged(nameof(AutoScrollToolTip));
         NotifyCommandStates();
 
         if (!IsConnected)
@@ -12263,6 +12271,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ConfirmBeforeDisconnect));
         NotifyAutoReconnectPropertiesChanged();
         OnPropertyChanged(nameof(IsAutoScrollEnabled));
+        OnPropertyChanged(nameof(AutoScrollToolTip));
         OnPropertyChanged(nameof(ShowTimestampInLogView));
         OnPropertyChanged(nameof(ShowRxTxDirectionPrefixInLogView));
         OnPropertyChanged(nameof(SelectedTimestampDisplayFormatOption));

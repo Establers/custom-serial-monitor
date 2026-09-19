@@ -27,55 +27,97 @@
             <ControlTemplate x:Key="CompactCheckBoxTemplate"
                              TargetType="CheckBox">
                 <Grid x:Name="CheckRoot"
+                      Control.IsTemplateFocusTarget="True"
                       Height="{TemplateBinding Height}"
                       MinHeight="{TemplateBinding MinHeight}"
                       Background="Transparent">
                     <VisualStateManager.VisualStateGroups>
-                        <VisualStateGroup x:Name="CommonStates">
-                            <VisualState x:Name="Normal" />
-                            <VisualState x:Name="PointerOver">
+                        <VisualStateGroup x:Name="CombinedStates">
+                            <VisualState x:Name="UncheckedNormal">
+                            </VisualState>
+                            <VisualState x:Name="UncheckedPointerOver">
                                 <VisualState.Setters>
-                                    <Setter Target="CheckBorder.BorderBrush"
-                                            Value="{ThemeResource CompactCheckBoxPointerOverBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource CompactCheckBoxPointerOverBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
-                            <VisualState x:Name="Pressed">
+                            <VisualState x:Name="UncheckedPressed">
                                 <VisualState.Setters>
-                                    <Setter Target="CheckBorder.Background"
-                                            Value="{ThemeResource CompactCheckBoxPressedBrush}" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.8" />
                                 </VisualState.Setters>
                             </VisualState>
-                            <VisualState x:Name="Disabled">
+                            <VisualState x:Name="UncheckedDisabled">
                                 <VisualState.Setters>
-                                    <Setter Target="CheckRoot.Opacity"
-                                            Value="0.45" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.45" />
                                 </VisualState.Setters>
                             </VisualState>
-                        </VisualStateGroup>
-                        <VisualStateGroup x:Name="CheckStates">
-                            <VisualState x:Name="Unchecked" />
-                            <VisualState x:Name="Checked">
+                            <VisualState x:Name="CheckedNormal">
                                 <VisualState.Setters>
-                                    <Setter Target="CheckBorder.Background"
-                                            Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                    <Setter Target="CheckBorder.BorderBrush"
-                                            Value="{ThemeResource AccentFillColorSecondaryBrush}" />
-                                    <Setter Target="CheckGlyph.Text"
-                                            Value="✓" />
-                                    <Setter Target="CheckGlyph.Opacity"
-                                            Value="1" />
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="✓" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
                                 </VisualState.Setters>
                             </VisualState>
-                            <VisualState x:Name="Indeterminate">
+                            <VisualState x:Name="CheckedPointerOver">
                                 <VisualState.Setters>
-                                    <Setter Target="CheckBorder.Background"
-                                            Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                    <Setter Target="CheckBorder.BorderBrush"
-                                            Value="{ThemeResource AccentFillColorSecondaryBrush}" />
-                                    <Setter Target="CheckGlyph.Text"
-                                            Value="-" />
-                                    <Setter Target="CheckGlyph.Opacity"
-                                            Value="1" />
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="✓" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource CompactCheckBoxPointerOverBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedPressed">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="✓" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.8" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedDisabled">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="✓" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.45" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="IndeterminateNormal">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="−" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="IndeterminatePointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="−" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource CompactCheckBoxPointerOverBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="IndeterminatePressed">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="−" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.8" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="IndeterminateDisabled">
+                                <VisualState.Setters>
+                                    <Setter Target="CheckBorder.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="CheckBorder.BorderBrush" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="CheckGlyph.Text" Value="−" />
+                                    <Setter Target="CheckGlyph.Opacity" Value="1" />
+                                    <Setter Target="CheckRoot.Opacity" Value="0.45" />
                                 </VisualState.Setters>
                             </VisualState>
                         </VisualStateGroup>
@@ -390,15 +432,15 @@
             <Style x:Key="ToolbarIconButtonStyle"
                    TargetType="Button">
                 <Setter Property="Height"
-                        Value="22" />
+                        Value="24" />
                 <Setter Property="MinWidth"
-                        Value="22" />
+                        Value="24" />
                 <Setter Property="MinHeight"
-                        Value="22" />
+                        Value="24" />
                 <Setter Property="Padding"
-                        Value="2,0" />
+                        Value="4,0" />
                 <Setter Property="FontSize"
-                        Value="11" />
+                        Value="12" />
                 <Setter Property="CornerRadius"
                         Value="4" />
                 <Setter Property="Background"
@@ -420,84 +462,109 @@
                 <Setter Property="VerticalContentAlignment"
                         Value="Center" />
             </Style>
-            <ControlTemplate x:Key="NavigationIconButtonTemplate"
-                             TargetType="Button">
-                <Grid x:Name="ButtonRoot"
-                      Background="{TemplateBinding Background}"
-                      CornerRadius="{TemplateBinding CornerRadius}">
+            <ControlTemplate x:Key="SearchOptionToggleTemplate"
+                             TargetType="ToggleButton">
+                <ContentPresenter x:Name="ButtonContentPresenter"
+                                  Background="{TemplateBinding Background}"
+                                  BackgroundSizing="{TemplateBinding BackgroundSizing}"
+                                  BorderBrush="{TemplateBinding BorderBrush}"
+                                  BorderThickness="{TemplateBinding BorderThickness}"
+                                  CornerRadius="{TemplateBinding CornerRadius}"
+                                  Padding="{TemplateBinding Padding}"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  ContentTransitions="{TemplateBinding ContentTransitions}"
+                                  FontFamily="{TemplateBinding FontFamily}"
+                                  FontSize="{TemplateBinding FontSize}"
+                                  FontWeight="{TemplateBinding FontWeight}"
+                                  Foreground="{TemplateBinding Foreground}"
+                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  Control.IsTemplateFocusTarget="True">
                     <VisualStateManager.VisualStateGroups>
                         <VisualStateGroup x:Name="CommonStates">
                             <VisualState x:Name="Normal" />
                             <VisualState x:Name="PointerOver">
                                 <VisualState.Setters>
-                                    <Setter Target="ButtonRoot.Background"
-                                            Value="{ThemeResource NavigationButtonPointerOverBrush}" />
-                                    <Setter Target="NavigationContentPresenter.Foreground"
-                                            Value="{ThemeResource NavigationButtonInteractionForegroundBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundPointerOver}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundPointerOver}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Pressed">
                                 <VisualState.Setters>
-                                    <Setter Target="ButtonRoot.Background"
-                                            Value="{ThemeResource NavigationButtonPressedBrush}" />
-                                    <Setter Target="NavigationContentPresenter.Foreground"
-                                            Value="{ThemeResource NavigationButtonInteractionForegroundBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundPressed}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource ButtonBorderBrushPressed}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundPressed}" />
                                 </VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Disabled">
                                 <VisualState.Setters>
-                                    <Setter Target="ButtonRoot.Background"
-                                            Value="{ThemeResource NavigationButtonDisabledBrush}" />
-                                    <Setter Target="NavigationContentPresenter.Foreground"
-                                            Value="{ThemeResource NavigationButtonDisabledForegroundBrush}" />
-                                    <Setter Target="ButtonRoot.Opacity"
-                                            Value="0.45" />
+                                    <Setter Target="ButtonContentPresenter.Background"
+                                            Value="{ThemeResource ButtonBackgroundDisabled}" />
+                                    <Setter Target="ButtonContentPresenter.BorderBrush"
+                                            Value="{ThemeResource CompactButtonBorderBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground"
+                                            Value="{ThemeResource ButtonForegroundDisabled}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedPointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedPressed">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background" Value="{ThemeResource AccentFillColorTertiaryBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="CheckedDisabled">
+                                <VisualState.Setters>
+                                    <Setter Target="ButtonContentPresenter.Background" Value="{ThemeResource AccentFillColorDisabledBrush}" />
+                                    <Setter Target="ButtonContentPresenter.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                                 </VisualState.Setters>
                             </VisualState>
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
-
-                    <ContentPresenter x:Name="NavigationContentPresenter"
-                                      Content="{TemplateBinding Content}"
-                                      ContentTemplate="{TemplateBinding ContentTemplate}"
-                                      Foreground="{TemplateBinding Foreground}"
-                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                </Grid>
+                </ContentPresenter>
             </ControlTemplate>
+            <Style x:Key="SearchOptionToggleStyle" TargetType="ToggleButton">
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="MinWidth" Value="24" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="Background" Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseLayoutRounding" Value="True" />
+                <Setter Property="Template" Value="{StaticResource SearchOptionToggleTemplate}" />
+            </Style>
             <Style x:Key="NavigationIconButtonStyle"
                    TargetType="Button"
                    BasedOn="{StaticResource ToolbarIconButtonStyle}">
-                <Setter Property="Width"
-                        Value="24" />
-                <Setter Property="Height"
-                        Value="24" />
-                <Setter Property="MinWidth"
-                        Value="24" />
-                <Setter Property="MinHeight"
-                        Value="24" />
-                <Setter Property="Padding"
-                        Value="0" />
-                <Setter Property="UseLayoutRounding"
-                        Value="True" />
-                <Setter Property="CornerRadius"
-                        Value="12" />
-                <Setter Property="Background"
-                        Value="{ThemeResource NavigationButtonBrush}" />
-                <Setter Property="Foreground"
-                        Value="{ThemeResource NavigationButtonForegroundBrush}" />
-                <Setter Property="BorderBrush"
-                        Value="Transparent" />
-                <Setter Property="BorderThickness"
-                        Value="0" />
-                <Setter Property="Template"
-                        Value="{StaticResource NavigationIconButtonTemplate}" />
-                <Setter Property="UseSystemFocusVisuals"
-                        Value="True" />
-                <Setter Property="HorizontalContentAlignment"
-                        Value="Center" />
-                <Setter Property="VerticalContentAlignment"
-                        Value="Center" />
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Padding" Value="0" />
             </Style>
             <ControlTemplate x:Key="CompactTextBoxTemplate"
                              TargetType="TextBox">
@@ -1053,12 +1120,11 @@
                         Height="24"
                         MinHeight="24"
                         Command="{Binding ToggleFileLoggingCommand}"
+                        AutomationProperties.Name="{Binding FileLoggingToggleText}"
                         Style="{StaticResource RuleActionButtonStyle}"
                         ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
                     <TextBlock x:Name="FileLoggingToggleTextBlock"
-                               Text="{Binding FileLoggingToggleText}"
-                               FontWeight="Bold"
-                               Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
+                               Text="{Binding FileLoggingToggleText}" />
                 </Button>
 
                 <Grid Grid.Column="6"
@@ -1142,17 +1208,22 @@
                   RowDefinitions="Auto,*">
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto"
                           ColumnSpacing="4">
                     <StackPanel Grid.Column="0"
                                 Orientation="Horizontal"
                                 Spacing="2"
                                 VerticalAlignment="Center">
-                        <CheckBox x:Uid="StaticUi015"
-                                  Content="Auto"
-                                  IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
-                                  ToolTipService.ToolTip="Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends." />
+                        <ToggleButton x:Uid="FollowLatestLogButton" x:Name="FollowLatestLogButton"
+                                      Width="24" Height="24" MinWidth="24" MinHeight="24"
+                                      Padding="0" CornerRadius="4"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                                      AutomationProperties.Name="Follow latest logs"
+                                      ToolTipService.ToolTip="{Binding AutoScrollToolTip}">
+                            <PathIcon Width="16" Height="16"
+                                      Data="M 0,0 L 8,0 8,1.5 0,1.5 Z M 0,4 L 8,4 8,5.5 0,5.5 Z M 0,8 L 5,8 5,9.5 0,9.5 Z M 11,2 L 12.5,2 12.5,12 15,9.5 16,10.5 11.75,14.75 7.5,10.5 8.5,9.5 11,12 Z" />
+                        </ToggleButton>
                         <Button Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ToggleLogRenderingPauseCommand}"
                                 ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
@@ -1191,9 +1262,9 @@
                                   ViewChanged="HorizontalToolbarScrollViewer_ViewChanged"
                                   SizeChanged="HorizontalToolbarScrollViewer_SizeChanged">
                     <Grid Width="{Binding ViewportWidth, ElementName=LogToolbarScrollViewer}"
-                          MinWidth="1000"
+                          MinWidth="800"
                           ColumnSpacing="4"
-                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,Auto,96">
+                          ColumnDefinitions="350,Auto,Auto,Auto,Auto,Auto,Auto,Auto,96,*">
                         <Grid Grid.Column="0" ColumnDefinitions="*,Auto" ColumnSpacing="4">
                             <TextBox x:Uid="StaticUi007" x:Name="SearchTextBox"
                                      Grid.Column="0"
@@ -1235,43 +1306,36 @@
                                       UseLayoutRounding="False"
                                       Glyph="&#xE76C;" />
                         </Button>
-                        <CheckBox Grid.Column="3"
+                        <ToggleButton Grid.Column="3"
                                   Content="Aa"
+                                  AutomationProperties.Name="대소문자 구분"
                                   IsChecked="{Binding IsSearchCaseSensitive, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
-                                  ToolTipService.ToolTip="대/소문자 구분 (검색창에서 Alt+C)" />
-                        <CheckBox Grid.Column="4"
+                                  Style="{StaticResource SearchOptionToggleStyle}"
+                                  ToolTipService.ToolTip="대소문자 구분 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+C)" />
+                        <ToggleButton Grid.Column="4"
                                   Content="|ab|"
+                                  AutomationProperties.Name="단어 전체 일치"
                                   IsChecked="{Binding IsSearchWholeWord, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
-                                  ToolTipService.ToolTip="단어 전체 일치 (검색창에서 Alt+W)" />
-                        <CheckBox Grid.Column="5"
+                                  Style="{StaticResource SearchOptionToggleStyle}"
+                                  ToolTipService.ToolTip="단어 전체 일치 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+W)" />
+                        <ToggleButton Grid.Column="5"
                                   Content=".*"
+                                  AutomationProperties.Name="정규식"
                                   IsChecked="{Binding IsSearchRegularExpression, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
-                                  ToolTipService.ToolTip="정규식 사용 (검색창에서 Alt+R)" />
+                                  Style="{StaticResource SearchOptionToggleStyle}"
+                                  ToolTipService.ToolTip="정규식 사용 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+R)" />
                         <TextBlock Grid.Column="6"
                                    Text="{Binding SearchSummaryText}"
                                    FontWeight="SemiBold"
                                    FontSize="12"
                                    VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="7"
-                                   Text="Mode"
-                                   Style="{StaticResource CompactLabelTextStyle}" />
-                        <ComboBox x:Uid="StaticUi012" Grid.Column="8"
-                                  ItemsSource="{Binding RxDisplayModes}"
-                                  SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
-                                  ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                                  Style="{StaticResource CompactComboBoxStyle}"
-                                  Width="96"
-                                  ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                         <TextBlock x:Uid="VisibleFilterLabel"
-                                   Grid.Column="9"
+                                   Grid.Column="7"
                                    Text="Filter"
                                    Style="{StaticResource CompactLabelTextStyle}" />
                         <Button x:Uid="VisibleFilterButton"
                                 x:Name="VisibleLogFilterButton"
-                                Grid.Column="10"
+                                Grid.Column="8"
                                 Style="{StaticResource ToolbarIconButtonStyle}"
                                 Width="96"
                                 HorizontalContentAlignment="Stretch"
@@ -1363,6 +1427,15 @@
                                   UseLayoutRounding="False"
                                   Glyph="&#xE76C;" />
                     </Button>
+                    <ComboBox x:Uid="StaticUi012" Grid.Column="4"
+                              Margin="8,0,0,0"
+                              AutomationProperties.Name="RX/TX mode"
+                              ItemsSource="{Binding RxDisplayModes}"
+                              SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                              ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                              Style="{StaticResource CompactComboBoxStyle}"
+                              Width="96"
+                              ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                     </Grid>
                 </Border>
 
@@ -2414,13 +2487,12 @@
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <Button Grid.Column="1"
                                                     Command="{Binding ToggleFileLoggingCommand}"
+                                                    AutomationProperties.Name="{Binding FileLoggingToggleText}"
                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                     HorizontalAlignment="Left"
                                                     ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
                                                 <TextBlock x:Name="FileLoggingSettingsToggleTextBlock"
-                                                           Text="{Binding FileLoggingToggleText}"
-                                                           FontWeight="Bold"
-                                                           Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
+                                                           Text="{Binding FileLoggingToggleText}" />
                                             </Button>
                                             <TextBlock x:Uid="StaticUi104" Grid.Column="2"
                                                        Text="Now"
@@ -2497,13 +2569,13 @@
                                             <TextBlock Text="Rotation"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
                                             <TextBlock x:Uid="StaticUi116" Grid.Column="1"
-                                                       Text="New file per LOG ON; no date-based split"
+                                                       Text="New file each time saving starts; no date-based split"
                                                        Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until LOG OFF unless optional size rotation is enabled." />
+                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled." />
                                             <TextBlock x:Uid="StaticUi117" Grid.Column="2"
                                                        Text="Always"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Every LOG ON creates a new file instead of appending to an earlier run." />
+                                                       ToolTipService.ToolTip="Starting log saving creates a new file instead of appending to an earlier run." />
                                         </Grid>
                                         <Grid ColumnDefinitions="86,*,58"
                                               ColumnSpacing="4">
@@ -3432,70 +3504,88 @@
                           IsEnabled="{Binding IsTxLineEndingEffective}"
                           ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
                           MinWidth="78" />
-                <Button Grid.Column="4"
-                        Content="Send"
-                        Command="{Binding SendCommand}" />
+                <Button x:Uid="CommandSendButton" Grid.Column="4"
+                        Style="{StaticResource ToolbarIconButtonStyle}"
+                        AutomationProperties.Name="Send command"
+                        ToolTipService.ToolTip="Send command"
+                        Command="{Binding SendCommand}">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="14"
+                              Glyph="&#xE724;" />
+                </Button>
                 <Button x:Uid="StaticUi247" Grid.Column="5"
-                        Content="Hist"
-                        ToolTipService.ToolTip="Show recently sent TX commands">
+                        Style="{StaticResource ToolbarIconButtonStyle}"
+                        AutomationProperties.Name="Command history"
+                        ToolTipService.ToolTip="Command history">
+                    <Button.Content>
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="14"
+                                  Glyph="&#xE81C;" />
+                    </Button.Content>
                     <Button.Flyout>
                         <Flyout x:Name="CommandHistoryFlyout"
                                 Opening="CommandHistoryFlyout_Opening"
+                                AreOpenCloseAnimationsEnabled="False"
                                 Placement="TopEdgeAlignedRight">
-                            <StackPanel Spacing="4"
-                                        MinWidth="340"
-                                        MaxWidth="420">
-                                <Grid ColumnDefinitions="*,Auto,Auto"
-                                      ColumnSpacing="4">
-                                    <TextBlock Text="History"
-                                               Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                    <Button x:Uid="StaticUi249" Grid.Column="1"
-                                            Content="Send"
-                                            IsEnabled="{Binding CanSendManualTx}"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="SendSelectedHistoryCommand_Click"
-                                            ToolTipService.ToolTip="Send selected history command" />
-                                    <Button x:Uid="StaticUi250" Grid.Column="2"
-                                            Content="Clear"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="ClearCommandHistory_Click"
-                                            ToolTipService.ToolTip="Clear command history" />
+                            <StackPanel Spacing="4" Width="340">
+                                <TextBox x:Uid="CommandHistorySearch"
+                                         Style="{StaticResource CompactTextBoxStyle}"
+                                         Text="{Binding Commands.HistorySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         PlaceholderText="Search command history..."
+                                         AutomationProperties.Name="Search command history" />
+                                <Grid Height="120">
+                                    <ListView x:Name="CommandHistoryListView"
+                                              ItemsSource="{Binding Commands.FilteredCommandHistory}"
+                                              SelectionMode="Single"
+                                              IsItemClickEnabled="True"
+                                              ItemClick="CommandHistoryListView_ItemClick"
+                                              DoubleTapped="CommandHistoryListView_DoubleTapped"
+                                              KeyDown="CommandHistoryListView_KeyDown"
+                                              Padding="0"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                              Height="120">
+                                        <ListView.ItemContainerTransitions>
+                                            <TransitionCollection />
+                                        </ListView.ItemContainerTransitions>
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem"
+                                                   BasedOn="{StaticResource CompactListViewItemStyle}">
+                                                <Setter Property="Height" Value="24" />
+                                                <Setter Property="Margin" Value="0" />
+                                                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid ColumnDefinitions="*,58"
+                                                      ColumnSpacing="4"
+                                                      Margin="0,0,20,0"
+                                                      MinHeight="24">
+                                                    <TextBlock Text="{Binding CommandText}"
+                                                               FontFamily="Consolas"
+                                                               Style="{StaticResource CompactCellTextStyle}">
+                                                        <ToolTipService.ToolTip>
+                                                            <ToolTip MaxWidth="600">
+                                                                <TextBlock Text="{Binding CommandText}"
+                                                                           TextWrapping="Wrap"
+                                                                           FontFamily="Consolas" />
+                                                            </ToolTip>
+                                                        </ToolTipService.ToolTip>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding LastSentTimeText}"
+                                                               Style="{StaticResource CompactCellTextStyle}"
+                                                               HorizontalAlignment="Right" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                    <TextBlock x:Uid="CommandHistoryNoResults"
+                                               Visibility="{Binding Commands.HistoryEmptyVisibility}"
+                                               Text="No matching command history."
+                                               Style="{StaticResource CompactCellTextStyle}" />
                                 </Grid>
-                                <TextBlock x:Uid="StaticUi251" x:Name="CommandHistoryEmptyText"
-                                           Text="No command history."
-                                           Style="{StaticResource CompactCellTextStyle}" />
-                                <ListView x:Name="CommandHistoryListView"
-                                          ItemsSource="{Binding Commands.CommandHistory}"
-                                          SelectionMode="Single"
-                                          IsItemClickEnabled="True"
-                                          ItemClick="CommandHistoryListView_ItemClick"
-                                          DoubleTapped="CommandHistoryListView_DoubleTapped"
-                                          KeyDown="CommandHistoryListView_KeyDown"
-                                          MaxHeight="240">
-                                    <ListView.ItemContainerStyle>
-                                        <Style TargetType="ListViewItem"
-                                               BasedOn="{StaticResource CompactListViewItemStyle}" />
-                                    </ListView.ItemContainerStyle>
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid ColumnDefinitions="*,42,58"
-                                                  ColumnSpacing="4"
-                                                  MinHeight="24">
-                                                <TextBlock Text="{Binding CommandText}"
-                                                           FontFamily="Consolas"
-                                                           Style="{StaticResource CompactCellTextStyle}" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding CountText}"
-                                                           Style="{StaticResource CompactCellTextStyle}"
-                                                           HorizontalAlignment="Right" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding LastSentTimeText}"
-                                                           Style="{StaticResource CompactCellTextStyle}"
-                                                           HorizontalAlignment="Right" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
