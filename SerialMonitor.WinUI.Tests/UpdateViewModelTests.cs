@@ -172,7 +172,7 @@ public sealed class UpdateViewModelTests
     public async Task PendingResultSave_KeepsCheckBusyUntilStorageFinishes()
     {
         var service = new FakeService { CheckGate = new(TaskCreationOptions.RunContinuationsAsynchronously) };
-        using var model = new UpdateViewModel(service);
+        using var model = new UpdateViewModel(service, new Version(1, 3, 8));
         var pending = model.CheckAsync(true);
         service.SaveGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         service.CheckGate.SetResult();
