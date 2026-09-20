@@ -154,9 +154,17 @@ public sealed partial class MainWindow : Window
 
     private bool IsClosingOrClosed => _closeCleanupStarted || _closeAllowed;
 
+    private readonly SerialMonitor.WinUI.ViewModels.UpdateViewModel _updates = UpdatePreview.CreateViewModel();
+
     public MainWindow()
     {
         InitializeComponent();
+        UpdateAboutPanel.DataContext = _updates;
+        UpdateStatusButton.DataContext = _updates;
+#if DEBUG
+        if (Environment.GetCommandLineArgs().Any(a => a.StartsWith("--update-preview=", StringComparison.Ordinal)))
+            Title = "Serial Monitor — Update preview";
+#endif
         _xtermSearchOperation = new LatestRequestAsyncOperation<XtermSearchRequest>(
             SearchXtermAsync,
             _xtermSearchCancellation.Token);
@@ -329,6 +337,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _updates.Dispose();
         _logRestoreProgressTimer?.Stop();
         _logRestoreProgress = null;
         _xtermSearchCancellation.Cancel();
@@ -486,6 +495,7 @@ public sealed partial class MainWindow : Window
 
     private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
+        _ = _updates.InitializeAsync();
         await _viewModel.InitializeAsync();
         ApplySelectedTheme();
         ApplyTitleBarTheme();
@@ -4259,6 +4269,13 @@ public sealed partial class MainWindow : Window
         {
             _viewModel.RecordInspectorTabLayoutError($"Inspector tab layout failed: {ex.Message}");
         }
+    }
+
+    private void UpdateStatusButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (_isInspectorCollapsed) ToggleInspectorCollapsed();
+        InspectorTabView.SelectedItem = AboutTabViewItem;
+        UpdateCheckButton.Focus(FocusState.Programmatic);
     }
 
     private void FooterCopyStatusMenuItem_Click(object sender, RoutedEventArgs args)

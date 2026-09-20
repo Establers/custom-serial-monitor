@@ -28,7 +28,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.WinUI\SerialMonitor.WinUI.csproj" />
+    <ProjectReference Include="..\SerialMonitor.UpdateTestWorker\SerialMonitor.UpdateTestWorker.csproj"
+                      ReferenceOutputAssembly="false" SetPlatform="Platform=AnyCPU" />
   </ItemGroup>
+
+  <Target Name="CopyUpdateTestWorker" AfterTargets="Build">
+    <MSBuild Projects="..\SerialMonitor.UpdateTestWorker\SerialMonitor.UpdateTestWorker.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=AnyCPU">
+      <Output TaskParameter="TargetOutputs" ItemName="UpdateWorkerAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <UpdateWorkerFiles Include="@(UpdateWorkerAssembly);@(UpdateWorkerAssembly->'%(RootDir)%(Directory)%(Filename).deps.json');@(UpdateWorkerAssembly->'%(RootDir)%(Directory)%(Filename).runtimeconfig.json')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(UpdateWorkerFiles)" DestinationFolder="$(OutDir)UpdateTestWorker" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <Using Include="Xunit" />

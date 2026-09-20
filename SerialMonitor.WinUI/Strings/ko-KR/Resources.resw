@@ -876,4 +876,25 @@
   <data name="StopLogSaving" xml:space="preserve"><value>Stop Logging</value></data>
   <data name="StartLogSavingHelp" xml:space="preserve"><value>현재 파일에 저장하지 않습니다. 클릭하면 새 로그부터 파일에 저장합니다. 수신과 화면 표시는 별도로 계속됩니다.</value></data>
   <data name="StopLogSavingHelp" xml:space="preserve"><value>현재 파일 저장 상태: {0}. 클릭하면 저장을 중지합니다. 기존 파일은 유지됩니다.</value></data>
+  <data name="UpdateBadge" xml:space="preserve"><value>업데이트 {0}</value></data>
+  <data name="UpdateCheckingButton" xml:space="preserve"><value>확인 중…</value></data>
+  <data name="UpdateCheckButton" xml:space="preserve"><value>업데이트 확인</value></data>
+  <data name="UpdateChecking" xml:space="preserve"><value>새 버전을 확인하고 있습니다…</value></data>
+  <data name="UpdateFailed" xml:space="preserve"><value>업데이트를 확인하지 못했습니다. 인터넷 연결 후 다시 시도하세요.</value></data>
+  <data name="UpdateSkipped" xml:space="preserve"><value>{0} 사용 가능 · 자동 알림 건너뜀</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>새 버전 {0} 사용 가능</value></data>
+  <data name="UpdateCurrent" xml:space="preserve"><value>최신 버전입니다</value></data>
+  <data name="UpdateIdle" xml:space="preserve"><value>새 버전을 확인할 수 있습니다</value></data>
+  <data name="UpdateLastChecked" xml:space="preserve"><value>마지막 확인 {0}</value></data>
+  <data name="UpdateNotChecked" xml:space="preserve"><value>아직 확인하지 않음</value></data>
+  <data name="UpdateLoadFailed" xml:space="preserve"><value>설정을 읽지 못해 자동 확인을 껐습니다.</value></data>
+  <data name="UpdateSaveFailed" xml:space="preserve"><value>설정을 저장하지 못했습니다. 변경 사항은 이번 실행에만 적용됩니다.</value></data>
+  <data name="UpdateOpenFailed" xml:space="preserve"><value>브라우저를 열지 못했습니다. 아래 GitHub 링크에서 릴리스를 확인하세요.</value></data>
+  <data name="UpdateDownloadHint.Text" xml:space="preserve"><value>변경 사항과 다운로드를 브라우저에서 확인합니다.</value></data>
+  <data name="UpdateViewRelease.Content" xml:space="preserve"><value>업데이트 보기</value></data>
+  <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>업데이트 옵션</value></data>
+  <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>업데이트 옵션</value></data>
+  <data name="UpdateSkip.Text" xml:space="preserve"><value>이 버전 알림 건너뛰기</value></data>
+  <data name="UpdateAutomatic.Content" xml:space="preserve"><value>자동으로 업데이트 확인</value></data>
+  <data name="UpdateAutomatic.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시작 시 하루 최대 한 번 GitHub에서 확인합니다. 자동 설치나 재시작은 하지 않습니다.</value></data>
 </root>

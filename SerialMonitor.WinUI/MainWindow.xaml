@@ -3351,67 +3351,79 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem x:Uid="StaticUi236" Header="About"
+                    <TabViewItem x:Uid="StaticUi236" x:Name="AboutTabViewItem" Header="About"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="View the app version, author, and GitHub repository.">
-                        <ScrollViewer Padding="4"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="4">
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <Grid ColumnDefinitions="56,*"
-                                          ColumnSpacing="4">
-                                        <Image Width="48"
-                                               Height="48"
-                                               HorizontalAlignment="Left"
-                                               VerticalAlignment="Top"
-                                               Source="ms-appx:///Assets/AppIcon/SerialMonitor-64.png" />
-                                        <StackPanel Grid.Column="1"
-                                                    Spacing="4">
-                                            <TextBlock Text="Serial Monitor"
-                                                       FontSize="20"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock x:Uid="StaticUi238" Text="Windows serial monitor for embedded-device debugging"
-                                                       TextWrapping="NoWrap"
-                                                       ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
-                                            <TextBlock Text="{Binding AboutVersionText}"
-                                                       FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                 ToolTipService.ToolTip="View the app version, updates, and GitHub repository.">
+                        <ScrollViewer x:Name="AboutScrollViewer" HorizontalContentAlignment="Stretch"
+                                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                            <Grid x:Name="UpdateAboutPanel" HorizontalAlignment="Stretch"
+                                  Padding="8,6" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <Image Source="ms-appx:///Assets/AppIcon/SerialMonitor-64.png"
+                                           Width="32" Height="32" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock Text="Serial Monitor" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding InstalledVersion}" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Button x:Name="UpdateCheckButton" Grid.Column="2" Content="{Binding CheckButtonText}"
+                                            Command="{Binding CheckCommand}" Height="28" MinHeight="28" Padding="10,0"
+                                            FontSize="12" CornerRadius="4" BorderThickness="1"
+                                            Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                                </Grid>
+                                <Border Grid.Row="1" Background="{ThemeResource InspectorSectionBrush}"
+                                        BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10,7">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                            <FontIcon Glyph="{Binding StatusGlyph}" FontSize="14" Visibility="{Binding StatusGlyphVisibility}" />
+                                            <ProgressRing IsActive="{Binding IsChecking}" Visibility="{Binding ProgressVisibility}"
+                                                          Width="16" Height="16" MinWidth="16" MinHeight="16"
+                                                          Background="{ThemeResource InspectorSectionBrush}" />
+                                        </Grid>
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Status}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                       AutomationProperties.LiveSetting="Polite" />
+                                            <TextBlock x:Uid="UpdateDownloadHint" Text="Release notes and downloads open in your browser."
+                                                       FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       Visibility="{Binding ReleaseVisibility}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding PreferenceError}" Visibility="{Binding PreferenceErrorVisibility}"
+                                                       Foreground="{ThemeResource WarningTextBrush}" FontSize="11" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                                                    Visibility="{Binding ReleaseVisibility}">
+                                            <Button x:Uid="UpdateViewRelease" Content="View release" Command="{Binding OpenCommand}"
+                                                    Height="26" MinHeight="26" Padding="10,0" FontSize="12" CornerRadius="4"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                            <Button x:Uid="UpdateMore" Width="26" Height="26" MinHeight="26" Padding="0"
+                                                    AutomationProperties.Name="Update options" ToolTipService.ToolTip="Update options">
+                                                <FontIcon Glyph="&#xE712;" FontSize="12" />
+                                                <Button.Flyout>
+                                                    <MenuFlyout>
+                                                        <MenuFlyoutItem x:Uid="UpdateSkip" Text="Skip this version" Command="{Binding SkipCommand}" />
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <Grid ColumnDefinitions="80,*"
-                                          RowDefinitions="Auto,Auto"
-                                          ColumnSpacing="4"
-                                          RowSpacing="4">
-                                        <TextBlock Text="Author"
-                                                   Style="{StaticResource CompactCellTextStyle}"
-                                                   FontWeight="SemiBold" />
-                                        <TextBlock Grid.Column="1"
-                                                   Style="{StaticResource CompactCellTextStyle}"
-                                                   Text="박재환" />
-                                        <TextBlock Grid.Row="1"
-                                                   Text="GitHub"
-                                                   Style="{StaticResource CompactCellTextStyle}"
-                                                   FontWeight="SemiBold" />
-                                        <HyperlinkButton Grid.Row="1"
-                                                         Grid.Column="1"
-                                                         Padding="0"
-                                                         Height="24"
-                                                         MinHeight="24"
-                                                         FontSize="11"
-                                                         HorizontalAlignment="Left"
-                                                         Content="Establers/custom-serial-monitor"
-                                                         NavigateUri="https://github.com/Establers/custom-serial-monitor" />
-                                    </Grid>
-                                </Border>
-
-                            </StackPanel>
+                                <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="20">
+                                    <CheckBox x:Uid="UpdateAutomatic" Content="Check automatically"
+                                              IsEnabled="{Binding IsReady}" IsChecked="{Binding Automatic, Mode=TwoWay}"
+                                              FontSize="12" MinHeight="22" Height="22" Padding="0"
+                                              ToolTipService.ToolTip="Check GitHub on startup, at most once a day. No automatic installation or restart." />
+                                    <TextBlock Grid.Column="1" Text="{Binding LastCheckedText}" FontSize="11" VerticalAlignment="Center"
+                                               HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding LastCheckedText}" />
+                                </Grid>
+                                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="박재환" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="·" FontSize="11" VerticalAlignment="Center" />
+                                    <HyperlinkButton Content="GitHub" NavigateUri="https://github.com/Establers/custom-serial-monitor"
+                                                     FontSize="11" Padding="0" MinHeight="18" Height="18" />
+                                </StackPanel>
+                            </Grid>
                         </ScrollViewer>
                     </TabViewItem>
                 </TabView>
@@ -3702,25 +3714,37 @@
         </Border>
 
         <Border Grid.Row="4"
+                MinHeight="22"
                 Style="{StaticResource CompactSurfaceBorderStyle}"
                 Padding="2">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled">
-                <TextBlock x:Uid="StaticUi260" Text="{Binding FooterStatusText}"
-                           FontSize="11"
-                           TextWrapping="NoWrap"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="{Binding FooterStatusToolTipText}"
-                           MaxLines="1">
-                    <TextBlock.ContextFlyout>
-                        <MenuFlyout>
-                            <MenuFlyoutItem x:Uid="FooterCopyStatusMenuItem"
-                                            Text="Copy status"
-                                            Click="FooterCopyStatusMenuItem_Click" />
-                        </MenuFlyout>
-                    </TextBlock.ContextFlyout>
-                </TextBlock>
-            </ScrollViewer>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <TextBlock x:Uid="StaticUi260" Text="{Binding FooterStatusText}"
+                               FontSize="11"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTipService.ToolTip="{Binding FooterStatusToolTipText}"
+                               MaxLines="1">
+                        <TextBlock.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem x:Uid="FooterCopyStatusMenuItem"
+                                                Text="Copy status"
+                                                Click="FooterCopyStatusMenuItem_Click" />
+                            </MenuFlyout>
+                        </TextBlock.ContextFlyout>
+                    </TextBlock>
+                </ScrollViewer>
+                <Button x:Name="UpdateStatusButton" Grid.Column="1" Visibility="{Binding NotificationVisibility}"
+                        Click="UpdateStatusButton_Click" Height="18" MinHeight="18" Padding="6,0" FontSize="11"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        ToolTipService.ToolTip="{Binding Status}" AutomationProperties.Name="{Binding NotificationText}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <FontIcon Glyph="&#xE898;" FontSize="10" />
+                        <TextBlock Text="{Binding NotificationText}" FontSize="11" />
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Border>
 
         <InfoBar x:Name="EventNotificationInfoBar"
