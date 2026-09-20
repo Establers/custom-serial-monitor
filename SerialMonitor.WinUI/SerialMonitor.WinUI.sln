@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.WinUI.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.StressTool", "..\SerialMonitor.StressTool\SerialMonitor.StressTool.csproj", "{5A7D57D7-DC34-48AD-BE87-B31D71CFD574}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.UpdateTestWorker", "..\SerialMonitor.UpdateTestWorker\SerialMonitor.UpdateTestWorker.csproj", "{B3F689F6-E1EF-45C6-B93F-D1938EBA4318}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -39,6 +41,10 @@ Global
 		{5A7D57D7-DC34-48AD-BE87-B31D71CFD574}.Debug|x64.Build.0 = Debug|Any CPU
 		{5A7D57D7-DC34-48AD-BE87-B31D71CFD574}.Release|x64.ActiveCfg = Release|Any CPU
 		{5A7D57D7-DC34-48AD-BE87-B31D71CFD574}.Release|x64.Build.0 = Release|Any CPU
+		{B3F689F6-E1EF-45C6-B93F-D1938EBA4318}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B3F689F6-E1EF-45C6-B93F-D1938EBA4318}.Debug|x64.Build.0 = Debug|Any CPU
+		{B3F689F6-E1EF-45C6-B93F-D1938EBA4318}.Release|x64.ActiveCfg = Release|Any CPU
+		{B3F689F6-E1EF-45C6-B93F-D1938EBA4318}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
