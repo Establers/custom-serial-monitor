@@ -1,0 +1,46 @@
+name: Publish update manifest
+
+on:
+  release:
+    types: [published, edited, released, unpublished, deleted]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/update-manifest.yml'
+      - 'scripts/build_update_manifest.ps1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-manifest-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - name: Build manifest from the published latest release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/build_update_manifest.ps1 -Repository '${{ github.repository }}'
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: artifacts/update-site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

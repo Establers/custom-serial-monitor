@@ -68,3 +68,37 @@ writes, lock timeout/cancellation, and a crashed lock owner. The worker links th
 production storage implementation and is only a test dependency, not part of the
 distributed app. View-model tests also exercise stale windows, rapid toggles,
 pending HTTP requests, and pending result saves.
+
+## Static fallback manifest
+
+The app checks the GitHub releases API first. HTTP 429, or HTTP 403 with a rate-limit
+header/message, falls back once to
+`https://establers.github.io/custom-serial-monitor/updates.json`.
+Ordinary 403, network failures and invalid successful API responses do not trigger
+fallback. Both requests share a ten-second cancellation deadline. Responses use the
+same bounded HTTP buffer and stable numeric version validation. Release links are
+constructed within this repository; remote JSON cannot select an arbitrary URL.
+The service remembers the API reset/retry time for its lifetime (at least one minute)
+and uses Pages directly during that interval. Closing the window cancels either request.
+If Pages also fails, the existing error state and last successful cache are retained.
+
+`.github/workflows/update-manifest.yml` generates `artifacts/update-site/updates.json`
+and publishes only that directory to GitHub Pages. The file contains `tag_name`,
+`draft: false`, `prerelease: false` and `published_at`. It is generated rather than
+manually maintained in the source tree. `scripts/build_update_manifest.ps1` queries
+the currently published latest stable release using the workflow's read-only token;
+no token is shipped in the desktop app or public file.
+
+Pages must use the GitHub Actions publishing source. The workflow runs on release
+publication/edit/removal, on changes to the workflow/generator on main, and via
+manual dispatch. Publish the release with its download assets before making it
+public. A commit or tag alone does not advertise an unreleased app version.
+If another workflow creates releases using `GITHUB_TOKEN`, explicitly dispatch this
+workflow as well, since those release events do not start another workflow.
+For recovery, run `gh workflow run update-manifest.yml --ref main`, then confirm the
+public JSON matches the latest published stable release. Deployment failures leave
+the previously published file in place; Pages/CDN propagation may briefly lag.
+
+Existing v1.4.0 binaries use only the API and must be replaced with a build containing
+this fallback. Company networks must allow the Pages address too; API quota fallback
+does not bypass network access policy.

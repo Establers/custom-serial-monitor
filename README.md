@@ -93,6 +93,11 @@ HEX 모드의 수신 데이터는 byte-exact 16진수 텍스트로 기록되며 
 `Check for updates`는 날짜 제한과 건너뛰기를 무시하고 수동 확인합니다.
 자동 설치나 재시작은 하지 않습니다. 마지막 확인 결과는 재실행 후에도 유지되며,
 설정은 프로필과 별도로 `%LOCALAPPDATA%\SerialMonitor\updates.json`에 저장됩니다.
+GitHub API 요청 한도를 초과하면 GitHub Pages의
+[`updates.json`](https://establers.github.io/custom-serial-monitor/updates.json)으로 대체 확인합니다.
+API와 대체 요청의 네트워크 대기는 합계 최대 10초이며, 일반 접속 오류에는 대체 요청을 하지 않습니다.
+안내 파일은 정식 릴리스 게시 후 자동 갱신됩니다. 자세한 배포 절차는
+[업데이트 확인 문서](docs/update_ui_testing.md#static-fallback-manifest)를 참고하세요.
 개발 중에는 [업데이트 UI 미리보기](docs/update_ui_testing.md)로 새 버전·최신·오프라인·확인 중 상태를 검증할 수 있습니다.
 
 | 영역 | 제공 기능 |
