@@ -7,18 +7,84 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class CommandHistoryTests
 {
     [Fact]
-    public void RepeatedCommandKeepsOriginalEntryAndPosition()
+    public void RepeatedCommandBecomesNewestAndUpdatesTimestamp()
     {
         var model = new CommandViewModel();
         var timestamp = DateTimeOffset.Now.AddMinutes(-1);
         model.AddToHistory("status", timestamp);
-        var original = model.CommandHistory[0];
-        model.AddToHistory("reset");
-        model.AddToHistory("status");
+        var resentAt = timestamp.AddMinutes(1);
+        model.AddToHistory("reset", timestamp.AddSeconds(30));
+        model.AddToHistory(" status ", resentAt);
 
-        Assert.Equal(new[] { "reset", "status" }, model.CommandHistory.Select(entry => entry.CommandText));
-        Assert.Same(original, model.CommandHistory[1]);
-        Assert.Equal(timestamp, original.LastSentTime);
+        Assert.Equal(new[] { "status", "reset" }, model.CommandHistory.Select(entry => entry.CommandText));
+        Assert.Equal(resentAt, model.CommandHistory[0].LastSentTime);
+        Assert.Equal("status", model.FilteredCommandHistory[0].CommandText);
+
+        var restored = new CommandViewModel();
+        restored.LoadHistory(model.GetHistorySnapshot());
+        Assert.True(restored.NavigateHistory(-1));
+        Assert.Equal("status", restored.CurrentCommandText);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ResendRecallsLatestCommandFirstAndDownRestoresDraft(bool selectFromHistory)
+    {
+        var model = new CommandViewModel();
+        model.AddToHistory("status");
+        model.AddToHistory("reset");
+        Assert.True(model.NavigateHistory(-1));
+        if (selectFromHistory)
+        {
+            model.HistorySearchText = "stat";
+            model.SelectHistoryEntry(Assert.Single(model.FilteredCommandHistory));
+        }
+        else
+        {
+            model.CurrentCommandText = "status";
+        }
+
+        model.AddToHistory(model.CurrentCommandText);
+        model.CurrentCommandText = string.Empty;
+
+        Assert.True(model.NavigateHistory(-1));
+        Assert.Equal("status", model.CurrentCommandText);
+        Assert.True(model.NavigateHistory(-1));
+        Assert.Equal("reset", model.CurrentCommandText);
+        Assert.True(model.NavigateHistory(1));
+        Assert.Equal("status", model.CurrentCommandText);
+        Assert.True(model.NavigateHistory(1));
+        Assert.Equal(string.Empty, model.CurrentCommandText);
+    }
+
+    [Fact]
+    public void RepeatedNewestCommandUpdatesTimeWithoutGrowingHistory()
+    {
+        var model = new CommandViewModel();
+        var timestamp = DateTimeOffset.Now.AddMinutes(-1);
+        model.AddToHistory("status", timestamp);
+        model.AddToHistory("status", timestamp.AddMinutes(1));
+
+        Assert.Equal(timestamp.AddMinutes(1), Assert.Single(model.CommandHistory).LastSentTime);
+        Assert.Equal(timestamp.AddMinutes(1), Assert.Single(model.FilteredCommandHistory).LastSentTime);
+    }
+
+    [Fact]
+    public void ResentOldestCommandSurvivesHistoryCapacityEviction()
+    {
+        var model = new CommandViewModel();
+        for (var i = 0; i < CommandViewModel.DefaultMaxHistoryCount; i++)
+        {
+            model.AddToHistory($"command {i}");
+        }
+
+        model.AddToHistory("command 0");
+        model.AddToHistory("new command");
+
+        Assert.Equal(CommandViewModel.DefaultMaxHistoryCount, model.CommandHistoryCount);
+        Assert.Equal("command 0", model.CommandHistory[1].CommandText);
+        Assert.DoesNotContain(model.CommandHistory, entry => entry.CommandText == "command 1");
     }
 
     [Fact]

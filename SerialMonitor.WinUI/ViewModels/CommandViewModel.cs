@@ -90,14 +90,17 @@ public sealed class CommandViewModel : ViewModelBase
             var existing = CommandHistory.FirstOrDefault(
                 entry => string.Equals(entry.CommandText, normalized, StringComparison.Ordinal));
 
-            if (existing is null)
+            if (existing is not null)
             {
-                CommandHistory.Insert(0, new CommandHistoryEntry
-                {
-                    CommandText = normalized,
-                    LastSentTime = timestamp
-                });
+                CommandHistory.Remove(existing);
             }
+
+            // Reinsert with the latest timestamp so recall and persisted history use send order.
+            CommandHistory.Insert(0, new CommandHistoryEntry
+            {
+                CommandText = normalized,
+                LastSentTime = timestamp
+            });
 
             while (CommandHistory.Count > DefaultMaxHistoryCount)
             {
