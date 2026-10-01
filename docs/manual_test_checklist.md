@@ -5,6 +5,16 @@
   or restarting serial/file logging. Restart normally and verify the choice is
   restored. With System selected, change the Windows theme; also check Windows
   high contrast remains legible.
+- [ ] Run two app instances. Select Light in one and Dark in the other, then
+  switch either instance's theme repeatedly. Verify the other instance's terminal,
+  selection, scrollbar and context menu keep their own theme. Repeat with System
+  in one instance, change the Windows theme, and verify only System follows it.
+  Confirm retained logs and ongoing serial/file logging survive each change.
+- [ ] Connect two instances to different COM ports (or MOCK). In one, clear,
+  filter, search, change font, pause/resume, reconnect, stop a sequence, minimize
+  and exit. Verify the other keeps receiving, logging and detecting its own events
+  with unchanged terminal history, selection and scroll position. Verify its
+  health does not show the first instance's runtime errors.
 
 Use this checklist before release candidates and after UI/layout changes. Prefer
 `MOCK` for repeatable checks, then repeat critical connect/TX/logging checks on

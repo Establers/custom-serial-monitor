@@ -47,6 +47,9 @@ public sealed partial class MainWindow : Window
         Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon", "SerialMonitor.ico");
 
     private readonly MainViewModel _viewModel;
+    private readonly Task _xtermInitializationTask;
+    private CoreWebView2Environment? _xtermEnvironment;
+    private readonly TaskCompletionSource _xtermBrowserExited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly WindowsTrayNotifier _trayNotifier = new();
     private readonly Microsoft.UI.System.ThemeSettings _themeSettings;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _eventPopupTimer;
@@ -216,7 +219,7 @@ public sealed partial class MainWindow : Window
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
         UpdateCuteBackgroundImage();
-        _ = InitializeXtermWebViewAsync();
+        _xtermInitializationTask = InitializeXtermWebViewAsync();
 
         AppWindow.Resize(new SizeInt32(1200, 800));
     }
@@ -275,6 +278,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            await CloseXtermWebViewAsync();
             await RuntimeDiagnostics.FlushAsync(TimeSpan.FromSeconds(1));
             _closeAllowed = true;
             Close();
@@ -513,7 +517,7 @@ public sealed partial class MainWindow : Window
     {
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
-        ApplyWebViewColorScheme();
+        _ = SyncXtermColorSchemeAsync();
         UpdateSequenceStateVisuals();
         UpdateFileLoggingActionColor();
     }
@@ -528,28 +532,37 @@ public sealed partial class MainWindow : Window
         };
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
-        ApplyWebViewColorScheme();
+        _ = SyncXtermColorSchemeAsync();
     }
 
-    private void ApplyWebViewColorScheme()
+    private string XtermColorScheme => Root.ActualTheme == ElementTheme.Light ? "light" : "dark";
+
+    private async Task<bool> SyncXtermColorSchemeAsync()
     {
-        if (XtermLogWebView.CoreWebView2 is not { } core)
+        if (!_isXtermReady || IsClosingOrClosed)
         {
-            return;
+            return false;
         }
 
         try
         {
-            core.Profile.PreferredColorScheme = _viewModel.SelectedAppTheme switch
+            // Apply the resolved window theme directly to this page. Profile
+            // preferences can affect every WebView that shares that profile.
+            var colorSchemeJson = JsonSerializer.Serialize(XtermColorScheme);
+            var result = await ExecuteXtermScriptAsync(
+                $"window.serialMonitorSetColorScheme && window.serialMonitorSetColorScheme({colorSchemeJson});");
+            if (TryParseScriptBoolean(result) == true)
             {
-                AppTheme.Dark => CoreWebView2PreferredColorScheme.Dark,
-                AppTheme.Light => CoreWebView2PreferredColorScheme.Light,
-                _ => CoreWebView2PreferredColorScheme.Auto
-            };
+                return true;
+            }
+
+            _viewModel.RecordXtermLayoutError("xterm color scheme update was rejected.");
+            return false;
         }
         catch (Exception ex)
         {
-            RuntimeDiagnostics.RecordError("MainWindow.ApplyWebViewColorScheme", ex);
+            _viewModel.RecordXtermLayoutError($"xterm color scheme update failed: {ex.Message}");
+            return false;
         }
     }
 
@@ -2406,8 +2419,20 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            await XtermLogWebView.EnsureCoreWebView2Async();
-            ApplyWebViewColorScheme();
+            await RuntimeInstanceStorage.Current.PrepareWebViewDirectoryAsync(CancellationToken.None);
+            if (IsClosingOrClosed) return;
+            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
+                null, RuntimeInstanceStorage.Current.WebViewUserDataFolder,
+                new CoreWebView2EnvironmentOptions { ExclusiveUserDataFolderAccess = true });
+            if (IsClosingOrClosed) return;
+            // Environment/registry overrides must never silently reintroduce a shared profile.
+            if (!string.Equals(Path.GetFullPath(environment.UserDataFolder).TrimEnd(Path.DirectorySeparatorChar),
+                RuntimeInstanceStorage.Current.WebViewUserDataFolder, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("WebView2 did not use this instance's isolated user data folder.");
+            _xtermEnvironment = environment;
+            environment.BrowserProcessExited += OnXtermBrowserProcessExited;
+            await XtermLogWebView.EnsureCoreWebView2Async(environment);
+            if (IsClosingOrClosed) return;
             XtermLogWebView.CoreWebView2.WebMessageReceived += OnXtermWebMessageReceived;
             XtermLogWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "serialmonitor.local",
@@ -2422,11 +2447,51 @@ public sealed partial class MainWindow : Window
                     CoreWebView2HostResourceAccessKind.Allow);
             }
             XtermLogWebView.NavigationCompleted += OnXtermNavigationCompleted;
-            XtermLogWebView.Source = new Uri("https://serialmonitor.local/index.html");
+            XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}");
         }
         catch (Exception ex)
         {
             _viewModel.RecordXtermAppendError($"xterm WebView2 init failed: {ex.Message}");
+        }
+    }
+
+    private void OnXtermBrowserProcessExited(CoreWebView2Environment sender, CoreWebView2BrowserProcessExitedEventArgs args) =>
+        _xtermBrowserExited.TrySetResult();
+
+    private async Task CloseXtermWebViewAsync()
+    {
+        var browserExited = false;
+        try
+        {
+            // Keep the dispatcher responsive while a late initialization completes.
+            await _xtermInitializationTask.WaitAsync(TimeSpan.FromSeconds(3));
+            _isXtermReady = false;
+            XtermLogWebView.Close();
+            if (_xtermEnvironment is null)
+                browserExited = true;
+            else
+            {
+                await _xtermBrowserExited.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                browserExited = true;
+            }
+        }
+        catch (TimeoutException) { } // Startup cleanup will remove this instance's abandoned cache.
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.CloseXtermWebViewAsync", ex);
+        }
+        finally
+        {
+            if (_xtermEnvironment is not null)
+                _xtermEnvironment.BrowserProcessExited -= OnXtermBrowserProcessExited;
+            try
+            {
+                await RuntimeInstanceStorage.Current.ReleaseWebViewDirectoryAsync(browserExited).WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnostics.RecordError("MainWindow.CloseXtermWebViewAsync.Cleanup", ex);
+            }
         }
     }
 
@@ -2441,6 +2506,7 @@ public sealed partial class MainWindow : Window
 
         _isXtermReady = true;
         _viewModel.SetXtermReady(true);
+        await SyncXtermColorSchemeAsync();
         await SyncXtermScrollbackSizeAsync();
         await SyncXtermFontAsync();
         await SyncXtermHexSelectionHintModeAsync();

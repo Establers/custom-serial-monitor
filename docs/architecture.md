@@ -110,11 +110,32 @@ the xterm view only; persisted logs remain plain text.
 
 - Default profile: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
 - Serial logs: `%LOCALAPPDATA%\SerialMonitor\logs`
-- Runtime diagnostics: `%LOCALAPPDATA%\SerialMonitor\diagnostics`
+- Runtime diagnostics: `%LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>`
+- WebView2 runtime data: `%LOCALAPPDATA%\SerialMonitor\WebView2\instance-<pid>-<launch-id>`
 
 Profile writes use a temporary file and replacement/backup flow. Generated
 publish output under `release/` and `artifacts/` should be treated as build
 artifacts rather than source.
+
+## Multiple app instances
+
+Each launch owns its serial/bridge services, parsers, bounded channels, event
+detector, command sequence runner, file writer, UI log buffer and xterm page.
+There is no runtime IPC or watcher that copies those states between launches.
+Profile and update preference files remain shared intentionally.
+
+WebView2 uses a distinct user data folder with exclusive access for every launch,
+so its browser process, profile preferences and browser storage are isolated.
+The terminal receives the resolved theme from its own window. Runtime diagnostics
+also use distinct paths so another launch cannot clear an error or change the
+health indicator. Browser caches are removed after their browser exits; subsequent
+startups reclaim abandoned caches using an exclusive owner lease and never touch
+another active launch's folder.
+
+OS resources remain shared: two launches cannot open the same COM port, and the
+clipboard is global. Automatic serial log names are allocated with CreateNew and
+collision suffixes; explicitly choosing an existing filename is rejected without
+overwriting the other capture. See [instance validation](instance-isolation-validation.md).
 
 ## Verification
 

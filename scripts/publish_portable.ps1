@@ -232,7 +232,9 @@ Notes
 - Logs and profiles are still stored under %LOCALAPPDATA%\SerialMonitor.
 - Default logs: %LOCALAPPDATA%\SerialMonitor\logs
 - Default profile: %LOCALAPPDATA%\SerialMonitor\profiles\default.json
-- Runtime diagnostics: %LOCALAPPDATA%\SerialMonitor\diagnostics\last_runtime_error.txt
+- Runtime diagnostics: %LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>\last_runtime_error.txt
+- Each launch creates a separate instance-* folder. Check last_startup.txt in that folder to identify the launch by its startup time.
+- last_runtime_error.txt exists only after a runtime error. Root-level diagnostics .txt files are legacy records and are not updated by this version.
 - WebView2 Runtime may still be required on the target PC for the xterm log view.
 - JetBrains Mono is bundled for the xterm log view under Assets\xterm\fonts.
 - Its SIL Open Font License is included at Assets\xterm\fonts\OFL.txt.

@@ -73,7 +73,12 @@ Logs and profiles remain user-local:
 - Logs: `%LOCALAPPDATA%\SerialMonitor\logs`
 - Default profile: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
 - Runtime diagnostics:
-  `%LOCALAPPDATA%\SerialMonitor\diagnostics\last_runtime_error.txt`
+  `%LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>\last_runtime_error.txt`
+
+Each launch creates a separate `instance-*` diagnostics folder. Check its
+`last_startup.txt` to identify the launch by startup time; `last_runtime_error.txt`
+exists only after a runtime error. Root-level diagnostics `.txt` files are legacy
+records and are not updated by this version.
 
 ## Target PC Notes
 

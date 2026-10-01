@@ -197,7 +197,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 | --- | --- |
 | 시리얼 로그 | `%LOCALAPPDATA%\SerialMonitor\logs` |
 | 기본 프로필 | `%LOCALAPPDATA%\SerialMonitor\profiles\default.json` |
-| 마지막 런타임 오류 | `%LOCALAPPDATA%\SerialMonitor\diagnostics\last_runtime_error.txt` |
+| 마지막 런타임 오류 | `%LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>\last_runtime_error.txt` |
+
+실행마다 별도의 `instance-*` 진단 폴더를 만듭니다. 해당 폴더의
+`last_startup.txt`에 기록된 시작 시각으로 확인하려는 실행을 구분하세요.
+`last_runtime_error.txt`는 오류가 발생했을 때만 생성됩니다.
+`diagnostics` 바로 아래에 남은 `.txt` 파일은 이전 버전 기록이며 현재 실행에서 갱신하지 않습니다.
 
 ## 문서
 

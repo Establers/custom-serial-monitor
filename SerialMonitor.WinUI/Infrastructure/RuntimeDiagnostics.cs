@@ -7,7 +7,7 @@ public static class RuntimeDiagnostics
     private static readonly DiagnosticFileWriter Writer = new(WriteTextAsync);
 
     public static string DirectoryPath { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SerialMonitor", "diagnostics");
+        RuntimeInstanceStorage.Current.DiagnosticsDirectory;
 
     public static string LastErrorPath => Path.Combine(DirectoryPath, "last_runtime_error.txt");
 
