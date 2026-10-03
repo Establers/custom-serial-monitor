@@ -12,6 +12,6 @@ $project = Join-Path $repoRoot 'SerialMonitor.WinUI\SerialMonitor.WinUI.csproj'
 & dotnet build $project -c Debug -p:Platform=x64 -p:UpdatePreviewBuild=true -o "$previewDirectory\"
 if ($LASTEXITCODE -ne 0) { throw 'Update preview build failed. Close any previous preview window before rebuilding.' }
 
-Write-Host 'Open About to inspect updates. Preview data does not change your update preferences.'
+Write-Host 'Open About and click Check for updates to inspect the preview. Preview data does not change your update preferences.'
 # This script explicitly launches the interactive preview requested by its caller.
 Start-Process -FilePath (Join-Path $previewDirectory 'SerialMonitor.UpdatePreview.exe') -ArgumentList "--update-preview=$Scenario"

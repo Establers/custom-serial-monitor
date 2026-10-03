@@ -737,7 +737,7 @@
     <comment>Log restore overlay line-count format.</comment>
   </data>
   <data name="HexFtdiHelpNotice" xml:space="preserve">
-    <value>The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. If packets are split, consider setting the FTDI Latency Timer to 2 ms.</value>
+    <value>The default HEX TIMEOUT is 40 ms regardless of baud rate. Adjust it if needed.&#x0A;&#x0A;For the RealSYS CNV485U (USB-RS485), set the Latency Timer to 2 ms. This device uses an FTDI driver; its default 16 ms latency can split a packet when the HEX timeout is short.&#x0A;&#x0A;Device Manager → Ports (COM &amp; LPT) → Properties of the device's COM port → Port Settings → Advanced → Latency Timer (msec): 2. Disconnect and reconnect in the app after changing this setting.&#x0A;&#x0A;This is a USB driver setting, separate from the app's HEX TIMEOUT. Check the same setting for other FTDI USB serial devices if packets are split.</value>
     <comment>Help tab HEX timeout notice.</comment>
   </data>
   <data name="HelpQuickStartTitle" xml:space="preserve">
@@ -881,13 +881,13 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="UpdateCheckButton" xml:space="preserve"><value>Check for updates</value></data>
   <data name="UpdateChecking" xml:space="preserve"><value>Checking for updates…</value></data>
   <data name="UpdateFailed" xml:space="preserve"><value>Could not check for updates. Try again when you’re online.</value></data>
-  <data name="UpdateSkipped" xml:space="preserve"><value>{0} is available · automatic notification skipped</value></data>
+  <data name="UpdateSkipped" xml:space="preserve"><value>{0} is available · notification skipped</value></data>
   <data name="UpdateAvailable" xml:space="preserve"><value>{0} is available</value></data>
   <data name="UpdateCurrent" xml:space="preserve"><value>You’re up to date</value></data>
   <data name="UpdateIdle" xml:space="preserve"><value>Check for a newer version</value></data>
   <data name="UpdateLastChecked" xml:space="preserve"><value>Last checked {0}</value></data>
   <data name="UpdateNotChecked" xml:space="preserve"><value>Not checked yet</value></data>
-  <data name="UpdateLoadFailed" xml:space="preserve"><value>Could not load preferences. Automatic checks are off.</value></data>
+  <data name="UpdateLoadFailed" xml:space="preserve"><value>Could not load update preferences.</value></data>
   <data name="UpdateSaveFailed" xml:space="preserve"><value>Preferences could not be saved. Changes apply only to this session.</value></data>
   <data name="UpdateOpenFailed" xml:space="preserve"><value>Could not open your browser. Visit the GitHub link below for releases.</value></data>
   <data name="UpdateDownloadHint.Text" xml:space="preserve"><value>Release notes and downloads open in your browser.</value></data>
@@ -895,6 +895,4 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Update options</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Update options</value></data>
   <data name="UpdateSkip.Text" xml:space="preserve"><value>Skip this version</value></data>
-  <data name="UpdateAutomatic.Content" xml:space="preserve"><value>Check automatically</value></data>
-  <data name="UpdateAutomatic.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Check GitHub on startup, at most once a day. No automatic installation or restart.</value></data>
 </root>

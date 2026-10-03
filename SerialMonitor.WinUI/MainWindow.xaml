@@ -3408,15 +3408,9 @@
                                         </StackPanel>
                                     </Grid>
                                 </Border>
-                                <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="20">
-                                    <CheckBox x:Uid="UpdateAutomatic" Content="Check automatically"
-                                              IsEnabled="{Binding IsReady}" IsChecked="{Binding Automatic, Mode=TwoWay}"
-                                              FontSize="12" MinHeight="22" Height="22" Padding="0"
-                                              ToolTipService.ToolTip="Check GitHub on startup, at most once a day. No automatic installation or restart." />
-                                    <TextBlock Grid.Column="1" Text="{Binding LastCheckedText}" FontSize="11" VerticalAlignment="Center"
-                                               HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding LastCheckedText}" />
-                                </Grid>
+                                <TextBlock Grid.Row="2" Text="{Binding LastCheckedText}" FontSize="11" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding LastCheckedText}" />
                                 <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="박재환" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <TextBlock Text="·" FontSize="11" VerticalAlignment="Center" />

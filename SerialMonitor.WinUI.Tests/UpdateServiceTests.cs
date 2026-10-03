@@ -143,20 +143,6 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
-    public void AutomaticChecks_RespectOptOutAndDailyBoundary()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var preferences = new UpdatePreferences { LastAttemptUtc = now.AddHours(-23) };
-        Assert.False(UpdateService.IsAutomaticCheckDue(preferences, now));
-        preferences.LastAttemptUtc = now.AddDays(-1);
-        Assert.True(UpdateService.IsAutomaticCheckDue(preferences, now));
-        preferences.Automatic = false;
-        Assert.False(UpdateService.IsAutomaticCheckDue(preferences, now));
-        preferences.LastAttemptUtc = null;
-        Assert.False(UpdateService.IsAutomaticCheckDue(preferences, now));
-    }
-
-    [Fact]
     public async Task UnresponsiveHttpEndpoint_TimesOutWithoutBlockingCaller()
     {
         using var client = new System.Net.Http.HttpClient(new DelayedHandler()) { Timeout = TimeSpan.FromMilliseconds(150) };
@@ -196,12 +182,12 @@ public sealed class UpdateServiceTests
         try
         {
             var service = new UpdateService(path);
-            Assert.True((await service.LoadAsync(default)).Automatic);
+            Assert.Null((await service.LoadAsync(default)).LastSuccessUtc);
             var now = DateTimeOffset.UtcNow;
-            await service.ApplyAsync(new(Automatic: false, LastAttemptUtc: now, SkippedVersion: "1.4.0.0"), default);
+            await service.ApplyAsync(new(LastSuccessUtc: now, LastKnownTag: "v1.5.0", SkippedVersion: "1.4.0.0"), default);
             var restored = await new UpdateService(path).LoadAsync(default);
-            Assert.False(restored.Automatic);
-            Assert.Equal(now, restored.LastAttemptUtc);
+            Assert.Equal(now, restored.LastSuccessUtc);
+            Assert.Equal("v1.5.0", restored.LastKnownTag);
             Assert.Equal("1.4.0.0", restored.SkippedVersion);
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }

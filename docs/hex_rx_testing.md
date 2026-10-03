@@ -110,10 +110,15 @@ times are strictly between complete packets.
 | 38400 | random 1-4096 B | continuous | 20/50/100/500 ms | 10,000 per gap |
 | both | random 1-255 B | continuous; framing-error run | 4/10 ms | 10,000 |
 
-For every run, choose the profile timeout above the continuous UART character
-arrival interval (plus practical timing tolerance) and below the shortest idle
-between complete packets. For example, 9600 8N1 is about 1.042 ms per byte, so
-2 ms is a valid starting value when the measured inter-packet idle is 4 ms.
+For every run, choose the profile timeout above the largest observed host-side
+delivery gap inside the desired group and below the smallest preserved gap
+between groups. The continuous UART character arrival interval is only a lower
+bound: 9600 8N1 is about 1.042 ms per byte, but that alone does not justify a 2 ms
+application timeout for a 4 ms on-wire packet gap. USB buffering and driver/read
+thread delays can change or erase those gaps before the application observes
+them. If the two host-side ranges overlap, timeout-only grouping cannot reliably
+recover every on-wire packet boundary. See `hex_timeout_usb_review.md` for the
+20/40 ms delivery simulation and the CNV485U driver investigation.
 
 ## Acceptance criteria
 

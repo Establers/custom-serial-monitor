@@ -737,8 +737,8 @@
     <comment>English: {0:N0} lines</comment>
   </data>
   <data name="HexFtdiHelpNotice" xml:space="preserve">
-    <value>HEX TIMEOUT 기본값은 Baud와 관계없이 40ms입니다. 필요하면 조정하세요. 패킷이 분리되면 FTDI Latency Timer를 2ms로 설정하는 방안을 검토하세요.</value>
-    <comment>English: The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. If packets are split, consider setting the FTDI Latency Timer to 2 ms.</comment>
+    <value>HEX TIMEOUT 기본값은 Baud와 관계없이 40ms입니다. 필요하면 조정하세요.&#x0A;&#x0A;리얼시스 CNV485U(USB-RS485) 사용 시 Latency Timer를 2ms로 변경하세요. 이 장비는 FTDI 드라이버를 사용하며, 기본 지연 16ms로 인해 HEX 타임아웃이 짧으면 한 패킷이 여러 줄로 나뉠 수 있습니다.&#x0A;&#x0A;설정 경로: 장치 관리자 → 포트(COM 및 LPT) → 해당 장비의 COM 포트 속성 → 포트 설정 → 고급 → Latency Timer(msec): 2. 변경 후 앱에서 연결을 끊었다가 다시 연결하세요.&#x0A;&#x0A;이 값은 USB 드라이버 설정이며 앱의 HEX TIMEOUT과는 별개입니다. 다른 FTDI 기반 USB 시리얼 장비도 패킷이 분리되면 같은 설정을 확인하세요.</value>
+    <comment>Help tab HEX timeout notice, including RealSYS CNV485U setup instructions.</comment>
   </data>
   <data name="HelpQuickStartTitle" xml:space="preserve">
     <value>빠른 시작</value>
@@ -881,13 +881,13 @@
   <data name="UpdateCheckButton" xml:space="preserve"><value>업데이트 확인</value></data>
   <data name="UpdateChecking" xml:space="preserve"><value>새 버전을 확인하고 있습니다…</value></data>
   <data name="UpdateFailed" xml:space="preserve"><value>업데이트를 확인하지 못했습니다. 인터넷 연결 후 다시 시도하세요.</value></data>
-  <data name="UpdateSkipped" xml:space="preserve"><value>{0} 사용 가능 · 자동 알림 건너뜀</value></data>
+  <data name="UpdateSkipped" xml:space="preserve"><value>{0} 사용 가능 · 알림 건너뜀</value></data>
   <data name="UpdateAvailable" xml:space="preserve"><value>새 버전 {0} 사용 가능</value></data>
   <data name="UpdateCurrent" xml:space="preserve"><value>최신 버전입니다</value></data>
   <data name="UpdateIdle" xml:space="preserve"><value>새 버전을 확인할 수 있습니다</value></data>
   <data name="UpdateLastChecked" xml:space="preserve"><value>마지막 확인 {0}</value></data>
   <data name="UpdateNotChecked" xml:space="preserve"><value>아직 확인하지 않음</value></data>
-  <data name="UpdateLoadFailed" xml:space="preserve"><value>설정을 읽지 못해 자동 확인을 껐습니다.</value></data>
+  <data name="UpdateLoadFailed" xml:space="preserve"><value>업데이트 확인 설정을 읽지 못했습니다.</value></data>
   <data name="UpdateSaveFailed" xml:space="preserve"><value>설정을 저장하지 못했습니다. 변경 사항은 이번 실행에만 적용됩니다.</value></data>
   <data name="UpdateOpenFailed" xml:space="preserve"><value>브라우저를 열지 못했습니다. 아래 GitHub 링크에서 릴리스를 확인하세요.</value></data>
   <data name="UpdateDownloadHint.Text" xml:space="preserve"><value>변경 사항과 다운로드를 브라우저에서 확인합니다.</value></data>
@@ -895,6 +895,4 @@
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>업데이트 옵션</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>업데이트 옵션</value></data>
   <data name="UpdateSkip.Text" xml:space="preserve"><value>이 버전 알림 건너뛰기</value></data>
-  <data name="UpdateAutomatic.Content" xml:space="preserve"><value>자동으로 업데이트 확인</value></data>
-  <data name="UpdateAutomatic.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시작 시 하루 최대 한 번 GitHub에서 확인합니다. 자동 설치나 재시작은 하지 않습니다.</value></data>
 </root>

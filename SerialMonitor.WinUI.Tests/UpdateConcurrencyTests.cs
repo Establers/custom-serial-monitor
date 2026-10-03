@@ -15,24 +15,21 @@ public sealed class UpdateConcurrencyTests : IDisposable
     {
         var first = new UpdateService(FilePath);
         var second = new UpdateService(FilePath);
-        Assert.True((await second.LoadAsync(default)).Automatic);
-        await first.ApplyAsync(new(Automatic: false, SkippedVersion: "1.4.0.0"), default);
+        Assert.Null((await second.LoadAsync(default)).SkippedVersion);
+        await first.ApplyAsync(new(SkippedVersion: "1.4.0.0"), default);
         await second.ApplyAsync(new(LastSuccessUtc: DateTimeOffset.UtcNow, LastKnownTag: "v1.5.0"), default);
         var saved = await first.LoadAsync(default);
-        Assert.False(saved.Automatic);
         Assert.Equal("1.4.0.0", saved.SkippedVersion);
         Assert.Equal("v1.5.0", saved.LastKnownTag);
     }
 
     [Fact]
-    public async Task ThreeProcesses_WritingSimultaneously_PreserveAllFieldsAndCleanTemporaryFiles()
+    public async Task TwoProcesses_WritingSimultaneously_PreserveAllFieldsAndCleanTemporaryFiles()
     {
-        using var automatic = StartWorker("automatic");
         using var skip = StartWorker("skip");
         using var cache = StartWorker("cache");
-        await Task.WhenAll(WaitForSuccess(automatic), WaitForSuccess(skip), WaitForSuccess(cache));
+        await Task.WhenAll(WaitForSuccess(skip), WaitForSuccess(cache));
         var saved = await new UpdateService(FilePath).LoadAsync(default);
-        Assert.False(saved.Automatic);
         Assert.Equal("1.4.0.0", saved.SkippedVersion);
         Assert.Equal("v1.5.0", saved.LastKnownTag);
         Assert.NotNull(saved.LastSuccessUtc);
@@ -47,15 +44,15 @@ public sealed class UpdateConcurrencyTests : IDisposable
         try
         {
             var stopwatch = Stopwatch.StartNew();
-            var pending = new UpdateService(FilePath).ApplyAsync(new(Automatic: false), default);
+            var pending = new UpdateService(FilePath).ApplyAsync(new(SkippedVersion: "1.4.0.0"), default);
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), "Storage call blocked its caller.");
             Assert.False(pending.IsCompleted);
             await Assert.ThrowsAsync<TimeoutException>(() => pending.WaitAsync(TimeSpan.FromSeconds(8)));
             Assert.False(File.Exists(FilePath));
         }
         finally { await holder.StandardInput.WriteLineAsync("release"); await WaitForSuccess(holder); }
-        await new UpdateService(FilePath).ApplyAsync(new(Automatic: false), default);
-        Assert.False((await new UpdateService(FilePath).LoadAsync(default)).Automatic);
+        await new UpdateService(FilePath).ApplyAsync(new(SkippedVersion: "1.4.0.0"), default);
+        Assert.Equal("1.4.0.0", (await new UpdateService(FilePath).LoadAsync(default)).SkippedVersion);
     }
 
     [Fact]
@@ -66,7 +63,7 @@ public sealed class UpdateConcurrencyTests : IDisposable
         try
         {
             using var cancellation = new CancellationTokenSource();
-            var pending = new UpdateService(FilePath).ApplyAsync(new(Automatic: false), cancellation.Token);
+            var pending = new UpdateService(FilePath).ApplyAsync(new(SkippedVersion: "1.4.0.0"), cancellation.Token);
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(TimeSpan.FromSeconds(2)));
             Assert.False(File.Exists(FilePath));
@@ -81,8 +78,8 @@ public sealed class UpdateConcurrencyTests : IDisposable
         Assert.Equal("LOCKED", await holder.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)));
         holder.Kill();
         await holder.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
-        await new UpdateService(FilePath).ApplyAsync(new(Automatic: false), default);
-        Assert.False((await new UpdateService(FilePath).LoadAsync(default)).Automatic);
+        await new UpdateService(FilePath).ApplyAsync(new(SkippedVersion: "1.4.0.0"), default);
+        Assert.Equal("1.4.0.0", (await new UpdateService(FilePath).LoadAsync(default)).SkippedVersion);
     }
 
     [Fact]
@@ -100,7 +97,7 @@ public sealed class UpdateConcurrencyTests : IDisposable
     {
         await File.WriteAllTextAsync(FilePath, "broken");
         await Assert.ThrowsAsync<System.Text.Json.JsonException>(() =>
-            new UpdateService(FilePath).ApplyAsync(new(LastAttemptUtc: DateTimeOffset.UtcNow), default));
+            new UpdateService(FilePath).ApplyAsync(new(SkippedVersion: "1.4.0.0"), default));
         Assert.Equal("broken", await File.ReadAllTextAsync(FilePath));
     }
 

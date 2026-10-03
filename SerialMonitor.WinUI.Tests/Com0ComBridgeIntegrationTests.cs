@@ -344,6 +344,89 @@ public sealed class Com0ComBridgeIntegrationTests
         await bridge.StopAsync(timeout.Token);
     }
 
+    [Theory]
+    [InlineData(4, 1)]
+    [InlineData(4, 2)]
+    [InlineData(5_000, 1)]
+    public async Task Com4Com5_QueuedBacklog_GroupsByReceiveTimestamps(int groupTimeoutMs, int groupCount)
+    {
+        if (Environment.GetEnvironmentVariable("SERIAL_COM0COM_TEST") != "1")
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var partner = new SerialPortStream("COM5", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        partner.Open();
+        await using var bridge = new SerialBridgeService();
+        var errors = new ConcurrentQueue<string>();
+        bridge.Error += (_, message) => errors.Enqueue(message);
+        using var resumeWriter = new ManualResetEventSlim();
+        var writerPaused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pauseStarted = 0;
+        EventHandler pauseAfterFirstWrite = (_, _) =>
+        {
+            if (bridge.DeviceToVirtualChunkCount == 1 &&
+                Interlocked.CompareExchange(ref pauseStarted, 1, 0) == 0)
+            {
+                // Pause only the test writer so the entire backlog exists before it resumes.
+                writerPaused.TrySetResult();
+                resumeWriter.Wait(timeout.Token);
+            }
+        };
+        bridge.StatusChanged += pauseAfterFirstWrite;
+        try
+        {
+            await bridge.StartAsync(
+                new BridgeSettings { VirtualPortName = "COM4" },
+                new SerialSettings { PortName = "DEVICE", BaudRate = 115200 },
+                (_, _) => Task.CompletedTask,
+                timeout.Token);
+            Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(
+                new byte[] { 0xF0 }, Stopwatch.GetTimestamp(), false, 0)));
+            await writerPaused.Task.WaitAsync(timeout.Token);
+            Assert.Equal(new byte[] { 0xF0 }, await ReadExactlyAsync(partner, 1, timeout.Token));
+
+            bridge.ConfigureDeviceToVirtualGrouping(groupTimeoutMs);
+            var sourceStart = Stopwatch.GetTimestamp();
+            var expected = new List<byte>();
+            for (var group = 0; group < groupCount; group++)
+            {
+                for (var fragment = 0; fragment < 3; fragment++)
+                {
+                    var bytes = new byte[] { (byte)(0xA0 + group), (byte)fragment };
+                    expected.AddRange(bytes);
+                    var receivedAt = sourceStart +
+                        (group * 10 + fragment) * Stopwatch.Frequency / 1000;
+                    Assert.True(bridge.TryEnqueueDeviceChunk(new BridgeRxChunk(bytes, receivedAt, false, 0)));
+                }
+            }
+
+            // Let both the idle and maximum-latency deadlines expire while RX stays queued.
+            await Task.Delay(150, timeout.Token);
+            resumeWriter.Set();
+            Assert.Equal(expected.ToArray(), await ReadExactlyAsync(partner, expected.Count, timeout.Token));
+            await WaitUntilAsync(() => bridge.DeviceToVirtualByteCount == expected.Count + 1, timeout.Token);
+            Assert.Equal(groupCount + 1, bridge.DeviceToVirtualChunkCount);
+            Assert.Equal(0, bridge.DroppedDeviceToVirtualByteCount);
+            Assert.Equal(0, bridge.QueueOverflowCount);
+            Assert.Null(bridge.LastFaultReason);
+            Assert.Empty(errors);
+        }
+        finally
+        {
+            resumeWriter.Set();
+            bridge.StatusChanged -= pauseAfterFirstWrite;
+        }
+
+        await bridge.StopAsync(timeout.Token);
+    }
+
     [Fact]
     public async Task Com4Com5_QueueOverflowFaultsBridgeImmediately()
     {

@@ -18,12 +18,7 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
     private bool _manualReveal;
     private bool _disposed;
     private bool _checkInProgress;
-    private long _preferenceRevision;
-    private long _automaticRevision;
     private long _skipRevision;
-    private bool _savingAutomatic;
-    private bool _automaticSavePending;
-    private bool _automaticDirty;
     private bool _skipDirty;
     private string _preferenceError = string.Empty;
 
@@ -32,7 +27,7 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
         _service = service ?? new UpdateService();
         var version = current ?? Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
         _current = new(version.Major, version.Minor, Math.Max(0, version.Build), Math.Max(0, version.Revision));
-        CheckCommand = new AsyncRelayCommand(() => CheckAsync(true), () => IsReady && !IsChecking && !_disposed);
+        CheckCommand = new AsyncRelayCommand(CheckAsync, () => IsReady && !IsChecking && !_disposed);
         SkipCommand = new AsyncRelayCommand(SkipAsync, () => _release is not null && !IsChecking && !_disposed);
         OpenCommand = new AsyncRelayCommand(OpenAsync, () => _release is not null && !_disposed);
     }
@@ -58,7 +53,7 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
     {
         UpdateCheckState.Checking => T("UpdateChecking", "Checking for updates…"),
         UpdateCheckState.Failed => T("UpdateFailed", "Could not check for updates. Try again when you’re online."),
-        UpdateCheckState.Available when IsSkipped => UiText.Format("UpdateSkipped", "{0} is available · automatic notification skipped", _release?.Tag),
+        UpdateCheckState.Available when IsSkipped => UiText.Format("UpdateSkipped", "{0} is available · notification skipped", _release?.Tag),
         UpdateCheckState.Available => UiText.Format("UpdateAvailable", "{0} is available", _release?.Tag),
         UpdateCheckState.Current => T("UpdateCurrent", "You’re up to date"),
         _ => T("UpdateIdle", "Check for a newer version")
@@ -73,33 +68,12 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
     public string LastCheckedText => _preferences.LastSuccessUtc is { } last
         ? UiText.Format("UpdateLastChecked", "Last checked {0}", last.LocalDateTime.ToString("g"))
         : T("UpdateNotChecked", "Not checked yet");
-    public bool Automatic
-    {
-        get => _preferences.Automatic;
-        set
-        {
-            if (value == _preferences.Automatic || !IsReady || _disposed) return;
-            _preferences.Automatic = value;
-            _preferenceRevision++;
-            _automaticRevision++;
-            _automaticDirty = true;
-            OnPropertyChanged();
-            _automaticSavePending = true;
-            if (!_savingAutomatic) _ = SaveAutomaticAsync();
-        }
-    }
 
     public async Task InitializeAsync()
     {
         if (_initialized || _disposed) return;
         _initialized = true;
         await LoadPreferencesAsync();
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(5), _shutdown.Token);
-            if (UpdateService.IsAutomaticCheckDue(_preferences, DateTimeOffset.UtcNow)) await CheckAsync(false);
-        }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
     }
 
     internal async Task LoadPreferencesAsync()
@@ -117,15 +91,14 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { return; }
         catch (Exception ex)
         {
-            _preferences.Automatic = false;
-            _preferenceError = T("UpdateLoadFailed", "Could not load preferences. Automatic checks are off.");
+            _preferenceError = T("UpdateLoadFailed", "Could not load update preferences.");
             RuntimeDiagnostics.RecordError("Updates.Initialize", ex);
         }
         IsReady = true;
         Refresh();
     }
 
-    internal async Task CheckAsync(bool manual)
+    internal async Task CheckAsync()
     {
         if (IsChecking || _disposed) return;
         _checkInProgress = true;
@@ -133,32 +106,11 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
         Refresh();
         try
         {
-            if (!manual)
-            {
-                var revision = _preferenceRevision;
-                var latest = await _service.LoadAsync(_shutdown.Token);
-                if (_disposed) return;
-                if (revision == _preferenceRevision && !_savingAutomatic)
-                {
-                    if (!_automaticDirty) _preferences.Automatic = latest.Automatic;
-                    if (!_skipDirty) _preferences.SkippedVersion = latest.SkippedVersion;
-                    _preferences.LastAttemptUtc = latest.LastAttemptUtc;
-                }
-                MergeCachedRelease(latest);
-                if (!UpdateService.IsAutomaticCheckDue(_preferences, DateTimeOffset.UtcNow))
-                {
-                    State = _release is not null ? UpdateCheckState.Available
-                        : _preferences.LastSuccessUtc is not null ? UpdateCheckState.Current : UpdateCheckState.Idle;
-                    return;
-                }
-            }
             var startedAt = DateTimeOffset.UtcNow;
-            _preferences.LastAttemptUtc = startedAt;
-            await SaveAsync(new(LastAttemptUtc: startedAt));
             var release = await _service.CheckAsync(_shutdown.Token);
             if (_disposed) return;
             _release = release.Version > _current ? release : null;
-            _manualReveal = manual;
+            _manualReveal = true;
             _preferences.LastKnownTag = release.Tag;
             _preferences.LastSuccessUtc = startedAt;
             await SaveAsync(new(LastSuccessUtc: startedAt, LastKnownTag: release.Tag));
@@ -173,61 +125,25 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
         finally { _checkInProgress = false; if (!_disposed) Refresh(); }
     }
 
-    private void MergeCachedRelease(UpdatePreferences latest)
-    {
-        // Another window may have completed a check during our startup delay.
-        // Adopt its result before the daily limit suppresses our network request.
-        if (latest.LastSuccessUtc is not { } success ||
-            (_preferences.LastSuccessUtc is { } currentSuccess && success < currentSuccess) ||
-            latest.LastKnownTag is not { } tag || UpdateService.ParseVersion(tag) is not { } version) return;
-
-        _preferences.LastSuccessUtc = success;
-        _preferences.LastKnownTag = tag;
-        _release = version > _current ? UpdateService.CreateRelease(tag, version) : null;
-    }
-
-    private async Task SaveAutomaticAsync()
-    {
-        _savingAutomatic = true;
-        try
-        {
-            // At most one active write and one latest pending value, even under rapid toggles.
-            while (_automaticSavePending && !_disposed)
-            {
-                _automaticSavePending = false;
-                await SaveAsync(new(Automatic: _preferences.Automatic));
-            }
-        }
-        finally { _savingAutomatic = false; }
-    }
-
     private async Task<bool> SaveAsync(UpdatePreferenceChange change)
     {
         try
         {
-            var automaticRevision = _automaticRevision;
             var skipRevision = _skipRevision;
             var saved = await _service.ApplyAsync(change, _shutdown.Token);
             if (_disposed) return false;
             // Preserve local edits made while this write was in flight.
-            if (automaticRevision == _automaticRevision)
-            {
-                if (change.Automatic is not null) _automaticDirty = false;
-                if (!_automaticDirty && !_automaticSavePending) _preferences.Automatic = saved.Automatic;
-                OnPropertyChanged(nameof(Automatic));
-            }
             if (skipRevision == _skipRevision)
             {
                 if (change.SkippedVersion is not null) _skipDirty = false;
                 if (!_skipDirty && _preferences.SkippedVersion != saved.SkippedVersion)
                 {
                     _preferences.SkippedVersion = saved.SkippedVersion;
-                    // Automatic preference saves do not otherwise refresh the release UI.
                     foreach (var property in new[] { nameof(IsSkipped), nameof(ShowNotification),
                         nameof(NotificationVisibility), nameof(Status) }) OnPropertyChanged(property);
                 }
             }
-            if (!_automaticDirty && !_skipDirty) _preferenceError = string.Empty;
+            if (!_skipDirty) _preferenceError = string.Empty;
             return true;
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { return false; }
@@ -252,7 +168,6 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
         if (_release is null || IsChecking || _disposed) return;
         _preferences.SkippedVersion = _release.Version.ToString();
         _manualReveal = false;
-        _preferenceRevision++;
         _skipRevision++;
         _skipDirty = true;
         await SaveAsync(new(SkippedVersion: _preferences.SkippedVersion));
@@ -277,7 +192,7 @@ public sealed class UpdateViewModel : ViewModelBase, IDisposable
 
     private void Refresh()
     {
-        foreach (var property in new[] { nameof(State), nameof(IsReady), nameof(IsChecking), nameof(Automatic),
+        foreach (var property in new[] { nameof(State), nameof(IsReady), nameof(IsChecking),
             nameof(Status), nameof(StatusGlyph), nameof(CheckButtonText), nameof(IsSkipped), nameof(ShowNotification),
             nameof(NotificationVisibility), nameof(NotificationText), nameof(ReleaseVisibility), nameof(ProgressVisibility), nameof(StatusGlyphVisibility),
             nameof(LastCheckedText), nameof(PreferenceError), nameof(PreferenceErrorVisibility) }) OnPropertyChanged(property);

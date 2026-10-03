@@ -8,8 +8,6 @@ public sealed record AppRelease(string Tag, Version Version, Uri Page);
 
 public sealed class UpdatePreferences
 {
-    public bool Automatic { get; set; } = true;
-    public DateTimeOffset? LastAttemptUtc { get; set; }
     public string? SkippedVersion { get; set; }
     public DateTimeOffset? LastSuccessUtc { get; set; }
     public string? LastKnownTag { get; set; }
@@ -17,18 +15,13 @@ public sealed class UpdatePreferences
 
 // Null means unchanged. Never send a window's complete stale snapshot to disk.
 public sealed record UpdatePreferenceChange(
-    bool? Automatic = null,
     string? SkippedVersion = null,
-    DateTimeOffset? LastAttemptUtc = null,
     DateTimeOffset? LastSuccessUtc = null,
     string? LastKnownTag = null)
 {
     public void ApplyTo(UpdatePreferences latest)
     {
-        if (Automatic is { } automatic) latest.Automatic = automatic;
         if (SkippedVersion is not null) latest.SkippedVersion = SkippedVersion;
-        if (LastAttemptUtc is { } attempt && (latest.LastAttemptUtc is null || attempt >= latest.LastAttemptUtc))
-            latest.LastAttemptUtc = attempt;
         // Keep a result and its timestamp together; late older results cannot roll the cache back.
         if (LastSuccessUtc is { } success && LastKnownTag is not null &&
             (latest.LastSuccessUtc is null || success >= latest.LastSuccessUtc))
@@ -227,7 +220,4 @@ public sealed class UpdateService : IUpdateService
         if (!Version.TryParse(value, out var version) || version.Build < 0) return null;
         return new Version(version.Major, version.Minor, version.Build, Math.Max(0, version.Revision));
     }
-
-    public static bool IsAutomaticCheckDue(UpdatePreferences preferences, DateTimeOffset now) =>
-        preferences.Automatic && (preferences.LastAttemptUtc is not { } last || now < last || now - last >= TimeSpan.FromDays(1));
 }

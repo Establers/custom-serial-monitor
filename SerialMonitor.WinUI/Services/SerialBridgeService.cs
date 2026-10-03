@@ -406,12 +406,17 @@ public sealed class SerialBridgeService : ISerialBridgeService
                         BridgeGroupFlushReason? flushReason = null;
                         while (!flushReason.HasValue)
                         {
-                            flushReason = grouper.GetImmediateFlushReason(_clock.GetTimestamp());
-                            if (flushReason.HasValue)
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var immediateReason = grouper.GetImmediateFlushReason(_clock.GetTimestamp());
+                            if (immediateReason is BridgeGroupFlushReason.NativeIdleBoundary or
+                                BridgeGroupFlushReason.MaximumSize)
                             {
+                                flushReason = immediateReason;
                                 break;
                             }
 
+                            // An overdue writer is not evidence of a receive-side gap.
+                            // Compare queued RX timestamps before flushing on elapsed time.
                             BridgeRxChunk? nextChunk;
                             lock (_stateGate)
                             {
@@ -438,10 +443,9 @@ public sealed class SerialBridgeService : ISerialBridgeService
                                 break;
                             }
 
-                            if (!await WaitForDeviceChunkAsync(wait.Delay, cancellationToken))
-                            {
-                                flushReason = wait.TimeoutReason;
-                            }
+                            // A wait timeout is a wake-up signal; recheck the queue and
+                            // monotonic deadline before deciding that the group is complete.
+                            await WaitForDeviceChunkAsync(wait.Delay, cancellationToken);
                         }
 
                         chunk = grouper.BuildAndReset(flushReason!.Value);

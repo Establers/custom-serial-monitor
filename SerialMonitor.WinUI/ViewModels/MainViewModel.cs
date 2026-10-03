@@ -3980,8 +3980,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string HexFtdiHelpNoticeText => UiText.Get(
         "HexFtdiHelpNotice",
-        "The default HEX TIMEOUT is 40 ms regardless of Baud. Adjust it if needed. " +
-        "If packets are split, consider setting the FTDI Latency Timer to 2 ms.");
+        """
+        The default HEX TIMEOUT is 40 ms regardless of baud rate. Adjust it if needed.
+
+        For the RealSYS CNV485U (USB-RS485), set the Latency Timer to 2 ms. This device uses an FTDI driver; its default 16 ms latency can split a packet when the HEX timeout is short.
+
+        Device Manager → Ports (COM & LPT) → Properties of the device's COM port → Port Settings → Advanced → Latency Timer (msec): 2. Disconnect and reconnect in the app after changing this setting.
+
+        This is a USB driver setting, separate from the app's HEX TIMEOUT. Check the same setting for other FTDI USB serial devices if packets are split.
+        """);
 
     public IReadOnlyList<HelpSection> HelpSections { get; } = CreateHelpSections();
 

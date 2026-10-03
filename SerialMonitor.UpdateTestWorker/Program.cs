@@ -15,10 +15,8 @@ for (var index = 0; index < 25; index++)
 {
     var change = mode switch
     {
-        "automatic" => new UpdatePreferenceChange(Automatic: false),
         "skip" => new UpdatePreferenceChange(SkippedVersion: "1.4.0.0"),
-        _ => new UpdatePreferenceChange(LastAttemptUtc: DateTimeOffset.UtcNow,
-            LastSuccessUtc: DateTimeOffset.UtcNow, LastKnownTag: "v1.5.0")
+        _ => new UpdatePreferenceChange(LastSuccessUtc: DateTimeOffset.UtcNow, LastKnownTag: "v1.5.0")
     };
     await service.ApplyAsync(change, default);
 }
