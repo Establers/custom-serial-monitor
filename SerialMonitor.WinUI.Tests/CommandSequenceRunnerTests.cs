@@ -78,29 +78,38 @@ public sealed class CommandSequenceRunnerTests
         Assert.Equal(new[] { 1, 2, 3, 4 }, completed);
     }
 
-    [Fact]
-    public async Task RepeatedDisconnects_RetryOnlyFailedStepWithoutAdvancingProgress()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(CommandSequenceRunner.MaxAttemptsPerSlice * 3 + 1)]
+    [InlineData(1000)]
+    public async Task RepeatedDisconnects_RetryOnlyFailedStepWithoutAdvancingProgress(int failedAttempts)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        // This verifies retry/progress semantics, not scheduler throughput. The
+        // runner yields on its own; an extra Task.Yield per fake reconnect made
+        // hosted CI hit the old five-second cutoff despite correct behavior.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var attempts = 0;
         var waits = 0;
         var completed = new List<int>();
+        var sent = new List<string>();
         await new CommandSequenceRunner().RunAsync(Sequence(),
-            async token => { waits++; await Task.Yield(); token.ThrowIfCancellationRequested(); return true; },
+            token => { waits++; token.ThrowIfCancellationRequested(); return Task.FromResult(true); },
             (step, _) =>
             {
                 attempts++;
-                if (attempts <= 1000)
+                if (attempts <= failedAttempts)
                 {
                     Assert.Equal("A", step.CommandText);
                     Assert.Empty(completed);
                     return Task.FromResult(false);
                 }
+                sent.Add(step.CommandText);
                 return Task.FromResult(true);
             },
             () => true, _ => { }, completed.Add, timeout.Token);
-        Assert.Equal(1002, attempts);
+        Assert.Equal(failedAttempts + 2, attempts);
         Assert.Equal(attempts, waits);
+        Assert.Equal(new[] { "A", "B" }, sent);
         Assert.Equal(new[] { 1, 2 }, completed);
     }
 
