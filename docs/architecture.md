@@ -109,6 +109,7 @@ the xterm view only; persisted logs remain plain text.
 ## Persistence
 
 - Default profile: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
+- Window names by port: `%LOCALAPPDATA%\SerialMonitor\port-aliases.json`
 - Serial logs: `%LOCALAPPDATA%\SerialMonitor\logs`
 - Runtime diagnostics: `%LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>`
 - WebView2 runtime data: `%LOCALAPPDATA%\SerialMonitor\WebView2\instance-<pid>-<launch-id>`
@@ -116,6 +117,12 @@ the xterm view only; persisted logs remain plain text.
 Profile writes use a temporary file and replacement/backup flow. Generated
 publish output under `release/` and `artifacts/` should be treated as build
 artifacts rather than source.
+
+Port aliases are independent of profiles and serial-log filenames. Each edit
+asynchronously merges only the selected port's name into the latest alias file
+under an OS file lock, then atomically replaces it. Renaming needs no reconnect.
+The button stays outside the connection toolbar's scrolling content, and the
+native window title includes the selected port and its optional alias.
 
 ## Multiple app instances
 

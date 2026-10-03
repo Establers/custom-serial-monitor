@@ -1597,6 +1597,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _selectedPort, displayValue))
             {
                 _currentSerialSettings.PortName = GetActualPortName(displayValue) ?? string.Empty;
+                OnPropertyChanged(nameof(SelectedActualPortName));
                 RecordPortSelectionChange(_suppressSettingsApplyRecording
                     ? $"Restored port selection: {displayValue ?? "(none)"}"
                     : $"Selected port: {displayValue ?? "(none)"}");
@@ -1610,6 +1611,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
         }
     }
+
+    public string SelectedActualPortName => GetActualPortName(SelectedPort) ?? string.Empty;
 
     public int SelectedBaudRate
     {

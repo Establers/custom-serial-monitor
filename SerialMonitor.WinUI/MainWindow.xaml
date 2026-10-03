@@ -1065,7 +1065,7 @@
         </Grid>
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
             <Button x:Uid="StaticUi002" x:Name="ConnectionToolbarScrollBackButton"
                     Grid.Column="0"
                     Style="{StaticResource NavigationIconButtonStyle}"
@@ -1178,6 +1178,51 @@
                           FontSize="12"
                           UseLayoutRounding="False"
                           Glyph="&#xE76C;" />
+            </Button>
+            <Button x:Name="PortAliasButton"
+                    Grid.Column="3"
+                    Margin="8,0,0,0"
+                    MinWidth="80"
+                    MaxWidth="160"
+                    IsEnabled="{Binding CanEdit}"
+                    ToolTipService.ToolTip="{Binding ToolTip}"
+                    AutomationProperties.Name="{Binding ToolTip}">
+                <Button.Content>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Text="{Binding ButtonText}"
+                                   MaxWidth="125"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <FontIcon Grid.Column="1"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="11" Glyph="&#xE70F;" />
+                    </Grid>
+                </Button.Content>
+                <Button.Flyout>
+                    <Flyout x:Name="PortAliasFlyout"
+                            Placement="BottomEdgeAlignedRight"
+                            Opening="PortAliasFlyout_Opening"
+                            Closed="PortAliasFlyout_Closed"
+                            Opened="PortAliasFlyout_Opened">
+                        <StackPanel x:Name="PortAliasEditor" Width="260" Spacing="8" KeyDown="PortAliasEditor_KeyDown">
+                            <TextBlock Text="{Binding EditingPortText}" FontWeight="SemiBold" />
+                            <TextBox x:Uid="PortAliasInput" x:Name="PortAliasTextBox"
+                                     Text="{Binding DraftAlias, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     MaxLength="64" IsEnabled="{Binding CanApply}"
+                                     PlaceholderText="e.g. Main board" />
+                            <TextBlock x:Uid="PortAliasHint"
+                                       Text="Remembered for this port. Leave empty to remove the name."
+                                       TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Visibility="{Binding ErrorVisibility}" />
+                            <Button x:Uid="PortAliasApply" Content="Apply"
+                                    HorizontalAlignment="Right" IsEnabled="{Binding CanApply}"
+                                    Click="PortAliasApplyButton_Click" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
             </Button>
             </Grid>
         </Border>

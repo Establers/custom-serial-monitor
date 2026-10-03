@@ -10,6 +10,15 @@ if (mode == "hold")
     return;
 }
 
+if (mode is "alias-first" or "alias-second")
+{
+    var aliases = new PortAliasService(path);
+    for (var index = 0; index < 25; index++)
+        await aliases.SetAsync(mode == "alias-first" ? "COM3" : "COM7",
+            mode == "alias-first" ? "Main board" : "Module", default);
+    return;
+}
+
 var service = new UpdateService(path);
 for (var index = 0; index < 25; index++)
 {

@@ -33,6 +33,21 @@ real hardware when available.
 - [ ] Hover over the footer and confirm the health reason and counter legend appear.
 - [ ] Right-click the footer, copy status, and paste it into Notepad.
 
+## Window Names
+
+- [ ] Select a port and click the name button at the far right of the top row.
+  Verify the input receives focus and Enter applies the name to the button and
+  native title (`Main board · COM3 - Serial Monitor`).
+- [ ] Edit the name, press Esc or click outside, and verify the previous name remains.
+- [ ] Apply an empty name and verify the title falls back to the COM port only.
+- [ ] Rename while MOCK RX and file logging are active; verify both continue and
+  the log filename and command history remain unchanged.
+- [ ] Narrow the window and verify the button remains visible; long names must
+  show an ellipsis with the full name available in the tooltip.
+- [ ] Switch ports and restart; verify names restore for their respective ports.
+- [ ] Run two instances on different ports and save both names, then exit/restart.
+  Verify neither name was lost or copied to the other port.
+
 ## MOCK Connect And Disconnect
 
 - [ ] Select `MOCK`.

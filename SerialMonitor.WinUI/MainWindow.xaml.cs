@@ -166,7 +166,7 @@ public sealed partial class MainWindow : Window
         UpdateStatusButton.DataContext = _updates;
 #if DEBUG
         if (Environment.GetCommandLineArgs().Any(a => a.StartsWith("--update-preview=", StringComparison.Ordinal)))
-            Title = "Serial Monitor — Update preview";
+            Title = "Serial Monitor - Update preview";
 #endif
         _xtermSearchOperation = new LatestRequestAsyncOperation<XtermSearchRequest>(
             SearchXtermAsync,
@@ -200,6 +200,7 @@ public sealed partial class MainWindow : Window
             dispatcherQueue);
 
         Root.DataContext = _viewModel;
+        InitializePortAliasUi();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.Events.BatchApplied += OnDetectedEventsBatchApplied;
         _viewModel.Log.TextBatchAppended += OnLogTextBatchAppended;
@@ -253,6 +254,7 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        _portAlias.Dispose();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
     }
@@ -341,6 +343,8 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _portAlias.PropertyChanged -= OnPortAliasPropertyChanged;
+        _portAlias.Dispose();
         _updates.Dispose();
         _logRestoreProgressTimer?.Stop();
         _logRestoreProgress = null;
@@ -500,7 +504,8 @@ public sealed partial class MainWindow : Window
     private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
         _ = _updates.InitializeAsync();
-        await _viewModel.InitializeAsync();
+        await Task.WhenAll(_viewModel.InitializeAsync(), _portAlias.InitializeAsync());
+        if (IsClosingOrClosed) return;
         ApplySelectedTheme();
         ApplyTitleBarTheme();
         ApplyXtermDefaultBackgroundColor();
@@ -2524,6 +2529,8 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.SelectedActualPortName) && !IsClosingOrClosed)
+            UpdatePortAliasSelection();
         if (args.PropertyName == nameof(MainViewModel.SelectedAppTheme))
         {
             ApplySelectedTheme();

@@ -895,4 +895,16 @@
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>업데이트 옵션</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>업데이트 옵션</value></data>
   <data name="UpdateSkip.Text" xml:space="preserve"><value>이 버전 알림 건너뛰기</value></data>
+  <data name="PortAliasAddName" xml:space="preserve"><value>이름 추가</value></data>
+  <data name="PortAliasEditorTitle" xml:space="preserve"><value>{0} 장치 이름</value></data>
+  <data name="PortAliasSelectPort" xml:space="preserve"><value>창 이름을 지정할 COM 포트를 선택하세요.</value></data>
+  <data name="PortAliasToolTip" xml:space="preserve"><value>{0} 이름 수정 · 현재 이름: {1}</value></data>
+  <data name="PortAliasNoName" xml:space="preserve"><value>없음</value></data>
+  <data name="PortAliasLoadFailed" xml:space="preserve"><value>저장된 이름을 불러오지 못했습니다.</value></data>
+  <data name="PortAliasSaveFailed" xml:space="preserve"><value>이름을 저장하지 못했습니다. 다시 시도하세요.</value></data>
+  <data name="PortAliasInvalidName" xml:space="preserve"><value>이름은 64자 이내로 입력하세요. 줄바꿈과 제어 문자는 사용할 수 없습니다.</value></data>
+  <data name="PortAliasInput.PlaceholderText" xml:space="preserve"><value>예: 메인 보드</value></data>
+  <data name="PortAliasInput.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>장치 이름</value></data>
+  <data name="PortAliasHint.Text" xml:space="preserve"><value>포트별로 기억합니다. 비우면 이름이 삭제됩니다.</value></data>
+  <data name="PortAliasApply.Content" xml:space="preserve"><value>적용</value></data>
 </root>

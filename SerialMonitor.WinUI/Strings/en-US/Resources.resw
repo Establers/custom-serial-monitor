@@ -895,4 +895,16 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Update options</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Update options</value></data>
   <data name="UpdateSkip.Text" xml:space="preserve"><value>Skip this version</value></data>
+  <data name="PortAliasAddName" xml:space="preserve"><value>Add name</value></data>
+  <data name="PortAliasEditorTitle" xml:space="preserve"><value>Name for {0}</value></data>
+  <data name="PortAliasSelectPort" xml:space="preserve"><value>Select a port to name this window.</value></data>
+  <data name="PortAliasToolTip" xml:space="preserve"><value>Edit the name for {0}. Current name: {1}</value></data>
+  <data name="PortAliasNoName" xml:space="preserve"><value>none</value></data>
+  <data name="PortAliasLoadFailed" xml:space="preserve"><value>Saved names could not be loaded.</value></data>
+  <data name="PortAliasSaveFailed" xml:space="preserve"><value>Name could not be saved. Try again.</value></data>
+  <data name="PortAliasInvalidName" xml:space="preserve"><value>Use at most 64 valid characters on one line; control marks are not allowed.</value></data>
+  <data name="PortAliasInput.PlaceholderText" xml:space="preserve"><value>e.g. Main board</value></data>
+  <data name="PortAliasInput.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Device name</value></data>
+  <data name="PortAliasHint.Text" xml:space="preserve"><value>Remembered for this port. Leave empty to remove the name.</value></data>
+  <data name="PortAliasApply.Content" xml:space="preserve"><value>Apply</value></data>
 </root>
