@@ -22,6 +22,15 @@ real hardware when available.
 
 ## Startup
 
+- [ ] In Settings, verify every serial selector, appearance selector and UI
+  selector uses the same width and aligned label/control columns. Check the
+  longest values (OnePointFive, DtrRtsXOn, JetBrains Mono (Bundled), and
+  yyyy-MM-dd HH:mm:ss.fff) fit fully including the dropdown arrow. Repeat for
+  Bridge and Test selectors and the HEX timeout input.
+- [ ] Narrow the inspector/window and verify setting fields keep their width
+  and remain reachable by horizontal scrolling. Labels, paths, explanations
+  and status text should wrap instead of using an ellipsis or clipping a line.
+
 - [ ] Start the app.
 - [ ] Confirm the bridge is `BRIDGE OFF` after startup, including when the saved
   profile previously contained an enabled bridge and the device COM auto-connects.
