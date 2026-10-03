@@ -817,6 +817,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CopyStatusCommand = new AsyncRelayCommand(CopyStatusAsync);
         CopyHelpCommand = new AsyncRelayCommand(CopyHelpAsync);
         OpenLogFolderCommand = new AsyncRelayCommand(OpenLogFolderAsync);
+        OpenCurrentLogLocationCommand = new AsyncRelayCommand(OpenCurrentLogLocationAsync);
         OpenCurrentSerialLogCommand = new AsyncRelayCommand(OpenCurrentSerialLogAsync, CanOpenCurrentSerialLog);
         CopySerialLogPathCommand = new AsyncRelayCommand(CopySerialLogPathAsync, CanUseCurrentSerialLogPath);
         ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync, () => !IsBusy);
@@ -1364,6 +1365,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public AsyncRelayCommand CopyHelpCommand { get; }
 
     public AsyncRelayCommand OpenLogFolderCommand { get; }
+    public AsyncRelayCommand OpenCurrentLogLocationCommand { get; }
 
     public AsyncRelayCommand OpenCurrentSerialLogCommand { get; }
 
@@ -2291,6 +2293,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ? UiText.Format("StopLogSavingHelp", "File logging status: {0}. Click to stop saving; existing files are kept.", FileLoggingStatus)
         : UiText.Get("StartLogSavingHelp", "Not saving to a file. Click to start saving new serial logs; receiving and display continue independently.");
 
+    public string FileLoggingToolbarToolTip => FileLoggingToolTip + "\n"
+        + UiText.Get("OpenCurrentLogLocationHint", "Right-click to open the log file's folder.");
+
     public bool FileLoggingWhileViewPaused
     {
         get => _currentUiSettings.FileLoggingWhileViewPaused;
@@ -3066,6 +3071,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string CompactPauseRenderingButtonText => IsLogRenderingPaused ? ">" : "||";
 
     public string CompactPauseRenderingButtonGlyph => IsLogRenderingPaused ? "\uE768" : "\uE769";
+
+    public string PauseRenderingIconVisibility => IsLogRenderingPaused ? "Collapsed" : "Visible";
+
+    public string ResumeRenderingIconVisibility => IsLogRenderingPaused ? "Visible" : "Collapsed";
 
     public string PauseRenderingToolTip => IsViewPauseTransitioning
         ? "Finishing display work accepted before the pause boundary. RX, file logging, and events continue."
@@ -10976,18 +10985,30 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         return SelectedEvent is not null && !string.IsNullOrWhiteSpace(SelectedEventContextText);
     }
 
-    private Task OpenLogFolderAsync()
+    private Task OpenLogFolderAsync() => OpenLogLocationAsync(useCurrentLogDirectory: false);
+
+    private Task OpenCurrentLogLocationAsync() => OpenLogLocationAsync(useCurrentLogDirectory: true);
+
+    private async Task OpenLogLocationAsync(bool useCurrentLogDirectory)
     {
+        // Capture the target before awaiting: a rotation or settings edit must
+        // not redirect an action that the user already requested.
+        var logPath = useCurrentLogDirectory ? CurrentSerialLogPath : string.Empty;
+        var saveDirectory = GetLogFolderPath();
         try
         {
-            var folder = GetLogFolderPath();
-            Directory.CreateDirectory(folder);
-
-            Process.Start(new ProcessStartInfo
+            var folder = await Task.Run(() =>
             {
-                FileName = "explorer.exe",
-                Arguments = $"\"{folder}\"",
-                UseShellExecute = true
+                var target = string.IsNullOrWhiteSpace(logPath)
+                    ? saveDirectory
+                    : Path.GetDirectoryName(Path.GetFullPath(logPath)) ?? saveDirectory;
+                Directory.CreateDirectory(target);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = target,
+                    UseShellExecute = true
+                });
+                return target;
             });
 
             RecordLogFileActionSuccess($"Opened log folder: {folder}");
@@ -10996,8 +11017,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             RecordLogFileActionError($"Open log folder failed: {ex.Message}");
         }
-
-        return Task.CompletedTask;
     }
 
     private async Task ToggleFileLoggingAsync()
@@ -11969,6 +11988,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(PauseRenderingButtonText));
         OnPropertyChanged(nameof(CompactPauseRenderingButtonText));
         OnPropertyChanged(nameof(CompactPauseRenderingButtonGlyph));
+        OnPropertyChanged(nameof(PauseRenderingIconVisibility));
+        OnPropertyChanged(nameof(ResumeRenderingIconVisibility));
         OnPropertyChanged(nameof(PauseRenderingToolTip));
         OnPropertyChanged(nameof(PendingVisualLineCount));
         SetStatus(statusMessage);
@@ -12340,6 +12361,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(FileLoggingToolbarToolTip));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
         OnPropertyChanged(nameof(LastLogFileActionStatus));
         OnPropertyChanged(nameof(LogFileActionErrorCount));
@@ -12366,6 +12388,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToggleText));
         OnPropertyChanged(nameof(FileLoggingMainStatusText));
         OnPropertyChanged(nameof(FileLoggingToolTip));
+        OnPropertyChanged(nameof(FileLoggingToolbarToolTip));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
     }
 

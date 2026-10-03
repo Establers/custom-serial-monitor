@@ -907,4 +907,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="PortAliasInput.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Device name</value></data>
   <data name="PortAliasHint.Text" xml:space="preserve"><value>Remembered for this port. Leave empty to remove the name.</value></data>
   <data name="PortAliasApply.Content" xml:space="preserve"><value>Apply</value></data>
+  <data name="OpenCurrentLogLocationMenuItem.Text" xml:space="preserve"><value>Open log file location</value></data>
+  <data name="OpenCurrentLogLocationHint" xml:space="preserve"><value>Right-click to open the log file's folder.</value></data>
 </root>

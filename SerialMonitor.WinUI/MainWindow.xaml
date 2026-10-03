@@ -1122,7 +1122,18 @@
                         Command="{Binding ToggleFileLoggingCommand}"
                         AutomationProperties.Name="{Binding FileLoggingToggleText}"
                         Style="{StaticResource RuleActionButtonStyle}"
-                        ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
+                        ToolTipService.ToolTip="{Binding FileLoggingToolbarToolTip}">
+                    <Button.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem x:Uid="OpenCurrentLogLocationMenuItem"
+                                            Text="Open log file location"
+                                            Command="{Binding OpenCurrentLogLocationCommand}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE838;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.ContextFlyout>
                     <TextBlock x:Name="FileLoggingToggleTextBlock"
                                Text="{Binding FileLoggingToggleText}" />
                 </Button>
@@ -1272,10 +1283,19 @@
                         <Button Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ToggleLogRenderingPauseCommand}"
                                 ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      FontSize="12"
-                                      UseLayoutRounding="False"
-                                      Glyph="{Binding CompactPauseRenderingButtonGlyph}" />
+                            <Grid>
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          FontSize="12"
+                                          UseLayoutRounding="False"
+                                          Glyph="&#xE769;"
+                                          Visibility="{Binding PauseRenderingIconVisibility}" />
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          FontSize="12"
+                                          UseLayoutRounding="False"
+                                          Glyph="&#xE768;"
+                                          Foreground="{ThemeResource ErrorTextBrush}"
+                                          Visibility="{Binding ResumeRenderingIconVisibility}" />
+                            </Grid>
                         </Button>
                         <Button x:Uid="StaticUi016"
                                 Style="{StaticResource NavigationIconButtonStyle}"

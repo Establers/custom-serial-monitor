@@ -907,4 +907,6 @@
   <data name="PortAliasInput.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>장치 이름</value></data>
   <data name="PortAliasHint.Text" xml:space="preserve"><value>포트별로 기억합니다. 비우면 이름이 삭제됩니다.</value></data>
   <data name="PortAliasApply.Content" xml:space="preserve"><value>적용</value></data>
+  <data name="OpenCurrentLogLocationMenuItem.Text" xml:space="preserve"><value>로그 파일 위치 열기</value></data>
+  <data name="OpenCurrentLogLocationHint" xml:space="preserve"><value>우클릭하면 로그 파일이 있는 폴더를 열 수 있습니다.</value></data>
 </root>

@@ -50,6 +50,16 @@ real hardware when available.
 
 ## MOCK Connect And Disconnect
 
+- [ ] Right-click the top Logging button and open the log file location. While
+  logging, verify it opens the active file's folder without toggling logging.
+  After stopping, verify it opens the last log's folder; before any log exists,
+  verify it opens the configured Save dir. Repeat with spaces and Korean text
+  in the folder path, and after changing Save dir while a previous log exists.
+- [ ] Pause the log display and verify the play icon uses the existing error-red
+  color. Resume and verify the pause icon retains its original foreground.
+  Repeat in Light and Dark and switch theme while paused; high contrast must
+  retain the app's accessible error color.
+
 - [ ] Select `MOCK`.
 - [ ] Click Connect.
 - [ ] Confirm connection state changes to connected.
