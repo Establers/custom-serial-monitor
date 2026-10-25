@@ -586,6 +586,7 @@
     let replaceQueueHead = 0;
     let parsedLogLineIdHead = 0;
     let parsedLogLineIdCount = 0;
+    let lastParsedLogLineIsOpen = false;
     let appendDrainScheduled = false;
     let appendWriting = false;
     let replaceWriting = false;
@@ -613,6 +614,7 @@
       parsedLogLineTimestamps.length = 0;
       parsedLogLineIdHead = 0;
       parsedLogLineIdCount = 0;
+      lastParsedLogLineIsOpen = false;
     }
 
     function trimParsedLogLineIds() {
@@ -705,6 +707,7 @@
       }
 
       appendParsedLogLineId(lineId, timestamp);
+      lastParsedLogLineIsOpen = true;
       return true;
     });
 
@@ -983,6 +986,8 @@
         action = 'focus';
       } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === 'F3') {
         action = event.shiftKey ? 'previous' : 'next';
+      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === 'F4') {
+        action = 'previous';
       }
 
       if (!action) {
@@ -1334,7 +1339,9 @@
       replaceOperationId += 1;
       invalidateLogicalLineStartRows();
       resetParsedLogLineIds();
-      terminal.clear();
+      // clear() retains the current row and cursor column. An unfinished RX
+      // would then be prepended to the first restored log and shift its offsets.
+      terminal.reset();
       return true;
     };
 
@@ -1443,7 +1450,7 @@
       replaceOperationId += 1;
       invalidateLogicalLineStartRows();
       resetParsedLogLineIds();
-      terminal.clear();
+      terminal.reset();
       return true;
     };
 
@@ -1531,6 +1538,8 @@
     }
 
     terminal.onResize(invalidateLogicalLineStartRows);
+    // Unlike soft wrapping, a received LF completes the tagged logical line.
+    terminal.onLineFeed(() => { lastParsedLogLineIsOpen = false; });
 
     function getLogicalLineStartRows() {
       if (logicalLineStartRowsCache) {
@@ -1555,7 +1564,10 @@
         }
       }
 
-      if (count > 0 && buffer.getLine(starts[count - 1])?.translateToString(true).length === 0) {
+      // Tabs occupy empty cells. A tagged, unfinished tab-only RX still owns
+      // this row; dropping it would shift every retained ID to the previous log.
+      if (!lastParsedLogLineIsOpen && count > 0 &&
+          buffer.getLine(starts[count - 1])?.translateToString(true).length === 0) {
         count--;
       }
 

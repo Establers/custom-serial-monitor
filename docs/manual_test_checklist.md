@@ -22,6 +22,15 @@ real hardware when available.
 
 ## Startup
 
+- [ ] Enable Cute background mode, choose a JPG/PNG (also try a path with spaces
+  and Korean text), and enter opacity values 0, 1, 37, 73 and 100 percent.
+  Confirm 0 hides the image and 100 shows it fully, with intermediate values
+  changing its visibility. The main xterm surface remains opaque.
+- [ ] Close normally without pressing Save Profile, restart, and confirm the
+  background mode, image path and opacity are restored. Repeat while receiving
+  MOCK logs and with background mode disabled. Temporarily rename the image,
+  restart, and confirm the default image appears while the selected path stays
+  saved. Restore the file and restart to confirm the custom image returns.
 - [ ] In Settings, verify every serial selector, appearance selector and UI
   selector uses the same width and aligned label/control columns. Check the
   longest values (OnePointFive, DtrRtsXOn, JetBrains Mono (Bundled), and
@@ -408,8 +417,14 @@ real hardware when available.
   Click it and compare with Enter: both refresh the visible-log snapshot using the
   current options, select the next match, and add the query to search history.
 - [ ] Confirm xterm jumps/selects matches.
-- [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3;
+- [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3/F4;
   confirm the total match count remains the last Enter-search snapshot.
+- [ ] With Auto Scroll OFF and timestamp/direction prefixes hidden, receive an
+  unterminated tab-only RX segment. Search and navigate older matches; confirm
+  the selected text belongs to the requested log line, including repeated text.
+- [ ] While RX has an unfinished line, change a display setting that redraws
+  the logs. Search the first retained log; confirm its text and match offsets
+  are unchanged. Clear during partial RX, then confirm new logs start cleanly.
 - [ ] Press Enter in the search box and confirm the total match count updates to
   include the newly appended matches.
 - [ ] Click the xterm log and press Enter; confirm Auto Scroll toggles once.
@@ -579,3 +594,21 @@ real hardware when available.
   plus a remaining count while copied status includes every reason.
 - [ ] Confirm stale profile or search-result states are not treated as health
   errors.
+
+## AI CLI / MCP
+
+- [ ] In MCP > Quick start, confirm the AI skill card offers the separate `SerialMonitorSkills.zip` download and installation guide. Other MCP pages keep their existing content.
+- [ ] In About, confirm the brief skill introduction and installation-guide link. Check Korean/English text, narrow panels, and light/dark themes.
+- [ ] Run the new GUI, then `serialctl instances`; select `--instance` when two GUIs are running.
+- [ ] Connect through the GUI, then `serialctl request --port COM7 --text "status" --duration-ms 2000`.
+  Confirm actual RX appears in both the GUI and the capture; interleaved output is preserved without matching.
+- [ ] Pause/filter the GUI and switch Terminal/HEX modes; captures must continue independently.
+- [ ] Capture more than 16 KiB. Follow every `page.nextOffset` until `hasMore=false` and compare hex with `.bin`.
+- [ ] During a capture, GUI TX/sequence/bridge start and a second AI capture must be busy; status remains readable.
+- [ ] Use `AI 중지`, CLI cancel, MCP cancellation, client exit, and physical disconnect; control must be released.
+- [ ] Force disk/queue failure and verify explicit capture failure or rxGapDetected without stopping serial RX.
+- [ ] Register `serialctl mcp` in an AI CLI and let it read saved commands, execute one, inspect all RX, and select the next command.
+- [ ] While bridge startup is waiting for its virtual port to open, AI control must return busy; startup failure/cancellation must release control.
+- [ ] During AI connect/port refresh, GUI connect and connection-setting controls must be disabled. Verify success only for the requested port and baud.
+- [ ] Cancel AI connect during port enumeration, lifecycle-gate wait and port opening. No delayed connection may start; after a successful connect, closing the caller must leave the session connected.
+- [ ] Keep an old capture's bin/txt/json open while starting capture 33. The new capture must succeed, every file of the pinned capture must remain readable, and another old capture must be evicted.

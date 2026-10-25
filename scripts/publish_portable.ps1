@@ -81,13 +81,20 @@ function Copy-WinUIResourceArtifacts {
         throw "Could not find WinUI build output folder for XAML resources."
     }
 
-    $xbfFiles = @(Get-ChildItem -LiteralPath $buildDir -Filter "*.xbf" -File -ErrorAction SilentlyContinue)
+    $buildRoot = (Resolve-FullPath $buildDir).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $buildPrefix = $buildRoot + [System.IO.Path]::DirectorySeparatorChar
+    $xbfFiles = @(Get-ChildItem -LiteralPath $buildRoot -Filter "*.xbf" -File -Recurse)
     if ($xbfFiles.Count -eq 0) {
         throw "No .xbf files found in WinUI build output: $buildDir"
     }
 
     foreach ($xbfFile in $xbfFiles) {
-        Copy-Item -LiteralPath $xbfFile.FullName -Destination (Join-Path $DestinationPath $xbfFile.Name) -Force
+        # XAML resource URIs retain their project-relative folders (e.g. Views/).
+        $sourcePath = Assert-ChildPath -Path $xbfFile.FullName -ParentPath $buildRoot
+        $relativePath = $sourcePath.Substring($buildPrefix.Length)
+        $targetPath = Assert-ChildPath -Path (Join-Path $DestinationPath $relativePath) -ParentPath $DestinationPath
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $targetPath) | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
     }
 
     $appPri = Join-Path $buildDir "SerialMonitor.WinUI.pri"
@@ -176,6 +183,15 @@ if ($exitCode -ne 0) {
     throw "dotnet publish failed with exit code $exitCode."
 }
 
+$cliPublishArgs = @(
+    "publish", (Join-Path $repoRoot "SerialMonitor.Cli\SerialMonitor.Cli.csproj"),
+    "-c", $Configuration, "-r", "win-x64", "--self-contained", "true",
+    "-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true",
+    "-p:PublishTrimmed=false", "-o", (Join-Path $portableDirFull "tools")
+)
+$cliExitCode = Invoke-DotnetPublish -PublishArgs $cliPublishArgs -Label "serialctl CLI / MCP"
+if ($cliExitCode -ne 0) { throw "serialctl publish failed with exit code $cliExitCode." }
+
 $exePath = Join-Path $portableDirFull $exeName
 if (-not (Test-Path -LiteralPath $exePath)) {
     throw "Portable executable was not produced: $exePath"
@@ -187,6 +203,7 @@ Copy-Item -LiteralPath $licensePath -Destination (Join-Path $portableDirFull "LI
 $requiredAssets = @(
     "App.xbf",
     "MainWindow.xbf",
+    "Views\McpGuideView.xbf",
     "SerialMonitor.WinUI.pri",
     "Assets\xterm\index.html",
     "Assets\xterm\xterm.js",
@@ -200,12 +217,22 @@ $requiredAssets = @(
     "Assets\AppIcon\SerialMonitor.ico",
     "docs\sequence_authoring.md",
     "docs\sequence_examples.json",
+    "docs\ai_control.md",
+    "docs\agent_skills.md",
+    "skills\Install-Skill.ps1",
+    "skills\serial-monitor-control\SKILL.md",
+    "skills\serial-monitor-control\agents\openai.yaml",
+    "skills\serial-monitor-control\references\cli.md",
+    "skills\serial-monitor-control\references\mcp.md",
+    "skills\serial-monitor-control\references\installation.md",
+    "skills\serial-monitor-control\scripts\Find-SerialCtl.ps1",
+    "tools\serialctl.exe",
     "LICENSE"
 )
 
 foreach ($relativeAsset in $requiredAssets) {
     $assetPath = Join-Path $portableDirFull $relativeAsset
-    if (-not (Test-Path -LiteralPath $assetPath)) {
+    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
         throw "Required asset missing from portable output: $relativeAsset"
     }
 }
@@ -249,6 +276,14 @@ AI sequence authoring
 - Invalid formats or duplicate names cancel the entire import. Limit: 100 files, 10000 total steps, 16 MiB total (2 MiB/file).
 - Response waits and branching are not supported. TX OK does not verify device receipt or execution.
 
+AI device control
+-----------------
+- Open docs\agent_skills.md for the shared Codex / Claude Code / Copilot skill.
+- Users with the app installed can download SerialMonitorSkills.zip separately and point -CliPath at tools\serialctl.exe.
+- Install skills\serial-monitor-control with skills\Install-Skill.ps1 for project or personal use.
+- tools\serialctl.exe controls this running GUI and collects actual RX; the GUI owns the COM port.
+- CLI is the default path. Optional local MCP setup is in skills\serial-monitor-control\references\mcp.md.
+
 If the app does not start
 -------------------------
 - Check the Windows version.
@@ -282,6 +317,10 @@ if (-not $NoZip) {
     $zipPath = Join-Path $releaseRootFull "SerialMonitorPortable_$timestamp.zip"
     Compress-Archive -LiteralPath $portableDirFull -DestinationPath $zipPath -Force
     $zipChecksumPath = Write-Sha256File -FilePath $zipPath
+    $downloadZipPath = Join-Path $releaseRootFull 'SerialMonitorPortable.zip'
+    Copy-Item -LiteralPath $zipPath -Destination $downloadZipPath -Force
+    $downloadZipChecksumPath = Write-Sha256File -FilePath $downloadZipPath
+    $skillPackage = & (Join-Path $scriptRoot 'package_agent_skill.ps1') -OutputDirectory $releaseRootFull
 }
 
 $fileCount = @(Get-ChildItem -LiteralPath $portableDirFull -Recurse -File).Count
@@ -293,5 +332,9 @@ Write-Host "Files: $fileCount"
 if ($zipPath) {
     Write-Host "Zip: $zipPath"
     Write-Host "SHA-256: $zipChecksumPath"
+    Write-Host "Portable download: $downloadZipPath"
+    Write-Host "Portable download SHA-256: $downloadZipChecksumPath"
+    Write-Host "Standalone skills: $($skillPackage.ZipPath)"
+    Write-Host "Skills SHA-256: $($skillPackage.ChecksumPath)"
 }
 Write-Host "MSIX/AppX output: none"

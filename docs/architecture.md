@@ -32,6 +32,46 @@ TX commands and user markers join the flow after parsing as `LogLine` objects.
 Only RX data passes through the byte decoder. ANSI highlighting is generated for
 the xterm view only; persisted logs remain plain text.
 
+## Local AI / CLI automation
+
+The GUI hosts a current-user-only Named Pipe endpoint per runtime instance.
+`serialctl` provides JSON commands and an MCP stdio server; neither opens a COM
+port. `AutomationController` coordinates control reservations, bounded capture
+windows and paging. A dispatcher adapter uses the existing GUI connection/TX
+paths, including TX logging. GUI TX, sequences and bridge startup cannot enter
+an active automation reservation; an active GUI writer/sequence/bridge/reconnect
+causes an external mutation to return busy. Explicit GUI disconnect remains an
+escape hatch and interrupts a capture.
+
+`AutomationControlGate` reserves bridge startup before its first asynchronous
+wait, so a bridge whose port is still opening also excludes automation. During
+an automation reservation, GUI connection/settings controls are disabled and the
+GUI connect entry point rechecks ownership after acquiring its lifecycle gate.
+`AutomationConnectionOperation` cancels the shared port-refresh wait, forwards the
+request token to connection startup, and verifies the actual port/baud afterward.
+A startup-only cancellation registration cancels the independent connection
+lifetime during startup and detaches before the request ends, preserving an
+established session when the RPC host closes that request.
+
+`SerialService.CaptureBytesReceived` publishes the receive generation and original
+chunk in every receive mode, before parser/bridge routing. Its only subscriber
+offers the chunk to `RxCaptureService` without waiting on disk or UI. This is a
+separate fan-out, not another reader of the serial/parser channels. Capture
+workers persist byte-exact RX and incrementally decoded text, independent of
+display mode, pause and filtering. Cancellation/session changes stop collection;
+bounded queues, byte limits, disk failures and serial line errors remain explicit
+in results. Large RX is paged with byte offsets and UTF-8 boundaries, rather
+than silently truncated. Matching is not required, and capture completion does
+not imply product command success. See [AI control](ai_control.md).
+
+Capture retention obtains non-reading, delete-sharing leases on every member of
+a capture before deleting any member, with metadata removed last. Active page
+read handles and external viewers cause the whole capture to be skipped; cleanup
+tries another old capture and never fails a new capture for a sharing violation.
+Opening a page and checking its metadata are synchronized with retention. If all
+old captures are pinned, retention limits are temporarily exceeded until a later
+capture can clean them up.
+
 ## Component responsibilities
 
 - `SerialService` owns real and mock serial connections, RX byte reads, TX byte

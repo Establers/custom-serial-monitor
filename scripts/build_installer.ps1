@@ -136,6 +136,9 @@ if (-not $installer) {
 }
 
 $installerChecksumPath = Write-Sha256File -FilePath $installer.FullName
+$downloadInstallerPath = Join-Path $releaseRoot 'SerialMonitorSetup.exe'
+Copy-Item -LiteralPath $installer.FullName -Destination $downloadInstallerPath -Force
+$downloadInstallerChecksumPath = Write-Sha256File -FilePath $downloadInstallerPath
 
 $packageExtensions = @(".msix", ".msixbundle", ".appx", ".appxbundle")
 $packageFiles = @(Get-ChildItem -LiteralPath $releaseRoot -Recurse -File |
@@ -150,4 +153,6 @@ Write-Host "Installer build complete."
 Write-Host "Portable folder: $portableDir"
 Write-Host "Installer: $($installer.FullName)"
 Write-Host "SHA-256: $installerChecksumPath"
+Write-Host "Installer download: $downloadInstallerPath"
+Write-Host "Installer download SHA-256: $downloadInstallerChecksumPath"
 Write-Host "MSIX/AppX output: none"

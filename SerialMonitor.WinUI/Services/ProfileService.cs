@@ -17,17 +17,13 @@ public sealed class ProfileService : IProfileService
     private const int MaxMockStressLinesPerSecond = 50_000;
     private const int MinMockStressBurstSize = 1;
     private const int MaxMockStressBurstSize = 10_000;
-    private const double MinCuteBackgroundOpacity = 0.02;
-    private const double MaxCuteBackgroundOpacity = 0.50;
+    private const double MinCuteBackgroundOpacity = 0.0;
+    private const double MaxCuteBackgroundOpacity = 1.0;
     private const int MaxSequenceDelayAfterMs = 600_000;
     private const int MaxCommandHistoryCount = 100;
     private const int CurrentProfileSchemaVersion = 1;
     private const long MinSizeRotationBytes = 1_048_576;
     private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
-    private static readonly string[] KnownDevelopmentCuteBackgroundPaths =
-    {
-        @"C:\Users\pjh\Downloads\s88.png"
-    };
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
 
@@ -976,23 +972,11 @@ public sealed class ProfileService : IProfileService
                 "Custom cute background image path was too long.");
         }
 
-        if (IsKnownDevelopmentCuteBackgroundPath(trimmed))
-        {
-            return ClearCuteBackgroundImagePath(
-                defaultPath,
-                warnings,
-                "Legacy development cute background image path was cleared.");
-        }
-
         try
         {
-            if (!File.Exists(trimmed))
-            {
-                return ClearCuteBackgroundImagePath(
-                    defaultPath,
-                    warnings,
-                    "Missing custom cute background image path was cleared.");
-            }
+            // Validate the path without requiring the image to be available now.
+            // The renderer can fall back temporarily without losing the user's choice.
+            _ = Path.GetFullPath(trimmed);
         }
         catch (Exception ex)
         {
@@ -1014,34 +998,6 @@ public sealed class ProfileService : IProfileService
         _lastCuteBackgroundCustomPathClearReason = reason;
         warnings.Add(reason);
         return defaultPath?.Trim() ?? string.Empty;
-    }
-
-    private static bool IsKnownDevelopmentCuteBackgroundPath(string path)
-    {
-        foreach (var knownPath in KnownDevelopmentCuteBackgroundPaths)
-        {
-            if (PathsEqual(path, knownPath))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool PathsEqual(string left, string right)
-    {
-        try
-        {
-            return string.Equals(
-                Path.GetFullPath(left),
-                Path.GetFullPath(right),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
-        }
     }
 
     private static void NormalizeEventContextSettings(

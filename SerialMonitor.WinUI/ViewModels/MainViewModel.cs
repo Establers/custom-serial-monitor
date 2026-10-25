@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Channels;
 using Microsoft.UI.Dispatching;
 using SerialMonitor.Core;
+using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
@@ -235,7 +236,7 @@ public sealed class HelpSection
     public string Body { get; }
 }
 
-public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
+public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private const int MaxRetainedEventContexts = 5_000;
     private const int SearchResultPageSize = 1_000;
@@ -257,8 +258,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private const int MaxMockStressLinesPerSecond = 50_000;
     private const int MinMockStressBurstSize = 1;
     private const int MaxMockStressBurstSize = 10_000;
-    private const double MinCuteBackgroundOpacity = 0.02;
-    private const double MaxCuteBackgroundOpacity = 0.50;
+    private const double MinCuteBackgroundOpacity = 0.0;
+    private const double MaxCuteBackgroundOpacity = 1.0;
     private const long MinSizeRotationMegabytes = 1;
     private const long MaxSizeRotationMegabytes = 10 * 1024;
     private const long MinSizeRotationBytes = MinSizeRotationMegabytes * LogSettings.BytesPerMegabyte;
@@ -277,8 +278,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static readonly TimeSpan RecentRuntimeHealthErrorDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan EventNotificationGroupingInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ViewPauseDrainTimeout = TimeSpan.FromSeconds(30);
-    private static readonly IReadOnlyList<string> CuteBackgroundOpacityOptionValues =
-        new[] { "0.10", "0.20", "0.25", "0.30", "0.40", "0.50" };
 
     private readonly ISerialService _serialService;
     private readonly ILogPipeline _logPipeline;
@@ -907,6 +906,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshStatusBar();
 
         _ = RefreshPortsAsync();
+        StartAutomation();
     }
 
     public Task InitializeAsync()
@@ -1437,10 +1437,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsBridgeActive => _bridgeService.IsRunning;
 
-    public bool CanEditBridgePort => !IsBridgeActive && !IsBusy;
+    public bool CanEditBridgePort => !IsBridgeActive && !IsBridgeStarting && !IsBusy;
 
     public bool CanStartBridge =>
         IsConnected &&
+        !IsAutomationBusy &&
+        !IsBridgeStarting &&
         !IsBusy &&
         !IsSequenceRunning &&
         !IsBridgeActive &&
@@ -1505,7 +1507,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsManualTxBusy => IsBridgeActive && ManualTxState != ManualTxState.Idle;
 
-    public bool CanSendManualTx => IsConnected && !IsBusy && !IsManualTxBusy;
+    public bool CanSendManualTx => IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -2620,7 +2622,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool CanEditConnectionSettings => !IsConnected && !IsBusy && !IsAutoReconnectRunning;
+    public bool CanEditConnectionSettings => !IsConnected && !IsBusy && !IsAutoReconnectRunning && !IsAutomationBusy;
 
     public bool CanEditSizeRotationMegabytes => !IsBusy && SizeRotationEnabled;
 
@@ -2630,6 +2632,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanConnect =>
         !IsConnected &&
+        !IsAutomationBusy &&
         !IsBusy &&
         !IsAutoReconnectRunning &&
         SelectedPortAvailable &&
@@ -2844,8 +2847,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged();
             OnPropertyChanged(nameof(CuteBackgroundLayerOpacity));
             OnPropertyChanged(nameof(CuteBackgroundOpacity));
-            OnPropertyChanged(nameof(CuteBackgroundOpacityText));
-            OnPropertyChanged(nameof(CuteBackgroundOverlayOpacity));
+            OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
             RecordSettingsChange("Cute background mode", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             RefreshStatusBar();
         }
@@ -2872,8 +2874,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public IReadOnlyList<string> CuteBackgroundOpacityOptions => CuteBackgroundOpacityOptionValues;
-
     public double CuteBackgroundLayerOpacity => CuteBackgroundMode ? 1.0 : 0.0;
 
     public double CuteBackgroundOpacity
@@ -2881,6 +2881,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _currentUiSettings.CuteBackgroundOpacity;
         set
         {
+            if (!double.IsFinite(value))
+            {
+                return;
+            }
+
             var clamped = Math.Clamp(value, MinCuteBackgroundOpacity, MaxCuteBackgroundOpacity);
             if (Math.Abs(_currentUiSettings.CuteBackgroundOpacity - clamped) < 0.0001)
             {
@@ -2889,37 +2894,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             _currentUiSettings.CuteBackgroundOpacity = clamped;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(CuteBackgroundOpacityText));
-            OnPropertyChanged(nameof(CuteBackgroundOverlayOpacity));
+            OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
             RecordSettingsChange(
                 "Cute background opacity",
                 SettingsApplyBehavior.Immediate,
-                clamped.ToString("0.00", CultureInfo.InvariantCulture));
+                $"{CuteBackgroundOpacityPercent:0.##}%");
             RefreshStatusBar();
         }
     }
 
-    public string CuteBackgroundOpacityText
+    public double CuteBackgroundOpacityPercent
     {
-        get => CuteBackgroundOpacity.ToString("0.00", CultureInfo.InvariantCulture);
-        set
-        {
-            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
-            {
-                CuteBackgroundOpacity = parsed;
-                return;
-            }
-
-            SetStatus("Cute background opacity was invalid.");
-            _lastBackgroundError = "Cute background opacity was invalid.";
-            RefreshStatusBar();
-            OnPropertyChanged();
-        }
+        get => CuteBackgroundOpacity * 100.0;
+        set => CuteBackgroundOpacity = value / 100.0;
     }
-
-    public double CuteBackgroundOverlayOpacity => CuteBackgroundMode
-        ? Math.Clamp(0.70 - (CuteBackgroundOpacity * 0.5), 0.45, 0.65)
-        : 0.0;
 
     public bool CuteBackgroundFileExists => _cuteBackgroundFileExists;
 
@@ -4256,6 +4244,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         CancelActiveSearch();
 
         var startedAt = DateTimeOffset.Now;
+        _captures?.Cancel();
         _lastShutdownStartTimeText = FormatDiagnosticTime(startedAt);
         _lastShutdownCompletedTimeText = "(pending)";
         _shutdownCleanupResult = "Shutdown cleanup running.";
@@ -4273,6 +4262,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            // Persist preferences before disconnect/flush can consume the shutdown timeout.
+            try
+            {
+                var profile = CreateProfileFromCurrentState();
+                await _profileService.SaveAsync(CurrentProfilePath, profile, shutdownCancellation.Token);
+                RefreshProfileProperties();
+            }
+            catch (Exception ex)
+            {
+                _shutdownProfileSaveError = $"Shutdown profile save failed: {ex.Message}";
+                cleanupErrors.Add(_shutdownProfileSaveError);
+            }
+
             if (IsSequenceRunning)
             {
                 try
@@ -4310,18 +4312,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 _shutdownFileFlushError = $"Shutdown file flush failed: {ex.Message}";
                 cleanupErrors.Add(_shutdownFileFlushError);
             }
-
-            try
-            {
-                var profile = CreateProfileFromCurrentState();
-                await _profileService.SaveAsync(CurrentProfilePath, profile, shutdownCancellation.Token);
-                RefreshProfileProperties();
-            }
-            catch (Exception ex)
-            {
-                _shutdownProfileSaveError = $"Shutdown profile save failed: {ex.Message}";
-                cleanupErrors.Add(_shutdownProfileSaveError);
-            }
         }
         catch (OperationCanceledException ex)
         {
@@ -4354,6 +4344,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await StopAutomationAsync();
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
@@ -6002,12 +5993,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartBridgeAsync()
     {
+        var startup = _automationControl.TryBeginBridgeStart();
+        if (startup is null) { SetStatus("AI/CLI or bridge startup is active. Stop it before starting the bridge."); return; }
+        NotifyBridgePropertiesChanged();
         // A bridge start is a one-shot user action, never an armed state that can
         // survive a failed start, disconnect, reconnect, or application restart.
-        _currentBridgeSettings.Enabled = false;
-        await StartBridgeCoreAsync();
-        _currentBridgeSettings.Enabled = _bridgeService.IsRunning;
-        NotifyBridgePropertiesChanged();
+        try
+        {
+            _currentBridgeSettings.Enabled = false;
+            await StartBridgeCoreAsync();
+            _currentBridgeSettings.Enabled = _bridgeService.IsRunning;
+        }
+        finally
+        {
+            startup.Dispose();
+            NotifyBridgePropertiesChanged();
+        }
     }
 
     private async Task StartBridgeCoreAsync()
@@ -6110,6 +6111,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedBridgePort));
         OnPropertyChanged(nameof(BridgeRequestedEnabled));
         OnPropertyChanged(nameof(IsBridgeActive));
+        OnPropertyChanged(nameof(IsBridgeStarting));
         OnPropertyChanged(nameof(CanEditBridgePort));
         OnPropertyChanged(nameof(CanStartBridge));
         OnPropertyChanged(nameof(CanStopBridge));
@@ -6157,13 +6159,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RunCommandSequenceCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task ConnectAsync()
+    private Task ConnectAsync() => ConnectAsync(CancellationToken.None);
+
+    private async Task ConnectAsync(CancellationToken cancellationToken, bool isAutomation = false)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (IsAutomationBusy && !isAutomation) return;
         Volatile.Write(ref _autoReconnectArmed, 0);
-        await _connectionLifecycleGate.WaitAsync();
+        await _connectionLifecycleGate.WaitAsync(cancellationToken);
         try
         {
-            await ConnectCoreAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsAutomationBusy && !isAutomation) return;
+            await ConnectCoreAsync(cancellationToken);
         }
         finally
         {
@@ -6245,8 +6253,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private async Task ConnectCoreAsync()
+    private async Task ConnectCoreAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var requestedSelectedPort = SelectedPort;
         var settings = CreateCurrentSettings();
         var requestedRxDisplayMode = NormalizeRxDisplayMode(SelectedRxDisplayMode);
@@ -6285,6 +6294,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _connectionCancellation = new CancellationTokenSource();
+            using var startupCancellation = new ConnectionStartupCancellation(cancellationToken, _connectionCancellation);
+            cancellationToken.ThrowIfCancellationRequested();
             ApplySizeRotationSettings();
             ApplySessionFileNaming(requestNewFile: false);
             if (FileLoggingEnabled)
@@ -6296,17 +6307,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 EventRules,
                 _currentEventContextSettings,
                 CancellationToken.None);
+            cancellationToken.ThrowIfCancellationRequested();
             ApplySessionFileNaming(requestNewFile: false);
             await _serialService.ConnectAsync(
                 settings,
                 CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
                 _connectionCancellation.Token);
+            cancellationToken.ThrowIfCancellationRequested();
             EnsureSerialConnectedAfterStartup();
             ApplyRxDisplayRuntime(
                 requestedRxDisplayMode,
                 requestedHexGroupTimeoutMs,
                 "serial connection mode applied");
             await _logPipeline.StartAsync(_serialService.ReceivedBytes, settings, CancellationToken.None);
+            cancellationToken.ThrowIfCancellationRequested();
             ClearActiveBackgroundHealthError(_logPipeline);
             ClearActiveBackgroundHealthError(LogObserverHealthKey);
             _observeLogsTask = Task.Run(() => ObserveLogsAsync(CancellationToken.None), CancellationToken.None);
@@ -6341,6 +6355,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             RestoreConnectionSelection(requestedSelectedPort, settings);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                SetStatus(string.IsNullOrEmpty(cleanupError) ? "Connection canceled." : $"Connection canceled. {cleanupError}");
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             RecordConnectFailure(settings, ex, cleanupError);
         }
         finally
@@ -7833,6 +7852,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             : SelectedCommandSequence;
         return IsConnected &&
             !IsBusy &&
+            !IsAutomationBusy &&
             !IsBridgeActive &&
             !IsSequenceRunning &&
             sequence is not null &&
@@ -8016,11 +8036,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default)
+    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default, bool isAutomation = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var commandText = sourceCommand.CommandText.Trim();
-        if (string.IsNullOrWhiteSpace(commandText))
+        if (IsAutomationBusy && !isAutomation)
+        {
+            RecordTxError("TX busy: AI/CLI is collecting RX. Stop the capture before sending another command.");
+            return false;
+        }
+        var commandText = isAutomation ? sourceCommand.CommandText : sourceCommand.CommandText.Trim();
+        if (commandText.Length == 0 || (!isAutomation && string.IsNullOrWhiteSpace(commandText)))
         {
             return false;
         }
@@ -8039,6 +8064,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OptionalShortcut = sourceCommand.OptionalShortcut
         };
 
+        _activeGuiSends++;
         try
         {
             var txRawBytes = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(lineEndingMode));
@@ -8116,6 +8142,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             IsConnected = _serialService.IsConnected;
             return false;
         }
+        finally { _activeGuiSends--; }
     }
 
     private bool CanSendCurrentCommand()
@@ -10347,14 +10374,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public void RecordXtermSearchResult(bool found, long durationMs)
     {
-        if (found)
+        Interlocked.Exchange(ref _lastXtermSearchDurationMs, Math.Max(0, durationMs));
+        if (!found)
         {
-            Interlocked.Increment(ref _xtermSearchHitCount);
+            RecordXtermSearchError(
+                "Could not locate the search result in the terminal. Press Enter or Refresh to update results.");
+            return;
         }
 
+        Interlocked.Increment(ref _xtermSearchHitCount);
         _lastXtermSearchError = string.Empty;
         _lastSearchError = string.Empty;
-        Interlocked.Exchange(ref _lastXtermSearchDurationMs, Math.Max(0, durationMs));
         OnPropertyChanged(nameof(XtermSearchHitCount));
         OnPropertyChanged(nameof(LastXtermSearchError));
         OnPropertyChanged(nameof(LastSearchError));
@@ -12316,8 +12346,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(CuteBackgroundImagePath));
             OnPropertyChanged(nameof(CuteBackgroundLayerOpacity));
             OnPropertyChanged(nameof(CuteBackgroundOpacity));
-            OnPropertyChanged(nameof(CuteBackgroundOpacityText));
-            OnPropertyChanged(nameof(CuteBackgroundOverlayOpacity));
+            OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
             OnPropertyChanged(nameof(CuteBackgroundFileExists));
             OnPropertyChanged(nameof(CuteBackgroundLoaded));
             OnPropertyChanged(nameof(CuteBackgroundSource));

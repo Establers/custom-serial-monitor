@@ -48,7 +48,18 @@ The script creates:
 
 - `release\SerialMonitorPortable`
 - `release\SerialMonitorPortable_yyyyMMdd_HHmm.zip`
+- `release\SerialMonitorPortable.zip` and its `.sha256` checksum (fixed download name)
 - `release\SerialMonitorPortable\README_PORTABLE.txt`
+- `release\SerialMonitorSkills.zip` and its `.sha256` checksum (separate skill download)
+
+Users who already have the application can download only `SerialMonitorSkills.zip`.
+It contains the skill installer and CLI/MCP guides, without application binaries.
+See [skill installation and sharing](agent_skills.md). Build just this ZIP without
+publishing the application with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package_agent_skill.ps1
+```
 
 The portable folder must include `SerialMonitor.WinUI.exe`, runtime DLLs,
 Windows App SDK files, local `Assets\xterm` files, local `Assets\context`

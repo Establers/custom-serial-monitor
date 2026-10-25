@@ -22,7 +22,7 @@ function createBridge() {
       callback();
     }),
     scrollToBottom() {},
-    clear() { rendered.length = 0; }
+    reset() { rendered.length = 0; }
   };
   const window = {
     requestAnimationFrame: callback => pending.push(callback),

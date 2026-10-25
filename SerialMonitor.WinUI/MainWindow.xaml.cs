@@ -4624,13 +4624,14 @@ public sealed partial class MainWindow : Window
 
     private bool TryHandleSearchNavigationShortcut(KeyRoutedEventArgs args, string source)
     {
-        if (args.Key != VirtualKey.F3 || IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        if ((args.Key != VirtualKey.F3 && args.Key != VirtualKey.F4) ||
+            IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
         {
             return false;
         }
 
         args.Handled = true;
-        if (IsModifierDown(VirtualKey.Shift))
+        if (args.Key == VirtualKey.F4 || IsModifierDown(VirtualKey.Shift))
         {
             _ = _viewModel.FindPreviousFromShortcutAsync(source);
             return true;

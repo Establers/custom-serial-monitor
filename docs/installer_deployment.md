@@ -65,6 +65,7 @@ Portable output remains:
 Installer output:
 
 - `release\installer\SerialMonitorSetup_yyyyMMdd_HHmm.exe`
+- `release\SerialMonitorSetup.exe` and its `.sha256` checksum (fixed download name)
 
 No `.msix`, `.msixbundle`, `.appx`, or `.appxbundle` package should be produced.
 

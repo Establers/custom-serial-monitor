@@ -461,8 +461,8 @@
     <comment>English: Applies immediately. Visual only.</comment>
   </data>
   <data name="StaticUi178.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>선택 사항입니다. 비워 두면 내장 기본 배경을 사용합니다. 이전 경로나 찾을 수 없는 경로도 기본 배경으로 대체됩니다.</value>
-    <comment>English: Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default.</comment>
+    <value>선택 사항입니다. 비워 두면 내장 기본 배경을 사용합니다. 이미지를 찾지 못하면 일시적으로 기본 배경을 표시하며, 선택한 경로는 유지됩니다.</value>
+    <comment>English: Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved.</comment>
   </data>
   <data name="StaticUi179.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>사용자 배경 이미지(.png, .jpg, .jpeg, .webp)를 선택합니다.</value>
@@ -477,12 +477,15 @@
     <comment>English: Applies after the image path field loses focus or after Browse.</comment>
   </data>
   <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>값이 높을수록 배경이 잘 보이지만 가독성이 낮아질 수 있습니다.</value>
-    <comment>English: Higher values make the background more visible but may reduce readability.</comment>
+    <value>배경 불투명도를 0~100%로 조절합니다. 0은 이미지를 숨기고, 100은 이미지를 완전히 표시합니다.</value>
+    <comment>English: Background opacity from 0 to 100 percent. 0 hides the image; 100 shows the full image.</comment>
   </data>
   <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>즉시 적용됩니다. 로그가 빽빽할 때는 낮은 값을 권장합니다.</value>
     <comment>English: Applies immediately. Keep the value subtle for dense logs.</comment>
+  </data>
+  <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
+    <value>배경 불투명도 (%)</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>연결 중에는 불러오기/초기화 불가</value>
@@ -909,4 +912,14 @@
   <data name="PortAliasApply.Content" xml:space="preserve"><value>적용</value></data>
   <data name="OpenCurrentLogLocationMenuItem.Text" xml:space="preserve"><value>로그 파일 위치 열기</value></data>
   <data name="OpenCurrentLogLocationHint" xml:space="preserve"><value>우클릭하면 로그 파일이 있는 폴더를 열 수 있습니다.</value></data>
+  <data name="AutomationReady" xml:space="preserve"><value>AI/CLI 연결 대기</value></data>
+  <data name="AutomationActive" xml:space="preserve"><value>AI/CLI 제어 · RX 수집 중</value></data>
+  <data name="AutomationStatus.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI/CLI가 이 앱의 시리얼 연결을 사용합니다. RX 수집은 화면 일시정지·필터와 독립적으로 동작합니다.</value></data>
+  <data name="StopAutomation.Content" xml:space="preserve"><value>AI 중지</value></data>
+  <data name="StopAutomation.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>RX 수집을 중지합니다. 이미 전송한 명령은 취소되지 않습니다.</value></data>
+  <data name="AgentSkillTitle.Text" xml:space="preserve"><value>AI 스킬을 활용해 보세요</value></data>
+  <data name="AgentSkillIntroBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot에서 포트 확인, 명령 전송, RX 로그 검토를 요청해 보세요. 프로그램과 별도로 SerialMonitorSkills.zip만 받아 설치할 수 있습니다. CLI로 쓰면 MCP 등록 없이 시작할 수 있습니다.</value></data>
+  <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot용 스킬로 AI 장치 제어를 시작해 보세요. 스킬 ZIP을 별도로 받아 설치할 수 있습니다.</value></data>
+  <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>스킬 ZIP 받기 ↗</value></data>
+  <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>스킬 설치 안내 ↗</value></data>
 </root>

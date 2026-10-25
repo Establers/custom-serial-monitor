@@ -11,6 +11,9 @@ public interface ISerialService : IAsyncDisposable
 
     event Action<BridgeRxChunk>? RawBytesReceived;
 
+    // Independent non-blocking observers; never consume ReceivedBytes here.
+    event Action<long, ReceivedByteChunk>? CaptureBytesReceived;
+
     bool IsConnected { get; }
 
     SerialConnectionState ConnectionState { get; }

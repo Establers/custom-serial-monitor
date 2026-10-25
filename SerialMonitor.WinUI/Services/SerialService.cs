@@ -49,6 +49,8 @@ public sealed class SerialService : ISerialService
 
     public event Action<BridgeRxChunk>? RawBytesReceived;
 
+    public event Action<long, ReceivedByteChunk>? CaptureBytesReceived;
+
     public bool IsConnected => ConnectionState == SerialConnectionState.Connected;
 
     public SerialConnectionState ConnectionState
@@ -206,7 +208,8 @@ public sealed class SerialService : ISerialService
         try
         {
             ThrowIfDisposed();
-            await EnsureNoPendingReceiveTeardownAsync();
+            await EnsureNoPendingReceiveTeardownAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (ConnectionState is SerialConnectionState.Connected or SerialConnectionState.Connecting)
             {
@@ -214,6 +217,7 @@ public sealed class SerialService : ISerialService
             }
 
             await StopCurrentConnectionAsync(CancellationToken.None, publishDisconnected: false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             Volatile.Write(ref _rawBridgePriorityEnabled, 0);
             Interlocked.Exchange(ref _bridgePriorityDroppedPipelineByteCount, 0);
@@ -249,7 +253,7 @@ public sealed class SerialService : ISerialService
                 // Subscribe before Open(). Some adapters can report errors as
                 // soon as DTR/RTS and the driver state are applied during open.
                 serialPort.ErrorReceived += OnSerialErrorReceived;
-                openTask = Task.Run(serialPort.Open, CancellationToken.None);
+                openTask = Task.Run(serialPort.Open, cancellationToken);
                 await openTask.WaitAsync(ReceiveTeardownTimeout, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -505,7 +509,7 @@ public sealed class SerialService : ISerialService
         }
     }
 
-    private async Task EnsureNoPendingReceiveTeardownAsync()
+    private async Task EnsureNoPendingReceiveTeardownAsync(CancellationToken cancellationToken = default)
     {
         var pending = Volatile.Read(ref _pendingReceiveTeardown);
         if (pending is null)
@@ -513,7 +517,7 @@ public sealed class SerialService : ISerialService
             return;
         }
 
-        if (!await WaitForTeardownAsync(pending))
+        if (!await WaitForTeardownAsync(pending, cancellationToken))
         {
             SetFaultedConnection("Previous serial session is still shutting down.");
             throw new InvalidOperationException("Previous serial session is still shutting down.");
@@ -635,16 +639,20 @@ public sealed class SerialService : ISerialService
         return WaitForWriteIdleAsyncCore(_writeGate);
     }
 
-    private static async Task<bool> WaitForTeardownAsync(Task teardownTask)
+    private static async Task<bool> WaitForTeardownAsync(Task teardownTask, CancellationToken cancellationToken = default)
     {
         try
         {
-            await teardownTask.WaitAsync(ReceiveTeardownTimeout);
+            await teardownTask.WaitAsync(ReceiveTeardownTimeout, cancellationToken);
             return true;
         }
         catch (TimeoutException)
         {
             return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -1042,6 +1050,17 @@ public sealed class SerialService : ISerialService
             cancellationToken.ThrowIfCancellationRequested();
 
             var bytes = receivedChunk.Bytes;
+            // Publish in every receive mode, before parser/bridge routing. An
+            // observer must only offer to its own bounded queue.
+            var captureObservers = CaptureBytesReceived;
+            if (captureObservers is not null)
+            {
+                foreach (var observer in captureObservers.GetInvocationList().Cast<Action<long, ReceivedByteChunk>>())
+                {
+                    try { observer(session.Generation, receivedChunk); }
+                    catch (Exception ex) { ReportError($"Capture RX observer failed: {ex.Message}", countConnectionError: false); }
+                }
+            }
             if (IsRawBridgePriorityEnabled)
             {
                 PublishRawBytesReceived(new BridgeRxChunk(

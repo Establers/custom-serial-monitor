@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.Core\SerialMonitor.Core.csproj" />
+    <ProjectReference Include="..\SerialMonitor.Cli\SerialMonitor.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>

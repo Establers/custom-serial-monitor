@@ -30,3 +30,8 @@ Thumbs.db
 *.tmp
 *.bak
 .codex-temp
+
+# Generated agent skill installations; canonical source is under skills/.
+.agents/skills/serial-monitor-control/
+.claude/skills/serial-monitor-control/
+.github/skills/serial-monitor-control/

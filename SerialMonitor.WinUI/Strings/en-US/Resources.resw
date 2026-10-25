@@ -461,7 +461,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi178.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Optional. Leave empty to use the bundled default background. Old or missing custom paths fall back to the bundled default.</value>
+    <value>Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi179.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -477,12 +477,15 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Higher values make the background more visible but may reduce readability.</value>
+    <value>Background opacity from 0 to 100 percent. 0 hides the image; 100 shows the full image.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately. Keep the value subtle for dense logs.</value>
     <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
+    <value>Bg opacity (%)</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>Load/reset disabled while connected</value>
@@ -909,4 +912,14 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="PortAliasApply.Content" xml:space="preserve"><value>Apply</value></data>
   <data name="OpenCurrentLogLocationMenuItem.Text" xml:space="preserve"><value>Open log file location</value></data>
   <data name="OpenCurrentLogLocationHint" xml:space="preserve"><value>Right-click to open the log file's folder.</value></data>
+  <data name="AutomationReady" xml:space="preserve"><value>AI/CLI ready</value></data>
+  <data name="AutomationActive" xml:space="preserve"><value>AI/CLI active — RX capture / control</value></data>
+  <data name="AutomationStatus.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view.</value></data>
+  <data name="StopAutomation.Content" xml:space="preserve"><value>Stop AI</value></data>
+  <data name="StopAutomation.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop RX capture. Already sent commands cannot be undone.</value></data>
+  <data name="AgentSkillTitle.Text" xml:space="preserve"><value>Try the AI control skill</value></data>
+  <data name="AgentSkillIntroBody.Text" xml:space="preserve"><value>Ask Codex, Claude Code or GitHub Copilot to check ports, send commands and review RX logs. Download SerialMonitorSkills.zip separately from the application. CLI use does not require MCP registration.</value></data>
+  <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Start AI device control with the shared Codex, Claude Code and GitHub Copilot skill. Download and install the skill ZIP separately.</value></data>
+  <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>Get the skill ZIP ↗</value></data>
+  <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>Skill installation guide ↗</value></data>
 </root>
