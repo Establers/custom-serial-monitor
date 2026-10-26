@@ -219,13 +219,6 @@ $requiredAssets = @(
     "docs\sequence_examples.json",
     "docs\ai_control.md",
     "docs\agent_skills.md",
-    "skills\Install-Skill.ps1",
-    "skills\serial-monitor-control\SKILL.md",
-    "skills\serial-monitor-control\agents\openai.yaml",
-    "skills\serial-monitor-control\references\cli.md",
-    "skills\serial-monitor-control\references\mcp.md",
-    "skills\serial-monitor-control\references\installation.md",
-    "skills\serial-monitor-control\scripts\Find-SerialCtl.ps1",
     "tools\serialctl.exe",
     "LICENSE"
 )
@@ -235,6 +228,10 @@ foreach ($relativeAsset in $requiredAssets) {
     if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
         throw "Required asset missing from portable output: $relativeAsset"
     }
+}
+
+if (Test-Path -LiteralPath (Join-Path $portableDirFull 'skills')) {
+    throw 'Application output must not include skills. Distribute SerialMonitorSkills.zip separately.'
 }
 
 $readmePath = Join-Path $portableDirFull "README_PORTABLE.txt"
@@ -280,9 +277,9 @@ AI device control
 -----------------
 - Open docs\agent_skills.md for the shared Codex / Claude Code / Copilot skill.
 - Users with the app installed can download SerialMonitorSkills.zip separately and point -CliPath at tools\serialctl.exe.
-- Install skills\serial-monitor-control with skills\Install-Skill.ps1 for project or personal use.
+- Extract the separate skill ZIP and run its skills\Install-Skill.ps1 for project or personal use.
 - tools\serialctl.exe controls this running GUI and collects actual RX; the GUI owns the COM port.
-- CLI is the default path. Optional local MCP setup is in skills\serial-monitor-control\references\mcp.md.
+- CLI is the default path. Optional local MCP setup is in the app MCP tab and docs\ai_control.md.
 
 If the app does not start
 -------------------------

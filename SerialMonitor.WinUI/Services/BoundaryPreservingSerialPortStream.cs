@@ -91,6 +91,15 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
         }
     }
 
+    public int ReadOpenPortBaudRate()
+    {
+        // SerialPortStream.GetPortSettings() is the discovery API and rejects
+        // an already-open stream. The native transport reads GetCommState on
+        // our existing handle without stopping its RX monitor or clearing data.
+        NativeSerial.GetPortSettings();
+        return BaudRate;
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

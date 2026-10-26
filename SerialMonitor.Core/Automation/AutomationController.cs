@@ -5,7 +5,8 @@ namespace SerialMonitor.Core.Automation;
 
 public sealed record AutomationDeviceState(bool Connected, string Port, int BaudRate, long SessionGeneration,
     string Encoding, long SerialErrors, bool Busy, string? LastError,
-    int DataBits = 8, string Parity = "None", string StopBits = "One", string Handshake = "None");
+    int DataBits = 8, string Parity = "None", string StopBits = "One", string Handshake = "None",
+    string Mode = "terminal", int ByteTimeoutMs = 40);
 
 // The WinUI adapter performs only UI-owned operations on its dispatcher. Capture,
 // persistence, paging and transport remain in background services.
@@ -15,8 +16,13 @@ public interface IAutomationDevice
     Task<object> InvokeAsync(string operation, JsonElement arguments, CancellationToken cancellationToken);
 }
 
-public sealed class AutomationController(IAutomationDevice device, RxCaptureService captures)
+public sealed class AutomationController(IAutomationDevice device, RxCaptureService captures) : IAsyncDisposable
 {
+    private readonly AutomationSequenceRunner _sequences = new(device, captures);
+
+    public bool CancelActiveSequence() => _sequences.CancelActive();
+    public ValueTask DisposeAsync() => _sequences.DisposeAsync();
+
     public async Task<AutomationResponse> HandleAsync(AutomationRequest request, CancellationToken cancellationToken)
     {
         try
@@ -27,13 +33,44 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
                 case "status":
                 case "ports":
                 case "list_commands":
+                case "sequence_list":
+                case "sequence_get":
                     data = await device.InvokeAsync(request.Operation, request.Arguments, cancellationToken).ConfigureAwait(false);
                     break;
                 case "connect":
                 case "disconnect":
+                case "set_mode":
+                case "configure":
+                case "sequence_save":
+                case "sequence_delete":
+                    if (request.Operation == "set_mode" && request.Arguments.String("mode") is not ("terminal" or "hex"))
+                        throw new AutomationException("invalid_argument", "mode must be terminal or hex. Changing mode clears the visible log and changes GUI manual TX interpretation; per-call txMode is independent.");
+                    if (request.Operation == "configure")
+                        _ = AutomationSerialConfiguration.Parse(request.Arguments);
+                    if (request.Operation == "sequence_save")
+                    {
+                        if (!request.Arguments.TryGetProperty("sequence", out var definition))
+                            throw new AutomationException("invalid_argument", "sequence is required.");
+                        _ = AutomationSequenceValidation.Parse(definition);
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
                     await device.InvokeAsync("reserve", request.Arguments, cancellationToken).ConfigureAwait(false);
-                    try { data = await device.InvokeAsync(request.Operation, request.Arguments, cancellationToken).ConfigureAwait(false); }
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        data = await device.InvokeAsync(request.Operation, request.Arguments, cancellationToken).ConfigureAwait(false);
+                    }
                     finally { await device.InvokeAsync("release", default, CancellationToken.None).ConfigureAwait(false); }
+                    break;
+                case "sequence_start":
+                    data = await _sequences.StartAsync(request.Arguments, cancellationToken).ConfigureAwait(false);
+                    break;
+                case "sequence_status":
+                    data = _sequences.Status(request.Arguments.String("runId"));
+                    break;
+                case "sequence_cancel":
+                    data = _sequences.Cancel(request.Arguments.String("runId")
+                        ?? throw new AutomationException("invalid_argument", "runId is required to cancel a sequence run."));
                     break;
                 case "send":
                 case "capture_rx":
@@ -62,7 +99,11 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
                     };
                     break;
                 }
-                case "cancel_capture": data = new { canceled = captures.Cancel() }; break;
+                case "cancel_capture":
+                    if (_sequences.IsActive)
+                        throw new AutomationException("busy", "A sequence run owns RX capture. Use sequence_cancel with its runId.");
+                    data = new { canceled = captures.Cancel() };
+                    break;
                 default: throw new AutomationException("unknown_operation", "Unknown operation: " + request.Operation);
             }
             return AutomationResponse.Ok(data);
@@ -87,6 +128,9 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
             request.Operation == "send" ? 0 : args.Integer("durationMs", 2000),
             isSend ? args.String("command") : null,
             args.String("txMode", "text")!, args.String("lineEnding", "crlf")!);
+        var format = args.String("format", options.TxMode == "hex" ? "hex" : "text");
+        if (format is not ("text" or "hex"))
+            throw new AutomationException("invalid_argument", "format must be text or hex.");
         if (options.DurationMs is < 0 or > 60000 || options.TxMode is not ("text" or "hex") ||
             options.LineEnding is not ("none" or "cr" or "lf" or "crlf") ||
             (isSend && (string.IsNullOrEmpty(options.Command) || options.Command.Length > 16384)))
@@ -110,9 +154,9 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
             CapturePage? page = null;
             // An empty/error capture may not have readable files. Preserve its
             // metadata and TX status even if preview generation fails.
-            if (File.Exists(result.TextFile))
+            if (File.Exists(format == "hex" ? result.RawFile : result.TextFile))
             {
-                try { page = await captures.ReadAsync(result.CaptureId, limit: previewBytes, cancellationToken: CancellationToken.None).ConfigureAwait(false); }
+                try { page = await captures.ReadAsync(result.CaptureId, limit: previewBytes, format: format, cancellationToken: CancellationToken.None).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AutomationException)
                 { result = result with { CaptureStatus = "write_error", Error = "Capture preview: " + ex.Message }; }
             }

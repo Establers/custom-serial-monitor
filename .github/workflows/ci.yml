@@ -29,3 +29,9 @@ jobs:
       - run: dotnet restore SerialMonitor.WinUI\SerialMonitor.WinUI.sln
       - run: dotnet build SerialMonitor.WinUI\SerialMonitor.WinUI.sln --configuration ${{ matrix.configuration }} --no-restore
       - run: dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln --configuration ${{ matrix.configuration }} --no-build --no-restore
+      - name: Test standalone skill installation and custom paths
+        if: matrix.configuration == 'Release'
+        shell: powershell
+        run: |
+          .\scripts\test_agent_skill.ps1
+          .\scripts\test_skill_paths.ps1

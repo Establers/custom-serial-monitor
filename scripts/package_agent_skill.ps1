@@ -12,7 +12,8 @@ if (@($skillEntries | Where-Object { $_.Attributes -band [IO.FileAttributes]::Re
 }
 
 # Package source files only. Machine-specific settings are created by the receiver's installer.
-$files = @('LICENSE', 'docs\agent_skills.md', 'docs\ai_control.md', 'skills\Install-Skill.ps1')
+$files = @('LICENSE', 'docs\agent_skills.md', 'docs\ai_control.md', 'skills\Install-Skill.ps1',
+    'skills\SkillInstall.Common.ps1')
 $files += @($skillEntries | Where-Object {
     -not $_.PSIsContainer -and $_.Name -notin @('serial-monitor.local.json', '.serial-monitor-skill.json')
 } | ForEach-Object { $_.FullName.Substring($repo.TrimEnd('\', '/').Length + 1) })
@@ -28,7 +29,7 @@ if ($files -notcontains 'skills\serial-monitor-control\SKILL.md') { throw 'SKILL
 
 # Keep the ZIP's first page in sync with the maintained Korean guide.
 $readme = [IO.File]::ReadAllText((Join-Path $repo 'docs\agent_skills.md'), [Text.Encoding]::UTF8)
-$readme = $readme.Replace('(../skills/', '(skills/').Replace('(ai_control.md)', '(docs/ai_control.md)')
+$readme = $readme.Replace('(../skills/', '(skills/').Replace('(ai_control.md', '(docs/ai_control.md')
 
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem

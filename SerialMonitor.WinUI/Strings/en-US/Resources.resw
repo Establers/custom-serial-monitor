@@ -477,7 +477,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Background opacity from 0 to 100 percent. 0 hides the image; 100 shows the full image.</value>
+    <value>Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -485,7 +485,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
-    <value>Bg opacity (%)</value>
+    <value>Bg opacity</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>Load/reset disabled while connected</value>
@@ -772,7 +772,7 @@
     <comment>Help section title.</comment>
   </data>
   <data name="HelpCommandSequencesBody" xml:space="preserve">
-    <value>1. Press the upper + on the Sequences tab to create a sequence.&#x0A;2. Press the lower + to add command steps.&#x0A;3. Set Command, Line ending, and Delay after ms.&#x0A;4. Use Up and Dn to change the order.&#x0A;5. After connecting the device, press Run to start or Stop to cancel.&#x0A;&#x0A;A sequence uses the current Mode (Terminal/HEX) for every step.&#x0A;Per-step modes, device-response checks, and conditional branches are not supported.&#x0A;&#x0A;AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.&#x0A;Examples: docs\sequence_examples.json. These are sequence fragments, not a complete profile.&#x0A;Close the app and back up default.json before merging. Standalone sequence import is not supported.</value>
+    <value>1. Create a sequence and add command steps on the Sequences tab.&#x0A;2. Set Command, Line ending and Delay after ms, then arrange the order.&#x0A;3. Connect the device and press Run; Stop cancels the active run.&#x0A;&#x0A;Steps use the main mode at run start unless their JSON specifies TxMode (Terminal/Hex). GUI Run applies per-step mode and delay; CaptureMs and literal Expect checks apply only to CLI/MCP runs. Conditional branches are not supported.&#x0A;With auto reconnect enabled, GUI Run can retry a disconnected failed write; it may already have reached the device. CLI/MCP runs stop on uncertain TX or disconnect and never automatically retry.&#x0A;&#x0A;Use Sequence options to load/export standalone JSON. Import never sends commands. Guide: docs\sequence_authoring.md. Example: docs\sequence_examples.json. Read actual RX to judge product success; interleaved printf may prevent a literal match.</value>
     <comment>Help section body.</comment>
   </data>
   <data name="HelpComBridgeTitle" xml:space="preserve">
@@ -862,7 +862,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SequenceTipsCopy" xml:space="preserve"><value>Copy AI prompt + JSON template</value></data>
   <data name="SequenceTipsCopied" xml:space="preserve"><value>Copied. Paste into your AI chat.</value></data>
   <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
-  <data name="SequenceAiPrompt" xml:space="preserve"><value>Create one Serial Monitor sequence following _manual in the JSON below. First ask for the actual device protocol, Terminal/HEX mode, command order, line ending (None/Cr/Lf/Crlf or null), post-send delays in ms, repeat count and existing sequence names. Never invent commands or checksums. Do not add unsupported response waits, branches or variables. Use a unique Name and include every required field. Preserve _manual. Return the final result as one standard JSON object without comments or Markdown fences, ready to save as UTF-8. The template has empty Steps; fill it with the actual requested commands.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>Create one Serial Monitor sequence following _manual in the JSON below. First ask for the actual device protocol, main mode or per-step TxMode (null/Terminal/Hex), command order, line ending (None/Cr/Lf/Crlf or null), post-send delays in ms, repeat count and existing sequence names. If CLI/MCP execution is intended, ask for CaptureMs and optional literal Expect {Kind:text|hex,Value:literal}; GUI Run ignores capture/matching metadata. Explicit TxMode preserves command whitespace. Never invent commands, response literals or checksums. Do not add branches, variables, regex or subsequence matching. A missing literal in interleaved printf does not establish device failure. Use a unique Name and include every required field. Preserve _manual. Return one standard JSON object without comments or Markdown fences, ready to save as UTF-8. The template has empty Steps; fill it with the requested commands.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>Create sequences with AI…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>Close</value></data>
   <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>Search command history...</value></data>
@@ -922,4 +922,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Start AI device control with the shared Codex, Claude Code and GitHub Copilot skill. Download and install the skill ZIP separately.</value></data>
   <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>Get the skill ZIP ↗</value></data>
   <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>Skill installation guide ↗</value></data>
+  <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: Text logs and text commands with the selected line ending.</value></data>
+  <data name="HexModeDescription" xml:space="preserve"><value>HEX: Display and send raw bytes in hexadecimal, without a line ending.</value></data>
 </root>

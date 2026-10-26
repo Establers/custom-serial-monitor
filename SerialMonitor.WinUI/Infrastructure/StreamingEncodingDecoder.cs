@@ -28,7 +28,7 @@ public sealed class StreamingEncodingDecoder
 
         if (bytesUsed != bytes.Length || !completed)
         {
-            throw new InvalidOperationException("Bridge streaming decoder buffer was too small.");
+            throw new InvalidOperationException("Streaming decoder buffer was too small.");
         }
 
         return new DecodeResult(new string(chars, 0, charsUsed), _fallback.HadError);

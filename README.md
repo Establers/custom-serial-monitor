@@ -17,7 +17,7 @@
     ·
     <a href="docs/agent_skills.md#share">다른 사람에게 공유</a>
     ·
-    <a href="docs/release_notes_v1.5.0.md">v1.5.0 릴리즈 노트</a>
+    <a href="docs/release_notes_v1.5.1.md">v1.5.1 릴리즈 노트</a>
     ·
     <a href="docs/manual_test_checklist.md">테스트 체크리스트</a>
   </p>
@@ -27,7 +27,7 @@
 
 | 사용 방법 | 다운로드 경로 | 시작 방법 |
 | --- | --- | --- |
-| 일반 설치 | [프로그램 설치 EXE](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSetup.exe) | 설치 후 Serial Monitor 실행 |
+| 일반 설치 | [프로그램 설치 EXE](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSetup.exe) | 프로그램 설치 위치 선택 → 설치 후 실행 |
 | 프로그램 포터블 | [프로그램 포터블 ZIP](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorPortable.zip) | ZIP 전체를 풀고 `SerialMonitor.WinUI.exe` 실행 |
 | AI 스킬만 설치 | [스킬 전용 ZIP](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip) | 스킬 ZIP을 풀고 아래 설치 명령 실행 · [자세한 가이드](docs/agent_skills.md) |
 
@@ -37,7 +37,7 @@
 
 ## AI 스킬 빠른 설치
 
-**프로그램은 별도로 설치하고, 스킬은 `SerialMonitorSkills.zip`만 받아 설치합니다.**
+**프로그램이 이미 있다면 스킬 전용 `SerialMonitorSkills.zip`만 받아 설치합니다.**
 프로그램은 v1.5.0 이상을 사용하며 설치 폴더에 AI 제어용 `tools\serialctl.exe`가 있어야 합니다.
 
 1. [스킬 ZIP 다운로드](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip)에서
@@ -45,6 +45,7 @@
 2. 압축을 푼 `SerialMonitorSkills` 폴더에서 PowerShell을 열고 아래 명령을 실행합니다.
    `-CliPath`는 **이미 설치한 프로그램의 CLI 경로**입니다. 아래는 기본 설치 경로이며,
    포터블·사용자 지정 설치라면 자신의 `tools\serialctl.exe` 경로로 바꾸세요.
+   예를 들어 D 드라이브에 설치했다면 `-CliPath 'D:\Apps\SerialMonitor\tools\serialctl.exe'`입니다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\Install-Skill.ps1 -Client All -Scope User -CliPath "$env:LOCALAPPDATA\Programs\SerialMonitor\tools\serialctl.exe"
@@ -62,6 +63,12 @@ CLI 사용에는 MCP 등록이 필요하지 않습니다. MCP를 사용할 때�
 다른 사람에게도 **스킬 ZIP과 설치 가이드 링크**를 공유하면 됩니다.
 특정 도구·프로젝트에만 설치하는 방법은
 [스킬 설치·공유 가이드](docs/agent_skills.md#share)에 있습니다.
+
+프로그램 설치 위치는 설치 화면에서 C·D 드라이브 등 원하는 폴더로 고를 수 있습니다.
+**스킬은 필요할 때 별도 ZIP으로 수동 설치하며, 프로그램 업데이트가 설치된 스킬을 교체하지 않습니다.**
+새 스킬을 적용하거나 프로그램 위치를 옮겼다면 새 ZIP의 설치 명령에 실제 `-CliPath`를 지정해
+다시 실행하세요. MCP를 사용한다면 앱의 MCP 탭에서 새 경로로 등록도 수정합니다.
+[스킬 업데이트·프로그램 경로 변경 안내](docs/agent_skills.md#app-path)에서 확인하세요.
 
 ![Cute background를 끈 상태에서 MOCK 로그와 탐지 이벤트를 표시하는 Serial Monitor](docs/images/serial-monitor-overview.png)
 
@@ -113,7 +120,8 @@ UI 응답성과 메모리 사용량을 예측 가능하게 유지하는 것이 �
 
 ### 2. 장치 연결
 
-상단의 `Port`와 `Baud`를 선택하고 `Connect`를 누릅니다. 데이터 형식과 줄 끝,
+먼저 `Port` 왼쪽의 `Terminal`/`HEX` 모드를 확인한 뒤 `Port`와 `Baud`를 선택하고
+`Connect`를 누릅니다. 모드 드롭다운의 각 항목에 간단한 설명이 표시됩니다. 데이터 형식과 줄 끝,
 encoding, Terminal/HEX 모드는 `Settings`에서 조정할 수 있습니다.
 
 ### 3. 장치 없이 둘러보기
@@ -182,10 +190,21 @@ API와 대체 요청의 네트워크 대기는 합계 최대 10초이며, 일반
 ## AI CLI / MCP 제어
 
 실행 중인 GUI의 연결을 Codex·Claude Code·GitHub Copilot CLI에서 사용할 수 있습니다.
-`tools\serialctl.exe`로 포트 연결, 명령 전송, 지정 시간의 **전체 RX 수집**과 페이지 조회를
+`tools\serialctl.exe`로 포트 연결, Terminal/HEX 모드 조회·변경, 명령 전송, 시퀀스 등록·실행·중지, 지정 시간의 **전체 RX 수집**과 페이지 조회를
 수행합니다. 제품에서 섞여 나온 printf 출력도 원문으로 AI에 전달합니다. GUI 하단에서
 작업 상태를 확인하고 `AI 중지`로 수집을 끝낼 수 있습니다.
 설정과 사용 예는 [AI 제어 가이드](docs/ai_control.md)를 참고하세요.
+
+시퀀스는 `serialctl sequence save --file check.json`으로 GUI 목록과 프로필에 저장하고,
+`serialctl sequence run --name "장치 확인"`으로 실행합니다. 실행 ID를 받은 뒤
+`sequence status --run ID`와 `sequence cancel --run ID`로 확인·중지할 수 있습니다.
+실행 시작이 승인되면 CLI를 닫아도 계속 실행되며, GUI의 `AI 중지`와 시퀀스 Stop도 사용할 수 있습니다.
+등록 자체는 전송하지 않고, 기존 이름을 바꾸려면 `--overwrite true`를 명시해야 합니다.
+
+선택적인 예상 응답은 연속된 문자열 또는 HEX 바이트의 정확한 포함 여부만 확인합니다.
+`abcd`가 `ab12c3d4`로 섞여 들어오면 `not_matched`이며 제품 실패로 단정하지 않습니다.
+매칭과 무관하게 정해진 시간의 전체 RX를 저장하므로, 반환된 `captureId`로 원문을 읽어 판단할 수 있습니다.
+시퀀스는 단계별로 한 번만 전송하며 미매칭·전송 오류 시 자동 재전송하지 않습니다.
 
 Codex·Claude Code·GitHub Copilot에서 같은 절차를 재사용할 수 있는
 [CLI 제어 스킬](skills/serial-monitor-control/SKILL.md)도 제공합니다. CLI를 기본으로 사용하고
@@ -281,6 +300,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [수동 회귀 테스트](docs/manual_test_checklist.md)
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
+- [v1.5.1 릴리즈 노트](docs/release_notes_v1.5.1.md)
+- [v1.5.0 릴리즈 노트](docs/release_notes_v1.5.0.md)
 - [v1.4.2 릴리즈 노트](docs/release_notes_v1.4.2.md)
 - [v1.4.1 릴리즈 노트](docs/release_notes_v1.4.1.md)
 - [v1.4.0 릴리즈 노트](docs/release_notes_v1.4.0.md)

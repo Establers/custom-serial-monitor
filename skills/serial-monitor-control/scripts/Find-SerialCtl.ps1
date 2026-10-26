@@ -15,7 +15,7 @@ if ($CliPath) { return Resolve-Executable $CliPath }
 if ($env:SERIAL_MONITOR_CLI) { return Resolve-Executable $env:SERIAL_MONITOR_CLI }
 $localSettings = Join-Path (Split-Path -Parent $PSScriptRoot) 'serial-monitor.local.json'
 if (Test-Path -LiteralPath $localSettings -PathType Leaf) {
-    $settings = Get-Content -LiteralPath $localSettings -Raw | ConvertFrom-Json
+    $settings = [IO.File]::ReadAllText($localSettings, [Text.UTF8Encoding]::new($false, $true)) | ConvertFrom-Json
     if ($settings.cliPath) { return Resolve-Executable $settings.cliPath }
 }
 $onPath = Get-Command serialctl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1

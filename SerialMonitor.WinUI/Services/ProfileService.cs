@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.ObjectModel;
+using System.Text;
+using System.Security.Cryptography;
+using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 
@@ -26,6 +29,9 @@ public sealed class ProfileService : IProfileService
     private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _sequenceBaselines = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _sequenceBaselineOrder = [];
+    private readonly Dictionary<string, string> _failedLoadDiskHashes = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -244,7 +250,26 @@ public sealed class ProfileService : IProfileService
         await _ioGate.WaitAsync(cancellationToken);
         try
         {
-            return await LoadCoreAsync(path, cancellationToken);
+            try
+            {
+                path = Path.GetFullPath(path);
+                await using var lease = await ProfileFileLease.AcquireAsync(path, cancellationToken);
+                _failedLoadDiskHashes.Remove(path);
+                var profile = await LoadCoreAsync(path, cancellationToken);
+                RememberSequenceBaseline(path, ProfileSequenceMerge.Snapshot(profile.CommandSequences));
+                return profile;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                LastError = $"Profile load failed: {ex.Message}. Using in-memory defaults.";
+                LastStatus = "Profile load failed; defaults are active.";
+                Interlocked.Increment(ref _loadErrorCount);
+                RuntimeDiagnostics.RecordError("ProfileService.LoadAsync", ex);
+                var defaults = CreateDefaultProfile();
+                RememberSequenceBaseline(path, ProfileSequenceMerge.Snapshot(defaults.CommandSequences));
+                return defaults;
+            }
         }
         finally
         {
@@ -259,7 +284,7 @@ public sealed class ProfileService : IProfileService
             var defaultProfile = CreateDefaultProfile();
             try
             {
-                await SaveCoreAsync(path, defaultProfile, cancellationToken);
+                await SaveCoreAsync(path, defaultProfile, cancellationToken, fileLeaseHeld: true);
                 LastError = null;
                 LastStatus = $"Default profile created: {path}";
                 RecordLoadSuccess(defaultProfile);
@@ -283,6 +308,8 @@ public sealed class ProfileService : IProfileService
         {
             var json = await File.ReadAllTextAsync(path, cancellationToken);
             var profile = JsonSerializer.Deserialize<AppProfile>(json, Options);
+            if (profile is null && await TryReadProfileHashAsync(path, cancellationToken) is { } emptyHash)
+                _failedLoadDiskHashes[path] = emptyHash;
             var hasConfirmBeforeDisconnect =
                 json.IndexOf(nameof(UiSettings.ConfirmBeforeDisconnect), StringComparison.OrdinalIgnoreCase) >= 0;
             var hasShowTimestampInLogView =
@@ -364,6 +391,8 @@ public sealed class ProfileService : IProfileService
         catch (Exception ex)
         {
             var backupPath = TryBackupBrokenProfile(path);
+            if (await TryReadProfileHashAsync(path, cancellationToken) is { } failedHash)
+                _failedLoadDiskHashes[path] = failedHash;
             LastError = string.IsNullOrWhiteSpace(backupPath)
                 ? $"Profile load failed: {ex.Message}. Using defaults."
                 : $"Profile load failed: {ex.Message}. Using defaults. Broken profile backup: {backupPath}";
@@ -389,20 +418,34 @@ public sealed class ProfileService : IProfileService
         }
     }
 
-    private async Task SaveCoreAsync(string path, AppProfile profile, CancellationToken cancellationToken)
+    private async Task SaveCoreAsync(string path, AppProfile profile, CancellationToken cancellationToken, bool fileLeaseHeld = false)
     {
-        var tempPath = path + ".tmp";
-        var backupPath = path + ".bak";
+        string? tempPath = null;
+        string? backupPath = null;
         try
         {
+            path = Path.GetFullPath(path);
+            await using var lease = fileLeaseHeld ? null : await ProfileFileLease.AcquireAsync(path, cancellationToken);
             var normalized = NormalizeProfile(profile, out _);
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(directory))
+            var local = ProfileSequenceMerge.Clone(normalized.CommandSequences);
+            var localBaseline = ProfileSequenceMerge.Snapshot(local);
+            var disk = await ReadCurrentSequencesAsync(path, cancellationToken);
+            var hasBaseline = _sequenceBaselines.TryGetValue(path, out var baseline);
+            if (!hasBaseline && File.Exists(path))
             {
-                Directory.CreateDirectory(directory);
+                var diskHashes = ProfileSequenceMerge.Snapshot(disk);
+                if (localBaseline.Any(entry => !diskHashes.TryGetValue(entry.Key, out var existing) || existing != entry.Value))
+                    throw new ProfileConflictException("Load this profile before changing its sequences. This instance has no comparison baseline; no profile changes were written.");
             }
+            baseline ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var merged = ProfileSequenceMerge.Merge(baseline, local, disk);
+            var persisted = ProfileForPersistence(normalized, merged);
+            NormalizeRuleSequenceTriggers(persisted.LogRules, merged, new List<string>());
+            persisted.EventRules = CreateEventRulesFromLogRules(persisted.LogRules);
+            var operationId = Guid.NewGuid().ToString("N");
+            tempPath = path + "." + operationId + ".tmp";
+            backupPath = path + "." + operationId + ".bak";
 
-            TryDeleteFile(tempPath);
             await using (var stream = new FileStream(
                              tempPath,
                              FileMode.CreateNew,
@@ -411,21 +454,25 @@ public sealed class ProfileService : IProfileService
                              bufferSize: 32 * 1024,
                              options: FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                await JsonSerializer.SerializeAsync(stream, normalized, Options, cancellationToken);
+                await JsonSerializer.SerializeAsync(stream, persisted, Options, cancellationToken);
                 await stream.FlushAsync(cancellationToken);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             if (File.Exists(path))
             {
-                TryDeleteFile(backupPath);
                 File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
-                TryDeleteFile(backupPath);
             }
             else
             {
                 File.Move(tempPath, path);
             }
 
+            // The GUI still owns its submitted local list. Remembering the merged
+            // disk list instead would turn the next stale save into a deletion of
+            // remote additions (or a resurrection of remote deletions).
+            RememberSequenceBaseline(path, localBaseline);
+            _failedLoadDiskHashes.Remove(path);
             LastError = null;
             LastStatus = $"Profile saved: {path}";
             Interlocked.Increment(ref _saveCount);
@@ -438,14 +485,77 @@ public sealed class ProfileService : IProfileService
         }
         catch (Exception ex)
         {
-            TryDeleteFile(tempPath);
             LastError = $"Profile save failed: {ex.Message}";
             LastStatus = "Profile save failed.";
             Interlocked.Increment(ref _saveErrorCount);
             RuntimeDiagnostics.RecordError("ProfileService.SaveAsync", ex);
             throw;
         }
+        finally
+        {
+            if (tempPath is not null) TryDeleteFile(tempPath);
+            if (backupPath is not null) TryDeleteFile(backupPath);
+        }
     }
+
+    private async Task<List<CommandSequence>> ReadCurrentSequencesAsync(string path, CancellationToken token)
+    {
+        if (!File.Exists(path)) return [];
+        try
+        {
+            await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                32768, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var current = await JsonSerializer.DeserializeAsync<AppProfile>(file, Options, token)
+                ?? throw new InvalidDataException("The current profile cannot be read safely; no changes were written.");
+            var sequences = current.CommandSequences ?? [];
+            NormalizeCommandSequences(sequences, new List<string>());
+            return sequences;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        {
+            if (_failedLoadDiskHashes.TryGetValue(path, out var observed) &&
+                observed == await TryReadProfileHashAsync(path, token))
+            {
+                if (string.IsNullOrWhiteSpace(TryBackupBrokenProfile(path)))
+                    throw new IOException("The unchanged broken profile could not be backed up; no changes were written.", ex);
+                return [];
+            }
+            throw new ProfileConflictException("The profile changed or became unreadable in another instance. Reload it before saving; no profile changes were written.");
+        }
+    }
+
+    private void RememberSequenceBaseline(string path, IReadOnlyDictionary<string, string> snapshot)
+    {
+        _sequenceBaselines[path] = snapshot;
+        _sequenceBaselineOrder.RemoveAll(entry => string.Equals(entry, path, StringComparison.OrdinalIgnoreCase));
+        _sequenceBaselineOrder.Add(path);
+        if (_sequenceBaselineOrder.Count <= 8) return;
+        _sequenceBaselines.Remove(_sequenceBaselineOrder[0]);
+        _failedLoadDiskHashes.Remove(_sequenceBaselineOrder[0]);
+        _sequenceBaselineOrder.RemoveAt(0);
+    }
+
+    private static async Task<string?> TryReadProfileHashAsync(string path, CancellationToken token)
+    {
+        try
+        {
+            await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                32768, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            return Convert.ToHexString(await SHA256.HashDataAsync(file, token));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static AppProfile ProfileForPersistence(AppProfile profile, List<CommandSequence> sequences) => new()
+    {
+        ProfileSchemaVersion = profile.ProfileSchemaVersion, Name = profile.Name,
+        CurrentSessionName = profile.CurrentSessionName, SerialSettings = profile.SerialSettings,
+        LastSuccessfulSerialSettings = profile.LastSuccessfulSerialSettings, LogSettings = profile.LogSettings,
+        UiSettings = profile.UiSettings, EventContextSettings = profile.EventContextSettings,
+        BridgeSettings = profile.BridgeSettings, LogRules = profile.LogRules.Select(rule => rule.Clone()).ToList(),
+        EventRules = profile.EventRules, HighlightRules = profile.HighlightRules,
+        SavedCommands = profile.SavedCommands, CommandHistory = profile.CommandHistory, CommandSequences = sequences
+    };
 
     private AppProfile NormalizeProfile(AppProfile? profile, out string? warning)
     {
@@ -1450,14 +1560,15 @@ public sealed class ProfileService : IProfileService
             for (var stepIndex = sequence.Steps.Count - 1; stepIndex >= 0; stepIndex--)
             {
                 var step = sequence.Steps[stepIndex];
-                if (step is null || string.IsNullOrWhiteSpace(step.CommandText))
+                if (step is null || string.IsNullOrEmpty(step.CommandText) ||
+                    (step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex) && string.IsNullOrWhiteSpace(step.CommandText)))
                 {
                     sequence.Steps.RemoveAt(stepIndex);
                     warnings.Add("A command sequence step was missing a command.");
                     continue;
                 }
 
-                step.CommandText = step.CommandText.Trim();
+                if (step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex)) step.CommandText = step.CommandText.Trim();
                 step.Name = string.IsNullOrWhiteSpace(step.Name) ? null : step.Name.Trim();
                 step.Comment = string.IsNullOrWhiteSpace(step.Comment) ? null : step.Comment.Trim();
                 if (step.DelayAfterMs is < 0 or > MaxSequenceDelayAfterMs)
@@ -1470,6 +1581,26 @@ public sealed class ProfileService : IProfileService
                 {
                     step.LineEndingMode = null;
                     warnings.Add("A command sequence line ending was invalid.");
+                }
+
+                if (step.TxMode.HasValue && step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex))
+                {
+                    step.TxMode = null;
+                    warnings.Add("A command sequence TX mode was invalid and reset to Global.");
+                }
+                if (step.CaptureMs is < 0 or > 60000)
+                {
+                    step.CaptureMs = Math.Clamp(step.CaptureMs, 0, 60000);
+                    warnings.Add("A command sequence automation capture duration was outside the safe range.");
+                }
+                if (step.Expect is not null)
+                {
+                    try { _ = AutomationSequenceMatcher.PatternBytes(step.Expect, Encoding.UTF8); }
+                    catch (AutomationException)
+                    {
+                        step.Expect = null;
+                        warnings.Add("An invalid command sequence response expectation was removed.");
+                    }
                 }
             }
         }

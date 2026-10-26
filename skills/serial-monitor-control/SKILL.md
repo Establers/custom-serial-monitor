@@ -1,6 +1,6 @@
 ---
 name: serial-monitor-control
-description: Control the Windows Serial Monitor GUI through serialctl to connect a COM port, send documented device commands, collect actual UART RX and judge device responses, including interleaved printf output. Use for device checks and serial debugging through this application, with optional local MCP tools.
+description: Control the Windows Serial Monitor GUI through serialctl to connect a COM port, change baud rate and byte timeout, select Terminal/HEX mode, register and run command sequences, collect actual UART RX and judge device responses, including interleaved printf output. Use for device checks and serial debugging through this application, with optional local MCP tools.
 ---
 
 # Serial Monitor device control
@@ -27,6 +27,26 @@ the first instance simply because it is first. Inspect `ports` if a connection i
 needed. Connect only to the intended port/baud; an existing different connection
 requires the user's direction before disconnecting or replacing it. The GUI's current
 data bits, parity, stop bits and handshake apply; verify them in `status`.
+When the device workflow requires a different BPS on the same port, use
+`configure --port <expected-port> --baud <bps>` instead of replacing the connection.
+This changes the host's live baud rate; it does not command the device to change its
+own BPS. Follow the documented device transition and inspect the resulting status/RX.
+
+Inspect `byteTimeoutMs` in `status`. Use `configure --byte-timeout-ms <ms>` to tune
+live HEX display grouping (1..5000 ms; default 40). Windows scheduling, USB adapter
+buffering and RS485 turnaround/processing add jitter beyond theoretical byte timing.
+Choose empirical slack; increase the timeout when one response is split and reduce
+it cautiously when separate exchanges merge. No value guarantees protocol packet
+boundaries. It is independent of the overall response window (`durationMs` or step
+`captureMs`): allow enough time for the complete response too. Raw captures and exact
+expectations use the ordered byte stream, independent of display grouping/chunks.
+
+Inspect the GUI's `mode` (`terminal` or `hex`) in `status` or `mode`. Use
+`mode --set terminal|hex` when the task calls for changing the GUI mode; an actual
+switch clears visible logs/search and changes GUI manual/sequence TX interpretation
+and active rules. It leaves saved logs/raw captures intact and sends no device data.
+Per-request `--text`/`--hex` (MCP `txMode`) and capture page formats remain independent
+of the GUI mode. See the CLI reference for examples and busy behavior.
 
 ## Send and inspect real RX
 
@@ -42,7 +62,10 @@ data bits, parity, stop bits and handshake apply; verify them in `status`.
   and the documented line ending. For complex text, write a UTF-8 file and use
   `--text-file`; it preserves every space and newline, and `--ending` appends its
   own ending. Use `--ending none` when the file already contains the complete TX.
-  HEX sends exactly the specified bytes and ignores line endings.
+  HEX sends exactly the specified bytes and ignores line endings. Use the actual
+  protocol's complete packet, including any documented length/checksum/CRC; do not
+  invent bytes. HEX TX previews default to hex; use `--format hex` explicitly for
+  binary capture/response inspection and follow all raw pages.
 - Parse stdout JSON even when the process exits nonzero: failures can include
   valuable partial RX and a completed or uncertain TX. A nonzero exit is not a reason
   to repeat TX. Check `success`, `error`, `data.capture.sendStatus`,
@@ -62,6 +85,32 @@ data bits, parity, stop bits and handshake apply; verify them in `status`.
 
 ## Errors, sequencing and reporting
 
+When a documented command or check is repeated or clearly useful for reuse, register
+it in Sequences with a descriptive device/action name and step names, exact command
+content, explicit `txMode`, line ending, and an appropriate response window. This
+applies to one-command HEX packets and Terminal commands as well as multi-step checks.
+Check existing names/content first to reuse an equivalent definition and avoid
+duplicates. Preserve exact HEX bytes and Terminal whitespace; add an `expect` only
+when the protocol documents a reliable contiguous response. Save with `repeatCount: 1`
+unless repeated execution is required; registering a command does not require
+running it again. Never turn device RX into a new command or automatic trigger.
+Read the CLI reference's sequence section for registration and execution syntax.
+`sequence save` registers a validated definition in the GUI's shared profile without
+TX; replacing a name requires explicit overwrite. `sequence run` returns a background
+`runId` that continues after CLI/MCP disconnects. Inspect that run with `sequence
+status` and cancel it explicitly by run ID. If the start result is lost, inspect the
+latest status before deciding whether another start is justified. Read the whole-run
+RX capture in pages. Optional expectations use exact contiguous text/bytes only:
+interleaved `ab12c3d4` does not match `abcd` and can still be normal device output.
+Do not reconstruct a subsequence or use `not_matched` alone as product failure.
+Choose no expectation when whole RX interpretation is more useful. Matching does
+not shorten collection or gate later steps; GUI manual runs do not evaluate it.
+
+If saving returns `profile_conflict`, another GUI changed the same sequence.
+Do not automatically overwrite or loop on save. Explain the conflict and review
+the latest profile before retrying. Do not disconnect a working device just to
+reload its profile without the user's direction.
+
 Use one command/capture at a time for a target. `busy` includes GUI TX, bridge startup
 or activity, sequences, reconnect and another automation operation. Inspect status
 or let the current operation finish; do not kill the GUI or stop unrelated work.
@@ -75,9 +124,10 @@ during this window," and report transport gaps separately from product failure.
 Choose subsequent documented commands from what the actual response establishes,
 within the user's task and a bounded observation/retry budget.
 
-Report the target port/baud, command and ending/mode, observed window, relevant RX
+Report the target port/baud/byte timeout, command and ending/mode, observed window, relevant RX
 evidence, capture ID and outcome (normal, failed, or uncertain). Include truncation,
-unread pages or gaps when present; do not dump a large log into the final answer.
+unread pages or gaps when present, and name any registered sequence; do not dump a
+large log into the final answer.
 
 ## Optional MCP and installation
 

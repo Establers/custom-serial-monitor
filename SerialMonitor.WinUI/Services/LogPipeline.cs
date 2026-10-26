@@ -16,6 +16,9 @@ public sealed class LogPipeline : ILogPipeline
     private static readonly TimeSpan PartialFlushInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly EncodingDecoder _decoder;
+    // Worker-owned state, bounded by the encoding's incomplete-character buffer.
+    // A UI partial flush is not an encoding boundary.
+    private StreamingEncodingDecoder? _terminalDecoder;
     private readonly LineParser _lineParser;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _displayConfigurationGate = new();
@@ -151,6 +154,7 @@ public sealed class LogPipeline : ILogPipeline
         try
         {
             await StopCurrentPipelineAsync(CancellationToken.None);
+            _terminalDecoder = null;
             _lineParser.Clear();
             _hexPendingBytes.Clear();
             Volatile.Write(ref _hexPendingByteCount, 0);
@@ -486,6 +490,7 @@ public sealed class LogPipeline : ILogPipeline
             else
             {
                 await FlushPartialRxAsync(settings, cancellationToken);
+                await FlushTerminalDecoderTailAsync(settings, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -497,6 +502,9 @@ public sealed class LogPipeline : ILogPipeline
         }
         finally
         {
+            // Cancellation must not carry an old session's decoder bytes into
+            // the next session. Do not block shutdown behind a full log queue.
+            TryFlushTerminalAtStop(settings);
             Volatile.Write(ref _partialLineBufferLength, _lineParser.PartialBufferLength);
             UpdateMax(ref _maxPartialLineBufferLength, _lineParser.PartialBufferLength);
             _logs.Writer.TryComplete();
@@ -669,8 +677,9 @@ public sealed class LogPipeline : ILogPipeline
     {
         var hadPendingPartialTerminator = _lineParser.HasPendingPartialTerminator;
         var flushedPartial = await FlushPartialRxAsync(settings, cancellationToken);
+        var flushedDecoderTail = await FlushTerminalDecoderTailAsync(settings, cancellationToken);
         _lineParser.Clear();
-        if (!flushedPartial && !hadPendingPartialTerminator)
+        if (!flushedPartial && !hadPendingPartialTerminator && !flushedDecoderTail)
         {
             RecordPartialBufferLength();
             return;
@@ -739,17 +748,19 @@ public sealed class LogPipeline : ILogPipeline
         SerialSettings settings,
         CancellationToken cancellationToken)
     {
-        var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
         if (rawLine.IsPartialTerminator)
         {
-            await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+            await FlushTerminalDecoderTailAsync(settings, cancellationToken);
+            var terminatorSequence = Interlocked.Increment(ref _sequenceNumber);
+            await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(terminatorSequence), cancellationToken);
             Volatile.Write(ref _lastPartialFinalizedByNewline, 1);
             Interlocked.Increment(ref _partialDuplicateSuppressionCount);
             RaiseStatusChanged();
             return;
         }
 
-        var decoded = DecodeSafely(rawLine.Bytes, settings.Encoding);
+        var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
+        var decoded = DecodeTerminalSafely(rawLine.Bytes, settings.Encoding, flush: !rawLine.IsPartial);
         var line = LogLine.Rx(decoded.Text, rawLine.Bytes, sequenceNumber, rawLine.IsPartial);
 
         await _logs.Writer.WriteAsync(line, cancellationToken);
@@ -758,6 +769,79 @@ public sealed class LogPipeline : ILogPipeline
         {
             Volatile.Write(ref _lastPartialFinalizedByNewline, 0);
         }
+    }
+
+    private DecodeResult DecodeTerminalSafely(byte[] bytes, RxEncodingMode encodingMode, bool flush)
+    {
+        if (encodingMode == RxEncodingMode.Hex) return DecodeSafely(bytes, encodingMode);
+        try
+        {
+            _terminalDecoder ??= new StreamingEncodingDecoder(encodingMode);
+            var decoded = _terminalDecoder.Decode(bytes, flush);
+            if (flush) _terminalDecoder = null;
+            if (decoded.HadError)
+            {
+                Interlocked.Increment(ref _decodeErrorCount);
+                RaiseStatusChanged();
+            }
+            return decoded;
+        }
+        catch (Exception ex)
+        {
+            _terminalDecoder = null;
+            Interlocked.Increment(ref _decodeErrorCount);
+            Error?.Invoke(this, $"Line decode failed: {ex.Message}");
+            RaiseStatusChanged();
+            return new DecodeResult("<decode error>", HadError: true);
+        }
+    }
+
+    private async Task<bool> FlushTerminalDecoderTailAsync(SerialSettings settings, CancellationToken token)
+    {
+        if (_terminalDecoder is null) return false;
+        token.ThrowIfCancellationRequested();
+        var decoded = DecodeTerminalSafely(Array.Empty<byte>(), settings.Encoding, flush: true);
+        if (decoded.Text.Length == 0) return false;
+        var sequence = Interlocked.Increment(ref _sequenceNumber);
+        // Raw bytes were already emitted with the earlier partial segment.
+        var line = LogLine.Rx(decoded.Text, Array.Empty<byte>(), sequence, isPartialRxSegment: true);
+        try { await _logs.Writer.WriteAsync(line, token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Decode consumed/reset the old state before the channel await.
+            // Recover that tail if Stop raced with the write, but never wait
+            // for capacity on an aborted pipeline's bounded output channel.
+            if (_logs.Writer.TryWrite(line)) AddParsedLine();
+            throw;
+        }
+        AddParsedLine();
+        return true;
+    }
+
+    private void TryFlushTerminalAtStop(SerialSettings settings)
+    {
+        try
+        {
+            if (_lineParser.FlushPartial(settings.RxLineEnding) is { } raw)
+            {
+                var decoded = DecodeTerminalSafely(raw.Bytes, settings.Encoding, flush: false);
+                var sequence = Interlocked.Increment(ref _sequenceNumber);
+                if (_logs.Writer.TryWrite(LogLine.Rx(decoded.Text, raw.Bytes, sequence, isPartialRxSegment: true)))
+                    AddParsedLine();
+            }
+            if (_terminalDecoder is not null)
+            {
+                var decoded = DecodeTerminalSafely(Array.Empty<byte>(), settings.Encoding, flush: true);
+                if (decoded.Text.Length > 0)
+                {
+                    var sequence = Interlocked.Increment(ref _sequenceNumber);
+                    if (_logs.Writer.TryWrite(LogLine.Rx(decoded.Text, Array.Empty<byte>(), sequence, isPartialRxSegment: true)))
+                        AddParsedLine();
+                }
+            }
+        }
+        catch (Exception ex) { Error?.Invoke(this, $"Final line decode failed: {ex.Message}"); }
+        finally { _terminalDecoder = null; _lineParser.Clear(); }
     }
 
     private DecodeResult DecodeSafely(byte[] bytes, RxEncodingMode encodingMode)

@@ -477,15 +477,15 @@
     <comment>English: Applies after the image path field loses focus or after Browse.</comment>
   </data>
   <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>배경 불투명도를 0~100%로 조절합니다. 0은 이미지를 숨기고, 100은 이미지를 완전히 표시합니다.</value>
-    <comment>English: Background opacity from 0 to 100 percent. 0 hides the image; 100 shows the full image.</comment>
+    <value>0~100 사이의 정수를 입력하세요. 100을 넘으면 100으로 맞춥니다. 문자, 소수점, 음수는 입력할 수 없습니다. 0은 이미지를 숨기고, 100은 이미지를 완전히 표시합니다.</value>
+    <comment>English: Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image.</comment>
   </data>
   <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>즉시 적용됩니다. 로그가 빽빽할 때는 낮은 값을 권장합니다.</value>
     <comment>English: Applies immediately. Keep the value subtle for dense logs.</comment>
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
-    <value>배경 불투명도 (%)</value>
+    <value>배경 불투명도</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>연결 중에는 불러오기/초기화 불가</value>
@@ -772,7 +772,7 @@
     <comment>English: Command Sequences</comment>
   </data>
   <data name="HelpCommandSequencesBody" xml:space="preserve">
-    <value>1. Sequences 탭의 위쪽 +로 시퀀스를 만듭니다.&#x0A;2. 아래쪽 +로 명령 Step을 추가합니다.&#x0A;3. Command, Line ending, Delay after ms를 설정합니다.&#x0A;4. Up과 Dn으로 순서를 조정합니다.&#x0A;5. 장비 연결 후 Run으로 실행하고 Stop으로 중단합니다.&#x0A;&#x0A;시퀀스는 실행 시 현재 Mode(Terminal/HEX)를 모든 Step에 공통 적용합니다.&#x0A;Step별 Mode 선택, 장비 응답 판정, 조건 분기는 지원하지 않습니다.&#x0A;&#x0A;AI용 JSON 작성 가이드: 실행 파일 옆 docs\sequence_authoring.md를 메모장 등으로 열고 장비 명령어와 함께 AI에게 전달하세요.&#x0A;예제: docs\sequence_examples.json. 전체 프로필이 아닌 시퀀스 부분 예제입니다.&#x0A;적용 전 앱을 종료하고 default.json을 백업하세요. 시퀀스 전용 가져오기는 아직 지원하지 않습니다.</value>
+    <value>1. Sequences 탭에서 시퀀스와 명령 Step을 추가합니다.&#x0A;2. Command, Line ending, Delay after ms를 설정하고 순서를 조정합니다.&#x0A;3. 장비 연결 후 Run으로 실행하고 Stop으로 현재 실행을 중단합니다.&#x0A;&#x0A;기본값은 실행 시작의 메인 Mode이며 JSON의 TxMode(Terminal/Hex)로 Step별 모드를 지정할 수 있습니다. GUI Run은 모드와 대기만 적용하고, CaptureMs 수집·Expect 리터럴 확인은 CLI/MCP 실행에서만 적용합니다. 조건 분기는 지원하지 않습니다.&#x0A;GUI Run은 자동 재연결 중 송신 실패한 명령을 재시도할 수 있어 중복 수신 가능성이 있습니다. CLI/MCP 실행은 불확실한 TX나 연결 끊김에 중단하고 자동 재전송하지 않습니다.&#x0A;&#x0A;시퀀스 관리에서 전용 JSON을 불러오고 내보낼 수 있으며 불러오기만으로 실행하지 않습니다. 작성 안내: docs\sequence_authoring.md, 예제: docs\sequence_examples.json. 섞인 printf로 리터럴이 일치하지 않을 수 있으므로 제품 성공 여부는 실제 RX를 읽고 판단하세요.</value>
     <comment>English help section body.</comment>
   </data>
   <data name="HelpComBridgeTitle" xml:space="preserve">
@@ -862,7 +862,7 @@
   <data name="SequenceTipsCopy" xml:space="preserve"><value>AI 요청문 + JSON 양식 복사</value></data>
   <data name="SequenceTipsCopied" xml:space="preserve"><value>복사했습니다. AI 대화창에 붙여 넣으세요.</value></data>
   <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>복사하지 못했습니다. 다시 시도해 주세요.</value></data>
-  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, Terminal/HEX 모드, 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. 명령이나 체크섬을 추측하지 마세요. 응답 대기·분기·변수 등 지원하지 않는 기능은 임의 필드로 만들지 마세요. Name은 기존 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. _manual은 유지하고, JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 양식의 Steps는 빈 배열이므로 요청에 맞는 실제 명령을 채워 주세요.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, 메인 모드 또는 Step별 TxMode(null/Terminal/Hex), 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. CLI/MCP 실행용이면 CaptureMs와 선택적 Expect {Kind:text|hex,Value:리터럴}도 확인해 주세요. GUI Run에서는 수집·매칭 메타데이터를 실행하지 않습니다. 명시적 TxMode는 명령 앞뒤 공백을 보존합니다. 명령·응답 리터럴·체크섬을 추측하지 마세요. 분기·변수·정규식·부분수열 매칭은 지원하지 않습니다. 섞인 printf 때문에 리터럴이 일치하지 않아도 제품 실패로 단정하지 마세요. Name은 기존 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. _manual은 유지하고 JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 Steps는 빈 배열이므로 요청한 실제 명령을 채워 주세요.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>AI로 시퀀스 만들기…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>닫기</value></data>
   <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>명령 히스토리 검색...</value></data>
@@ -922,4 +922,6 @@
   <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot용 스킬로 AI 장치 제어를 시작해 보세요. 스킬 ZIP을 별도로 받아 설치할 수 있습니다.</value></data>
   <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>스킬 ZIP 받기 ↗</value></data>
   <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>스킬 설치 안내 ↗</value></data>
+  <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: 문자 로그·텍스트 명령, 줄 끝 적용</value></data>
+  <data name="HexModeDescription" xml:space="preserve"><value>HEX: 원본 바이트를 16진수로 표시·전송, 줄 끝 미적용</value></data>
 </root>

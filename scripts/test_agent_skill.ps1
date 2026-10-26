@@ -5,8 +5,10 @@ $repo = Split-Path -Parent $PSScriptRoot
 $installer = Join-Path $repo 'skills\Install-Skill.ps1'
 $source = Join-Path $repo 'skills\serial-monitor-control'
 $resolver = Join-Path $source 'scripts\Find-SerialCtl.ps1'
-$cli = & $resolver
 $scratch = Join-Path $repo ('artifacts\skill-tests-' + [Guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($scratch) | Out-Null
+$cli = Join-Path $scratch 'serialctl.exe'
+[IO.File]::WriteAllBytes($cli, [byte[]]@(77, 90, 0))
 $project = Join-Path $scratch 'project with spaces'
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
@@ -75,7 +77,7 @@ Assert-True (Test-Path -LiteralPath $package.ChecksumPath -PathType Leaf) 'Packa
 $archive = [IO.Compression.ZipFile]::OpenRead($package.ZipPath)
 try {
     $entries = @($archive.Entries | Where-Object Length -gt 0 | ForEach-Object FullName)
-    foreach ($required in @('README.md', 'LICENSE', 'skills/Install-Skill.ps1', 'docs/agent_skills.md',
+    foreach ($required in @('README.md', 'LICENSE', 'skills/Install-Skill.ps1', 'skills/SkillInstall.Common.ps1', 'docs/agent_skills.md',
         'docs/ai_control.md', 'skills/serial-monitor-control/SKILL.md',
         'skills/serial-monitor-control/references/mcp.md', 'skills/serial-monitor-control/scripts/Find-SerialCtl.ps1')) {
         Assert-True ($entries -contains ('SerialMonitorSkills/' + $required)) "Missing ZIP entry: $required"

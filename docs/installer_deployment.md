@@ -10,6 +10,7 @@ the portable zip. This installer is optional and does not use MSIX.
 - Per-user install by default, so admin rights are not required.
 - Creates a Start Menu shortcut named `Serial Monitor`.
 - Offers an optional desktop shortcut.
+- Lets the user choose the program installation folder, including another drive.
 - Keeps the portable zip deployment as the recommended fallback for quick tests.
 
 MSIX is intentionally not used because target company PCs may block MSIX
@@ -81,7 +82,23 @@ The installer uses a per-user path:
 %LOCALAPPDATA%\Programs\SerialMonitor
 ```
 
-This avoids admin rights by default and keeps company-PC deployment simpler.
+This is the initial destination. The directory selection page stays visible for
+fresh installs and upgrades, so users can choose another writable location, such
+as `D:\Apps\SerialMonitor`. The CLI then lives at
+`D:\Apps\SerialMonitor\tools\serialctl.exe`.
+
+## Install Skills Separately
+
+Application setup installs the program only. Skills are available separately in
+`SerialMonitorSkills.zip` and can be installed later through its manual script.
+Application upgrades leave skills already installed in AI tool folders unchanged.
+See the [standalone skill guide](agent_skills.md) for installation and updates.
+
+When the application moves to another folder, rerun the skill ZIP's script using
+the actual new `-CliPath`, for example
+`D:\Apps\SerialMonitor\tools\serialctl.exe`, or set `SERIAL_MONITOR_CLI` in the AI
+host's environment. Existing MCP registrations also keep their previous path:
+use the app's MCP tab to generate the new registration and update it manually.
 
 ## User Data
 
@@ -99,6 +116,7 @@ records and are not updated by this version.
 
 Uninstall removes installed program files only. It must not delete logs,
 profiles, diagnostics, or other user data under `%LOCALAPPDATA%\SerialMonitor`.
+It also leaves separately installed AI skill folders intact.
 
 ## Target PC Notes
 
@@ -124,6 +142,10 @@ instead.
 - [ ] `release\installer\SerialMonitorSetup_yyyyMMdd_HHmm.exe` exists.
 - [ ] Installed `Assets\xterm\fonts\OFL.txt` exists beside the bundled font files.
 - [ ] Running the installer does not request admin rights by default.
+- [ ] The program directory page is visible on fresh install and upgrade.
+- [ ] A custom program location, such as `D:\Apps\SerialMonitor`, launches correctly.
+- [ ] Installation and upgrade leave separately installed AI skills unchanged.
+- [ ] Skills can be installed later from the separate skill ZIP with the actual CLI path.
 - [ ] Start Menu shortcut launches Serial Monitor.
 - [ ] Optional desktop shortcut launches Serial Monitor when selected.
 - [ ] xterm loads.

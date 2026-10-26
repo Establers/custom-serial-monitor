@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
+using SerialMonitor.Core.Automation;
 
 namespace SerialMonitor.WinUI.Models;
 
@@ -20,6 +21,14 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     public int DelayAfterMs { get; set; } = 300;
 
     public string? Comment { get; set; }
+
+    // Null keeps legacy behavior: use the main TX mode captured at run start.
+    public TxSendMode? TxMode { get; set; }
+
+    // Capture and matching metadata is used by CLI/MCP runs, not ordinary GUI Run.
+    public int CaptureMs { get; set; } = 2000;
+
+    public AutomationResponseExpectation? Expect { get; set; }
 
     [JsonIgnore]
     public int StepNumber
@@ -72,7 +81,12 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     public string CommentText => string.IsNullOrWhiteSpace(Comment) ? string.Empty : Comment.Trim();
 
     [JsonIgnore]
-    public string RowToolTip => $"{StepNumberText} | {CommandText} | {LineEndingHelpText} | Delay {DelayText}";
+    public string RowToolTip => $"{StepNumberText} | {CommandText} | TX {TxMode?.ToString() ?? "Global"} | {LineEndingHelpText} | Delay {DelayText} | {AutomationHelpText}";
+
+    [JsonIgnore]
+    public string AutomationHelpText => $"CLI/MCP only: collect RX {CaptureMs} ms; " + (Expect is null
+        ? "no response match. GUI Run uses TX mode and delay only."
+        : $"literal {Expect.Kind} match '{(Expect.Value?.Length > 80 ? Expect.Value[..80] + "…" : Expect.Value)}'. GUI Run does not capture or match.");
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {

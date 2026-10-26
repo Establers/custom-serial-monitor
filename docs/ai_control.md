@@ -17,10 +17,14 @@ CLI의 `connect`를 사용합니다. 포터블/설치 배포에는 `tools\serial
 .\tools\serialctl.exe instances
 .\tools\serialctl.exe ports
 .\tools\serialctl.exe connect --port COM7 --baud 115200
+.\tools\serialctl.exe configure --port COM7 --baud 57600 --byte-timeout-ms 80
 .\tools\serialctl.exe status
+.\tools\serialctl.exe mode
+.\tools\serialctl.exe mode --set hex
+.\tools\serialctl.exe mode --set terminal
 .\tools\serialctl.exe commands
 .\tools\serialctl.exe request --port COM7 --text "status" --ending crlf --duration-ms 2000
-.\tools\serialctl.exe request --hex "AA 01 FF" --duration-ms 3000
+.\tools\serialctl.exe request --hex "AA 01 FF" --duration-ms 3000 --format hex
 .\tools\serialctl.exe request --text-file command.txt --ending none --duration-ms 2000 --preview-bytes 4096
 .\tools\serialctl.exe capture --duration-ms 1000
 .\tools\serialctl.exe cancel
@@ -48,6 +52,72 @@ HEX TX는 지정 바이트만 보내며 줄 끝을 붙이지 않습니다.
 파일에 줄 끝이 있으면 `--ending none`으로 중복 추가를 피하세요. `--preview-bytes`는
 첫 반환 페이지만 4..65536바이트로 제한하며 전체 수집과 파일 저장은 유지합니다.
 MCP의 대응 인자는 `previewBytes`입니다. 생략 시 기존 기본값 16384를 사용합니다.
+`send`·`request`·`capture`에는 `--format text|hex`로 첫 페이지 형식을 지정할 수 있습니다.
+HEX TX는 기본적으로 HEX 페이지를 반환하고, 나머지는 text가 기본입니다.
+
+## 연결 중 BPS / byte timeout 변경
+
+제품이 동작 중 BPS를 바꾸는 경우 같은 연결의 호스트 baud rate를 변경할 수 있습니다.
+`configure`는 COM 포트를 다시 열지 않고 현재 핸들에 적용하며 장치로 명령을 보내지 않습니다.
+장비 자체의 BPS 변경은 제품 명령 규격에 따라 별도로 수행하고, 양쪽 전환 순서를 맞추세요.
+
+```powershell
+.\tools\serialctl.exe configure --port COM7 --baud 57600 --instance INSTANCE_ID
+.\tools\serialctl.exe configure --port COM7 --byte-timeout-ms 80 --instance INSTANCE_ID
+.\tools\serialctl.exe configure --port COM7 --baud 115200 --byte-timeout-ms 40 --instance INSTANCE_ID
+.\tools\serialctl.exe status --instance INSTANCE_ID
+```
+
+`--baud`는 1..10,000,000 BPS이며 사용자 지정 속도도 허용하지만 시리얼 드라이버가
+지원해야 적용됩니다. `--byte-timeout-ms`는 1..5,000ms이고 기본값은 40ms입니다.
+둘 중 하나 이상을 지정해야 합니다. 연결된 상태에서만 사용할 수 있으며 연결·재연결을
+자동으로 시작하지 않습니다. 연결 전 설정은 GUI 또는 프로필에서 변경합니다.
+선택 인자 `--port`는 기대 포트가 맞는지 검증하며 다른 포트로 바꾸는 기능이 아닙니다.
+현재 적용값은 `status`의 `baudRate`와 `byteTimeoutMs`로 확인합니다. 수집·송신·시퀀스·
+Bridge·다른 제어 작업 중에는 `busy`이므로 작업 종료 후 변경합니다.
+
+byte timeout은 HEX 화면의 유휴 간격별 묶음 기준입니다. 제품 응답 전체를 기다리는
+`--duration-ms` / 시퀀스의 `captureMs`와 별개입니다. Windows 스케줄링, USB 어댑터
+버퍼링, RS485 전환·처리 시간 때문에 이론적인 바이트 간격보다 넉넉한 실측 여유가
+필요합니다. 응답 하나가 여러 줄로 나뉘면 timeout을 늘리고, 서로 다른 교환이 합쳐지면
+실제 간격을 관찰하며 줄이세요. 어떤 값도 프로토콜 패킷 경계를 보장하지 않습니다.
+정확한 판별에는 제품의 헤더·길이·체크섬/CRC 규격을 사용해야 합니다.
+
+원본 RX 캡처는 화면의 묶음과 관계없이 수신 순서대로 저장되며, 기대 응답 판정도
+수신 chunk 경계와 관계없는 연속 바이트를 확인합니다. 한 패킷이 여러 번에 나뉘거나
+여러 패킷이 한 번에 도착해도 캡처와 판정을 유지합니다. 응답이 수집 시간 밖으로
+늦게 오는 경우에는 `durationMs` / `captureMs`도 충분히 늘려야 합니다.
+
+MCP에서는 `serial_configure`에
+`{"port":"COM7","baudRate":57600,"byteTimeoutMs":80,"instanceId":"INSTANCE_ID"}`를
+전달합니다. 범위와 동작은 CLI와 같습니다.
+
+## Terminal / HEX 모드 제어
+
+GUI의 PORT 왼쪽 드롭다운과 같은 모드를 CLI/MCP에서도 선택할 수 있습니다.
+Terminal은 수신 데이터를 텍스트 터미널로 표시하고, HEX는 원본 바이트를 16진수로 표시합니다.
+드롭다운의 각 항목에 마우스를 올리면 한 줄 설명이 나옵니다.
+
+```powershell
+.\tools\serialctl.exe mode --instance INSTANCE_ID
+.\tools\serialctl.exe mode --set hex --instance INSTANCE_ID
+.\tools\serialctl.exe mode --set terminal --instance INSTANCE_ID
+```
+
+`mode`는 현재 상태를 조회하며 `status`와 같은 `mode` 필드에 `terminal` 또는 `hex`가
+반환됩니다. `--set`은 GUI의 실시간 RX 표시, 수동·시퀀스 TX 입력 해석과 활성 규칙 모드를
+함께 바꿉니다. 실제로 모드를 전환하면 현재 화면 로그와 검색 결과가 지워집니다. 이미 저장한
+로그와 원본 RX 캡처는 유지되며, 모드 선택만으로 연결하거나 장치에 데이터를 보내지 않습니다.
+
+GUI 모드와 요청별 전송 형식은 독립적입니다. GUI가 HEX여도 `request --text`는 텍스트를,
+Terminal이어도 `request --hex`는 지정 바이트를 보냅니다. 캡처의 `read --format hex`도
+페이지의 출력 형식만 선택하므로 GUI 모드를 바꾸지 않습니다.
+
+MCP에서는 `serial_get_status`로 조회하고 `serial_set_mode`에
+`{"mode":"hex","instanceId":"INSTANCE_ID"}` 또는 `mode: "terminal"`을 전달합니다.
+모드 변경은 다른 제어 작업과 동시에 실행되지 않습니다. GUI TX·시퀀스·Bridge 시작/실행·
+재연결·AI 제어/수집 중에는 `busy`를 반환하므로 현재 작업이 끝난 뒤 변경합니다.
+요청 취소도 지원합니다. 이 명령은 모드 제어를 지원하는 최신 GUI·CLI 빌드에서 사용합니다.
 
 ## 전체 RX와 페이지 조회
 
@@ -73,7 +143,9 @@ TX가 이미 장치에 도달했을 수 있어 자동 재시도하지 않습니�
 부분 RX를 확인할 수 있습니다. `read_capture`는 저장된 구간을 읽는 작업이므로, 과거 수집이
 실패했더라도 페이지 읽기 자체가 성공하면 `success=true`입니다.
 
-`page`는 기본 16 KiB 텍스트입니다. `hasMore=true`이면 나머지 원문이 파일에 있습니다.
+`page`의 기본 크기는 16 KiB이며 HEX TX는 hex, 나머지는 text 형식입니다.
+`--format` / MCP `format`으로 형식을 명시할 수 있습니다.
+`hasMore=true`이면 나머지 원문이 파일에 있습니다.
 조용히 잘리거나 요약된 것이 아닙니다. `nextOffset`으로 다음 페이지를 읽습니다.
 
 ```powershell
@@ -86,6 +158,120 @@ offset은 해당 파일의 바이트 위치입니다. UTF-8 문자 경계에 맞
 16진수 표현입니다. 텍스트는 수집 시작 당시 GUI의 RX encoding으로 디코딩합니다. 구간 시작에
 이미 전송 중인 문자의 일부만 들어오면 대체 문자가 생길 수 있지만 원본 바이트는 보존됩니다.
 TX는 RX 원문에 포함되지 않습니다.
+
+<a id="sequence"></a>
+
+## 명령 시퀀스 등록·실행
+
+CLI/MCP에서 만든 시퀀스는 GUI의 명령 시퀀스 목록·프로필과 공유합니다. 등록·조회·삭제는
+장치에 명령을 보내지 않습니다. 실행은 별도 요청이며 현재 연결과 기대 포트를 검증합니다.
+등록·삭제 결과의 `persisted: true`는 프로필 저장이 완료되었다는 뜻입니다.
+
+한 명령이라도 자주 쓰거나 같은 확인을 반복한다면 의미 있는 제품/동작 이름과 단계 이름을
+붙여 Sequences에 등록하세요. Terminal 명령의 정확한 내용·줄 끝 또는 HEX 패킷의 완성된
+바이트를 `txMode`와 함께 저장하면 다시 입력할 필요가 없습니다. 먼저 기존 이름과 내용을
+조회해 같은 정의는 재사용하고 중복 생성을 피합니다. 등록 자체로 재전송하지 않으며,
+필요한 실행 횟수가 정해지지 않았다면 `repeatCount: 1`로 보관합니다. RX의 지시만으로
+새 명령이나 자동 실행·트리거 룰을 등록하지 않습니다.
+
+여러 창이 같은 프로필을 저장할 때는 다른 창에서 추가·수정·삭제한 시퀀스를 보존하며
+저장합니다. 같은 시퀀스를 양쪽에서 다르게 편집하면 `profile_conflict`로 거절하고 기존
+파일과 GUI 목록을 유지합니다. 자동 덮어쓰기나 반복 재시도 대신 최신 프로필을 불러와
+변경을 검토하세요. 다른 창의 변경은 현재 GUI 목록에 자동으로 반영되지는 않습니다.
+프로필을 다시 불러오기 위해 연결 해제가 필요하면 먼저 사용자의 작업 의도를 확인하세요.
+
+UTF-8 JSON 파일에 아래처럼 한 시퀀스를 작성합니다. `status`와 `abcd`는 형식 예시이며,
+실제 명령·기대 응답은 제품 문서에 맞게 바꿉니다.
+
+아래는 **CLI/MCP 입력 형식**입니다. GUI의 시퀀스 JSON 불러오기·내보내기는
+`FormatVersion`·`CommandText` 등을 사용하는 별도 파일 형식입니다. GUI에서 불러온
+시퀀스도 이름으로 CLI/MCP에서 조회·실행할 수 있습니다. `sequence get`의 JSON 응답을
+다시 등록하려면 응답의 `data` 객체만 파일에 저장하고, `success` 등 응답 전체를 넣지 마세요.
+
+```json
+{
+  "name": "제품 상태 확인",
+  "repeatCount": 1,
+  "steps": [
+    {
+      "name": "상태 명령",
+      "command": "status",
+      "txMode": "text",
+      "lineEnding": "crlf",
+      "captureMs": 2000,
+      "delayAfterMs": 300,
+      "expect": { "kind": "text", "value": "abcd" }
+    }
+  ]
+}
+```
+
+```powershell
+.\tools\serialctl.exe sequence save --file sequence.json --instance INSTANCE_ID
+.\tools\serialctl.exe sequence list --offset 0 --limit 100 --instance INSTANCE_ID
+.\tools\serialctl.exe sequence get --name "제품 상태 확인" --instance INSTANCE_ID
+.\tools\serialctl.exe sequence run --name "제품 상태 확인" --port COM7 --instance INSTANCE_ID
+.\tools\serialctl.exe sequence status --run RUN_ID --instance INSTANCE_ID
+.\tools\serialctl.exe sequence cancel --run RUN_ID --instance INSTANCE_ID
+.\tools\serialctl.exe sequence delete --name "제품 상태 확인" --instance INSTANCE_ID
+```
+
+HEX Step은 `"txMode":"hex"`, `"lineEnding":"none"`으로 지정하고 `command`에
+제품 규격의 완성된 바이트를 넣습니다. 예를 들어 위 Step의 `command`를 `"AA 01 FF"`,
+`expect`를 `{"kind":"hex","value":"AA 81 00"}`로 바꿀 수 있습니다. 이 바이트는 형식
+예시이므로 실제 장비에 보내기 전에 해당 제품의 길이·체크섬/CRC·ACK 규격으로 바꾸세요.
+신뢰할 수 있는 리터럴 응답이 없으면 `expect`를 생략합니다.
+
+같은 이름을 교체하려면 `save --overwrite true`를 명시합니다. `list`는 정의 전체가 아닌
+메타데이터를 페이지로 반환합니다. `hasMore`이면 `nextOffset`으로 계속 조회합니다.
+`get`은 정의 하나를 반환하며, 한도를 넘는 기존 GUI 정의는 잘라 보내지 않고 오류를 반환합니다.
+
+`run`은 전체 실행을 기다리지 않고 `runId`를 곧바로 반환합니다. **접수된 실행은 CLI/MCP
+연결이 끝나도 GUI에서 계속됩니다.** `status --run RUN_ID`로 같은 실행을 확인하고,
+생략하면 해당 GUI의 최근 실행을 조회합니다. 결과를 잃었다면 최근 상태부터 확인하며 `run`을
+맹목적으로 재시도하지 않습니다. 중지는 반드시 `sequence cancel --run RUN_ID`로 요청합니다.
+일반 `cancel`/MCP 호출 취소는 이미 접수된 백그라운드 실행을 중지하는 방법이 아닙니다.
+취소 후에도 RX 저장이 끝나 제어권이 해제될 때까지 최종 상태를 확인합니다.
+
+상태의 `state`는 `running`, `completed`, `canceled`, `failed`입니다. `stepIndex`는
+0부터 시작하며 아직 시작 전에는 -1입니다. 단계별 `sendStatus`, `rxStartOffset`,
+`rxEndOffset`, `matchStatus`와 전체 `capture`를 확인할 수 있습니다. 전체 실행의 RX는
+하나의 캡처에 보존합니다. 반환된 `captureId`로 기존 `read` 명령을 사용해 나눠 읽습니다.
+단계별 RX offset은 **원본 바이트 위치**이므로 해당 구간을 조회할 때는 `--format hex`를
+사용하고, 디코딩된 텍스트 파일의 offset으로 재사용하지 않습니다.
+
+### 선택적인 정확 일치 확인
+
+`expect`는 생략할 수 있습니다. `kind: "text"`는 기대 문자열을 GUI의 RX 인코딩으로
+변환한 연속 바이트를, `kind: "hex"`는 `value: "AA 01 FF"` 같은 연속 바이트를 확인합니다.
+대소문자를 구분하며, 해당 인코딩으로 표현할 수 없는 기대 문자열은 실행 전에 거절합니다.
+정규식·유사 일치·떨어진 문자 재조합은 하지 않습니다. 결과는 `matched`, `not_matched`,
+`not_requested`, `inconclusive`입니다. 수신 누락 등으로 충분히 확인할 수 없으면
+`inconclusive`로 표시합니다.
+
+일치는 원본 바이트 스트림에서 확인하므로 수신 chunk나 byte timeout의 화면 묶음을
+가로질러도 연속 바이트가 있으면 확인할 수 있습니다. 한 chunk에 여러 패킷이 함께 와도
+동일합니다. 단계의 수집 구간을 넘어서는 기대값은 확인하지 않으므로 늦게 오는 응답에는
+`captureMs`를 조절하세요. 화면 한 줄을 프로토콜 패킷 하나로 가정하지 않습니다.
+
+`abcd`를 기대해도 printf가 섞여 `ab12c3d4`로 들어오면 정확 일치는 `not_matched`입니다.
+장치에는 정상인 출력일 수 있으므로 이를 제품 실패로 단정하지 않습니다. AI가 전체 RX와
+프로토콜 문맥을 확인해 최종 판단합니다. 이런 장치는 `expect`를 생략하고 전체 RX를
+읽는 방법이 적합합니다. 반대로 끊기지 않는 고정 바이트 ACK가 있는 프로토콜에는 정확 일치를
+보조 근거로 사용할 수 있습니다. GUI에서 직접 실행하는 시퀀스는 이 기대 응답 판정을 수행하지
+않으며, CLI/MCP 자동화 실행에서만 적용합니다.
+
+매칭은 단계가 수집한 데이터를 확인하는 보조 결과입니다. 일치해도 `captureMs`를 끝까지
+수집하고, 불일치만으로 다음 단계를 건너뛰거나 실행을 조기 종료하지 않습니다.
+전송·연결·캡처 오류나 취소는 실행을 중단할 수 있습니다. 전송 결과가 불확실한 명령은
+자동 재전송하지 않습니다.
+
+정의의 `name`, `repeatCount`, `steps`는 필수입니다. 이름은 1..128자, 단계 수·반복 수는
+각각 1..128이며 **단계 수 × 반복 수는 최대
+128회**입니다. 명령은 1..16384자, 기대값은 1..4096자입니다. 단계별 `captureMs`와
+`delayAfterMs`는 각각 0..60000 / 0..600000이고 기본값은 2000/300ms입니다. 전체 반복의 수집·대기
+합계는 최대 600000ms, 정의 JSON은 UTF-8 48KiB입니다. 새 자동화 등록은 최대 1000개이며,
+전체 실행의 원본 캡처는 최대 64MiB입니다. 모든 정의 검증은 첫 TX 전에 수행합니다.
 
 ## MCP 등록
 
@@ -139,13 +325,19 @@ tool_timeout_sec = 90
 | --- | --- |
 | `serial_list_instances` | 실행 중인 GUI 조회 |
 | `serial_get_status`, `serial_list_ports` | 연결·설정·오류와 포트 조회 |
+| `serial_set_mode` | GUI Terminal/HEX 모드 변경 (`mode`: `terminal` / `hex`) |
 | `serial_list_commands` | GUI의 저장 명령과 줄 끝 조회 |
 | `serial_connect`, `serial_disconnect` | GUI 연결·해제 |
+| `serial_configure` | 현재 연결 BPS·HEX byte timeout 변경 (`baudRate`, `byteTimeoutMs`) |
 | `serial_send` | 명령 한 번 전송 |
 | `serial_send_and_capture` | 전송하고 지정 시간의 전체 RX 수집 |
 | `serial_capture_rx` | 전송 없이 추가 RX 수집 |
 | `serial_read_capture` | 저장된 RX 페이지 조회 |
 | `serial_cancel_capture` | 현재 수집 중지 |
+| `serial_sequence_list`, `serial_sequence_get` | 공유 시퀀스 메타데이터 페이지·정의 조회 |
+| `serial_sequence_save`, `serial_sequence_delete` | 시퀀스 등록·교체·삭제 후 프로필 저장 |
+| `serial_sequence_start` | 시퀀스 백그라운드 실행 접수, `runId` 반환 |
+| `serial_sequence_status`, `serial_sequence_cancel` | 실행 상태 조회·지정한 `runId` 중지 |
 
 `serial_list_instances` 이외에는 선택적으로 `instanceId`를 지정합니다. send/capture에는
 기대 연결을 검증하는 `port`도 지정할 수 있습니다. 그 외 인자는 도구의 JSON Schema에
@@ -173,6 +365,9 @@ AI 요청 예:
 - 하단 `AI 중지`, CLI `cancel`, MCP 취소로 수집을 끝낼 수 있습니다. GUI 직접 연결 해제도
   수집을 끝냅니다. CLI/MCP가 종료되어 pipe가 닫히면 작업을 취소하고 제어를 반환합니다.
   GUI는 계속 실행되며 이미 보낸 명령을 되돌리지 않습니다.
+- 시퀀스 백그라운드 실행은 접수 후 요청 연결과 독립적입니다. CLI `sequence cancel --run`,
+  MCP `serial_sequence_cancel` 또는 GUI의 중지 기능을 사용합니다. 전체 실행 RX를 하나의
+  캡처에 보존하며, 일반 단발 캡처의 60초 제한 대신 정의 전체 수집·대기 합계 10분을 적용합니다.
 - 구간 최대 60초, 원본 최대 64 MiB, 큐 최대 1,024개 chunk 및 8 MiB입니다. 초과하면
   수집을 중단하고 누락/제한을 명시하며 시리얼 수신을 막지 않습니다.
 - 페이지 기본 16 KiB, 최대 64 KiB입니다. 모든 페이지를 읽으면 AI 처리 총량은 줄지 않으므로
@@ -194,3 +389,29 @@ AI 요청 예:
 실패 TX 무재시도, Named Pipe 왕복, MCP 초기화·호출·취소를 다룹니다. WinUI 테스트는
 Bridge 우선 모드 여부와 무관한 RX 수집과 기존 파서 채널 보존을 검증합니다. 실제 제품과
 USB-UART의 동작은 해당 하드웨어를 연결해 별도로 확인해야 합니다.
+
+실제 GUI 통합 검사는 MOCK 테스트 포트가 표시된 Debug 테스트 창에서 실행합니다.
+현재 프로필에 임시 시퀀스를 저장하므로 별도 테스트 프로필을 준비하거나 기존 프로필을
+백업하세요. 실제 장비에 연결된 창은 스크립트가 거부합니다.
+
+```powershell
+.\scripts\test_automation_gui.ps1 -CliPath 'C:\SerialMonitor\tools\serialctl.exe' -InstanceId '실제_TEST_GUI_INSTANCE_ID'
+```
+
+CLI/MCP의 실시간 BPS·timeout 변경, HEX 원본과 전체 페이지의 일치, 혼합 모드 시퀀스
+저장·조회·실행 및 정리를 확인하고 `artifacts/automation-gui-smoke/*/report.json`에 기록합니다.
+MOCK의 응답은 전송 내용을 표시한 UTF-8 텍스트이므로 실제 바이너리 UART 응답과 구분합니다.
+
+로컬에 com0com의 `CNCA0 ↔ CNCB0` pair 0이 설치되어 있으면 아래 검사를 명시적으로
+활성화할 수 있습니다. 테스트가 레지스트리의 에뮬레이터 신원을 확인한 뒤 실제 Windows
+핸들에서 BPS 변경·readback 및 분할/합친 바이너리 스트림을 검증합니다. 물리 포트는 열지
+않으며 일반 테스트 실행에서는 이 한 항목을 건너뜁니다.
+
+```powershell
+$env:SERIAL_MONITOR_TEST_COM0COM_PAIR0 = '1'
+try {
+    dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj --no-build --no-restore -p:Platform=x64 --filter FullyQualifiedName~SerialServiceVirtualDriverTests
+} finally {
+    Remove-Item Env:SERIAL_MONITOR_TEST_COM0COM_PAIR0
+}
+```

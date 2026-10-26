@@ -21,8 +21,10 @@
             <infra:HighlightColorBrushConverter x:Key="HighlightColorBrushConverter" />
             <infra:EventTextSegmentBrushConverter x:Key="EventTextSegmentBrushConverter" />
             <infra:DisplayModeNameConverter x:Key="DisplayModeNameConverter" />
+            <infra:DisplayModeToolTipConverter x:Key="DisplayModeToolTipConverter" />
             <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
-                <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}" />
+                <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}"
+                           ToolTipService.ToolTip="{Binding Converter={StaticResource DisplayModeToolTipConverter}}" />
             </DataTemplate>
 
             <ControlTemplate x:Key="CompactCheckBoxTemplate"
@@ -1077,9 +1079,19 @@
         </Grid>
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+            <ComboBox x:Uid="StaticUi012" x:Name="ConnectionModeComboBox" Grid.Column="0"
+                      Margin="0,0,8,0"
+                      AutomationProperties.Name="RX/TX mode"
+                      ItemsSource="{Binding RxDisplayModes}"
+                      SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                      IsEnabled="{Binding CanChangeTerminalMode}"
+                      ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
+                      Style="{StaticResource CompactComboBoxStyle}"
+                      Width="96"
+                      ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
             <Button x:Uid="StaticUi002" x:Name="ConnectionToolbarScrollBackButton"
-                    Grid.Column="0"
+                    Grid.Column="1"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
                     Click="ToolbarScrollBackButton_Click"
@@ -1090,7 +1102,7 @@
                           Glyph="&#xE76B;" />
             </Button>
             <ScrollViewer x:Name="ConnectionToolbarScrollViewer"
-                          Grid.Column="1"
+                          Grid.Column="2"
                           HorizontalScrollMode="Enabled"
                           HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollMode="Disabled"
@@ -1192,7 +1204,7 @@
             </Grid>
             </ScrollViewer>
             <Button x:Uid="StaticUi005" x:Name="ConnectionToolbarScrollForwardButton"
-                    Grid.Column="2"
+                    Grid.Column="3"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
                     Click="ToolbarScrollForwardButton_Click"
@@ -1203,7 +1215,7 @@
                           Glyph="&#xE76C;" />
             </Button>
             <Button x:Name="PortAliasButton"
-                    Grid.Column="3"
+                    Grid.Column="4"
                     Margin="8,0,0,0"
                     MinWidth="80"
                     MaxWidth="160"
@@ -1276,7 +1288,7 @@
                   RowDefinitions="Auto,*">
                 <Border Grid.Row="0"
                         Style="{StaticResource CompactSurfaceBorderStyle}">
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto"
                           ColumnSpacing="4">
                     <StackPanel Grid.Column="0"
                                 Orientation="Horizontal"
@@ -1504,15 +1516,6 @@
                                   UseLayoutRounding="False"
                                   Glyph="&#xE76C;" />
                     </Button>
-                    <ComboBox x:Uid="StaticUi012" Grid.Column="4"
-                              Margin="8,0,0,0"
-                              AutomationProperties.Name="RX/TX mode"
-                              ItemsSource="{Binding RxDisplayModes}"
-                              SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
-                              ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                              Style="{StaticResource CompactComboBoxStyle}"
-                              Width="96"
-                              ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                     </Grid>
                 </Border>
 
@@ -2813,6 +2816,7 @@
                                             <ComboBox x:Uid="StaticUi139" Grid.Column="1"
                                                       ItemsSource="{Binding RxDisplayModes}"
                                                       SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanChangeTerminalMode}"
                                                       ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                                                       Style="{StaticResource SettingComboBoxStyle}"
                                                       ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
@@ -3068,14 +3072,18 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
-                                            <TextBlock x:Uid="BackgroundOpacityLabel" Text="Bg opacity (%)"
+                                            <TextBlock x:Uid="BackgroundOpacityLabel" Text="Bg opacity"
                                                        Style="{StaticResource SettingLabelTextStyle}" />
-                                            <NumberBox x:Uid="StaticUi183" Grid.Column="1"
-                                                       Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
-                                                       Value="{Binding CuteBackgroundOpacityPercent, Mode=TwoWay}"
-                                                       SpinButtonPlacementMode="Compact"
-                                                       HorizontalAlignment="Stretch"
-                                                       ToolTipService.ToolTip="Background opacity from 0 to 100 percent. 0 hides the image; 100 shows the full image." />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                <infra:PercentageTextBox x:Uid="StaticUi183"
+                                                                         Value="{Binding CuteBackgroundOpacityPercent, Mode=TwoWay}"
+                                                                         Style="{StaticResource SettingTextBoxStyle}"
+                                                                         InputScope="Number"
+                                                                         IsSpellCheckEnabled="False"
+                                                                         IsTextPredictionEnabled="False"
+                                                                         ToolTipService.ToolTip="Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image." />
+                                                <TextBlock Text="%" FontSize="11" VerticalAlignment="Center" />
+                                            </StackPanel>
                                             <TextBlock x:Uid="StaticUi184" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"

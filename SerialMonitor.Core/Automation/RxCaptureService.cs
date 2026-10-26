@@ -32,6 +32,19 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         lock (_gate) _active?.Offer(generation, bytes, receivedTimestamp);
     }
 
+    // Raw-file positions reflect accepted bytes, including queued disk writes.
+    // Taking this under the same lock as Offer gives sequence observation windows
+    // stable byte boundaries without reading or writing files in the RX path.
+    public long SnapshotActiveAcceptedBytes()
+    {
+        lock (_gate) return _active?.AcceptedBytes ?? -1;
+    }
+
+    public string? ActiveInterruptionReason
+    {
+        get { lock (_gate) return _active?.InterruptionReason; }
+    }
+
     public void ConnectionChanged(CaptureConnection connection)
     {
         lock (_gate)
@@ -279,6 +292,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         private readonly long _startedTimestamp = Stopwatch.GetTimestamp();
         private long _pendingBytes;
         private long _acceptedBytes;
+        public long AcceptedBytes => _acceptedBytes;
         public long Generation { get; }
         public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
         public DateTimeOffset EndedAt { get; private set; }

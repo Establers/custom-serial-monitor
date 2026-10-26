@@ -97,6 +97,11 @@ public sealed class AutomationIntegrationTests : IDisposable
         var tools = (await output.Next()).GetProperty("result").GetProperty("tools").EnumerateArray().ToArray();
         Assert.Contains(tools, tool => tool.GetProperty("name").GetString() == "serial_send_and_capture");
         Assert.Contains(tools, tool => tool.GetProperty("name").GetString() == "serial_read_capture");
+        var setMode = Assert.Single(tools, tool => tool.GetProperty("name").GetString() == "serial_set_mode");
+        var schema = setMode.GetProperty("inputSchema");
+        Assert.Contains(schema.GetProperty("required").EnumerateArray(), item => item.GetString() == "mode");
+        Assert.Equal(new[] { "terminal", "hex" }, schema.GetProperty("properties").GetProperty("mode").GetProperty("enum")
+            .EnumerateArray().Select(item => item.GetString()));
         input.Finish();
         await run.WaitAsync(TimeSpan.FromSeconds(5));
     }
@@ -121,6 +126,11 @@ public sealed class AutomationIntegrationTests : IDisposable
             input.Send(new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { protocolVersion = "2025-06-18" } });
             await output.Next();
             input.Send(new { jsonrpc = "2.0", method = "notifications/initialized" });
+            input.Send(new { jsonrpc = "2.0", id = 10, method = "tools/call", @params = new { name = "serial_set_mode", arguments = new { mode = "hex" } } });
+            var modeResult = (await output.Next()).GetProperty("result");
+            Assert.False(modeResult.GetProperty("isError").GetBoolean());
+            Assert.Equal("hex", modeResult.GetProperty("structuredContent").GetProperty("data").GetProperty("mode").GetString());
+            Assert.Equal(0, device.SendCount);
             input.Send(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "serial_send_and_capture", arguments = new { command = "status", durationMs = 10 } } });
             var result = (await output.Next()).GetProperty("result");
             Assert.False(result.GetProperty("isError").GetBoolean());
@@ -141,6 +151,7 @@ public sealed class AutomationIntegrationTests : IDisposable
         public CaptureConnection Connection => new(true, 1, 0);
         public volatile bool Reserved;
         public int SendCount;
+        private string _mode = "terminal";
         public TaskCompletionSource Sent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Released { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<object> InvokeAsync(string operation, JsonElement arguments, CancellationToken cancellationToken)
@@ -152,13 +163,18 @@ public sealed class AutomationIntegrationTests : IDisposable
                 Reserved = true;
             }
             if (operation == "release") { Reserved = false; Released.TrySetResult(); }
+            if (operation == "set_mode")
+            {
+                Assert.True(Reserved);
+                _mode = arguments.GetProperty("mode").GetString()!;
+            }
             if (operation == "send")
             {
                 Interlocked.Increment(ref SendCount);
                 captures.Offer(1, "abc1d234\r\n> "u8.ToArray(), Stopwatch.GetTimestamp());
                 Sent.TrySetResult();
             }
-            return Task.FromResult<object>(new AutomationDeviceState(true, "COM7", 115200, 1, "Utf8", 0, Reserved, null));
+            return Task.FromResult<object>(new AutomationDeviceState(true, "COM7", 115200, 1, "Utf8", 0, Reserved, null, Mode: _mode));
         }
     }
 

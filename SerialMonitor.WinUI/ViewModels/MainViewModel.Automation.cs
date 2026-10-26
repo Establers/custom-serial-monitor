@@ -9,8 +9,10 @@ public sealed partial class MainViewModel
 {
     private RxCaptureService? _captures;
     private AutomationPipeHost? _automationHost;
+    private AutomationController? _automationController;
     private readonly AutomationControlGate _automationControl = new();
     private int _activeGuiSends;
+    private bool _isProfileSaveActive;
     private string? _automationLastResult;
     private string _automationStatus = UiText.Get("AutomationReady", "AI/CLI ready");
 
@@ -23,6 +25,7 @@ public sealed partial class MainViewModel
     {
         CancelAutomationCommand = new Infrastructure.AsyncRelayCommand(() =>
         {
+            _automationController?.CancelActiveSequence();
             _captures?.Cancel();
             return Task.CompletedTask;
         }, () => IsAutomationBusy);
@@ -33,8 +36,8 @@ public sealed partial class MainViewModel
                 "SerialMonitor", "automation", "captures", instanceId));
             _serialService.CaptureBytesReceived += OnCaptureBytes;
             _serialService.StatusChanged += OnCaptureConnectionChanged;
-            var controller = new AutomationController(new AutomationDeviceAdapter(this), _captures);
-            _automationHost = new AutomationPipeHost(instanceId, controller.HandleAsync, ex =>
+            _automationController = new AutomationController(new AutomationDeviceAdapter(this), _captures);
+            _automationHost = new AutomationPipeHost(instanceId, _automationController.HandleAsync, ex =>
             {
                 RuntimeDiagnostics.RecordError("AutomationPipeHost", ex);
                 RunOnUiThread(() => SetAutomationStatus("AI/CLI error: " + ex.Message));
@@ -50,11 +53,25 @@ public sealed partial class MainViewModel
 
     private async Task StopAutomationAsync()
     {
+        _automationController?.CancelActiveSequence();
         _captures?.Cancel();
-        if (_automationHost is not null) await _automationHost.DisposeAsync();
+        if (_automationHost is { } host)
+        {
+            _automationHost = null;
+            await host.DisposeAsync();
+        }
+        if (_automationController is { } controller)
+        {
+            _automationController = null;
+            await controller.DisposeAsync();
+        }
         _serialService.CaptureBytesReceived -= OnCaptureBytes;
         _serialService.StatusChanged -= OnCaptureConnectionChanged;
-        if (_captures is not null) await _captures.DisposeAsync();
+        if (_captures is { } captures)
+        {
+            _captures = null;
+            await captures.DisposeAsync();
+        }
     }
 
     private void OnCaptureBytes(long generation, ReceivedByteChunk chunk) =>
@@ -69,12 +86,17 @@ public sealed partial class MainViewModel
 
     private AutomationDeviceState AutomationState()
     {
-        var settings = _lastSuccessfulSerialSettings ?? _currentSerialSettings;
-        return new(_serialService.IsConnected, settings.PortName, settings.BaudRate,
+        var settings = _serialService.IsConnected
+            ? _lastSuccessfulSerialSettings ?? _currentSerialSettings
+            : _currentSerialSettings;
+        var effectiveBaudRate = _serialService.IsConnected && _serialService.AppliedBaudRate > 0
+            ? _serialService.AppliedBaudRate : settings.BaudRate;
+        return new(_serialService.IsConnected, settings.PortName, effectiveBaudRate,
             _serialService.ReceiveSessionGeneration, _currentSerialSettings.Encoding.ToString(),
             CaptureConnectionSnapshot.SerialErrorCount, IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
-            IsAutoReconnectRunning || IsAutomationBusy || _activeGuiSends > 0, _serialService.LastError,
-            settings.DataBits, settings.Parity.ToString(), settings.StopBits.ToString(), settings.Handshake.ToString());
+            IsAutoReconnectRunning || IsAutomationBusy || _activeGuiSends > 0 || _isProfileSaveActive, _serialService.LastError,
+            settings.DataBits, settings.Parity.ToString(), settings.StopBits.ToString(), settings.Handshake.ToString(),
+            SelectedRxDisplayMode == RxDisplayMode.Hex ? "hex" : "terminal", HexGroupTimeoutMs);
     }
 
     private void SetAutomationStatus(string text)
@@ -87,25 +109,39 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(CanConnect));
         OnPropertyChanged(nameof(CanToggleConnection));
         OnPropertyChanged(nameof(CanEditConnectionSettings));
+        OnPropertyChanged(nameof(CanChangeTerminalMode));
+        OnPropertyChanged(nameof(CanEditCommandSequences));
+        OnPropertyChanged(nameof(CanEditSelectedCommandSequence));
+        OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
         ConnectCommand.NotifyCanExecuteChanged();
         ToggleConnectionCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
         SendSavedCommandCommand.NotifyCanExecuteChanged();
         RunCommandSequenceCommand.NotifyCanExecuteChanged();
         StartBridgeCommand.NotifyCanExecuteChanged();
+        SaveProfileCommand.NotifyCanExecuteChanged();
+        LoadProfileCommand.NotifyCanExecuteChanged();
+        ResetProfileCommand.NotifyCanExecuteChanged();
         CancelAutomationCommand.NotifyCanExecuteChanged();
     }
 
     private async Task<object> InvokeAutomationOnUiAsync(string operation, JsonElement args, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (Volatile.Read(ref _shutdownStarted) != 0 && operation != "release")
+        var cleanup = operation is "release" or "capture_result" or "sequence_progress";
+        if (Volatile.Read(ref _shutdownStarted) != 0 && !cleanup)
             throw new AutomationException("shutting_down", "The GUI is shutting down.");
-        if (operation != "release") await InitializeAsync();
+        if (!cleanup) await InitializeAsync();
         cancellationToken.ThrowIfCancellationRequested();
         switch (operation)
         {
             case "status": return AutomationState();
+            case "sequence_list":
+            case "sequence_get":
+            case "sequence_save":
+            case "sequence_delete":
+            case "sequence_progress":
+                return await InvokeSequenceAutomationOnUiAsync(operation, args, cancellationToken);
             case "ports":
                 var ports = await _serialService.GetAvailablePortsAsync(cancellationToken);
                 return new { ports };
@@ -142,12 +178,14 @@ public sealed partial class MainViewModel
             {
                 var port = args.String("port") ?? throw new AutomationException("invalid_argument", "port is required.");
                 var baud = args.Integer("baudRate", 115200);
-                if (!BaudRates.Contains(baud)) throw new AutomationException("invalid_argument", "Unsupported baudRate.");
+                if (baud is < AutomationSerialConfiguration.MinBaudRate or > AutomationSerialConfiguration.MaxBaudRate)
+                    throw new AutomationException("invalid_argument", "baudRate must be an integer between 1 and 10,000,000.");
                 return await AutomationConnectionOperation.ConnectAsync(port, baud, AutomationState, RefreshPortsAsync,
                     () =>
                     {
                         var displayPort = PortNames.FirstOrDefault(p => string.Equals(GetActualPortName(p), port, StringComparison.OrdinalIgnoreCase));
                         if (displayPort is null) throw new AutomationException("port_not_found", "Port is not available in this GUI instance.");
+                        if (!BaudRates.Contains(baud)) BaudRates.Add(baud);
                         SelectedPort = displayPort;
                         SelectedBaudRate = baud;
                     }, token => ConnectAsync(token, isAutomation: true), cancellationToken);
@@ -155,6 +193,18 @@ public sealed partial class MainViewModel
             case "disconnect":
                 await DisconnectAsync(cancellationToken);
                 return AutomationState();
+            case "configure":
+                return await ConfigureAutomationSerialAsync(args, cancellationToken);
+            case "set_mode":
+            {
+                if (!IsAutomationBusy) throw new AutomationException("busy", "No control reservation.");
+                var requestedMode = args.String("mode");
+                if (requestedMode is not ("terminal" or "hex"))
+                    throw new AutomationException("invalid_argument", "mode must be terminal or hex. Changing mode clears visible logs and changes GUI manual TX interpretation.");
+                cancellationToken.ThrowIfCancellationRequested();
+                SelectedRxDisplayMode = requestedMode == "hex" ? RxDisplayMode.Hex : RxDisplayMode.Terminal;
+                return AutomationState();
+            }
             case "validate_send":
                 var requestedText = args.String("command") ?? throw new AutomationException("invalid_argument", "command is required.");
                 if (args.String("txMode", "text") == "hex" && !HexPayloadParser.TryParse(requestedText, out _, out var hexError))

@@ -28,6 +28,7 @@ public sealed class SerialService : ISerialService
     private long _serialLineErrorBoundarySuppressionCount;
     private int _appliedReceiveIdleTimeoutMs;
     private int _usesNativeReceiveIdleTimeout;
+    private int _appliedBaudRate;
     private int _rawBridgePriorityEnabled;
     private long _bridgePriorityDroppedPipelineByteCount;
     private long _bridgePriorityDroppedPipelineChunkCount;
@@ -102,6 +103,8 @@ public sealed class SerialService : ISerialService
     public int AppliedReceiveIdleTimeoutMs => Volatile.Read(ref _appliedReceiveIdleTimeoutMs);
 
     public bool UsesNativeReceiveIdleTimeout => Volatile.Read(ref _usesNativeReceiveIdleTimeout) != 0;
+
+    public int AppliedBaudRate => Volatile.Read(ref _appliedBaudRate);
 
     public bool IsRawBridgePriorityEnabled => Volatile.Read(ref _rawBridgePriorityEnabled) != 0;
 
@@ -201,6 +204,8 @@ public sealed class SerialService : ISerialService
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(receiveOptions);
+        if (settings.BaudRate is < 1 or > 10_000_000)
+            throw new ArgumentOutOfRangeException(nameof(settings), "Baud rate must be between 1 and 10,000,000 bps.");
 
         var normalizedReceiveOptions = receiveOptions.Normalize();
 
@@ -236,6 +241,7 @@ public sealed class SerialService : ISerialService
 
             if (session.IsMock)
             {
+                Volatile.Write(ref _appliedBaudRate, settings.BaudRate);
                 session.Worker = Task.Run(
                     () => RunMockReceiverAsync(session, settings.Clone()),
                     CancellationToken.None);
@@ -281,6 +287,7 @@ public sealed class SerialService : ISerialService
             Volatile.Write(
                 ref _usesNativeReceiveIdleTimeout,
                 normalizedReceiveOptions.UseNativeIdleTimeout ? 1 : 0);
+            Volatile.Write(ref _appliedBaudRate, serialPort!.BaudRate);
             session.Worker = Task.Factory.StartNew(
                 () => RunSerialReceiver(session),
                 CancellationToken.None,
@@ -311,6 +318,76 @@ public sealed class SerialService : ISerialService
         {
             _lifecycleGate.Release();
         }
+    }
+
+    public async Task<int> ChangeBaudRateAsync(int baudRate, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        if (baudRate is < 1 or > 10_000_000)
+            throw new ArgumentOutOfRangeException(nameof(baudRate), "Baud rate must be between 1 and 10,000,000 bps.");
+
+        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var session = Volatile.Read(ref _currentReceiveSession);
+                if (!IsConnected || session is null)
+                    throw new InvalidOperationException("Cannot change baud rate while disconnected.");
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var applied = baudRate;
+                if (session.Port is { } serialPort)
+                {
+                    // WriteAsync can finish before the driver has transmitted
+                    // its queued bytes. Drain those bytes at the previous rate
+                    // before changing DCB, without blocking the UI thread or
+                    // purging RX/TX buffers. Retain the same port and RX session.
+                    applied = await Task.Run(async () =>
+                    {
+                        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                        while (serialPort.BytesToWrite > 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) >= TimeSpan.FromSeconds(1))
+                                throw new TimeoutException("Serial TX is still draining; baud rate was not changed.");
+                            await Task.Delay(5, cancellationToken).ConfigureAwait(false);
+                        }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return SerialBaudRateUpdate.Apply(baudRate,
+                            serialPort.ReadOpenPortBaudRate,
+                            value => serialPort.BaudRate = value);
+                    }, cancellationToken).ConfigureAwait(false);
+                }
+
+                // The driver change is the commit point. Cancellation after
+                // it must not leave the effective setting unreported.
+                Volatile.Write(ref _appliedBaudRate, applied);
+                RaiseStatusChanged();
+                return applied;
+            }
+            catch (SerialBaudRateUpdateException ex) when (!ex.StateRestored)
+            {
+                Volatile.Write(ref _appliedBaudRate, 0);
+                ReportError(ex.Message, countConnectionError: true, state: SerialConnectionState.Faulted);
+                if (Volatile.Read(ref _currentReceiveSession) is { } session)
+                {
+                    session.RequestStop();
+                    session.Channel.Writer.TryComplete();
+                    _ = StartPortCloseAfterWriteIdle(session, WaitForWriteIdleAsync());
+                }
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                ReportError("Baud rate update failed: " + ex.Message, countConnectionError: false);
+                throw;
+            }
+            finally { _writeGate.Release(); }
+        }
+        finally { _lifecycleGate.Release(); }
     }
 
     public async Task SendAsync(TxCommand command, CancellationToken cancellationToken)
@@ -481,6 +558,7 @@ public sealed class SerialService : ISerialService
         }
 
         SetConnectionState(SerialConnectionState.Disconnecting);
+        Volatile.Write(ref _appliedBaudRate, 0);
         Volatile.Write(ref _appliedReceiveIdleTimeoutMs, 0);
         Volatile.Write(ref _usesNativeReceiveIdleTimeout, 0);
         Volatile.Write(ref _rawBridgePriorityEnabled, 0);

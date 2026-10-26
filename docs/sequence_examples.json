@@ -2,9 +2,11 @@
   "_manual": [
     "One file = one sequence. Load can select multiple JSON files. See sequence_authoring.md for the full guide.",
     "Required: FormatVersion=1, Name=nonblank string, RepeatCount=integer 1..9999, Steps=array (0..10000).",
-    "Each step requires nonblank CommandText, LineEndingMode=null/None/Cr/Lf/Crlf, DelayAfterMs=integer 0..600000. Name and Comment are optional string/null.",
+    "Each step requires nonempty CommandText, LineEndingMode=null/None/Cr/Lf/Crlf, DelayAfterMs=integer 0..600000. Name and Comment are optional string/null.",
     "No unknown fields, duplicate keys, comments or trailing commas. Any invalid file or duplicate sequence name cancels the entire batch.",
-    "Run uses the main Terminal/HEX mode. Delays are after sending. No response wait or branching. Commands here are examples; replace them with your device protocol.",
+    "Optional TxMode=null/Terminal/Hex selects a step mode; null/missing uses the main mode at run start. Explicit modes preserve command whitespace. GUI Run applies mode and delays without response checks.",
+    "Optional CaptureMs=0..60000 (default 2000) and Expect=null or {Kind:text|hex,Value:literal} apply only to CLI/MCP runs. Actual RX is retained; a missing literal does not imply device failure. No regex, subsequence matching or branching.",
+    "Commands here are examples; replace them with your device protocol. Import never sends. Automation has separate stricter run limits described in sequence_authoring.md.",
     "Load limits: 100 files, 2 MiB per file, 10000 total steps and 16 MiB total input per batch. Exceeding a limit cancels the entire batch."
   ],
   "FormatVersion": 1,
@@ -16,14 +18,20 @@
       "CommandText": "status",
       "LineEndingMode": "Crlf",
       "DelayAfterMs": 500,
-      "Comment": "전송 후 500ms 대기. 응답 성공 여부는 검사하지 않음."
+      "Comment": "GUI Run은 전송 후 500ms 대기. CLI/MCP 실행은 500ms RX 수집 후 대기. 응답 성공 여부는 검사하지 않음.",
+      "TxMode": "Terminal",
+      "CaptureMs": 500,
+      "Expect": null
     },
     {
       "Name": "버전 조회",
       "CommandText": "version",
       "LineEndingMode": "Crlf",
       "DelayAfterMs": 1000,
-      "Comment": null
+      "Comment": null,
+      "TxMode": "Terminal",
+      "CaptureMs": 1000,
+      "Expect": null
     }
   ]
 }

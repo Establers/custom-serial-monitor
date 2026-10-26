@@ -56,6 +56,20 @@ internal sealed class SequenceTxActivity(TimeProvider? clock = null)
 
     public void SetPhase(string phase) => _phase = Preview(phase, MaxPhasePreviewLength);
 
+    public void UpdateAutomationProgress(int sent, int failedAttempts, string phase)
+    {
+        sent = Math.Clamp(sent, 0, _total);
+        if (sent > _sent)
+        {
+            _lastSent = _clock.GetLocalNow();
+            _lastSentTimestamp = _clock.GetTimestamp();
+            _lastCommand = "AI/CLI (see sequence run status)";
+        }
+        _sent = sent;
+        _failedAttempts = Math.Max(0, failedAttempts);
+        SetPhase(phase);
+    }
+
     // Slice before inspecting characters: work and retained memory are bounded even
     // when the original command is megabytes long. Never alter the actual TX payload.
     private static string Preview(string value, int limit)

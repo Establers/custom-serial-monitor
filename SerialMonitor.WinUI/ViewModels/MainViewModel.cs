@@ -820,13 +820,13 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OpenCurrentSerialLogCommand = new AsyncRelayCommand(OpenCurrentSerialLogAsync, CanOpenCurrentSerialLog);
         CopySerialLogPathCommand = new AsyncRelayCommand(CopySerialLogPathAsync, CanUseCurrentSerialLogPath);
         ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync, () => !IsBusy);
-        SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => !IsBusy);
+        SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => !IsBusy && !IsAutomationBusy && !_isProfileSaveActive);
         LoadProfileCommand = new AsyncRelayCommand(
             LoadProfileAsync,
-            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning);
+            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
         ResetProfileCommand = new AsyncRelayCommand(
             ResetProfileAsync,
-            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning);
+            () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
         ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync);
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
@@ -1211,7 +1211,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasSelectedCommandSequence => SelectedCommandSequence is not null;
 
-    public bool CanEditCommandSequences => !IsSequenceRunning && !IsBusy;
+    public bool CanEditCommandSequences => !IsSequenceRunning && !IsBusy && !IsAutomationBusy;
 
     public bool CanEditSelectedCommandSequence => CanEditCommandSequences && HasSelectedCommandSequence;
 
@@ -1252,6 +1252,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SequenceCurrentStepDisplayText));
                 OnPropertyChanged(nameof(CanStartBridge));
                 OnPropertyChanged(nameof(CanEditCommandSequences));
+                OnPropertyChanged(nameof(CanChangeTerminalMode));
                 OnPropertyChanged(nameof(CanEditSelectedCommandSequence));
                 OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
@@ -1662,6 +1663,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             }
         }
     }
+
+    public bool CanChangeTerminalMode => !IsAutomationBusy && !IsBusy && !IsSequenceRunning &&
+        !IsBridgeActive && !IsBridgeStarting && !IsAutoReconnectRunning && _activeGuiSends == 0;
 
     public RxDisplayMode SelectedRxDisplayMode
     {
@@ -2596,6 +2600,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanConnect));
                 OnPropertyChanged(nameof(CanToggleConnection));
                 OnPropertyChanged(nameof(AutoReconnectStatusText));
+                OnPropertyChanged(nameof(CanChangeTerminalMode));
                 NotifyCommandStates();
             }
         }
@@ -2903,10 +2908,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public double CuteBackgroundOpacityPercent
+    public int CuteBackgroundOpacityPercent
     {
-        get => CuteBackgroundOpacity * 100.0;
-        set => CuteBackgroundOpacity = value / 100.0;
+        get => (int)Math.Round(CuteBackgroundOpacity * 100.0, MidpointRounding.AwayFromZero);
+        set => CuteBackgroundOpacity = Math.Clamp(value, 0, 100) / 100.0;
     }
 
     public bool CuteBackgroundFileExists => _cuteBackgroundFileExists;
@@ -4040,15 +4045,15 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     4. Use Up and Dn to change the order.
                     5. After connecting the device, press Run to start or Stop to cancel.
 
-                    A sequence uses the current Mode (Terminal/HEX) for every step.
-                    Per-step modes, device-response checks, and conditional branches are not supported.
-                    With Auto reconnect enabled, an interrupted connection pauses the sequence until recovery.
+                    Steps use the main Mode at run start unless their JSON specifies TxMode (Terminal/Hex).
+                    GUI Run honors per-step TxMode and delays. CaptureMs and literal Expect checks apply only to CLI/MCP runs; conditional branches are not supported.
+                    With Auto reconnect enabled, an interrupted GUI run pauses until recovery.
                     Successful steps are not replayed; a failed write is retried and may have reached the device already.
                     Stop or manual Disconnect cancels the run, including reconnect waiting.
 
                     AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.
-                    Examples: docs\sequence_examples.json. These are sequence fragments, not a complete profile.
-                    Close the app and back up default.json before merging. Standalone sequence import is not supported.
+                    Example: docs\sequence_examples.json. Load/export standalone JSON through Sequence options; import never runs it.
+                    CLI/MCP runs retain all RX, stop on uncertain TX/disconnect and never automatically retry a command.
                     """)),
             new HelpSection(
                 UiText.Get("HelpComBridgeTitle", "COM Bridge"),
@@ -4262,6 +4267,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            // Finish/stop pending automation persistence before taking the shutdown
+            // snapshot, otherwise an in-flight registration could be overwritten.
+            try { await StopAutomationAsync(); }
+            catch (Exception ex)
+            {
+                cleanupErrors.Add($"Shutdown automation stop failed: {ex.Message}");
+                RuntimeDiagnostics.RecordError("Shutdown.Automation", ex);
+            }
             // Persist preferences before disconnect/flush can consume the shutdown timeout.
             try
             {
@@ -4782,6 +4795,15 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task SaveProfileAsync()
     {
+        if (IsAutomationBusy || IsBusy || _isProfileSaveActive)
+        {
+            SetStatus("Wait for the current operation before saving a profile.");
+            return;
+        }
+        // Reserve profile persistence without pausing the normal GUI sequence's
+        // connection-readiness checks, which intentionally use IsBusy.
+        _isProfileSaveActive = true;
+        NotifyCommandStates();
         try
         {
             var profile = CreateProfileFromCurrentState();
@@ -4797,10 +4819,20 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             RefreshProfileProperties();
             RefreshStatusBar();
         }
+        finally
+        {
+            _isProfileSaveActive = false;
+            NotifyCommandStates();
+        }
     }
 
     private async Task LoadProfileAsync()
     {
+        if (IsAutomationBusy || IsBusy || _isProfileSaveActive)
+        {
+            SetStatus("Wait for the current operation before loading a profile.");
+            return;
+        }
         if (IsConnected)
         {
             SetStatus("Disconnect before loading a profile.");
@@ -4835,6 +4867,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private Task ResetProfileAsync()
     {
+        if (IsAutomationBusy || IsBusy || _isProfileSaveActive)
+        {
+            SetStatus("Wait for the current operation before resetting a profile.");
+            return Task.CompletedTask;
+        }
         if (IsConnected)
         {
             SetStatus("Disconnect before resetting profile settings.");
@@ -6108,6 +6145,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void NotifyBridgePropertiesChanged()
     {
+        OnPropertyChanged(nameof(CanChangeTerminalMode));
         OnPropertyChanged(nameof(SelectedBridgePort));
         OnPropertyChanged(nameof(BridgeRequestedEnabled));
         OnPropertyChanged(nameof(IsBridgeActive));
@@ -7878,8 +7916,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         var runSource = request?.Source ?? "manual run";
         var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
-        if (sequenceSendMode == TxSendMode.Hex &&
-            !TryValidateHexSequenceSteps(sequence.Steps, out var validationError))
+        if (!TryValidateHexSequenceSteps(sequence.Steps, sequenceSendMode, out var validationError))
         {
             RecordSequenceError($"Sequence run failed: {validationError}");
             return;
@@ -7915,7 +7952,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     var sent = await SendCommandAsync(new TxCommand(step.DisplayName, step.CommandText)
                     {
                         LineEndingMode = step.LineEndingMode
-                    }, addToHistory: false, modeOverride: sequenceSendMode, cancellationToken: token);
+                    }, addToHistory: false, modeOverride: step.TxMode ?? sequenceSendMode, cancellationToken: token,
+                        preserveWhitespace: step.TxMode.HasValue);
                     if (sent) _sequenceTxActivity.Sent(step.CommandText, step.DelayAfterMs);
                     else _sequenceTxActivity.FailedAttempt();
                     return sent;
@@ -7980,6 +8018,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         Interlocked.Increment(ref _sequenceStopCount);
         OnPropertyChanged(nameof(SequenceStopCount));
+        if (IsAutomationBusy) _automationController?.CancelActiveSequence();
         _sequenceCancellation?.Cancel();
         _sequenceTxActivity.SetPhase("Stopping");
         RefreshSequenceTxActivity();
@@ -8036,7 +8075,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default, bool isAutomation = false)
+    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default, bool isAutomation = false, bool preserveWhitespace = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsAutomationBusy && !isAutomation)
@@ -8044,8 +8083,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             RecordTxError("TX busy: AI/CLI is collecting RX. Stop the capture before sending another command.");
             return false;
         }
-        var commandText = isAutomation ? sourceCommand.CommandText : sourceCommand.CommandText.Trim();
-        if (commandText.Length == 0 || (!isAutomation && string.IsNullOrWhiteSpace(commandText)))
+        var commandText = isAutomation || preserveWhitespace ? sourceCommand.CommandText : sourceCommand.CommandText.Trim();
+        if (commandText.Length == 0 || (!isAutomation && !preserveWhitespace && string.IsNullOrWhiteSpace(commandText)))
         {
             return false;
         }
@@ -8065,6 +8104,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         };
 
         _activeGuiSends++;
+        OnPropertyChanged(nameof(CanChangeTerminalMode));
         try
         {
             var txRawBytes = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(lineEndingMode));
@@ -8142,7 +8182,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             IsConnected = _serialService.IsConnected;
             return false;
         }
-        finally { _activeGuiSends--; }
+        finally
+        {
+            _activeGuiSends--;
+            OnPropertyChanged(nameof(CanChangeTerminalMode));
+        }
     }
 
     private bool CanSendCurrentCommand()
@@ -9869,7 +9913,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         normalized = new CommandSequenceStep();
         error = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(step.CommandText))
+        if (string.IsNullOrEmpty(step.CommandText) || (!step.TxMode.HasValue && string.IsNullOrWhiteSpace(step.CommandText)))
         {
             error = "Sequence step command text is required.";
             return false;
@@ -9887,8 +9931,24 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        if (step.TxMode.HasValue && step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex))
+        {
+            error = "Sequence step TX mode must be Global, Terminal or Hex.";
+            return false;
+        }
+        if (step.CaptureMs is < 0 or > 60000)
+        {
+            error = "Sequence step automation capture duration must be between 0 and 60,000 ms.";
+            return false;
+        }
+        if (step.Expect is not null)
+        {
+            try { _ = AutomationSequenceMatcher.PatternBytes(step.Expect, Encoding.UTF8); }
+            catch (AutomationException ex) { error = ex.Message; return false; }
+        }
+
         normalized = CloneCommandSequenceStep(step);
-        normalized.CommandText = normalized.CommandText.Trim();
+        if (normalized.TxMode is null) normalized.CommandText = normalized.CommandText.Trim();
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? null : normalized.Name.Trim();
         normalized.Comment = string.IsNullOrWhiteSpace(normalized.Comment) ? null : normalized.Comment.Trim();
         return true;
@@ -9896,12 +9956,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private static bool TryValidateHexSequenceSteps(
         IEnumerable<CommandSequenceStep> steps,
+        TxSendMode defaultMode,
         out string error)
     {
         var index = 0;
         foreach (var step in steps)
         {
             index++;
+            if ((step.TxMode ?? defaultMode) != TxSendMode.Hex) continue;
             if (!HexPayloadParser.TryParse(step.CommandText, out _, out var parseError))
             {
                 error = $"step {index} ({step.DisplayName}): {parseError}";
@@ -12565,7 +12627,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             CommandText = step.CommandText,
             LineEndingMode = step.LineEndingMode,
             DelayAfterMs = step.DelayAfterMs,
-            Comment = step.Comment
+            Comment = step.Comment,
+            TxMode = step.TxMode,
+            CaptureMs = step.CaptureMs,
+            Expect = step.Expect is null ? null : step.Expect with { }
         };
     }
 

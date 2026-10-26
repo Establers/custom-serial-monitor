@@ -5107,7 +5107,7 @@ public sealed partial class MainWindow : Window
 
     private void SequenceRepeatCountTextBox_TextChanged(object sender, TextChangedEventArgs args)
     {
-        if (sender is TextBox textBox &&
+        if (_viewModel.CanEditCommandSequences && sender is TextBox textBox &&
             _viewModel.SelectedCommandSequence is { } sequence &&
             int.TryParse(textBox.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var repeatCount) &&
             repeatCount is >= CommandSequence.MinRepeatCount and <= CommandSequence.MaxRepeatCount)
@@ -5723,6 +5723,7 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(CreateDialogHint(LineEndingHelpText));
         panel.Children.Add(CreateDialogField("Delay after ms", delayBox));
         panel.Children.Add(CreateDialogField("Comment", commentBox));
+        panel.Children.Add(CreateDialogHint($"TX mode: {source.TxMode?.ToString() ?? "Global"}. {source.AutomationHelpText} These fields are preserved when editing here; change them in sequence JSON or through CLI/MCP."));
         panel.Children.Add(errorText);
 
         var dialog = new ContentDialog
@@ -5736,7 +5737,7 @@ public sealed partial class MainWindow : Window
         };
         dialog.PrimaryButtonClick += (_, clickArgs) =>
         {
-            if (string.IsNullOrWhiteSpace(commandBox.Text))
+            if (string.IsNullOrEmpty(commandBox.Text) || (source.TxMode is null && string.IsNullOrWhiteSpace(commandBox.Text)))
             {
                 errorText.Text = UiText.Get("ValidationCommandRequired", "Command text is required.");
                 errorText.Visibility = Visibility.Visible;
@@ -5770,7 +5771,10 @@ public sealed partial class MainWindow : Window
             CommandText = commandBox.Text,
             LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
             DelayAfterMs = parsedDelay,
-            Comment = string.IsNullOrWhiteSpace(commentBox.Text) ? null : commentBox.Text
+            Comment = string.IsNullOrWhiteSpace(commentBox.Text) ? null : commentBox.Text,
+            TxMode = source.TxMode,
+            CaptureMs = source.CaptureMs,
+            Expect = source.Expect is null ? null : source.Expect with { }
         };
     }
 
@@ -6199,7 +6203,10 @@ public sealed partial class MainWindow : Window
             CommandText = step.CommandText,
             LineEndingMode = step.LineEndingMode,
             DelayAfterMs = step.DelayAfterMs,
-            Comment = step.Comment
+            Comment = step.Comment,
+            TxMode = step.TxMode,
+            CaptureMs = step.CaptureMs,
+            Expect = step.Expect is null ? null : step.Expect with { }
         };
     }
 

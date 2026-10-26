@@ -46,6 +46,8 @@ public interface ISerialService : IAsyncDisposable
 
     bool UsesNativeReceiveIdleTimeout { get; }
 
+    int AppliedBaudRate { get; }
+
     bool IsRawBridgePriorityEnabled { get; }
 
     long BridgePriorityDroppedPipelineByteCount { get; }
@@ -84,6 +86,8 @@ public interface ISerialService : IAsyncDisposable
         CancellationToken cancellationToken);
 
     Task DisconnectAsync(CancellationToken cancellationToken);
+
+    Task<int> ChangeBaudRateAsync(int baudRate, CancellationToken cancellationToken);
 
     Task SendAsync(TxCommand command, CancellationToken cancellationToken);
 

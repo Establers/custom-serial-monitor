@@ -85,6 +85,7 @@ if (-not $SkipPublish) {
     }
 
     $publishArgs = @(
+        "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File", $publishScript,
         "-Configuration", $Configuration
@@ -107,6 +108,15 @@ if (-not (Test-Path -LiteralPath $portableDir -PathType Container)) {
 
 if (-not (Test-Path -LiteralPath $portableExe -PathType Leaf)) {
     throw "Portable executable not found: $portableExe"
+}
+
+# Skills are distributed separately. Reject staging from older app builds that
+# bundled skill installers, even when the caller deliberately skips publishing.
+if (Test-Path -LiteralPath (Join-Path $portableDir 'skills')) {
+    throw 'Portable output contains old bundled skills. Run build_installer.ps1 without -SkipPublish to refresh it.'
+}
+if (-not (Test-Path -LiteralPath (Join-Path $portableDir 'tools\serialctl.exe') -PathType Leaf)) {
+    throw 'Portable output is missing tools\serialctl.exe. Run build_installer.ps1 without -SkipPublish to refresh it.'
 }
 
 New-Item -ItemType Directory -Force -Path $installerOutputDir | Out-Null

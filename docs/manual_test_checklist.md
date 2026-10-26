@@ -22,10 +22,47 @@ real hardware when available.
 
 ## Startup
 
+- [ ] In Terminal mode, split UTF-8 Korean bytes after the first/second byte of
+  a character at a partial flush boundary (128 bytes or 250 ms idle). Repeat
+  with CP949 split after the leading byte. Verify the combined text is intact,
+  raw RX is unchanged, and an incomplete character alone does not increase the
+  decode-error count. A truly incomplete final character must still be reported
+  when the line/session ends; a new session must not inherit its pending bytes.
+- [ ] Start two windows using the shared profile. Register a sequence in A,
+  then save settings and exit B without reloading its stale sequence list.
+  Repeat the stale save, restart and verify A's sequence remains. Delete a
+  sequence in one window and save an unchanged older copy in the other; verify
+  it is not resurrected. Concurrent different edits to the same sequence must
+  report a conflict and preserve the last committed file.
+
+- [ ] With the GUI running, use `serialctl sequence save --file check.json` to
+  register a documented device sequence. Verify it appears in the GUI, causes
+  no TX, and survives app restart. Duplicate names require `--overwrite true`.
+  A failed profile save must leave the GUI sequence collection unchanged.
+- [ ] Start via CLI or `serial_sequence_start`, query the returned runId and
+  verify ordered, one-time TX plus progress in the GUI. Close the initiating
+  CLI after start; the accepted run must continue. Try GUI Stop, AI stop and
+  `sequence cancel --run ID`; control returns after RX has been saved. Manual
+  TX, sequence editing, profile replacement and Bridge must be blocked while
+  running. Disconnect during a step; no further steps or automatic TX retries.
+- [ ] Compare optional expected `abcd` with actual `abcd` and `ab12c3d4`.
+  Verify `matched` and `not_matched` respectively, without treating a miss as
+  product failure or retrying. Follow captureId/nextOffset to inspect complete
+  RX, including data after an early match and between steps. RX gaps/errors
+  must make match evidence inconclusive. Repeat with literal HEX bytes.
+
 - [ ] Enable Cute background mode, choose a JPG/PNG (also try a path with spaces
   and Korean text), and enter opacity values 0, 1, 37, 73 and 100 percent.
   Confirm 0 hides the image and 100 shows it fully, with intermediate values
   changing its visibility. The main xterm surface remains opaque.
+- [ ] Confirm the opacity editor matches other Settings inputs (200 x 24), has
+  a separate `%` suffix and no spin buttons. While focused/hovered, scroll the
+  mouse wheel and press Up/Down; the value must stay unchanged. Enter/paste
+  `101`, `1000` and a very long integer: each must become `100`. Try letters,
+  `12.5`, `-1`, `25%` and mixed pasted text: reject the entire edit and keep the
+  previous value. Clear the field, then press Enter or leave it: restore the last
+  valid value. Select all and replace with `0`, `37`, `100`; verify immediate
+  application and correct restoration after restarting the app.
 - [ ] Close normally without pressing Save Profile, restart, and confirm the
   background mode, image path and opacity are restored. Repeat while receiving
   MOCK logs and with background mode disabled. Temporarily rename the image,
@@ -597,6 +634,9 @@ real hardware when available.
 
 ## AI CLI / MCP
 
+- [ ] Confirm Terminal/HEX is fixed to the left of Port, including when the connection toolbar is scrolled. Open each mode dropdown and check the short Terminal/HEX item tooltips in Korean/English.
+- [ ] Use CLI `mode`, `mode --set hex`, and `mode --set terminal`, or MCP `serial_set_mode`. Check status.mode, both GUI selectors and active rule mode; mode changes clear visible logs/search without deleting saved logs. A mode change sends no bytes and does not open/close COM. Explicit CLI/MCP TX formatting remains independent.
+- [ ] During AI capture, GUI TX, sequences, bridge startup/activity and reconnect, mode mutations must be busy and the GUI mode selectors disabled. After completion/cancellation, mode selectors must recover.
 - [ ] In MCP > Quick start, confirm the AI skill card offers the separate `SerialMonitorSkills.zip` download and installation guide. Other MCP pages keep their existing content.
 - [ ] In About, confirm the brief skill introduction and installation-guide link. Check Korean/English text, narrow panels, and light/dark themes.
 - [ ] Run the new GUI, then `serialctl instances`; select `--instance` when two GUIs are running.

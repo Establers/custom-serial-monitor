@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text;
+using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
@@ -20,9 +22,11 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
         "Unknown fields, duplicate keys, wrong types, missing required fields and out-of-range values fail the entire import. Sequence names must be unique ignoring case, including existing sequences.",
         "Steps execute in array order. DelayAfterMs is the wait AFTER sending, including the last step. RepeatCount repeats the entire sequence. Comment and _manual never execute.",
         "LineEndingMode: None adds nothing; Cr adds CR; Lf adds LF; Crlf adds CR+LF; null uses the main TX ending at run start. JSON Global is invalid.",
-        "Execution uses the main Terminal/HEX mode at run start; mode is not stored in this file. Terminal sends UTF-8 plus ending. HEX sends bytes such as AA 55 01; endings are ignored, use None. Do not mix modes.",
-        "Command leading/trailing whitespace is trimmed by the app. For exact whitespace bytes use HEX. Escape quotes and backslashes using JSON string escaping.",
-        "No response wait, conditions, variables, retry fields, checksum calculation or sequence calls. Never invent command bytes or unsupported fields; ask for the device protocol when unclear.",
+        "Optional step TxMode is null (use main mode at run start), Terminal or Hex. Legacy files without TxMode use the main mode. Terminal sends UTF-8 plus ending; HEX sends exact bytes such as AA 55 01 and ignores endings. All HEX steps are validated before any TX.",
+        "Optional CaptureMs is an integer 0..60000 (default 2000). Optional Expect is null or {Kind: text|hex, Value: literal nonempty string, maximum 4096 characters}. Kind and Value are case-sensitive. HEX expectations contain complete bytes with optional whitespace. No regex or subsequence matching.",
+        "CaptureMs and Expect are automation metadata for CLI/MCP sequence execution only. Ordinary GUI Run sends steps using TxMode and DelayAfterMs, without RX capture or matching. A missing literal does not establish product failure when printf output interleaves; automation retains all RX for inspection.",
+        "Command leading/trailing whitespace is preserved when TxMode is explicitly Terminal or Hex. Legacy steps with null/missing TxMode keep the GUI's trimming behavior. Escape quotes and backslashes using JSON string escaping.",
+        "No conditions, variables, retry fields, checksum calculation or sequence calls. Never invent command bytes or unsupported fields; ask for the device protocol when unclear.",
         "Import never runs a sequence. Review commands and select the correct connection and mode before Run. Export includes only this sequence, not connection settings or RX rules.",
         "Limits: 2 MiB per file, 100 files per Load, at most 10000 total steps and 16 MiB total input per Load. Any invalid file or name collision cancels the whole batch. Rename Name explicitly to import another copy."
     ];
@@ -95,7 +99,8 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
             {
                 step.Name, step.CommandText,
                 LineEndingMode = step.LineEndingMode?.ToString(),
-                step.DelayAfterMs, step.Comment
+                step.DelayAfterMs, step.Comment,
+                TxMode = step.TxMode?.ToString(), step.CaptureMs, step.Expect
             })
         }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         if (System.Text.Encoding.UTF8.GetByteCount(json) > MaxFileBytes) throw new InvalidDataException("Export exceeds 2 MiB.");
@@ -126,7 +131,7 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var path = $"$.Steps[{sequence.Steps.Count}]";
-            CheckObject(step, path, ["Name", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment"]);
+            CheckObject(step, path, ["Name", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment", "TxMode", "CaptureMs", "Expect"]);
             var ending = Required(step, "LineEndingMode", path);
             TxLineEndingMode? mode = ending.ValueKind switch
             {
@@ -137,17 +142,51 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
                 JsonValueKind.String when ending.GetString() == "Crlf" => TxLineEndingMode.Crlf,
                 _ => throw new InvalidDataException($"{path}.LineEndingMode must be null, None, Cr, Lf or Crlf.")
             };
+            var txMode = ParseTxMode(step, path);
+            var command = Required(step, "CommandText", path);
+            if (command.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(command.GetString()) ||
+                (txMode is null && string.IsNullOrWhiteSpace(command.GetString())))
+                throw new InvalidDataException($"{path}.CommandText must be a nonempty string (legacy Global steps require nonblank text).");
             sequence.Steps.Add(new CommandSequenceStep
             {
                 Name = NormalizeOptionalText(OptionalText(step, "Name", path)),
-                CommandText = RequiredText(step, "CommandText", path).Trim(),
+                CommandText = txMode is null ? command.GetString()!.Trim() : command.GetString()!,
                 LineEndingMode = mode,
                 DelayAfterMs = Integer(step, "DelayAfterMs", path, 0, 600_000),
                 Comment = NormalizeOptionalText(OptionalText(step, "Comment", path)),
+                TxMode = txMode,
+                CaptureMs = step.TryGetProperty("CaptureMs", out _) ? Integer(step, "CaptureMs", path, 0, 60000) : 2000,
+                Expect = ParseExpectation(step, path),
                 StepNumber = sequence.Steps.Count + 1
             });
         }
         return sequence;
+    }
+
+    private static TxSendMode? ParseTxMode(JsonElement step, string path)
+    {
+        if (!step.TryGetProperty("TxMode", out var mode) || mode.ValueKind == JsonValueKind.Null) return null;
+        if (mode.ValueKind == JsonValueKind.String)
+        {
+            if (mode.GetString() == "Terminal") return TxSendMode.Terminal;
+            if (mode.GetString() == "Hex") return TxSendMode.Hex;
+        }
+        throw new InvalidDataException($"{path}.TxMode must be null, Terminal or Hex.");
+    }
+
+    private static AutomationResponseExpectation? ParseExpectation(JsonElement step, string path)
+    {
+        if (!step.TryGetProperty("Expect", out var expect) || expect.ValueKind == JsonValueKind.Null) return null;
+        CheckObject(expect, path + ".Expect", ["Kind", "Value"]);
+        var kind = RequiredText(expect, "Kind", path + ".Expect");
+        // Text whitespace is significant, including a literal newline or space.
+        var valueElement = Required(expect, "Value", path + ".Expect");
+        if (valueElement.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException($"{path}.Expect.Value must be a string.");
+        var expectation = new AutomationResponseExpectation(kind, valueElement.GetString()!);
+        try { _ = AutomationSequenceMatcher.PatternBytes(expectation, Encoding.UTF8); }
+        catch (AutomationException ex) { throw new InvalidDataException($"{path}.Expect: {ex.Message}", ex); }
+        return expectation;
     }
 
     private static string? NormalizeOptionalText(string? value) =>
