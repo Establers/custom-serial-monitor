@@ -419,6 +419,20 @@ public sealed class LogViewModel : ViewModelBase
         }
     }
 
+    // Call on the UI thread, like AddRange/Clear. Copy only immutable record references;
+    // formatting and file I/O can then run independently while live history changes.
+    public IReadOnlyList<LogLine> GetRetainedLinesSnapshot()
+    {
+        var snapshot = new LogLine[_retainedLines.Count];
+        var index = 0;
+        foreach (var retained in _retainedLines)
+        {
+            snapshot[index++] = retained.Line;
+        }
+
+        return snapshot;
+    }
+
     public string GetVisibleTextSnapshot()
     {
         if (_visibleLines.Count == 0)

@@ -19,6 +19,7 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
         "Required root fields (case-sensitive): FormatVersion (integer 1), Name (nonblank string), RepeatCount (integer 1..9999), Steps (array, 0..10000 steps). Empty sequences can be edited but cannot run.",
         "Optional root _manual is an array of strings for documentation only. JSON // and /* */ comments and trailing commas are forbidden.",
         "Each step requires CommandText (nonblank string), DelayAfterMs (integer 0..600000), LineEndingMode (null or exactly None, Cr, Lf, Crlf). Optional Name and Comment are strings or null.",
+        "Step Name is an optional short label for GUI progress/errors and CLI/MCP step results; blank names use CommandText in the GUI. Step names need not be unique. Comment is a reference note shown in the GUI step tooltip and saved in JSON. Neither field is transmitted or changes execution.",
         "Unknown fields, duplicate keys, wrong types, missing required fields and out-of-range values fail the entire import. Sequence names must be unique ignoring case, including existing sequences.",
         "Steps execute in array order. DelayAfterMs is the wait AFTER sending, including the last step. RepeatCount repeats the entire sequence. Comment and _manual never execute.",
         "LineEndingMode: None adds nothing; Cr adds CR; Lf adds LF; Crlf adds CR+LF; null uses the main TX ending at run start. JSON Global is invalid.",

@@ -3,6 +3,7 @@
     "One file = one sequence. Load can select multiple JSON files. See sequence_authoring.md for the full guide.",
     "Required: FormatVersion=1, Name=nonblank string, RepeatCount=integer 1..9999, Steps=array (0..10000).",
     "Each step requires nonempty CommandText, LineEndingMode=null/None/Cr/Lf/Crlf, DelayAfterMs=integer 0..600000. Name and Comment are optional string/null.",
+    "Step Name is a short label for GUI progress/errors and CLI/MCP results; it need not be unique. Comment is a reference note shown in the GUI step tooltip and saved in JSON. Neither field is transmitted or changes execution. Only the root sequence Name must be unique.",
     "No unknown fields, duplicate keys, comments or trailing commas. Any invalid file or duplicate sequence name cancels the entire batch.",
     "Optional TxMode=null/Terminal/Hex selects a step mode; null/missing uses the main mode at run start. Explicit modes preserve command whitespace. GUI Run applies mode and delays without response checks.",
     "Optional CaptureMs=0..60000 (default 2000) and Expect=null or {Kind:text|hex,Value:literal} apply only to CLI/MCP runs. Actual RX is retained; a missing literal does not imply device failure. No regex, subsequence matching or branching.",

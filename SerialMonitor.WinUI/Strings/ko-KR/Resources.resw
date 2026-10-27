@@ -101,8 +101,11 @@
     <comment>English: Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends.</comment>
   </data>
   <data name="StaticUi016.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>표시 로그를 지웁니다. HEX 모드에서는 RX BUSY/IDLE 측정 구간도 다시 시작합니다.</value>
-    <comment>English: Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</comment>
+    <value>화면 지우기: 표시 로그를 지웁니다. HEX 모드에서는 RX BUSY/IDLE 측정 구간도 다시 시작합니다.</value>
+    <comment>English: Clear screen: clear visible logs. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</comment>
+  </data>
+  <data name="StaticUi016.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>화면 지우기</value>
   </data>
   <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>로그 컨트롤을 오른쪽으로 스크롤</value>
@@ -592,17 +595,15 @@
     <comment>English: Scroll TX controls right</comment>
   </data>
   <data name="StaticUi254.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>저장 명령 추가</value>
-    <comment>English: Add saved command</comment>
+    <value>빠른 명령 추가</value>
+    <comment>English: Add quick command</comment>
   </data>
-  <data name="StaticUi255.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>선택한 저장 명령 편집</value>
-    <comment>English: Edit selected saved command</comment>
-  </data>
-  <data name="StaticUi256.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>선택한 저장 명령 삭제</value>
-    <comment>English: Delete selected saved command</comment>
-  </data>
+  <data name="StaticUi254.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>빠른 명령 추가</value></data>
+  <data name="QuickCommandAddTitle" xml:space="preserve"><value>빠른 명령 추가</value></data>
+  <data name="QuickCommandEditTitle" xml:space="preserve"><value>빠른 명령 수정</value></data>
+  <data name="QuickCommandDeleteTitle" xml:space="preserve"><value>빠른 명령 삭제</value></data>
+  <data name="QuickCommandEditMenuText" xml:space="preserve"><value>수정하기…</value></data>
+  <data name="QuickCommandDeleteMenuText" xml:space="preserve"><value>삭제하기…</value></data>
   <data name="StaticUi257.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>빠른 명령을 왼쪽으로 스크롤</value>
     <comment>English: Scroll quick commands left</comment>
@@ -862,7 +863,13 @@
   <data name="SequenceTipsCopy" xml:space="preserve"><value>AI 요청문 + JSON 양식 복사</value></data>
   <data name="SequenceTipsCopied" xml:space="preserve"><value>복사했습니다. AI 대화창에 붙여 넣으세요.</value></data>
   <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>복사하지 못했습니다. 다시 시도해 주세요.</value></data>
-  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, 메인 모드 또는 Step별 TxMode(null/Terminal/Hex), 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. CLI/MCP 실행용이면 CaptureMs와 선택적 Expect {Kind:text|hex,Value:리터럴}도 확인해 주세요. GUI Run에서는 수집·매칭 메타데이터를 실행하지 않습니다. 명시적 TxMode는 명령 앞뒤 공백을 보존합니다. 명령·응답 리터럴·체크섬을 추측하지 마세요. 분기·변수·정규식·부분수열 매칭은 지원하지 않습니다. 섞인 printf 때문에 리터럴이 일치하지 않아도 제품 실패로 단정하지 마세요. Name은 기존 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. _manual은 유지하고 JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 Steps는 빈 배열이므로 요청한 실제 명령을 채워 주세요.</value></data>
+  <data name="SequenceStepNameLabel" xml:space="preserve"><value>단계 이름 (선택)</value></data>
+  <data name="SequenceStepNamePlaceholder" xml:space="preserve"><value>예: 펌웨어 버전 조회</value></data>
+  <data name="SequenceStepNameHelp" xml:space="preserve"><value>진행 표시·오류·CLI/MCP 결과에 쓰는 짧은 이름입니다. 비워 두면 GUI에는 명령이 표시됩니다.</value></data>
+  <data name="SequenceStepCommentLabel" xml:space="preserve"><value>설명 메모 (선택)</value></data>
+  <data name="SequenceStepCommentPlaceholder" xml:space="preserve"><value>예: 재부팅이 끝난 뒤 다음 명령 전송</value></data>
+  <data name="SequenceStepCommentHelp" xml:space="preserve"><value>단계 툴팁에 표시되고 JSON에 저장되는 참고 메모입니다. 실행에는 영향을 주지 않습니다.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, 메인 모드 또는 Step별 TxMode(null/Terminal/Hex), 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. CLI/MCP 실행용이면 CaptureMs와 선택적 Expect {Kind:text|hex,Value:리터럴}도 확인해 주세요. GUI Run에서는 수집·매칭 메타데이터를 실행하지 않습니다. 명시적 TxMode는 명령 앞뒤 공백을 보존합니다. 명령·응답 리터럴·체크섬을 추측하지 마세요. 분기·변수·정규식·부분수열 매칭은 지원하지 않습니다. 섞인 printf 때문에 리터럴이 일치하지 않아도 제품 실패로 단정하지 마세요. 최상위 Name은 기존 시퀀스 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. 선택적인 단계 Name은 진행 표시·오류·CLI/MCP 결과용 짧은 이름이며 중복되어도 됩니다. Comment는 참고 메모입니다. 두 필드는 전송되거나 실행 동작을 바꾸지 않습니다. _manual은 유지하고 JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 Steps는 빈 배열이므로 요청한 실제 명령을 채워 주세요.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>AI로 시퀀스 만들기…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>닫기</value></data>
   <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>명령 히스토리 검색...</value></data>
@@ -924,4 +931,27 @@
   <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>스킬 설치 안내 ↗</value></data>
   <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: 문자 로그·텍스트 명령, 줄 끝 적용</value></data>
   <data name="HexModeDescription" xml:space="preserve"><value>HEX: 원본 바이트를 16진수로 표시·전송, 줄 끝 미적용</value></data>
+  <data name="SaveLogHistoryButton.Content" xml:space="preserve"><value>로그 내보내기...</value></data>
+  <data name="SaveLogHistoryButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>버튼을 누른 순간 메모리에 남아 있는 로그를 저장합니다. 필터로 숨겨진 기록도 포함하며 저장창을 연 뒤 들어오는 로그는 제외합니다. 보관 한도 초과·화면 지우기·화면 일시정지로 남아 있지 않은 로그는 복구할 수 없습니다.</value></data>
+  <data name="SaveLogHistoryMenuItem.Text" xml:space="preserve"><value>로그 내보내기...</value></data>
+  <data name="LogHistoryContextHint" xml:space="preserve"><value>우클릭하면 로그를 내보내거나 로그 파일이 있는 폴더를 열 수 있습니다.</value></data>
+  <data name="LogHistoryFileType" xml:space="preserve"><value>시리얼 로그</value></data>
+  <data name="LogHistoryEmpty" xml:space="preserve"><value>내보낼 로그가 없습니다.</value></data>
+  <data name="LogHistoryActiveFile" xml:space="preserve"><value>실시간 로그를 저장 중인 파일입니다. 다른 파일을 선택하세요.</value></data>
+  <data name="LogHistorySaving" xml:space="preserve"><value>로그 기록 {0:N0}개를 내보내는 중입니다...</value></data>
+  <data name="LogHistorySaved" xml:space="preserve"><value>로그 기록 {0:N0}개 내보내기 완료: {1}</value></data>
+  <data name="LogHistorySaveFailed" xml:space="preserve"><value>로그 내보내기 실패: {0}</value></data>
+  <data name="LogHistoryProgressTitle.Text" xml:space="preserve"><value>로그 내보내는 중</value></data>
+  <data name="LogHistoryCancelButton.Content" xml:space="preserve"><value>취소</value></data>
+  <data name="LogHistoryProgressHint.Text" xml:space="preserve"><value>저장 중에도 로그 수신과 화면 표시는 계속됩니다.</value></data>
+  <data name="LogHistoryPreparing" xml:space="preserve"><value>현재 로그를 준비하고 있습니다...</value></data>
+  <data name="LogHistoryProgress" xml:space="preserve"><value>{0}% · {1:N0} / {2:N0}개 기록</value></data>
+  <data name="LogHistoryFinalizing" xml:space="preserve"><value>99% · 로그 내보내기 마무리 중...</value></data>
+  <data name="LogHistoryCanceling" xml:space="preserve"><value>로그 내보내기를 취소하고 있습니다...</value></data>
+  <data name="LogHistoryCanceled" xml:space="preserve"><value>로그 내보내기를 취소했습니다.</value></data>
+  <data name="SaveLogHistoryToolbarLabel.Text" xml:space="preserve"><value>로그 내보내기...</value></data>
+  <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>로그 내보내기</value></data>
+  <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>버튼을 누른 순간 남아 있는 로그를 별도 파일로 저장합니다. 필터로 숨겨진 기록도 포함하며 저장창을 연 뒤 들어오는 로그는 제외합니다. 실시간 파일 저장 중에도 사용할 수 있습니다.</value></data>
+  <data name="LogHistoryPickerTitle" xml:space="preserve"><value>로그 내보내기</value></data>
+  <data name="LogHistoryExportAction" xml:space="preserve"><value>내보내기</value></data>
 </root>

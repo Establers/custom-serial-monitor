@@ -288,10 +288,12 @@ public sealed class BridgeLogProcessorTests
         var expected = new EncodingDecoder().Decode(invalidBytes, encodingMode);
 
         Assert.True(processor.TryEnqueue(invalidBytes, RxDisplayMode.Terminal, encodingMode));
-        var line = await ReadLineAsync(processor);
+        await processor.FlushAsync(CancellationToken.None);
+        var lines = new List<LogLine>();
+        while (processor.Logs.TryRead(out var line)) lines.Add(line);
 
         Assert.True(expected.HadError);
-        Assert.Equal(expected.Text, line.Text);
+        Assert.Equal(expected.Text, string.Concat(lines.Select(line => line.Text)));
         Assert.True(processor.DecodeErrorCount > 0);
     }
 

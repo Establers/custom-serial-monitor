@@ -293,13 +293,16 @@ real hardware when available.
 
 ## Saved Commands
 
-- [ ] Add a saved command named `reboot` with command text `reboot`.
+- [ ] Confirm the toolbar reads `Quick CMD  +  |  ps  meminfo …`, with no Saved dropdown or standalone Edit/Del buttons.
+- [ ] Click `+` and add a saved command named `reboot` with command text `reboot`.
 - [ ] Confirm a compact `reboot` quick-send button appears.
 - [ ] Connect and click `reboot`.
 - [ ] Confirm TX logging works.
-- [ ] Edit `reboot` and confirm the chip updates.
-- [ ] Delete `reboot` and confirm it disappears.
+- [ ] Right-click `reboot`, choose Edit, and confirm the chip updates after saving.
+- [ ] Send one command, then right-click a different command and confirm Edit/Delete targets the right-clicked command.
+- [ ] Right-click `reboot`, choose Delete, and confirm it disappears after confirmation; Cancel leaves it intact.
 - [ ] Confirm add/edit/delete works while disconnected.
+- [ ] With enough commands to overflow, confirm only the command list scrolls and `Quick CMD` / `+` stay visible.
 
 ## Saved Command Shortcut
 
@@ -551,6 +554,43 @@ real hardware when available.
 - [ ] Confirm safe defaults are restored.
 
 ## Log File Actions
+
+- [ ] Without opening the Log tab, find **Export logs...** / **로그 내보내기...** immediately
+  to the right of **Start Logging / Stop Logging**. Confirm its icon and text
+  remain visible when the inspector is collapsed and the window is narrow.
+  Verify it uses the same save action in English and Korean, including while
+  live file logging is on. Receiving and the log view must stay usable while
+  the non-modal progress panel is shown.
+
+- [ ] With LOG OFF, receive MOCK data and use **Export logs...** in the
+  Log tab and the LOG button's right-click menu. Verify the UTF-8 file contains
+  earlier RX, TX, MARK and system records with timestamps. Repeat in Korean UI.
+- [ ] Hide records with a view filter, then save retained logs. Verify hidden
+  records are included. Repeat after retention rollover/Clear and confirm deleted
+  history is not exported. Cancel the save dialog and verify no error is shown.
+- [ ] While receiving, press Export logs and leave the save dialog open as new
+  records arrive. Confirm the suggested name contains the first retained record's
+  timestamp and the button-click time (both local dates/times, to milliseconds).
+  Confirm the output stops at the click-time snapshot, excluding records received
+  while the dialog was open. Repeat across midnight and after retention rollover;
+  the first timestamp must refer to retained history, not discarded session history.
+- [ ] While receiving and saving a live log, export history to a separate file.
+  Verify receiving/live logging continue and the export is a stable snapshot.
+  Try the active log path and a read-only destination; verify a clear error,
+  intact existing files, and that another export can be attempted.
+- [ ] During a slow export, verify the progress panel stays inside the upper-right
+  log viewport and leaves TX input/send and inspector controls available. Cancel
+  a new destination and confirm neither an empty output nor a temporary file is
+  left behind. Retry and verify the completed output and live logger keep their
+  correct contents. See [GUI validation evidence](log-export-ux-validation.md).
+- [ ] Export a large history (up to 1,000,000 records) while MOCK stress is running.
+  Verify the progress panel shows percentage and written/total records, the terminal
+  and RX counters advance, and tabs/controls remain usable. Completion must not show
+  100% before the destination is replaced. Repeat in Korean and English.
+- [ ] Cancel a running history export over an existing file. Verify the panel shows
+  cancellation until cleanup finishes, the old file is preserved, no temporary file
+  remains, and another export succeeds. Close the app during export and verify the
+  normal RX/live-log shutdown still completes promptly.
 
 - [ ] Connect to `MOCK`.
 - [ ] Wait until serial log file is created.

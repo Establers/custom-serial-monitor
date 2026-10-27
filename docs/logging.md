@@ -32,6 +32,59 @@ independent from file logging and does not create an event log file.
 - RX, TX, MARK, and system lines use the same ordered serial log stream.
 - Terminal rendering and event detection continue while Log Save is OFF.
 
+## Export Logs
+
+- Use **Export logs...** (Korean: **로그 내보내기...**) immediately to the right of
+  **Start Logging / Stop Logging** in the connection toolbar to save records
+  received before Log Save was enabled. The same action remains available in
+  the Log tab's Actions row and the LOG button's right-click menu.
+- Pressing Export logs immediately snapshots all records still retained in memory,
+  including records hidden by view filters, before opening the save dialog. Records
+  arriving while choosing the name/folder are excluded. The snapshot does not change
+  when live reception, Clear, or retention rollover subsequently changes the view.
+- The suggested name is `yyyy-MM-dd_HHmmss.fff_to_yyyy-MM-dd_HHmmss.fff_logs.log`:
+  the first retained record's local timestamp followed by the button-click time.
+  Both dates are included for captures spanning midnight. The first time is the
+  start of retained history, which can differ from the session start after Clear
+  or retention rollover. Editing the filename does not change the captured range.
+- The UTF-8 `.log` / `.txt` file uses the live file logger's timestamp, RX/TX/MARK/SYS
+  prefixes and original per-record Terminal/HEX representation. It is independent
+  of the current timestamp visibility, filters, and highlight colors.
+- Formatting and streaming writes run in the background. Reception and live file
+  logging continue; this action does not enable Log Save for future records.
+  A non-modal progress panel shows the percentage and written/total record count;
+  other controls and terminal rendering remain available. Progress is sampled every
+  100 ms using one pending value rather than queuing a UI callback per record.
+  Preparation is indeterminate, and the percentage stays below 100 until the final
+  flush, close and file replacement finish. Cancel stops the current export; another
+  export can be started after cleanup. A completed replacement is reported as saved
+  even if Cancel arrives immediately afterward.
+  The panel sits at the upper right of the log viewport, leaving TX controls and
+  inspector settings available. The destination picker only selects a path; it
+  does not create an empty destination before export, so cancellation does not
+  leave an empty reserved file behind.
+  An active live log file cannot be overwritten. Other selected files are replaced
+  only after a successful write; a failed or canceled export removes its temporary
+  file and preserves the previous destination. Closing the app cancels the export.
+- Only retained records can be saved. Records removed by the configured retention
+  limit or Clear, lost to UI overload, or omitted during Pause View are unavailable.
+  For complete long-running capture, enable Log Save before receiving data.
+- Export and live logging share CPU, memory, and storage bandwidth. A large
+  export can compete with live writes on slow storage, and its snapshot keeps
+  original records alive while the save dialog is open and until export completes
+  or is canceled. See [the concurrent export review](log-history-export-review.md)
+  for measurements and remaining limits.
+- The measured ~3.3ms snapshot time covers reference copying, not file writing.
+  Long payloads are streamed without constructing one whole-file string, but
+  completion time and disk usage depend on total encoded bytes. A million
+  records averaging 1KB of UTF-8 payload need roughly 1GB; averaging 10KB needs
+  roughly 10GB, plus timestamps and direction prefixes. Retention is bounded by
+  record count, not total payload bytes. Long records can therefore still use
+  substantial memory. The non-modal progress panel and Cancel remain useful.
+
+See [the GUI and wording validation](log-export-ux-validation.md) for actual MOCK
+reception, concurrent file logging, progress/cancellation, and screenshot evidence.
+
 ## Pause View
 
 - Pause View freezes the current terminal snapshot. Records received during the
@@ -81,6 +134,13 @@ Each log line stores the display representation active when that line was
 created. Terminal lines are written as decoded text. HEX lines are written as
 byte-exact hexadecimal text. Switching modes does not rewrite earlier disk log
 entries.
+
+Bridge HEX logs keep a short on-screen preview but save the full byte sequence
+to live files and history exports. Bridge Terminal decoding preserves partial
+UTF-8/CP949 characters across idle and 64 KiB display groups. Stopping the bridge
+flushes accepted log data and delivers it to file/event queues before cleanup;
+an incomplete trailing character uses the normal replacement policy at that
+stream end. Bounded-queue saturation is still counted and can drop bridge logs.
 
 ## Events And Raw Binary
 

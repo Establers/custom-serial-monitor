@@ -101,8 +101,11 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi016.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Clear visible log. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</value>
+    <value>Clear screen: clear visible logs. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</value>
     <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi016.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Clear screen</value>
   </data>
   <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll log controls right</value>
@@ -592,17 +595,15 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi254.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Add saved command</value>
+    <value>Add quick command</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi255.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Edit selected saved command</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
-  <data name="StaticUi256.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Delete selected saved command</value>
-    <comment>Static MainWindow UI text.</comment>
-  </data>
+  <data name="StaticUi254.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add quick command</value></data>
+  <data name="QuickCommandAddTitle" xml:space="preserve"><value>Add quick command</value></data>
+  <data name="QuickCommandEditTitle" xml:space="preserve"><value>Edit quick command</value></data>
+  <data name="QuickCommandDeleteTitle" xml:space="preserve"><value>Delete quick command</value></data>
+  <data name="QuickCommandEditMenuText" xml:space="preserve"><value>Edit…</value></data>
+  <data name="QuickCommandDeleteMenuText" xml:space="preserve"><value>Delete…</value></data>
   <data name="StaticUi257.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll quick commands left</value>
     <comment>Static MainWindow UI text.</comment>
@@ -862,7 +863,13 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SequenceTipsCopy" xml:space="preserve"><value>Copy AI prompt + JSON template</value></data>
   <data name="SequenceTipsCopied" xml:space="preserve"><value>Copied. Paste into your AI chat.</value></data>
   <data name="SequenceTipsCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
-  <data name="SequenceAiPrompt" xml:space="preserve"><value>Create one Serial Monitor sequence following _manual in the JSON below. First ask for the actual device protocol, main mode or per-step TxMode (null/Terminal/Hex), command order, line ending (None/Cr/Lf/Crlf or null), post-send delays in ms, repeat count and existing sequence names. If CLI/MCP execution is intended, ask for CaptureMs and optional literal Expect {Kind:text|hex,Value:literal}; GUI Run ignores capture/matching metadata. Explicit TxMode preserves command whitespace. Never invent commands, response literals or checksums. Do not add branches, variables, regex or subsequence matching. A missing literal in interleaved printf does not establish device failure. Use a unique Name and include every required field. Preserve _manual. Return one standard JSON object without comments or Markdown fences, ready to save as UTF-8. The template has empty Steps; fill it with the requested commands.</value></data>
+  <data name="SequenceStepNameLabel" xml:space="preserve"><value>Step name (optional)</value></data>
+  <data name="SequenceStepNamePlaceholder" xml:space="preserve"><value>e.g. Read firmware version</value></data>
+  <data name="SequenceStepNameHelp" xml:space="preserve"><value>Short label for progress, errors and CLI/MCP results. If blank, the GUI shows the command.</value></data>
+  <data name="SequenceStepCommentLabel" xml:space="preserve"><value>Comment (optional)</value></data>
+  <data name="SequenceStepCommentPlaceholder" xml:space="preserve"><value>e.g. Wait for reboot before the next command</value></data>
+  <data name="SequenceStepCommentHelp" xml:space="preserve"><value>Extra context shown in the step tooltip and saved in JSON. Does not affect execution.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>Create one Serial Monitor sequence following _manual in the JSON below. First ask for the actual device protocol, main mode or per-step TxMode (null/Terminal/Hex), command order, line ending (None/Cr/Lf/Crlf or null), post-send delays in ms, repeat count and existing sequence names. If CLI/MCP execution is intended, ask for CaptureMs and optional literal Expect {Kind:text|hex,Value:literal}; GUI Run ignores capture/matching metadata. Explicit TxMode preserves command whitespace. Never invent commands, response literals or checksums. Do not add branches, variables, regex or subsequence matching. A missing literal in interleaved printf does not establish device failure. Use a unique root Name and include every required field. Optional step Name is a short label for progress/errors and CLI/MCP results; it need not be unique. Comment is a reference note. Neither field is transmitted or changes execution. Preserve _manual. Return one standard JSON object without comments or Markdown fences, ready to save as UTF-8. The template has empty Steps; fill it with the requested commands.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>Create sequences with AI…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>Close</value></data>
   <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>Search command history...</value></data>
@@ -924,4 +931,27 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>Skill installation guide ↗</value></data>
   <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: Text logs and text commands with the selected line ending.</value></data>
   <data name="HexModeDescription" xml:space="preserve"><value>HEX: Display and send raw bytes in hexadecimal, without a line ending.</value></data>
+  <data name="SaveLogHistoryButton.Content" xml:space="preserve"><value>Export logs...</value></data>
+  <data name="SaveLogHistoryButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Save all records retained at the button click, including filtered records. Records arriving while the save dialog is open are excluded. Logs removed by the retention limit, Clear, or view pause cannot be recovered.</value></data>
+  <data name="SaveLogHistoryMenuItem.Text" xml:space="preserve"><value>Export logs...</value></data>
+  <data name="LogHistoryContextHint" xml:space="preserve"><value>Right-click to export logs or open the log file&apos;s folder.</value></data>
+  <data name="LogHistoryFileType" xml:space="preserve"><value>Serial log</value></data>
+  <data name="LogHistoryEmpty" xml:space="preserve"><value>No current logs to export.</value></data>
+  <data name="LogHistoryActiveFile" xml:space="preserve"><value>Choose a different file; this file is being used for live logging.</value></data>
+  <data name="LogHistorySaving" xml:space="preserve"><value>Exporting {0:N0} log records...</value></data>
+  <data name="LogHistorySaved" xml:space="preserve"><value>Exported {0:N0} log records: {1}</value></data>
+  <data name="LogHistorySaveFailed" xml:space="preserve"><value>Log export failed: {0}</value></data>
+  <data name="LogHistoryProgressTitle.Text" xml:space="preserve"><value>Exporting logs</value></data>
+  <data name="LogHistoryCancelButton.Content" xml:space="preserve"><value>Cancel</value></data>
+  <data name="LogHistoryProgressHint.Text" xml:space="preserve"><value>Reception and the log view continue while saving.</value></data>
+  <data name="LogHistoryPreparing" xml:space="preserve"><value>Preparing current logs...</value></data>
+  <data name="LogHistoryProgress" xml:space="preserve"><value>{0}% · {1:N0} / {2:N0} records</value></data>
+  <data name="LogHistoryFinalizing" xml:space="preserve"><value>99% · Finishing log export...</value></data>
+  <data name="LogHistoryCanceling" xml:space="preserve"><value>Canceling export...</value></data>
+  <data name="LogHistoryCanceled" xml:space="preserve"><value>Log export was canceled.</value></data>
+  <data name="SaveLogHistoryToolbarLabel.Text" xml:space="preserve"><value>Export logs...</value></data>
+  <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Export logs</value></data>
+  <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Save all logs retained at the button click to a separate file, including filtered records. Records arriving while the save dialog is open are excluded. Available while live file logging continues.</value></data>
+  <data name="LogHistoryPickerTitle" xml:space="preserve"><value>Export logs</value></data>
+  <data name="LogHistoryExportAction" xml:space="preserve"><value>Export</value></data>
 </root>

@@ -96,6 +96,10 @@ capture can clean them up.
   Its bounded background pipeline uses a bridge-dedicated streaming decoder in
   Terminal mode and byte-exact HEX matching data in HEX mode; it never modifies
   the bytes forwarded by `SerialBridgeService`.
+  Terminal decoder state survives idle and 64 KiB display boundaries, and is
+  finalized at stream end or an encoding/mode change. Bridge stop joins the
+  producer, flushes accepted log input, and waits for file/event fan-out before
+  those consumers stop. Start/stop operations are serialized through this drain.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
 - `MainViewModel` coordinates lifecycle and fans parsed lines out to downstream
   components. It currently also contains search, profile application, command,
@@ -135,6 +139,9 @@ capture can clean them up.
   rules all evaluate the same individual `LogLine.RawBytes`; patterns split
   across display records do not match. Raw transport queues and timing are
   independent of this processing.
+- Bridge HEX previews remain limited to 64 bytes on screen. Live files and
+  history exports use the full HEX text for each record; file queue memory
+  accounting includes this separate text.
 - Virtual-to-device completion never waits for UI rendering. Its optional TX
   log input and output enter bounded queues before the existing bounded UI-only
   queue; saturation is counted and may omit file/event/UI records while raw

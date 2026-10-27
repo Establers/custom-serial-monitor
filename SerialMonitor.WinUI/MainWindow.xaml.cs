@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -708,7 +709,8 @@ public sealed partial class MainWindow : Window
         var deltaY = point.Position.Y - _inspectorResizeStartY;
         var maximumHeight = Math.Max(
             0,
-            MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+            MainContentGrid.ActualHeight - ContentCommandsRow.ActualHeight -
+            ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
         var inspectorHeight = Math.Clamp(
             _inspectorResizeStartHeight - deltaY,
             0,
@@ -1068,7 +1070,8 @@ public sealed partial class MainWindow : Window
         {
             var maximumHeight = Math.Max(
                 0,
-                MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+                MainContentGrid.ActualHeight - ContentCommandsRow.ActualHeight -
+                ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
             ContentLogRow.Height = new GridLength(1, GridUnitType.Star);
             ContentInspectorRow.Height = new GridLength(
                 Math.Min(_liveInspectorResizeHeight, maximumHeight));
@@ -1077,7 +1080,8 @@ public sealed partial class MainWindow : Window
         {
             var maximumHeight = Math.Max(
                 0,
-                MainContentGrid.ActualHeight - ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
+                MainContentGrid.ActualHeight - ContentCommandsRow.ActualHeight -
+                ContentResizeHandleRow.ActualHeight - MinimumLogPanelHeight);
             ContentLogRow.Height = new GridLength(1, GridUnitType.Star);
             ContentInspectorRow.Height = new GridLength(
                 Math.Min(_lastExpandedInspectorHeight, maximumHeight));
@@ -1090,7 +1094,7 @@ public sealed partial class MainWindow : Window
 
         LogColumn.Width = new GridLength(1, GridUnitType.Star);
         InspectorColumn.Width = new GridLength(0);
-        Grid.SetRow(InspectorPanel, 2);
+        Grid.SetRow(InspectorPanel, 3);
         Grid.SetColumn(InspectorPanel, 0);
     }
 
@@ -4648,6 +4652,16 @@ public sealed partial class MainWindow : Window
         _viewModel.RecordSearchFocusShortcut(source);
     }
 
+    private async void SaveLogHistory_Click(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.ExportLogHistoryAsync(suggestedName => LogExportFilePicker.PickAsync(
+            WinRT.Interop.WindowNative.GetWindowHandle(this),
+            suggestedName,
+            UiText.Get("LogHistoryPickerTitle", "Export logs"),
+            UiText.Get("LogHistoryFileType", "Serial log"),
+            UiText.Get("LogHistoryExportAction", "Export")));
+    }
+
     private async void BrowseLogFolder_Click(object sender, RoutedEventArgs args)
     {
         try
@@ -4961,42 +4975,80 @@ public sealed partial class MainWindow : Window
 
     private async void AddSavedCommand_Click(object sender, RoutedEventArgs args)
     {
-        var command = await ShowSavedCommandDialogAsync("Add saved command", new TxCommand());
+        var command = await ShowSavedCommandDialogAsync(UiText.Get("QuickCommandAddTitle", "Add quick command"), new TxCommand());
         if (command is not null)
         {
             _viewModel.AddSavedCommand(command);
         }
     }
 
-    private async void EditSavedCommand_Click(object sender, RoutedEventArgs args)
+    private void SavedCommand_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
     {
-        if (_viewModel.SelectedSavedCommand is null)
+        if (sender is not FrameworkElement { DataContext: TxCommand command } target)
         {
             return;
         }
 
-        var command = await ShowSavedCommandDialogAsync("Edit saved command", CloneTxCommand(_viewModel.SelectedSavedCommand));
+        // Keep the menu on the enabled wrapper so commands remain editable while TX is disabled.
+        var menu = new MenuFlyout();
+        var editItem = new MenuFlyoutItem
+        {
+            Text = UiText.Get("QuickCommandEditMenuText", "Edit…"),
+            Icon = new SymbolIcon(Symbol.Edit),
+            Tag = command
+        };
+        editItem.Click += EditSavedCommand_Click;
+        menu.Items.Add(editItem);
+        var deleteItem = new MenuFlyoutItem
+        {
+            Text = UiText.Get("QuickCommandDeleteMenuText", "Delete…"),
+            Icon = new SymbolIcon(Symbol.Delete),
+            Tag = command
+        };
+        deleteItem.Click += DeleteSavedCommand_Click;
+        menu.Items.Add(deleteItem);
+
+        if (args.TryGetPosition(target, out var position))
+        {
+            menu.ShowAt(target, new FlyoutShowOptions { Position = position });
+        }
+        else
+        {
+            menu.ShowAt(target);
+        }
+
+        args.Handled = true;
+    }
+
+    private async void EditSavedCommand_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not MenuFlyoutItem { Tag: TxCommand source })
+        {
+            return;
+        }
+
+        var command = await ShowSavedCommandDialogAsync(UiText.Get("QuickCommandEditTitle", "Edit quick command"), CloneTxCommand(source));
         if (command is not null)
         {
-            _viewModel.ReplaceSelectedSavedCommand(command);
+            _viewModel.ReplaceSavedCommand(source, command);
         }
     }
 
     private async void DeleteSavedCommand_Click(object sender, RoutedEventArgs args)
     {
-        if (_viewModel.SelectedSavedCommand is null)
+        if (sender is not MenuFlyoutItem { Tag: TxCommand source })
         {
             return;
         }
 
         if (await ConfirmDeleteAsync(
-                "Delete saved command",
+                UiText.Get("QuickCommandDeleteTitle", "Delete quick command"),
                 UiText.Format(
                     "DeleteSavedCommandConfirmation",
                     "Delete saved command '{0}'?",
-                    _viewModel.SelectedSavedCommand.Name)))
+                    source.Name)))
         {
-            _viewModel.DeleteSelectedSavedCommand();
+            _viewModel.DeleteSavedCommand(source);
         }
     }
 
@@ -5178,9 +5230,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void EditCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    private async Task EditSelectedCommandSequenceStepAsync()
     {
-        if (_viewModel.SelectedCommandSequenceStep is null)
+        if (!_viewModel.CanEditSelectedCommandSequenceStep || _viewModel.SelectedCommandSequenceStep is null)
         {
             return;
         }
@@ -5192,7 +5244,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void EditCommandSequenceStepRow_Click(object sender, RoutedEventArgs args)
+    private async void EditCommandSequenceStepRow_Click(object sender, RoutedEventArgs args)
     {
         if (sender is FrameworkElement { DataContext: CommandSequenceStep step })
         {
@@ -5200,7 +5252,42 @@ public sealed partial class MainWindow : Window
             CommandSequenceStepListView.SelectedItem = step;
         }
 
-        EditCommandSequenceStep_Click(sender, args);
+        await EditSelectedCommandSequenceStepAsync();
+    }
+
+    private async void CommandSequenceStepListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    {
+        try
+        {
+            if (!_viewModel.CanEditCommandSequences)
+            {
+                return;
+            }
+
+            var current = args.OriginalSource as DependencyObject;
+            while (current is not null && current != CommandSequenceStepListView)
+            {
+                if (current is Button)
+                {
+                    return;
+                }
+
+                if (current is ListViewItem { Content: CommandSequenceStep step })
+                {
+                    _viewModel.SelectedCommandSequenceStep = step;
+                    CommandSequenceStepListView.SelectedItem = step;
+                    args.Handled = true;
+                    await EditSelectedCommandSequenceStepAsync();
+                    return;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("MainWindow.CommandSequenceStepListView_DoubleTapped", ex);
+        }
     }
 
     private async void DeleteCommandSequenceStep_Click(object sender, RoutedEventArgs args)
@@ -5702,13 +5789,15 @@ public sealed partial class MainWindow : Window
 
     private async Task<CommandSequenceStep?> ShowCommandSequenceStepDialogAsync(string title, CommandSequenceStep source)
     {
-        var nameBox = CreateDialogTextBox(source.Name ?? string.Empty, "Optional step name");
+        var nameBox = CreateDialogTextBox(source.Name ?? string.Empty,
+            UiText.Get("SequenceStepNamePlaceholder", "e.g. Read firmware version"));
         var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
         var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
         var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
         ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
         var delayBox = CreateDialogTextBox(source.DelayAfterMs.ToString(CultureInfo.InvariantCulture), "Delay after ms");
-        var commentBox = CreateDialogTextBox(source.Comment ?? string.Empty, "Optional note");
+        var commentBox = CreateDialogTextBox(source.Comment ?? string.Empty,
+            UiText.Get("SequenceStepCommentPlaceholder", "e.g. Wait for reboot before the next command"));
         var errorText = new TextBlock
         {
             FontSize = 12,
@@ -5717,12 +5806,16 @@ public sealed partial class MainWindow : Window
         };
 
         var panel = CreateDialogPanel();
-        panel.Children.Add(CreateDialogField("Name", nameBox));
         panel.Children.Add(CreateDialogField("Command", commandBox));
+        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepNameLabel", "Step name (optional)"), nameBox));
+        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepNameHelp",
+            "Short label for progress, errors and CLI/MCP results. If blank, the GUI shows the command.")));
         panel.Children.Add(CreateDialogField("Line ending", endingBox));
         panel.Children.Add(CreateDialogHint(LineEndingHelpText));
         panel.Children.Add(CreateDialogField("Delay after ms", delayBox));
-        panel.Children.Add(CreateDialogField("Comment", commentBox));
+        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepCommentLabel", "Comment (optional)"), commentBox));
+        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepCommentHelp",
+            "Extra context shown in the step tooltip and saved in JSON. Does not affect execution.")));
         panel.Children.Add(CreateDialogHint($"TX mode: {source.TxMode?.ToString() ?? "Global"}. {source.AutomationHelpText} These fields are preserved when editing here; change them in sequence JSON or through CLI/MCP."));
         panel.Children.Add(errorText);
 

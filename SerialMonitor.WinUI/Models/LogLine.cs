@@ -21,12 +21,14 @@ public sealed class LogLine
         bool isPartialRxSegment = false,
         bool isPartialRxTerminator = false,
         string? displayText = null,
-        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal)
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal,
+        string? fileText = null)
     {
         Timestamp = timestamp;
         Direction = direction;
         Text = text;
         DisplayText = displayText ?? text;
+        FileText = fileText ?? DisplayText;
         RawBytes = rawBytes;
         SequenceNumber = sequenceNumber;
         IsPartialRxSegment = isPartialRxSegment;
@@ -44,6 +46,9 @@ public sealed class LogLine
     // DisplayText is the presentation captured when the line was created
     // (for example, byte-exact HEX while the RX view is in HEX mode).
     public string DisplayText { get; }
+
+    // File output can retain the complete payload while the UI shows a preview.
+    public string FileText { get; }
 
     public string Message => Text;
 
@@ -70,6 +75,9 @@ public sealed class LogLine
     public string Formatted =>
         $"[{FormatTimestamp(TimestampDisplayFormat.DateTimeMilliseconds)}] {DirectionText} {DisplayText}";
 
+    public string FileFormatted =>
+        $"[{FormatTimestamp(TimestampDisplayFormat.DateTimeMilliseconds)}] {DirectionText} {FileText}";
+
     public string Format(TimestampDisplayFormat timestampFormat) =>
         $"[{FormatTimestamp(timestampFormat)}] {DirectionText} {DisplayText}";
 
@@ -90,7 +98,8 @@ public sealed class LogLine
         long? sequenceNumber = null,
         bool isPartialRxSegment = false,
         string? displayText = null,
-        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal) =>
+        LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal,
+        string? fileText = null) =>
         new(
             DateTimeOffset.Now,
             LogDirection.Rx,
@@ -99,7 +108,8 @@ public sealed class LogLine
             sequenceNumber,
             isPartialRxSegment: isPartialRxSegment,
             displayText: displayText,
-            contentMode: contentMode);
+            contentMode: contentMode,
+            fileText: fileText);
 
     public static LogLine RxPartialTerminator(long? sequenceNumber = null) =>
         new(DateTimeOffset.Now, LogDirection.Rx, string.Empty, null, sequenceNumber, isPartialRxTerminator: true);

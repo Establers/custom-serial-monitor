@@ -25,5 +25,9 @@ public interface IBridgeLogProcessor : IAsyncDisposable
 
     void ResetStream();
 
+    // Call after stopping the producer. Ends the decoder stream and returns the
+    // lifetime count of emitted records, so consumers can finish fan-out too.
+    Task<long> FlushAsync(CancellationToken cancellationToken);
+
     bool TryEnqueue(byte[] bytes, RxDisplayMode mode, RxEncodingMode terminalEncoding);
 }

@@ -304,7 +304,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly CancellationTokenSource _searchShortcutCancellation = new();
     private readonly Channel<(long Generation, LogLine Line)> _bridgeVisualLogQueue = CreateBridgeVisualLogQueue();
     private long _visibleLogGeneration;
+    private long _observedBridgeLogLineCount;
     private readonly SemaphoreSlim _connectionLifecycleGate = new(1, 1);
+    private readonly SemaphoreSlim _bridgeLifecycleGate = new(1, 1);
     private readonly object _viewPauseGate = new();
     private readonly ViewPauseStateMachine _viewPause = new();
     private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
@@ -756,7 +758,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         ISerialBridgeService bridgeService,
         IBridgeLogProcessor bridgeLogProcessor,
         IProfileService profileService,
-        DispatcherQueue dispatcherQueue)
+        DispatcherQueue dispatcherQueue,
+        ILogHistoryExporter? logHistoryExporter = null)
     {
         _serialService = serialService;
         _logPipeline = logPipeline;
@@ -766,6 +769,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _bridgeLogProcessor = bridgeLogProcessor;
         _profileService = profileService;
         _dispatcherQueue = dispatcherQueue;
+        _logHistoryExporter = logHistoryExporter ?? new LogHistoryExporter();
+        Log.PropertyChanged += OnLogHistoryPropertyChanged;
         _portRefreshOperation = new CoalescingAsyncOperation(RefreshPortsOnceAsync);
         _searchShortcutOperation = new LatestRequestAsyncOperation<SearchShortcutRequest>(
             RunSearchShortcutAsync,
@@ -2300,7 +2305,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         : UiText.Get("StartLogSavingHelp", "Not saving to a file. Click to start saving new serial logs; receiving and display continue independently.");
 
     public string FileLoggingToolbarToolTip => FileLoggingToolTip + "\n"
-        + UiText.Get("OpenCurrentLogLocationHint", "Right-click to open the log file's folder.");
+        + UiText.Get("LogHistoryContextHint", "Right-click to export logs or open the log file's folder.");
 
     public bool FileLoggingWhileViewPaused
     {
@@ -4244,6 +4249,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        CancelLogHistoryExport();
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
@@ -4357,13 +4363,18 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        CancelLogHistoryExport();
+        Log.PropertyChanged -= OnLogHistoryPropertyChanged;
+        if (_logHistoryExportProgressTimer is not null)
+        {
+            _logHistoryExportProgressTimer.Stop();
+            _logHistoryExportProgressTimer.Tick -= OnLogHistoryExportProgressTick;
+        }
         await StopAutomationAsync();
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
         _eventNotificationCancellation.Cancel();
-        _bridgeVisualLogCancellation.Cancel();
-        _bridgeVisualLogQueue.Writer.TryComplete();
         _statusTimer.Stop();
         _statusTimer.Tick -= OnStatusTimerTick;
 
@@ -4394,6 +4405,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             {
             }
         }
+        _bridgeVisualLogCancellation.Cancel();
+        _bridgeVisualLogQueue.Writer.TryComplete();
         if (_observeBridgeVisualLogsTask is not null)
         {
             try
@@ -4413,7 +4426,17 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventNotificationCancellation.Dispose();
         _bridgeVisualLogCancellation.Dispose();
         _searchShortcutCancellation.Dispose();
+        // Live capture must finish cleanup before an optional export can consume
+        // any of MainWindow's three-second disposal budget.
+        if (_logHistoryExportTask is { } exportTask)
+        {
+            try { await exportTask.WaitAsync(TimeSpan.FromMilliseconds(500)); }
+            catch (TimeoutException ex) { RuntimeDiagnostics.RecordError("LogHistoryExport.Shutdown", ex); }
+            catch (Exception) { /* ExportLogHistoryAsync reports export errors. */ }
+        }
+        _logHistoryExportCancellation.Dispose();
         _connectionLifecycleGate.Dispose();
+        _bridgeLifecycleGate.Dispose();
     }
 
     private async Task WaitForSequenceStopAsync(CancellationToken cancellationToken)
@@ -6050,6 +6073,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartBridgeCoreAsync()
     {
+        await _bridgeLifecycleGate.WaitAsync();
+        try
+        {
+            await StartBridgeSessionAsync();
+        }
+        finally
+        {
+            _bridgeLifecycleGate.Release();
+        }
+    }
+
+    private async Task StartBridgeSessionAsync()
+    {
         var devicePort = GetActualPortName(SelectedPort);
         var virtualPort = SelectedBridgePort?.Trim();
         if (!_serialService.IsConnected)
@@ -6107,8 +6143,20 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StopBridgeCoreAsync(bool disableRequested, CancellationToken cancellationToken)
     {
+        await _bridgeLifecycleGate.WaitAsync(cancellationToken);
+        try
+        {
+            await StopBridgeSessionAsync(disableRequested, cancellationToken);
+        }
+        finally
+        {
+            _bridgeLifecycleGate.Release();
+        }
+    }
+
+    private async Task StopBridgeSessionAsync(bool disableRequested, CancellationToken cancellationToken)
+    {
         _serialService.SetRawBridgePriorityEnabled(false);
-        _bridgeLogProcessor.ResetStream();
         if (disableRequested)
         {
             _currentBridgeSettings.Enabled = false;
@@ -6117,6 +6165,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             await _bridgeService.StopAsync(cancellationToken);
+            await FlushBridgeLogsAsync(cancellationToken);
             if (disableRequested)
             {
                 SetStatus("Serial bridge stopped.");
@@ -6131,6 +6180,30 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             NotifyBridgePropertiesChanged();
             RefreshStatusBar();
+        }
+    }
+
+    private async Task FlushBridgeLogsAsync(CancellationToken cancellationToken)
+    {
+        var emittedLineCount = await _bridgeLogProcessor.FlushAsync(cancellationToken);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            // The processor barrier has emitted the tail. Wait for the separate
+            // observer to enqueue it to file/events before their shutdown begins.
+            while (Interlocked.Read(ref _observedBridgeLogLineCount) < emittedLineCount)
+            {
+                if (_observeBridgeProcessedLogsTask is null || _observeBridgeProcessedLogsTask.IsCompleted)
+                {
+                    throw new InvalidOperationException("Bridge log observer stopped before completing log delivery.");
+                }
+                await Task.Delay(10, deadline.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("Bridge log delivery timed out.");
         }
     }
 
@@ -8602,7 +8675,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool ReplaceSelectedSavedCommand(TxCommand replacement)
     {
-        if (SelectedSavedCommand is null)
+        return ReplaceSavedCommand(SelectedSavedCommand, replacement);
+    }
+
+    public bool ReplaceSavedCommand(TxCommand? source, TxCommand replacement)
+    {
+        if (source is null)
         {
             RecordCommandEditError("Select a saved command before editing.");
             return false;
@@ -8614,7 +8692,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
-        var index = Commands.SavedCommands.IndexOf(SelectedSavedCommand);
+        var index = Commands.SavedCommands.IndexOf(source);
         if (index < 0)
         {
             RecordCommandEditError("Selected saved command was not found.");
@@ -8629,14 +8707,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool DeleteSelectedSavedCommand()
     {
-        if (SelectedSavedCommand is null)
+        return DeleteSavedCommand(SelectedSavedCommand);
+    }
+
+    public bool DeleteSavedCommand(TxCommand? source)
+    {
+        if (source is null)
         {
             RecordCommandEditError("Select a saved command before deleting.");
             return false;
         }
 
-        var deletedName = SelectedSavedCommand.Name;
-        var index = Commands.SavedCommands.IndexOf(SelectedSavedCommand);
+        var deletedName = source.Name;
+        var index = Commands.SavedCommands.IndexOf(source);
         if (index < 0)
         {
             RecordCommandEditError("Selected saved command was not found.");
@@ -12758,8 +12841,17 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            _serialService.SetRawBridgePriorityEnabled(false);
-            await _bridgeService.StopAsync(CancellationToken.None);
+            await _bridgeLifecycleGate.WaitAsync();
+            try
+            {
+                _serialService.SetRawBridgePriorityEnabled(false);
+                await _bridgeService.StopAsync(CancellationToken.None);
+                await FlushBridgeLogsAsync(CancellationToken.None);
+            }
+            finally
+            {
+                _bridgeLifecycleGate.Release();
+            }
         }
         catch (Exception ex)
         {
@@ -12895,6 +12987,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     fileEligible: true,
                     detectEvent: true,
                     useBridgeVisualQueue: true);
+                Interlocked.Increment(ref _observedBridgeLogLineCount);
             }
         }
         catch (OperationCanceledException)

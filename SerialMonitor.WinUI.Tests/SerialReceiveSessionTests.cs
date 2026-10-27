@@ -109,13 +109,15 @@ public sealed class SerialReceiveSessionTests
     {
         await using var service = new SerialService();
         var settings = new SerialSettings { PortName = "MOCK" };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.ConnectAsync(settings, new SerialReceiveOptions(), CancellationToken.None);
         var firstReader = service.ReceivedBytes;
         var firstGeneration = service.ReceiveSessionGeneration;
+        await service.SendBytesAsync("old-session"u8.ToArray(), "old-session", timeout.Token);
 
         await service.DisconnectAsync(CancellationToken.None);
-        Assert.True(firstReader.Completion.IsCompleted);
+        Assert.False(firstReader.Completion.IsCompleted);
 
         await service.ConnectAsync(settings, new SerialReceiveOptions(), CancellationToken.None);
         var secondReader = service.ReceivedBytes;
@@ -123,9 +125,16 @@ public sealed class SerialReceiveSessionTests
         Assert.NotSame(firstReader, secondReader);
         Assert.True(service.ReceiveSessionGeneration > firstGeneration);
 
+        var firstSessionText = new StringBuilder();
+        await foreach (var oldChunk in firstReader.ReadAllAsync(timeout.Token))
+        {
+            firstSessionText.Append(Encoding.UTF8.GetString(oldChunk.Bytes));
+        }
+        await firstReader.Completion.WaitAsync(timeout.Token);
+        Assert.Contains($"old-session{Environment.NewLine}", firstSessionText.ToString());
+
         await service.SendMockCrlfAsync(CancellationToken.None);
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         ReceivedByteChunk chunk;
         do
         {

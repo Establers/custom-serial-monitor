@@ -12,6 +12,7 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    // Optional label used in GUI progress/errors and CLI/MCP step results; never transmitted.
     public string? Name { get; set; }
 
     public string CommandText { get; set; } = string.Empty;
@@ -20,6 +21,7 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
 
     public int DelayAfterMs { get; set; } = 300;
 
+    // Reference note shown in the row tooltip and preserved in profile/sequence JSON.
     public string? Comment { get; set; }
 
     // Null keeps legacy behavior: use the main TX mode captured at run start.
@@ -81,7 +83,16 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     public string CommentText => string.IsNullOrWhiteSpace(Comment) ? string.Empty : Comment.Trim();
 
     [JsonIgnore]
-    public string RowToolTip => $"{StepNumberText} | {CommandText} | TX {TxMode?.ToString() ?? "Global"} | {LineEndingHelpText} | Delay {DelayText} | {AutomationHelpText}";
+    public string RowToolTip
+    {
+        get
+        {
+            var details = $"{StepNumberText} | {CommandText} | TX {TxMode?.ToString() ?? "Global"} | {LineEndingHelpText} | Delay {DelayText} | {AutomationHelpText}";
+            if (!string.IsNullOrWhiteSpace(Name)) details = $"Step name: {Name.Trim()}{Environment.NewLine}{details}";
+            if (!string.IsNullOrWhiteSpace(Comment)) details += $"{Environment.NewLine}Comment: {CommentText}";
+            return details;
+        }
+    }
 
     [JsonIgnore]
     public string AutomationHelpText => $"CLI/MCP only: collect RX {CaptureMs} ms; " + (Expect is null

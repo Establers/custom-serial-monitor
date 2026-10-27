@@ -16,6 +16,7 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
     private const int HexPreviewBytes = 64;
     private static readonly TimeSpan DefaultLogIdleTimeout = TimeSpan.FromMilliseconds(25);
     private static readonly TimeSpan MaxHexLogLatency = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(5);
 
     private readonly Channel<BridgeLogChunk> _input;
     private readonly Channel<LogLine> _output;
@@ -27,6 +28,7 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
     private long _droppedInputChunkCount;
     private long _droppedInputByteCount;
     private long _droppedOutputLineCount;
+    private long _emittedLineCount;
     private long _decodeErrorCount;
     private long _errorCount;
     private string? _lastError;
@@ -85,6 +87,26 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         Interlocked.Increment(ref _streamVersion);
     }
 
+    public async Task<long> FlushAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(FlushTimeout);
+        var completion = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = new BridgeLogChunk([], RxDisplayMode.Terminal, RxEncodingMode.Utf8, 0, completion);
+        try
+        {
+            // Only lifecycle code waits on this ordered barrier. Forwarding
+            // continues to use the non-blocking, bounded TryEnqueue path.
+            await _input.Writer.WriteAsync(request, deadline.Token).ConfigureAwait(false);
+            return await completion.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("Bridge log flush timed out.");
+        }
+    }
+
     public bool TryEnqueue(byte[] bytes, RxDisplayMode mode, RxEncodingMode terminalEncoding)
     {
         ArgumentNullException.ThrowIfNull(bytes);
@@ -116,13 +138,15 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         }
 
         _input.Writer.TryComplete();
-        _cancellation.Cancel();
         try
         {
-            await _worker;
+            await _worker.WaitAsync(FlushTimeout).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (TimeoutException)
         {
+            _cancellation.Cancel();
+            ReportError("Bridge log shutdown timed out.");
+            throw;
         }
         finally
         {
@@ -141,6 +165,26 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
             {
                 while (_input.Reader.TryRead(out var chunk))
                 {
+                    if (chunk.FlushCompletion is { } completion)
+                    {
+                        try
+                        {
+                            DiscardStaleGroups(ref pendingTerminal, ref pendingHex);
+                            FlushTerminalGroup(ref pendingTerminal, endStream: true);
+                            FlushHexGroup(ref pendingHex);
+                            completion.TrySetResult(Interlocked.Read(ref _emittedLineCount));
+                        }
+                        catch (Exception ex)
+                        {
+                            completion.TrySetException(ex);
+                            pendingTerminal = null;
+                            pendingHex = null;
+                            ResetStream();
+                            ReportError($"Bridge log flush failed: {ex.Message}");
+                        }
+                        continue;
+                    }
+
                     Interlocked.Decrement(ref _pendingInputChunkCount);
                     try
                     {
@@ -186,7 +230,7 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
             try
             {
                 DiscardStaleGroups(ref pendingTerminal, ref pendingHex);
-                FlushTerminalGroup(ref pendingTerminal);
+                FlushTerminalGroup(ref pendingTerminal, endStream: true);
                 FlushHexGroup(ref pendingHex);
             }
             catch (Exception ex)
@@ -194,6 +238,20 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
                 ReportError($"Bridge log final flush failed: {ex.Message}");
             }
 
+            _input.Writer.TryComplete();
+            while (_input.Reader.TryRead(out var remaining))
+            {
+                if (remaining.FlushCompletion is { } completion)
+                {
+                    completion.TrySetException(new InvalidOperationException("Bridge log processor stopped before flushing."));
+                }
+                else
+                {
+                    Interlocked.Decrement(ref _pendingInputChunkCount);
+                    Interlocked.Increment(ref _droppedInputChunkCount);
+                    Interlocked.Add(ref _droppedInputByteCount, remaining.Bytes.Length);
+                }
+            }
             _output.Writer.TryComplete();
         }
     }
@@ -225,36 +283,40 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
             : RxDisplayMode.Terminal;
         if (mode == RxDisplayMode.Hex)
         {
-            pendingTerminal = null;
+            FlushTerminalGroup(ref pendingTerminal, endStream: true);
             AppendHexBytes(chunk, ref pendingHex);
             return;
         }
 
-        pendingHex = null;
+        FlushHexGroup(ref pendingHex);
         var encoding = NormalizeTerminalEncoding(chunk.TerminalEncoding);
         if (pendingTerminal is null ||
             pendingTerminal.Encoding != encoding)
         {
-            pendingTerminal = null;
+            FlushTerminalGroup(ref pendingTerminal, endStream: true);
             pendingTerminal = new TerminalGroup(encoding, chunk.StreamVersion);
         }
 
+        var terminal = pendingTerminal;
         var offset = 0;
         while (offset < chunk.Bytes.Length)
         {
-            var available = MaxTerminalGroupBytes - pendingTerminal.RawBytes.Count;
+            var available = MaxTerminalGroupBytes - terminal.RawBytes.Count;
             if (available == 0)
             {
                 FlushTerminalGroup(ref pendingTerminal);
-                pendingTerminal = new TerminalGroup(encoding, chunk.StreamVersion);
+                if (chunk.StreamVersion != Interlocked.Read(ref _streamVersion))
+                {
+                    return;
+                }
                 available = MaxTerminalGroupBytes;
             }
 
             var count = Math.Min(available, chunk.Bytes.Length - offset);
             var segment = chunk.Bytes.AsSpan(offset, count);
-            pendingTerminal.RawBytes.AddRange(segment.ToArray());
-            var decoded = pendingTerminal.Decoder.Decode(segment, flush: false);
-            pendingTerminal.Text.Append(decoded.Text);
+            terminal.RawBytes.AddRange(segment.ToArray());
+            var decoded = terminal.Decoder.Decode(segment, flush: false);
+            terminal.Text.Append(decoded.Text);
             if (decoded.HadError)
             {
                 Interlocked.Increment(ref _decodeErrorCount);
@@ -289,7 +351,7 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         }
     }
 
-    private void FlushTerminalGroup(ref TerminalGroup? pendingTerminal)
+    private void FlushTerminalGroup(ref TerminalGroup? pendingTerminal, bool endStream = false)
     {
         if (pendingTerminal is null)
         {
@@ -297,15 +359,18 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         }
 
         var group = pendingTerminal;
-        pendingTerminal = null;
-        var final = group.Decoder.Decode(ReadOnlySpan<byte>.Empty, flush: true);
-        group.Text.Append(final.Text);
-        if (final.HadError)
+        if (endStream)
         {
-            Interlocked.Increment(ref _decodeErrorCount);
+            pendingTerminal = null;
+            var final = group.Decoder.Decode(ReadOnlySpan<byte>.Empty, flush: true);
+            group.Text.Append(final.Text);
+            if (final.HadError)
+            {
+                Interlocked.Increment(ref _decodeErrorCount);
+            }
         }
 
-        if (group.RawBytes.Count == 0)
+        if (group.RawBytes.Count == 0 && group.Text.Length == 0)
         {
             return;
         }
@@ -319,6 +384,9 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
             group.RawBytes.ToArray(),
             displayText: displayText,
             contentMode: LogRuleMatchMode.Terminal));
+        // Idle/size limits delimit display records, not the encoded byte stream.
+        group.RawBytes.Clear();
+        group.Text.Clear();
     }
 
     private void EmitHexLine(byte[] bytes)
@@ -343,7 +411,8 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         Emit(LogLine.Rx(
             builder.ToString(),
             bytes,
-            contentMode: LogRuleMatchMode.Hex));
+            contentMode: LogRuleMatchMode.Hex,
+            fileText: HexFormatter.Format(bytes)));
     }
 
     private void FlushHexGroup(ref HexGroup? pendingHex)
@@ -364,7 +433,11 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
 
     private void Emit(LogLine line)
     {
-        if (!_output.Writer.TryWrite(line))
+        if (_output.Writer.TryWrite(line))
+        {
+            Interlocked.Increment(ref _emittedLineCount);
+        }
+        else
         {
             Interlocked.Increment(ref _droppedOutputLineCount);
             ResetStream();
@@ -422,7 +495,8 @@ public sealed class BridgeLogProcessor : IBridgeLogProcessor
         byte[] Bytes,
         RxDisplayMode Mode,
         RxEncodingMode TerminalEncoding,
-        long StreamVersion);
+        long StreamVersion,
+        TaskCompletionSource<long>? FlushCompletion = null);
 
     private sealed class TerminalGroup
     {

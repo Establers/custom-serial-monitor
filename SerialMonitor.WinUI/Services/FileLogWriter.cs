@@ -735,7 +735,7 @@ public sealed class FileLogWriter : IFileLogWriter
                     SetCurrentLogFilePath(path);
                 }
 
-                var formatted = line.Formatted;
+                var formatted = line.FileFormatted;
                 var bytesWritten = Encoding.UTF8.GetByteCount(formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
                 batch.Add(formatted);
                 lineWasAddedToBatch = true;
@@ -1523,10 +1523,14 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         public static FileLogWriteRequest ForLine(LogLine line)
         {
-            var byteCount = Encoding.UTF8.GetByteCount(line.Formatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
+            var byteCount = Encoding.UTF8.GetByteCount(line.FileFormatted) + Encoding.UTF8.GetByteCount(Environment.NewLine);
             // Bound retained memory as well as encoded output (HEX/raw payloads
             // and UTF-16 strings can be much larger than the saved text).
             var retainedBytes = 128L + 2L * line.Text.Length + 2L * line.DisplayText.Length + (line.RawBytes?.LongLength ?? 0);
+            if (!ReferenceEquals(line.FileText, line.Text) && !ReferenceEquals(line.FileText, line.DisplayText))
+            {
+                retainedBytes += 2L * line.FileText.Length;
+            }
             return new(line, null, null, null, Math.Max(byteCount, retainedBytes));
         }
 

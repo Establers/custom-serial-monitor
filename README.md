@@ -17,7 +17,7 @@
     ·
     <a href="docs/agent_skills.md#share">다른 사람에게 공유</a>
     ·
-    <a href="docs/release_notes_v1.5.1.md">v1.5.1 릴리즈 노트</a>
+    <a href="docs/release_notes_v1.5.2.md">v1.5.2 릴리즈 노트</a>
     ·
     <a href="docs/manual_test_checklist.md">테스트 체크리스트</a>
   </p>
@@ -87,6 +87,7 @@ UI 응답성과 메모리 사용량을 예측 가능하게 유지하는 것이 �
    자동으로 모읍니다.
 5. 검색 결과, 사용자 마커, 하단 상태 카운터로 문제가 발생한 시점을 좁힙니다.
 6. 저장 명령과 시퀀스로 같은 재현 절차를 반복합니다.
+7. 필요한 경우 `로그 내보내기...`로 현재 보관 중인 로그를 별도 파일에 저장합니다.
 
 ## 왜 장시간 디버깅에 적합한가요?
 
@@ -136,6 +137,11 @@ Debug 빌드에서는 `Test` 탭의 `Show MOCK test port`를 켠 뒤 `[TEST] MOC
 `Log` 탭에서 저장 폴더, 파일 이름, 회전 크기를 정한 뒤 `LOG ON`을 누릅니다.
 HEX 모드의 수신 데이터는 byte-exact 16진수 텍스트로 기록되며 raw `.bin` 기록은
 제공하지 않습니다.
+
+실시간 파일 기록을 켜기 전의 로그도 메모리에 남아 있다면 상단의 `로그 내보내기...`로
+저장할 수 있습니다. 버튼을 누른 시점의 보관 기록을 필터로 숨겨진 기록까지 포함해
+별도 파일로 내보내며, 저장 중에도 수신과 실시간 파일 기록은 계속됩니다.
+보관 한도나 Clear로 제거된 기록은 포함되지 않습니다.
 
 ## 주요 기능
 
@@ -300,6 +306,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [수동 회귀 테스트](docs/manual_test_checklist.md)
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
+- [v1.5.2 릴리즈 노트](docs/release_notes_v1.5.2.md)
 - [v1.5.1 릴리즈 노트](docs/release_notes_v1.5.1.md)
 - [v1.5.0 릴리즈 노트](docs/release_notes_v1.5.0.md)
 - [v1.4.2 릴리즈 노트](docs/release_notes_v1.4.2.md)

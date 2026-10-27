@@ -740,11 +740,8 @@ public sealed class SerialService : ISerialService
 
     private void CompleteReceiveSession(ReceiveSession session)
     {
+        // The pipeline owns the reader and drains accepted RX after disconnect.
         session.Channel.Writer.TryComplete();
-        while (session.Channel.Reader.TryRead(out _))
-        {
-        }
-
         session.Dispose();
     }
 
