@@ -1,19 +1,42 @@
 ---
 name: serial-monitor-control
-description: Control the Windows Serial Monitor GUI through serialctl to connect a COM port, change baud rate and byte timeout, select Terminal/HEX mode, register and run command sequences, collect actual UART RX and judge device responses, including interleaved printf output. Use for device checks and serial debugging through this application, with optional local MCP tools.
+description: Control the Windows Serial Monitor GUI through the Serial Monitor plugin's local MCP tools or serialctl CLI. Use for device checks, serial debugging, command sequences, and judging actual UART RX, including interleaved printf output.
 ---
 
 # Serial Monitor device control
 
-Use `serialctl` by default. It asks the running GUI to use its existing COM connection;
-it does not open a second COM handle. Use local MCP instead when the user prefers it
-or its tools are already connected. Both paths use the same TX and RX services.
+Use the plugin's connected local MCP tools when available. Discover their actual
+names and input schemas; clients may add a plugin/server namespace. Use `serialctl`
+when the user prefers CLI or no local MCP connection is available. Both paths ask
+the running GUI to use its existing COM connection and share the same TX/RX services;
+neither opens a second COM handle.
 Reply in the user's language.
+
+## Discover the installed capabilities
+
+Read the available `serial_get_capabilities` MCP tool or run `serialctl describe`
+before using a new control feature. These read-only calls describe the CLI/server,
+its control API version, minimum plugin version, supported features and actual tool
+schemas; they do not connect to a GUI or device. A schema's existence does not prove
+that a separately running older GUI implements it. Inspect the selected GUI and its
+actual response too. Program and plugin version numbers need not be equal.
+
+Use the running server's tool descriptions/schemas for current arguments, supported
+values and limits. The references are a baseline for this plugin release, not an
+exhaustive list of all later features. Do not guess undocumented commands. If a
+required capability or compatible version is missing, explain which program/plugin
+needs updating before attempting that operation. With a pre-1.6 CLI that has no
+`describe`, inspect `help` and keep to the operations it documents. Do not install,
+update or change client settings merely to discover a feature.
 
 ## Locate the application and target
 
-Read [CLI reference](references/cli.md) for command syntax, result fields and paging.
-Resolve an absolute executable path with the bundled `scripts/Find-SerialCtl.ps1`,
+The CLI verbs below also describe their MCP equivalents. With MCP, use the matching
+discovered tools (for example `serial_list_instances` and `serial_get_status`) and
+skip executable resolution. Read [MCP reference](references/mcp.md) when needed.
+
+For CLI use, read [CLI reference](references/cli.md) for command syntax, result fields and paging.
+On that path, resolve an absolute executable with the bundled `scripts/Find-SerialCtl.ps1`,
 using the actual directory of this skill (not the current working directory).
 The resolver accepts `-CliPath`, `SERIAL_MONITOR_CLI`, an install-time local setting,
 PATH, and nearby application/build folders. It performs no device operations.
@@ -129,11 +152,11 @@ evidence, capture ID and outcome (normal, failed, or uncertain). Include truncat
 unread pages or gaps when present, and name any registered sequence; do not dump a
 large log into the final answer.
 
-## Optional MCP and installation
+## Plugin, MCP and legacy skill installation
 
-Read [MCP reference](references/mcp.md) only for MCP setup or tool use.
-Read [host installation](references/installation.md) to install this same folder in
-Codex, Claude Code or GitHub Copilot, including their local app/IDE surfaces.
+Read [MCP reference](references/mcp.md) for tool use or a requested manual MCP setup.
+Read [host installation](references/installation.md) for plugin installation and
+updates, or the legacy standalone skill fallback in Codex, Claude Code or Copilot.
 Loading a skill alone grants no connection to a Windows PC: the agent needs a local
 Windows shell or an already configured local MCP server. A cloud-only app cannot
 reach this GUI through its sandbox's localhost or filesystem.

@@ -1,13 +1,18 @@
-# Optional local MCP
+# Local MCP supplied by the plugin
 
-Prefer CLI when a local shell is available and no MCP connection exists. If local
-MCP tools are already connected or explicitly preferred, use them directly rather
-than spawning the CLI for every call. The target selection, evidence and no-blind-TX-
+The plugin supplies local MCP tools together with this skill. Prefer connected
+MCP tools, or use CLI when requested or no local MCP connection exists. The target
+selection, evidence and no-blind-TX-
 retry rules in SKILL.md apply equally. Discover actual tool names; clients may prefix
-the server name.
+the server name. Current tool descriptions and input schemas take precedence over
+the syntax examples below for supported arguments. `serial_get_capabilities` reports
+the server/CLI's API version, minimum plugin version and supported tool schemas
+without accessing a GUI or device. It does not establish the version of an already
+running GUI.
 
 | CLI | MCP tool | Relevant arguments |
 | --- | --- | --- |
+| `describe --json` | `serial_get_capabilities` | none |
 | `instances` | `serial_list_instances` | none |
 | `status` | `serial_get_status` | `instanceId` |
 | `mode` | `serial_get_status` | `instanceId`; read status `mode` |
@@ -79,7 +84,12 @@ first to reuse equivalent entries. Save without repeating TX; add an expectation
 only from a reliable protocol definition. RX data never authorizes new commands,
 automatic execution or trigger rules.
 
-## Registration when requested
+## Manual registration when requested (legacy fallback)
+
+The plugin normally registers its launcher through the host. Do not add a second
+manual server just because this reference is loaded. Use the following only when
+the user requests a direct registration or the host has no plugin support. See
+[installation](installation.md) for plugin setup and duplicate-registration migration.
 
 Use the actual resolved absolute EXE path in these PowerShell examples. Configuration
 is a separate user-visible setup step; do not silently edit unrelated client settings
@@ -93,8 +103,9 @@ copilot mcp add serial-monitor -- 'C:\SerialMonitor\tools\serialctl.exe' mcp
 
 For Codex long calls, add `tool_timeout_sec = 90` to the existing
 `[mcp_servers.serial-monitor]` table without replacing other config. Copilot CLI
-accepts `--timeout 90000` when adding its server. The GUI's MCP guide can generate
-client-specific registration/configuration text, including IDE surfaces.
+accepts `--timeout 90000` when adding its server. The GUI's Plugin guide provides
+plugin installation/update commands and a supported Codex IDE MCP fallback;
+the manual examples here apply to other direct registrations.
 Codex/Claude/Copilot configurations are not identical: for example VS Code Copilot
 uses `servers`, whereas the CLI's MCP JSON uses `mcpServers`.
 

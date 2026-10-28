@@ -1,0 +1,12 @@
+{
+  "name": "serial-monitor",
+  "version": "1.0.0",
+  "description": "Control the running Windows Serial Monitor and inspect actual UART RX.",
+  "skills": "./skills/",
+  "mcpServers": "./mcp.codex.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "Serial Monitor",
+    "shortDescription": "Control local serial devices and inspect actual UART RX"
+  }
+}

@@ -10,6 +10,7 @@ the portable zip. This installer is optional and does not use MSIX.
 - Per-user install by default, so admin rights are not required.
 - Creates a Start Menu shortcut named `Serial Monitor`.
 - Offers an optional desktop shortcut.
+- Uses the app's bundled icon for the Setup and Uninstall executables.
 - Lets the user choose the program installation folder, including another drive.
 - Keeps the portable zip deployment as the recommended fallback for quick tests.
 
@@ -87,18 +88,59 @@ fresh installs and upgrades, so users can choose another writable location, such
 as `D:\Apps\SerialMonitor`. The CLI then lives at
 `D:\Apps\SerialMonitor\tools\serialctl.exe`.
 
-## Install Skills Separately
+## Plugin Source and AI Client Registration
 
-Application setup installs the program only. Skills are available separately in
-`SerialMonitorSkills.zip` and can be installed later through its manual script.
-Application upgrades leave skills already installed in AI tool folders unchanged.
-See the [standalone skill guide](agent_skills.md) for installation and updates.
+Setup installs the GUI, `tools\serialctl.exe` and a local plugin marketplace at
+`{app}\agent-plugin`. This source contains the `serial-monitor` plugin and the
+`serial-monitor-tools` marketplace catalog. An upgrade refreshes that source along
+with the program. It does not silently install a plugin in an AI client, overwrite
+client configuration/caches, or replace legacy standalone skills.
 
-When the application moves to another folder, rerun the skill ZIP's script using
-the actual new `-CliPath`, for example
-`D:\Apps\SerialMonitor\tools\serialctl.exe`, or set `SERIAL_MONITOR_CLI` in the AI
-host's environment. Existing MCP registrations also keep their previous path:
-use the app's MCP tab to generate the new registration and update it manually.
+Use the app's **Plugin** tab to copy the selected client's installation and update
+commands. Codex desktop/CLI, Claude Code and Copilot CLI/VS Code use client-specific
+registration and reload behavior. A local source needs a host reload/restart after
+app setup; a Git-installed plugin is updated through its Git marketplace instead.
+See the [plugin guide](agent_plugins.md). `SerialMonitorPlugin.zip` provides the same
+marketplace without application binaries. `SerialMonitorSkills.zip` remains a
+[legacy standalone fallback](agent_skills.md).
+
+The launcher discovers the current CLI through an explicit `SERIAL_MONITOR_CLI`,
+nearby application files, installation registration, the default path or PATH/build
+locations. A custom Inno Setup destination is recorded for this lookup. If a local
+marketplace registration still points at an old application folder after a move,
+update that registration's source path too. Git/ZIP plugins paired with a portable
+application in another folder can set `SERIAL_MONITOR_CLI` in the actual AI host's
+environment. Already-running desktop processes do not inherit an unrelated shell's
+new environment values.
+
+Existing manual MCP registrations retain their old executable command. Update
+only the superseded registration when migrating; do not leave a duplicate server
+unless intentionally needed. Legacy skill users can rerun their existing installer
+with the actual new `-CliPath` and the same destination options.
+
+## Reinstalling While MCP Is Running
+
+Closing the GUI does not stop `serialctl mcp`: its lifetime belongs to the AI
+client that opened its stdio connection. The process can keep the installed
+`tools\serialctl.exe` locked even after the GUI closes.
+
+Setup uses Inno Setup's standard Windows Restart Manager integration with
+`CloseApplications=force`. It detects applications using the files being replaced
+and offers to close them. Restart Manager attempts shutdown first and can force
+an unresponsive process to exit after about 30 seconds. Allow that wait before
+assuming Setup is stuck. Close the GUI before updating to finish serial work and
+flush logs normally.
+
+`RestartApplications=no` leaves closed applications stopped after installation.
+Start the GUI and reconnect/restart `serial-monitor` in the AI client afterward
+so the client establishes a new stdio connection. Existing AI client registrations
+and separately installed standalone skills are retained; local plugin sources are
+refreshed, while client caches follow their own reload/update rules.
+
+These are built-in installer settings; see Inno Setup's
+[CloseApplications](https://jrsoftware.org/ishelp/topic_setup_closeapplications.htm)
+and [RestartApplications](https://jrsoftware.org/ishelp/topic_setup_restartapplications.htm)
+documentation.
 
 ## User Data
 
@@ -116,7 +158,10 @@ records and are not updated by this version.
 
 Uninstall removes installed program files only. It must not delete logs,
 profiles, diagnostics, or other user data under `%LOCALAPPDATA%\SerialMonitor`.
-It also leaves separately installed AI skill folders intact.
+It also leaves AI client registrations, installed plugin caches and separately
+installed standalone skill folders intact. A local marketplace pointing inside
+the removed application directory must be unregistered in that AI client when
+no longer needed.
 
 ## Target PC Notes
 
@@ -144,8 +189,16 @@ instead.
 - [ ] Running the installer does not request admin rights by default.
 - [ ] The program directory page is visible on fresh install and upgrade.
 - [ ] A custom program location, such as `D:\Apps\SerialMonitor`, launches correctly.
-- [ ] Installation and upgrade leave separately installed AI skills unchanged.
-- [ ] Skills can be installed later from the separate skill ZIP with the actual CLI path.
+- [ ] `agent-plugin\.claude-plugin\marketplace.json` and the complete `agent-plugin\plugins\serial-monitor` source are installed.
+- [ ] Installation and upgrade leave AI client configuration/caches and separately installed legacy skills unchanged.
+- [ ] Upgrade closes an installed `serialctl mcp` process and replaces its EXE
+      without a Windows restart; a CLI running from another folder stays running.
+- [ ] After upgrade, reconnecting MCP in the AI client starts the installed CLI.
+- [ ] Plugins can be installed later from the bundled local source, standalone plugin ZIP or published Git marketplace.
+- [ ] A local-source plugin reloads after app upgrade using each host's documented reload/restart behavior.
+- [ ] A Git-installed plugin continues to use its chosen Git source instead of being silently replaced by setup.
+- [ ] Custom installation paths are resolved by the launcher; a relocated local source registration is updated intentionally.
+- [ ] Legacy skills can still be installed from the separate skill ZIP with the actual CLI path.
 - [ ] Start Menu shortcut launches Serial Monitor.
 - [ ] Optional desktop shortcut launches Serial Monitor when selected.
 - [ ] xterm loads.

@@ -1,5 +1,5 @@
 <UserControl
-    x:Class="SerialMonitor.WinUI.Views.McpGuideView"
+    x:Class="SerialMonitor.WinUI.Views.PluginGuideView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     SizeChanged="Guide_SizeChanged">
@@ -68,12 +68,12 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel x:Name="WideNavigation" Grid.RowSpan="2" Spacing="6">
-                <TextBlock Text="MCP 연결 가이드" FontSize="11" FontWeight="SemiBold" Margin="8,3,0,2"
+                <TextBlock Text="Plugin 연결 가이드" FontSize="11" FontWeight="SemiBold" Margin="8,3,0,2"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <ListView ItemsSource="{Binding Pages}" SelectedIndex="{Binding SelectedPageIndex, Mode=TwoWay}"
                           SelectionChanged="Page_SelectionChanged" SelectionMode="Single" IsItemClickEnabled="False"
                           FontSize="11" HorizontalContentAlignment="Stretch"
-                          AutomationProperties.Name="MCP 가이드 목차">
+                          AutomationProperties.Name="Plugin 가이드 목차">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" />
@@ -94,7 +94,7 @@
             <ComboBox x:Name="CompactNavigation" Grid.Column="1" Visibility="Collapsed" Margin="0,0,0,6"
                       ItemsSource="{Binding Pages}" SelectedIndex="{Binding SelectedPageIndex, Mode=TwoWay}"
                       SelectionChanged="Page_SelectionChanged" HorizontalAlignment="Stretch" FontSize="11" MinHeight="26"
-                      AutomationProperties.Name="MCP 가이드 목차" />
+                      AutomationProperties.Name="Plugin 가이드 목차" />
 
             <ScrollViewer x:Name="ArticleScroll" Grid.Row="1" Grid.Column="1"
                           HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
@@ -106,20 +106,10 @@
                     <TextBlock Text="{Binding PageDescription}" Style="{StaticResource GuideBody}" Margin="0,0,0,6"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                    <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6" Visibility="{Binding SkillIntroVisibility}">
-                        <StackPanel Spacing="4">
-                            <TextBlock x:Uid="AgentSkillTitle" Text="AI 스킬을 활용해 보세요" FontSize="12"
-                                       FontWeight="SemiBold" TextWrapping="Wrap"
-                                       AutomationProperties.HeadingLevel="Level2" />
-                            <TextBlock x:Uid="AgentSkillIntroBody" Style="{StaticResource GuideBody}"
-                                       Text="Codex·Claude Code·GitHub Copilot에서 포트 확인, 명령 전송, RX 로그 검토를 요청해 보세요. 프로그램과 별도로 SerialMonitorSkills.zip만 받아 설치할 수 있습니다. CLI로 쓰면 MCP 등록 없이 시작할 수 있습니다." />
-                            <HyperlinkButton x:Uid="AgentSkillDownloadLink" Content="스킬 ZIP 받기 ↗"
-                                             NavigateUri="https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip"
-                                             FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
-                            <HyperlinkButton x:Uid="AgentSkillGuideLink" Content="스킬 설치 안내 ↗"
-                                             NavigateUri="https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_skills.md"
-                                             FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
-                        </StackPanel>
+                    <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6" Visibility="{Binding PluginIntroVisibility}">
+                        <HyperlinkButton x:Uid="AgentPluginRepositoryLink" Content="GitHub · Establers/custom-serial-monitor ↗"
+                                         NavigateUri="https://github.com/Establers/custom-serial-monitor"
+                                         FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
                     </Border>
 
                     <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6" Visibility="{Binding SetupVisibility}">
@@ -134,9 +124,9 @@
                                     <ComboBox ItemsSource="{Binding Clients}" SelectedIndex="{Binding SelectedClientIndex, Mode=TwoWay}"
                                               SelectionChanged="Client_SelectionChanged" HorizontalAlignment="Stretch"
                                               FontSize="11" MinHeight="26" Height="26" Padding="8,2"
-                                              AutomationProperties.Name="MCP 클라이언트 선택" />
+                                              AutomationProperties.Name="플러그인 클라이언트 선택" />
                                 </StackPanel>
-                                <StackPanel x:Name="ToolPathField" Grid.Column="1" Spacing="3">
+                                <StackPanel x:Name="ToolPathField" Grid.Column="1" Spacing="3" Visibility="{Binding ToolPathVisibility}">
                                     <TextBlock Text="serialctl.exe 경로" FontSize="11" FontWeight="SemiBold" />
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                                         <TextBox Text="{Binding ToolPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -148,7 +138,7 @@
                                     </Grid>
                                 </StackPanel>
                             </Grid>
-                            <TextBlock Text="{Binding PathStatus}" Style="{StaticResource GuideBody}"
+                            <TextBlock Text="{Binding PathStatus}" Style="{StaticResource GuideBody}" Visibility="{Binding ToolPathVisibility}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>
@@ -157,10 +147,8 @@
                     <ItemsControl ItemsSource="{Binding Sections}" ItemTemplate="{StaticResource SectionTemplate}" />
 
                     <StackPanel Visibility="{Binding SetupVisibility}" Spacing="2" Margin="0,0,0,6">
-                        <HyperlinkButton Content="선택한 클라이언트의 공식 MCP 문서 ↗" NavigateUri="{Binding SourceUri}"
+                        <HyperlinkButton Content="선택한 클라이언트의 공식 연결 문서 ↗" NavigateUri="{Binding SourceUri}"
                                          FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
-                        <TextBlock Text="공식 설정 문서 확인: 2026.10.25 · 앱 기능은 현재 구현 기준"
-                                   FontSize="10" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

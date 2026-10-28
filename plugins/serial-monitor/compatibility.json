@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "pluginVersion": "1.0.0",
+  "minimumCliVersion": "1.6.0",
+  "controlApiMajor": 1,
+  "probeTimeoutMs": 5000
+}

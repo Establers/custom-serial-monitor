@@ -1,0 +1,4 @@
+interface:
+  display_name: "Serial Monitor Control"
+  short_description: "Send device commands and inspect actual serial RX"
+  default_prompt: "Use $serial-monitor-control to inspect the connected device, send documented commands and judge its actual RX."

@@ -34,6 +34,15 @@ the xterm view only; persisted logs remain plain text.
 
 ## Local AI / CLI automation
 
+The `serial-monitor` plugin packages the shared skill and a Windows stdio launcher.
+Its marketplace is `serial-monitor-tools`, hosted in this repository and bundled
+as an optional local source at `<app>\agent-plugin`. The launcher resolves the
+installed CLI and performs a bounded read-only `describe --json` compatibility
+check before starting MCP. It does not open COM, modify AI configuration or install
+application updates. `serial_get_capabilities` exposes current CLI/server schemas
+and control API metadata independently of a GUI. This metadata does not claim that
+an already-running older GUI has the same features. See [plugin deployment](agent_plugins.md).
+
 The GUI hosts a current-user-only Named Pipe endpoint per runtime instance.
 `serialctl` provides JSON commands and an MCP stdio server; neither opens a COM
 port. `AutomationController` coordinates control reservations, bounded capture

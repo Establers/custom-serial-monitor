@@ -3636,10 +3636,10 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem Header="MCP"
+                    <TabViewItem x:Uid="PluginTab" Header="Plugin"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="AI 도구별 MCP 설치, 사용 예시와 한계 안내">
-                        <views:McpGuideView />
+                                 ToolTipService.ToolTip="AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내">
+                        <views:PluginGuideView />
                     </TabViewItem>
 
                     <TabViewItem x:Uid="StaticUi232" Header="Help"
@@ -3783,13 +3783,13 @@
                                 <Border Grid.Row="3" Background="{ThemeResource InspectorSectionBrush}"
                                         BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10,7">
                                     <StackPanel Spacing="4">
-                                        <TextBlock x:Uid="AgentSkillTitle" Text="AI 스킬을 활용해 보세요" FontSize="12"
+                                        <TextBlock x:Uid="AgentPluginTitle" Text="AI 플러그인으로 연결하세요" FontSize="12"
                                                    FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock x:Uid="AgentSkillAboutBody" FontSize="11" TextWrapping="Wrap"
+                                        <TextBlock x:Uid="AgentPluginAboutBody" FontSize="11" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                   Text="Codex·Claude Code·GitHub Copilot용 스킬로 AI 장치 제어를 시작해 보세요. 스킬 ZIP을 별도로 받아 설치할 수 있습니다." />
-                                        <HyperlinkButton x:Uid="AgentSkillGuideLink" Content="스킬 설치 안내 ↗"
-                                                         NavigateUri="https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_skills.md"
+                                                   Text="Codex·Claude Code·GitHub Copilot용 AI 플러그인으로 장치 제어를 시작해 보세요. Plugin 탭에서 설치와 업데이트 방법을 확인할 수 있습니다." />
+                                        <HyperlinkButton x:Uid="AgentPluginGuideLink" Content="플러그인 설치 · 업데이트 안내 ↗"
+                                                         NavigateUri="https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md"
                                                          FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
                                     </StackPanel>
                                 </Border>

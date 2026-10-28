@@ -110,13 +110,22 @@ if (-not (Test-Path -LiteralPath $portableExe -PathType Leaf)) {
     throw "Portable executable not found: $portableExe"
 }
 
-# Skills are distributed separately. Reject staging from older app builds that
-# bundled skill installers, even when the caller deliberately skips publishing.
+# Plugin source is bundled, while AI client installation stays an explicit step.
+# Reject older staging even when publishing was deliberately skipped.
 if (Test-Path -LiteralPath (Join-Path $portableDir 'skills')) {
     throw 'Portable output contains old bundled skills. Run build_installer.ps1 without -SkipPublish to refresh it.'
 }
 if (-not (Test-Path -LiteralPath (Join-Path $portableDir 'tools\serialctl.exe') -PathType Leaf)) {
     throw 'Portable output is missing tools\serialctl.exe. Run build_installer.ps1 without -SkipPublish to refresh it.'
+}
+foreach ($relative in @('agent-plugin\.claude-plugin\marketplace.json',
+    'agent-plugin\plugins\serial-monitor\plugin.json',
+    'agent-plugin\plugins\serial-monitor\scripts\Start-SerialMonitorMcp.ps1',
+    'agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md',
+    'docs\agent_plugins.md')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $portableDir $relative) -PathType Leaf)) {
+        throw "Portable output is missing the plugin distribution asset '$relative'. Run build_installer.ps1 without -SkipPublish."
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $installerOutputDir | Out-Null

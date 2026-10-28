@@ -1,7 +1,7 @@
 #define MyAppName "Serial Monitor"
 #define MyAppExeName "SerialMonitor.WinUI.exe"
 #define MyAppPublisher "Serial Monitor"
-#define MyAppVersion "1.5.2"
+#define MyAppVersion "1.6.0"
 #define BuildTimestamp GetDateTimeString('yyyymmdd_hhnn', '', '')
 #ifndef PortableSourceDir
   #define PortableSourceDir "..\release\SerialMonitorPortable"
@@ -26,7 +26,10 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 SetupLogging=yes
+CloseApplications=force
+RestartApplications=no
 LicenseFile=..\LICENSE
+SetupIconFile={#PortableSourceDir}\Assets\AppIcon\SerialMonitor.ico
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 

@@ -50,12 +50,24 @@ The script creates:
 - `release\SerialMonitorPortable_yyyyMMdd_HHmm.zip`
 - `release\SerialMonitorPortable.zip` and its `.sha256` checksum (fixed download name)
 - `release\SerialMonitorPortable\README_PORTABLE.txt`
-- `release\SerialMonitorSkills.zip` and its `.sha256` checksum (separate skill download)
+- `release\SerialMonitorPortable\agent-plugin` (local plugin marketplace and complete plugin source)
+- `release\SerialMonitorPlugin.zip` and its `.sha256` checksum (plugin source without app binaries)
+- `release\SerialMonitorSkills.zip` and its `.sha256` checksum (legacy standalone skill)
 
-Users who already have the application can download only `SerialMonitorSkills.zip`.
-It contains the skill installer and CLI/MCP guides, without application binaries.
-See [skill installation and sharing](agent_skills.md). Build just this ZIP without
+Register the portable folder's `agent-plugin` as a local marketplace in the selected
+AI host. Keep it beside `tools\serialctl.exe`; moving only the plugin or only the EXE
+loses that nearby-path relationship. A separately downloaded plugin ZIP or published
+Git marketplace can also use the application, with `SERIAL_MONITOR_CLI` when needed.
+See [plugin installation and updates](agent_plugins.md). Build the plugin ZIP without
 publishing the application with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package_agent_plugin.ps1
+```
+
+The program installer/portable publisher updates the local plugin source, not AI
+client caches or personal settings. Apply it through the host's reload/restart.
+The legacy [standalone skill installer](agent_skills.md) remains available with:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package_agent_skill.ps1
@@ -109,6 +121,8 @@ If the app does not start, check:
 
 - [ ] `release\SerialMonitorPortable` exists.
 - [ ] `release\SerialMonitorPortable\SerialMonitor.WinUI.exe` exists.
+- [ ] `release\SerialMonitorPortable\tools\serialctl.exe` and `agent-plugin\.claude-plugin\marketplace.json` exist.
+- [ ] `release\SerialMonitorPlugin.zip` and its checksum exist without app binaries or machine-specific settings.
 - [ ] `release\SerialMonitorPortable\Assets\xterm\index.html` exists.
 - [ ] `release\SerialMonitorPortable\Assets\xterm\fonts\JetBrainsMono-Regular.woff2` exists.
 - [ ] `release\SerialMonitorPortable\Assets\xterm\fonts\JetBrainsMono-Bold.woff2` exists.

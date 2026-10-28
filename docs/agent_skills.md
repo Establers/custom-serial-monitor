@@ -1,4 +1,10 @@
-# CLI 제어용 공통 Agent Skill
+# 기존 단독 Agent Skill 설치 (호환 경로)
+
+새 설치는 skill과 로컬 MCP 연결을 함께 제공하는 **Serial Monitor Plugin**을 사용하세요.
+[플러그인 설치·업데이트 가이드](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md)와
+GUI의 **Plugin** 탭에서 Codex·Claude Code·Copilot별 설치 명령을 확인할 수 있습니다.
+아래 내용은 플러그인 지원이 없는 환경이나 CLI만 사용하는 기존 설치를 위한 안내입니다.
+플러그인 설치가 단독 skill이나 수동 MCP 등록을 자동으로 제거하지 않습니다.
 
 `skills/serial-monitor-control`은 Codex, Claude Code, GitHub Copilot에서 재사용할
 `SKILL.md` 패키지입니다. 기본 경로는 CLI이고, 이미 연결된 로컬 MCP도 사용할 수 있습니다.
@@ -35,7 +41,7 @@ SerialMonitorSkills/
 
 3. **설치된 프로그램의 CLI 경로**를 지정해서 실행합니다. 아래는 일반 설치의 기본
    경로입니다. 포터블·사용자 지정 설치라면 `-CliPath`를 자신의 `tools\serialctl.exe`
-   경로로 바꾸세요. 앱의 MCP 탭에서도 CLI 경로를 확인·복사할 수 있습니다.
+   경로로 바꾸세요. 앱의 Plugin 탭에서도 CLI 경로를 확인·복사할 수 있습니다.
    예를 들어 프로그램이 `D:\Apps\SerialMonitor`에 있으면
    `-CliPath 'D:\Apps\SerialMonitor\tools\serialctl.exe'`를 사용합니다.
 
@@ -77,8 +83,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\Install-Skill.ps1 -
 사용자 지정 스킬 폴더를 썼다면 같은 `-CodexSkillDirectory`·`-ClaudeSkillDirectory`·
 `-CopilotSkillDirectory`도 다시 지정합니다. 대안으로 AI 도구 실행 환경의
 `SERIAL_MONITOR_CLI`에 실제 새 실행 파일 경로를 지정할 수 있습니다.
-MCP 등록은 별개입니다. MCP를 사용한다면 앱의 MCP 탭에서 실제 새 `serialctl.exe` 경로로
-등록 내용을 생성해 이전 등록을 수정하세요. 프로그램 제거도 AI 도구의 스킬 폴더를 삭제하지 않습니다.
+수동 MCP 등록은 별개입니다. 기존 등록이 실제 새 `serialctl.exe` 경로를 가리키도록
+[AI 제어 가이드](ai_control.md#수동-mcp-등록-호환-경로)에 따라 수정하세요.
+프로그램 제거도 AI 도구의 스킬 폴더를 삭제하지 않습니다.
 
 ## 사용자 지정 스킬 폴더와 자동 검색
 
@@ -227,7 +234,8 @@ CLI/MCP에서 시퀀스를 등록하면 GUI의 같은 목록·프로필에 저�
 
 ## MCP와 앱
 
-CLI는 기본 사용 방식이며 MCP는 선택입니다.
+이 단독 skill 호환 설치에서는 CLI를 사용할 수 있으며 연결된 MCP도 지원합니다.
+플러그인 설치는 MCP 연결을 함께 제공하는 별도의 기본 경로입니다.
 [AI 제어 가이드](ai_control.md)에서 MCP 등록법·도구와 자세한 동작을 확인할 수 있습니다.
 MCP 설정은 설치 스크립트에서 자동 변경하지 않습니다.
 

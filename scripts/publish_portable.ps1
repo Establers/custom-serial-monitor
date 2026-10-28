@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [switch]$StopRunning,
     [switch]$NoZip,
@@ -199,11 +199,16 @@ if (-not (Test-Path -LiteralPath $exePath)) {
 
 Copy-WinUIResourceArtifacts -RepoPath $repoRoot -ConfigurationName $Configuration -DestinationPath $portableDirFull
 Copy-Item -LiteralPath $licensePath -Destination (Join-Path $portableDirFull "LICENSE") -Force
+# App setup refreshes a local marketplace source only. AI clients remain in
+# control of plugin installation, trust and reload; no client settings are edited.
+Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\agent_plugins.md') -Destination (Join-Path $portableDirFull 'docs\agent_plugins.md') -Force
+$pluginPackage = & (Join-Path $scriptRoot 'package_agent_plugin.ps1') -OutputDirectory $releaseRootFull `
+    -StageDirectory (Join-Path $portableDirFull 'agent-plugin')
 
 $requiredAssets = @(
     "App.xbf",
     "MainWindow.xbf",
-    "Views\McpGuideView.xbf",
+    "Views\PluginGuideView.xbf",
     "SerialMonitor.WinUI.pri",
     "Assets\xterm\index.html",
     "Assets\xterm\xterm.js",
@@ -219,6 +224,11 @@ $requiredAssets = @(
     "docs\sequence_examples.json",
     "docs\ai_control.md",
     "docs\agent_skills.md",
+    "docs\agent_plugins.md",
+    "agent-plugin\.claude-plugin\marketplace.json",
+    "agent-plugin\plugins\serial-monitor\plugin.json",
+    "agent-plugin\plugins\serial-monitor\scripts\Start-SerialMonitorMcp.ps1",
+    "agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md",
     "tools\serialctl.exe",
     "LICENSE"
 )
@@ -231,7 +241,7 @@ foreach ($relativeAsset in $requiredAssets) {
 }
 
 if (Test-Path -LiteralPath (Join-Path $portableDirFull 'skills')) {
-    throw 'Application output must not include skills. Distribute SerialMonitorSkills.zip separately.'
+    throw 'Standalone skills must not be installed by app setup. Use the bundled agent-plugin marketplace or the legacy skill ZIP.'
 }
 
 $readmePath = Join-Path $portableDirFull "README_PORTABLE.txt"
@@ -275,11 +285,15 @@ AI sequence authoring
 
 AI device control
 -----------------
-- Open docs\agent_skills.md for the shared Codex / Claude Code / Copilot skill.
-- Users with the app installed can download SerialMonitorSkills.zip separately and point -CliPath at tools\serialctl.exe.
-- Extract the separate skill ZIP and run its skills\Install-Skill.ps1 for project or personal use.
+- Open docs\agent_plugins.md for the Codex / Claude Code / Copilot plugin.
+- The agent-plugin folder is a local marketplace source; register and install it once using the app Plugin tab.
+- App upgrades refresh this bundled source. Reload/update the plugin in the AI host as directed by the guide.
+- SerialMonitorPlugin.zip is the standalone plugin marketplace download; Git updates use Establers/custom-serial-monitor.
+- App setup never installs plugins into AI clients or changes their permissions/settings.
+- SerialMonitorSkills.zip remains available only for legacy standalone skill installation.
 - tools\serialctl.exe controls this running GUI and collects actual RX; the GUI owns the COM port.
-- CLI is the default path. Optional local MCP setup is in the app MCP tab and docs\ai_control.md.
+- The plugin supplies the shared skill and local MCP launcher. Use the app Plugin tab for setup and updates.
+- CLI fallback and advanced manual MCP setup remain documented in docs\ai_control.md.
 
 If the app does not start
 -------------------------
@@ -326,6 +340,9 @@ Write-Host "Portable publish complete."
 Write-Host "Folder: $portableDirFull"
 Write-Host "Executable: $exePath"
 Write-Host "Files: $fileCount"
+Write-Host "Plugin marketplace: $($pluginPackage.StageDirectory)"
+Write-Host "Plugin download: $($pluginPackage.ZipPath)"
+Write-Host "Plugin SHA-256: $($pluginPackage.ChecksumPath)"
 if ($zipPath) {
     Write-Host "Zip: $zipPath"
     Write-Host "SHA-256: $zipChecksumPath"

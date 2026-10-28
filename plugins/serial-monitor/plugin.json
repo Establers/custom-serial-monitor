@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "serial-monitor",
+  "version": "1.0.0",
+  "description": "Control the running Windows Serial Monitor, send documented device commands and inspect actual UART RX.",
+  "author": {
+    "name": "Serial Monitor"
+  },
+  "repository": "https://github.com/Establers/custom-serial-monitor",
+  "license": "MIT",
+  "keywords": ["serial", "uart", "embedded", "windows"],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true
+    }
+  }
+}
