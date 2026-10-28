@@ -924,11 +924,10 @@
   <data name="AutomationStatus.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI/CLI가 이 앱의 시리얼 연결을 사용합니다. RX 수집은 화면 일시정지·필터와 독립적으로 동작합니다.</value></data>
   <data name="StopAutomation.Content" xml:space="preserve"><value>AI 중지</value></data>
   <data name="StopAutomation.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>RX 수집을 중지합니다. 이미 전송한 명령은 취소되지 않습니다.</value></data>
-  <data name="AgentSkillTitle.Text" xml:space="preserve"><value>AI 스킬을 활용해 보세요</value></data>
-  <data name="AgentSkillIntroBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot에서 포트 확인, 명령 전송, RX 로그 검토를 요청해 보세요. 프로그램과 별도로 SerialMonitorSkills.zip만 받아 설치할 수 있습니다. CLI로 쓰면 MCP 등록 없이 시작할 수 있습니다.</value></data>
-  <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot용 스킬로 AI 장치 제어를 시작해 보세요. 스킬 ZIP을 별도로 받아 설치할 수 있습니다.</value></data>
-  <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>스킬 ZIP 받기 ↗</value></data>
-  <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>스킬 설치 안내 ↗</value></data>
+  <data name="AgentPluginTitle.Text" xml:space="preserve"><value>AI 플러그인으로 연결하세요</value></data>
+  <data name="AgentPluginAboutBody.Text" xml:space="preserve"><value>Codex·Claude Code·GitHub Copilot용 AI 플러그인으로 장치 제어를 시작해 보세요. Plugin 탭에서 설치와 업데이트 방법을 확인할 수 있습니다.</value></data>
+  <data name="AgentPluginRepositoryLink.Content" xml:space="preserve"><value>GitHub · Establers/custom-serial-monitor ↗</value></data>
+  <data name="AgentPluginGuideLink.Content" xml:space="preserve"><value>플러그인 설치 · 업데이트 안내 ↗</value></data>
   <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: 문자 로그·텍스트 명령, 줄 끝 적용</value></data>
   <data name="HexModeDescription" xml:space="preserve"><value>HEX: 원본 바이트를 16진수로 표시·전송, 줄 끝 미적용</value></data>
   <data name="SaveLogHistoryButton.Content" xml:space="preserve"><value>로그 내보내기...</value></data>
@@ -954,4 +953,6 @@
   <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>버튼을 누른 순간 남아 있는 로그를 별도 파일로 저장합니다. 필터로 숨겨진 기록도 포함하며 저장창을 연 뒤 들어오는 로그는 제외합니다. 실시간 파일 저장 중에도 사용할 수 있습니다.</value></data>
   <data name="LogHistoryPickerTitle" xml:space="preserve"><value>로그 내보내기</value></data>
   <data name="LogHistoryExportAction" xml:space="preserve"><value>내보내기</value></data>
+  <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
+  <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내</value></data>
 </root>

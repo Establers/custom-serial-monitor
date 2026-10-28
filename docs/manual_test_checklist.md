@@ -362,18 +362,20 @@ real hardware when available.
 - [ ] Confirm `LOG ON` is light green and `LOG OFF` is red-orange in both the
   header and Settings.
 
-## Event Detection And Context
+## Event Detection And Original Logs
 
 - [ ] Connect to `MOCK`.
 - [ ] Wait for WARN/ERROR/FAULT events.
 - [ ] Open Events tab and confirm events append incrementally.
 - [ ] Select an event.
-- [ ] Open Context tab and confirm context appears immediately.
-- [ ] Double-click an event and confirm Context opens immediately.
-- [ ] Confirm BEFORE, MATCHED, and AFTER sections are visible.
-- [ ] Select context text and press Ctrl+C.
-- [ ] Click Copy Event Context and paste into Notepad.
-- [ ] Confirm event detection/context works with Log Save OFF.
+- [ ] Confirm the Context tab is absent; Events and rule notification controls remain.
+- [ ] Double-click a retained event and confirm its original log is selected in
+  the main terminal, with surrounding lines available for reading.
+- [ ] Continue receiving logs and confirm the jumped position stays visible until
+  Auto Scroll is explicitly enabled again.
+- [ ] Double-click a filtered or expired event and confirm a clear status message
+  appears without jumping to a different log with the same message.
+- [ ] Confirm event detection and original-log navigation work with Log Save OFF.
 - [ ] Confirm no `*_events.log` file is created.
 
 ## Event Auto And Latest
@@ -425,6 +427,19 @@ real hardware when available.
   HEX highlight/filter rules match its raw bytes in the rebuilt view.
 
 ## Search
+
+- [ ] Hide timestamps and RX/TX prefixes, receive `SYS READY`, `RX < READY`,
+  `[12:34:56] READY`, and a payload with leading spaces. Search each entire
+  payload and confirm neither the match nor its leading text is lost.
+- [ ] After searching, change the query/options or timestamp/direction display.
+  Press F3/F4 before refreshing: confirm the old result selection does not move.
+- [ ] Keep receiving while a large search runs and confirm its result snapshot
+  is marked stale when newer logs were excluded.
+- [ ] Search more than 1,000 matching lines. Start with Shift+Enter and cross
+  page boundaries with F3/F4: confirm the list page and selected row follow the
+  original-log position. Press Enter on a selected result to jump to it.
+- [ ] Search a combining accent, Korean text, emoji, and tab-containing text;
+  confirm selection covers the intended terminal cells and nearby logs remain visible.
 
 - [ ] Search for `WARN`.
 - [ ] Confirm match count updates.
@@ -594,7 +609,8 @@ real hardware when available.
 
 - [ ] Connect to `MOCK`.
 - [ ] Wait until serial log file is created.
-- [ ] Generate an event and confirm it remains available in Events/Context.
+- [ ] Generate an event and confirm it remains available in Events; double-click
+  to inspect its original log while it remains in the visible buffer.
 - [ ] Open the Log tab.
 - [ ] Open current serial log.
 - [ ] Open logs folder.
@@ -644,8 +660,8 @@ real hardware when available.
 - [ ] During sustained mock event bursts, confirm the event list updates without
   entry/exit fades, retains the configured visible limit, and follows the latest
   event only when auto-scroll is enabled and the pointer is outside the list.
-- [ ] Select a retained event during a burst and verify its selection and context
-  stay on that event; verify safe selection clearing when it leaves the buffer.
+- [ ] Select a retained event during a burst and verify its selection stays on
+  that event; verify safe selection clearing when it leaves the buffer.
 - [ ] Copy footer status during a burst and confirm `Event UI` reports pending
   items, batch count, maximum batch size, queue drops, and last/maximum synchronous
   batch time. These times exclude deferred XAML layout, paint, and scrolling.
@@ -672,13 +688,33 @@ real hardware when available.
 - [ ] Confirm stale profile or search-result states are not treated as health
   errors.
 
-## AI CLI / MCP
+## Time/position navigation and activity graph
+
+- [ ] Confirm the default terminal has no additional activity bar and uses its full available height. The Navigate inspector tab must use the same native styles as Events and Search.
+- [ ] With an empty buffer, open Ctrl+G and verify helpful empty-state validation in a native WinUI ContentDialog. Receive logs and confirm the Go to toolbar button opens the same dialog; Escape/Cancel must restore focus without moving the log.
+- [ ] Jump by local HH:mm:ss, full YYYY-MM-DD HH:mm:ss.fff, #1, #500000, 0%, 70%, and 100%. Check destination preview, centered highlight and surrounding context.
+- [ ] From a historical position, use -5m and +30s. Confirm the current viewport center is the reference, rather than wall clock/latest RX.
+- [ ] Try invalid dates, missing dates across midnight, out-of-range times, #0 and 101%. Errors must stay in the dialog without moving or affecting RX.
+- [ ] Select Navigate, click a peak and an idle interval; hover for time/count/rate, zoom with +/- and Ctrl+wheel, reset to All. Test chart arrows/Home/End/Enter. Switch tabs, collapse/expand the inspector and minimize/restore the window; graph refreshes must stop while hidden and resume with current data.
+- [ ] Receive new RX after a jump and confirm the chosen viewport stays in place, Auto Scroll is off, RX/file logs continue, and view pause is unchanged.
+- [ ] Use Back repeatedly, including a wrapped log offset before and after column resize. After retention eviction, an expired Back anchor must report unavailable rather than jump elsewhere.
+- [ ] With one million retained lines, drag/resize the window, jump to #500000 and inspect peaks. No repeated whole-buffer scans, unbounded history, or frozen receive controls.
+- [ ] Verify Ctrl+C/Ctrl+M/Ctrl+F inside the native jump input do not copy terminal selection, create markers, or focus the main search. Tab/Shift+Tab must stay within the native dialog and Escape must close it. No HTML popup or browser-native controls should appear.
+- [ ] Verify Korean/English, light/dark/high contrast, narrow widths, clear/mode change, full screen restore, and a system clock regression.
+
+## AI Plugin / CLI / MCP
 
 - [ ] Confirm Terminal/HEX is fixed to the left of Port, including when the connection toolbar is scrolled. Open each mode dropdown and check the short Terminal/HEX item tooltips in Korean/English.
 - [ ] Use CLI `mode`, `mode --set hex`, and `mode --set terminal`, or MCP `serial_set_mode`. Check status.mode, both GUI selectors and active rule mode; mode changes clear visible logs/search without deleting saved logs. A mode change sends no bytes and does not open/close COM. Explicit CLI/MCP TX formatting remains independent.
 - [ ] During AI capture, GUI TX, sequences, bridge startup/activity and reconnect, mode mutations must be busy and the GUI mode selectors disabled. After completion/cancellation, mode selectors must recover.
-- [ ] In MCP > Quick start, confirm the AI skill card offers the separate `SerialMonitorSkills.zip` download and installation guide. Other MCP pages keep their existing content.
-- [ ] In About, confirm the brief skill introduction and installation-guide link. Check Korean/English text, narrow panels, and light/dark themes.
+- [ ] Confirm the old MCP menu is named Plugin. Check quick start, client installation/update, usage examples and troubleshooting in Korean/English, narrow panels and light/dark themes.
+- [ ] In Plugin quick start and About, confirm GitHub is the primary installation source and `docs/agent_plugins.md` is the guide. ZIP/local installation does not appear in the quick-start flow.
+- [ ] Install from `https://github.com/Establers/custom-serial-monitor.git` independently in Codex desktop/CLI, Claude Code and Copilot CLI. Confirm the plugin skill and MCP tool schemas are available in a new session. Verify Copilot VS Code with agent plugins enabled; do not treat a Codex IDE MCP fallback as a plugin installation.
+- [ ] Update the published Git plugin through each host. Confirm marketplace listing refresh versus installed-plugin update follows the selected host.
+- [ ] Upgrade the GUI in place and reconnect MCP. Confirm the Git-installed plugin remains managed by its Git source. Separately test `<app>\agent-plugin` as a development/offline fallback and apply local changes through the host's reload/restart.
+- [ ] Install to a path containing spaces/Korean and to another drive. Test launcher discovery from the installed registry and from a nearby portable app; test `SERIAL_MONITOR_CLI` with AI launched from that actual shell.
+- [ ] Run `serialctl describe --json` and MCP `serial_get_capabilities` without a running GUI. Confirm supported tools/versions are returned with no COM access or TX. Test missing/old CLI diagnostics without contaminating MCP stdout.
+- [ ] Keep an old standalone skill and manual server registration while migrating. Confirm setup does not delete them; intentionally remove only superseded duplicates after read-only plugin verification.
 - [ ] Run the new GUI, then `serialctl instances`; select `--instance` when two GUIs are running.
 - [ ] Connect through the GUI, then `serialctl request --port COM7 --text "status" --duration-ms 2000`.
   Confirm actual RX appears in both the GUI and the capture; interleaved output is preserved without matching.

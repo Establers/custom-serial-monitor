@@ -6,12 +6,12 @@ using Windows.ApplicationModel.DataTransfer;
 
 namespace SerialMonitor.WinUI.Views;
 
-public sealed partial class McpGuideView : UserControl
+public sealed partial class PluginGuideView : UserControl
 {
-    private readonly McpGuideViewModel _model = new();
+    private readonly PluginGuideViewModel _model = new();
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _feedbackTimer;
 
-    public McpGuideView()
+    public PluginGuideView()
     {
         InitializeComponent();
         GuideRoot.DataContext = _model;
@@ -30,7 +30,7 @@ public sealed partial class McpGuideView : UserControl
         }
         catch (Exception ex)
         {
-            RuntimeDiagnostics.RecordError("McpGuide.Copy", ex);
+            RuntimeDiagnostics.RecordError("PluginGuide.Copy", ex);
             _model.ActionStatus = "복사하지 못했습니다. 본문을 선택해 Ctrl+C로 복사하세요.";
         }
         CopyFeedback.Visibility = Visibility.Visible;

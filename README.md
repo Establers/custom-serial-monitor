@@ -11,13 +11,11 @@
   <p>
     <a href="https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSetup.exe"><strong>프로그램 다운로드</strong></a>
     ·
-    <a href="https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip"><strong>스킬 ZIP 다운로드</strong></a>
+    <a href="#ai-plugin-install"><strong>AI Plugin 설치</strong></a>
     ·
-    <a href="#ai-skill-install"><strong>AI 스킬 설치</strong></a>
+    <a href="docs/agent_plugins.md#share">다른 사람에게 공유</a>
     ·
-    <a href="docs/agent_skills.md#share">다른 사람에게 공유</a>
-    ·
-    <a href="docs/release_notes_v1.5.2.md">v1.5.2 릴리즈 노트</a>
+    <a href="docs/release_notes_v1.6.0.md">v1.6.0 변경 사항</a>
     ·
     <a href="docs/manual_test_checklist.md">테스트 체크리스트</a>
   </p>
@@ -29,46 +27,41 @@
 | --- | --- | --- |
 | 일반 설치 | [프로그램 설치 EXE](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSetup.exe) | 프로그램 설치 위치 선택 → 설치 후 실행 |
 | 프로그램 포터블 | [프로그램 포터블 ZIP](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorPortable.zip) | ZIP 전체를 풀고 `SerialMonitor.WinUI.exe` 실행 |
-| AI 스킬만 설치 | [스킬 전용 ZIP](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip) | 스킬 ZIP을 풀고 아래 설치 명령 실행 · [자세한 가이드](docs/agent_skills.md) |
+| AI 플러그인 | [GitHub 저장소](https://github.com/Establers/custom-serial-monitor) | 아래에서 사용할 AI 도구의 설치 명령 실행 |
 
 [릴리스 설명과 SHA-256 체크섬](https://github.com/Establers/custom-serial-monitor/releases/latest)도 제공합니다.
 
 <a id="ai-skill-install"></a>
+<a id="ai-plugin-install"></a>
 
-## AI 스킬 빠른 설치
+## AI Plugin 빠른 설치
 
-**프로그램이 이미 있다면 스킬 전용 `SerialMonitorSkills.zip`만 받아 설치합니다.**
-프로그램은 v1.5.0 이상을 사용하며 설치 폴더에 AI 제어용 `tools\serialctl.exe`가 있어야 합니다.
-
-1. [스킬 ZIP 다운로드](https://github.com/Establers/custom-serial-monitor/releases/latest/download/SerialMonitorSkills.zip)에서
-   **`SerialMonitorSkills.zip`**을 받아 압축을 풉니다.
-2. 압축을 푼 `SerialMonitorSkills` 폴더에서 PowerShell을 열고 아래 명령을 실행합니다.
-   `-CliPath`는 **이미 설치한 프로그램의 CLI 경로**입니다. 아래는 기본 설치 경로이며,
-   포터블·사용자 지정 설치라면 자신의 `tools\serialctl.exe` 경로로 바꾸세요.
-   예를 들어 D 드라이브에 설치했다면 `-CliPath 'D:\Apps\SerialMonitor\tools\serialctl.exe'`입니다.
+프로그램 v1.6.0 이상을 설치하고 GUI를 실행한 뒤, **사용할 AI 도구의 명령만** 실행하세요.
+플러그인은 [GitHub 저장소](https://github.com/Establers/custom-serial-monitor)에서 설치·업데이트합니다.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\Install-Skill.ps1 -Client All -Scope User -CliPath "$env:LOCALAPPDATA\Programs\SerialMonitor\tools\serialctl.exe"
+# Codex 데스크톱·CLI
+codex plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+codex plugin add serial-monitor@serial-monitor-tools
+
+# Claude Code
+claude plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+claude plugin install serial-monitor@serial-monitor-tools --scope user
+
+# GitHub Copilot CLI
+copilot plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+copilot plugin install serial-monitor@serial-monitor-tools
 ```
 
-3. 세 도구의 현재 사용자 범위에 스킬이 설치됩니다. Serial Monitor GUI를 실행하고
-   AI 도구에서 스킬을 새로고침하거나 새 세션을 엽니다.
-   장치 명령 문서와 함께 다음처럼 요청하세요. `COM7`은 실제 대상 포트로 바꿉니다.
+설치 후 AI 도구에서 플러그인 활성 상태를 확인하고 새 세션을 시작합니다. 먼저 읽기 전용으로
+연결을 확인하세요.
 
-> serial-monitor-control 스킬로 COM7 연결을 확인하고, 제품 문서에 있는 상태 명령을
-> 보내서 2초간 받은 전체 RX로 정상 여부를 판단해줘.
+> Serial Monitor 플러그인의 지원 기능과 실행 중인 GUI 목록을 조회해줘.
+> 대상 GUI의 연결 상태와 저장 명령을 알려주고, 명령 전송이나 연결 변경은 하지 마.
 
-CLI 사용에는 MCP 등록이 필요하지 않습니다. MCP를 사용할 때는 앱의 **MCP** 탭 또는
-[MCP 안내](skills/serial-monitor-control/references/mcp.md)를 참고하세요.
-다른 사람에게도 **스킬 ZIP과 설치 가이드 링크**를 공유하면 됩니다.
-특정 도구·프로젝트에만 설치하는 방법은
-[스킬 설치·공유 가이드](docs/agent_skills.md#share)에 있습니다.
-
-프로그램 설치 위치는 설치 화면에서 C·D 드라이브 등 원하는 폴더로 고를 수 있습니다.
-**스킬은 필요할 때 별도 ZIP으로 수동 설치하며, 프로그램 업데이트가 설치된 스킬을 교체하지 않습니다.**
-새 스킬을 적용하거나 프로그램 위치를 옮겼다면 새 ZIP의 설치 명령에 실제 `-CliPath`를 지정해
-다시 실행하세요. MCP를 사용한다면 앱의 MCP 탭에서 새 경로로 등록도 수정합니다.
-[스킬 업데이트·프로그램 경로 변경 안내](docs/agent_skills.md#app-path)에서 확인하세요.
+프로그램은 인스톨러로, 플러그인은 AI 도구의 갱신 기능으로 업데이트합니다.
+VS Code 설치·업데이트와 기존 skill에서 전환하는 방법은
+[플러그인 가이드](docs/agent_plugins.md)를 참고하세요.
 
 ![Cute background를 끈 상태에서 MOCK 로그와 탐지 이벤트를 표시하는 Serial Monitor](docs/images/serial-monitor-overview.png)
 
@@ -193,7 +186,29 @@ API와 대체 요청의 네트워크 대기는 합계 최대 10초이며, 일반
 
 `F3`는 다음 일치로, `Shift+F3` 또는 `F4`는 이전 일치로 이동합니다.
 
-## AI CLI / MCP 제어
+## 시간·위치 이동과 로그 발생량
+
+상단의 `위치 이동` 또는 `Ctrl+G`로 앱의 다른 편집 창과 같은 WinUI 이동 창을 엽니다.
+현재 보관된 시간 범위를 확인하고 원하는 위치로 바로 이동할 수 있습니다.
+`14:32:10`, `2026-10-27 23:10`, `#500000`, `70%`를 입력할 수 있습니다.
+`-5m`과 `+30s`는 현재 화면 가운데 로그를 기준으로 앞뒤로 이동하며,
+여러 날짜의 로그가 있으면 날짜까지 입력해야 합니다. 이동 전에 목적지의
+시각과 줄 번호를 미리 보여주고, 해당 시각의 로그가 없으면 그 이후 첫 로그로 이동합니다.
+
+이벤트·검색 등과 함께 있는 `탐색` 탭에서 촘촘한 발생량 그래프를 확인합니다.
+그래프는 해당 탭 안에 표시되며, 로그 화면의 기본 높이는 유지됩니다.
+시간별 피크와 현재 화면의 위치를 함께 표시합니다.
+마우스를 올리면 시각·로그 수·초당 발생량을 확인하고, 클릭하면 해당 시각으로 이동합니다.
+`+`/`−` 또는 `Ctrl+휠`로 확대·축소하고 `전체`로 돌아갈 수 있습니다.
+그래프에 포커스를 두면 방향키로 시간을 선택하고 `Enter`로 이동할 수도 있습니다.
+`이전 위치`는 이동 전 위치를 최대 64개까지 자동 기억합니다.
+다른 탭을 보거나 탭 영역을 접으면 그래프 갱신을 멈춥니다.
+
+이동하면 자동 스크롤이 꺼지고 수신과 파일 기록은 계속됩니다. 이동과 그래프는
+현재 화면에 보관 중인 로그를 기준으로 하며, 줄 번호와 비율도 이 범위 안의 위치입니다.
+보관 한도를 넘어 사라진 위치는 복원할 수 없음을 표시합니다.
+
+## AI Plugin / CLI / MCP 제어
 
 실행 중인 GUI의 연결을 Codex·Claude Code·GitHub Copilot CLI에서 사용할 수 있습니다.
 `tools\serialctl.exe`로 포트 연결, Terminal/HEX 모드 조회·변경, 명령 전송, 시퀀스 등록·실행·중지, 지정 시간의 **전체 RX 수집**과 페이지 조회를
@@ -212,15 +227,16 @@ API와 대체 요청의 네트워크 대기는 합계 최대 10초이며, 일반
 매칭과 무관하게 정해진 시간의 전체 RX를 저장하므로, 반환된 `captureId`로 원문을 읽어 판단할 수 있습니다.
 시퀀스는 단계별로 한 번만 전송하며 미매칭·전송 오류 시 자동 재전송하지 않습니다.
 
-Codex·Claude Code·GitHub Copilot에서 같은 절차를 재사용할 수 있는
-[CLI 제어 스킬](skills/serial-monitor-control/SKILL.md)도 제공합니다. CLI를 기본으로 사용하고
-로컬 MCP는 선택적으로 활용합니다. [스킬 설치 가이드](docs/agent_skills.md)의 설치 스크립트로
-프로젝트 또는 사용자 범위에 설치할 수 있으며, **별도 다운로드인 `SerialMonitorSkills.zip`**에
-설치 스크립트·스킬·안내문이 모두 포함됩니다.
+Codex·Claude Code·GitHub Copilot에서 같은 절차를 재사용하도록
+[Serial Monitor Plugin](docs/agent_plugins.md)에 [공통 skill](skills/serial-monitor-control/SKILL.md)과
+로컬 MCP launcher를 함께 제공합니다. 연결된 MCP 도구를 우선 사용하며 CLI도 지원합니다.
+`serial_get_capabilities` 또는 `serialctl describe --json`으로 현재 지원 기능·API 버전을
+조회하고, 새 제어 도구의 인자는 실행 중인 서버의 스키마에서 확인합니다.
+플러그인 지원이 없는 환경을 위한 [기존 단독 skill 설치](docs/agent_skills.md)도 유지합니다.
 
-앱의 **MCP** 탭에서 빠른 시작, Claude Code / Codex / GitHub Copilot의 CLI와
-VS Code 확장별 등록 방법, 복사 가능한 설정·프롬프트, 수집 한도와 오류 해결을 확인할 수 있습니다.
-`serialctl.exe` 경로를 바꾸면 각 클라이언트의 명령과 설정 예제가 함께 갱신됩니다.
+앱의 **Plugin** 탭에서 클라이언트별 설치·업데이트 명령, 읽기 전용 연결 테스트,
+실제 제어 예시와 문제 해결을 확인할 수 있습니다. 클라이언트가 Windows 로컬 MCP 또는
+로컬 shell에 접근할 수 있어야 장치를 제어할 수 있습니다.
 
 ## 안정성을 위한 구조
 
@@ -297,6 +313,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 
 ## 문서
 
+- [AI Plugin 설치·업데이트·공유](docs/agent_plugins.md)
+- [기존 단독 skill 설치](docs/agent_skills.md)
 - [AI용 시퀀스 JSON 작성 가이드](docs/sequence_authoring.md): 복사할 AI 요청문,
   실제 필드 규격, 시퀀스 JSON 불러오기·내보내기 방법. [JSON 예제](docs/sequence_examples.json)와
   함께 빌드·배포 결과의 실행 파일 옆 `docs` 폴더에 포함됩니다.
@@ -306,6 +324,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 - [수동 회귀 테스트](docs/manual_test_checklist.md)
 - [com0com 스트레스 테스트](docs/com0com_stress_testing.md)
 - [HEX RX 버스 사용량 계산](docs/bus_utilization.md)
+- [v1.6.0 변경 사항](docs/release_notes_v1.6.0.md)
 - [v1.5.2 릴리즈 노트](docs/release_notes_v1.5.2.md)
 - [v1.5.1 릴리즈 노트](docs/release_notes_v1.5.1.md)
 - [v1.5.0 릴리즈 노트](docs/release_notes_v1.5.0.md)

@@ -8,6 +8,12 @@ public static class AutomationToolRouter
     public static async Task<AutomationResponse> CallAsync(string operation, JsonElement args, string? defaultInstance,
         CancellationToken cancellationToken)
     {
+        if (operation == "capabilities")
+        {
+            if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Any())
+                throw new AutomationException("invalid_argument", "Capabilities takes no arguments and does not select a GUI.");
+            return AutomationResponse.Ok(ControlCapabilities.Describe());
+        }
         var instances = AutomationDiscovery.List();
         if (operation == "list_instances") return AutomationResponse.Ok(new { instances });
         var selected = args.String("instanceId", defaultInstance);

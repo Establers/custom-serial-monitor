@@ -35,3 +35,7 @@ jobs:
         run: |
           .\scripts\test_agent_skill.ps1
           .\scripts\test_skill_paths.ps1
+      - name: Validate plugin packages, shared skill and local MCP launch
+        if: matrix.configuration == 'Release'
+        shell: powershell
+        run: .\scripts\test_agent_plugin.ps1 -CliPath .\SerialMonitor.Cli\bin\Release\net8.0\serialctl.exe

@@ -1,0 +1,22 @@
+{
+  "name": "serial-monitor-tools",
+  "owner": {
+    "name": "Serial Monitor"
+  },
+  "metadata": {
+    "description": "Local Windows Serial Monitor control for Codex, Claude Code and GitHub Copilot."
+  },
+  "plugins": [
+    {
+      "name": "serial-monitor",
+      "description": "Control the running Windows Serial Monitor and inspect actual UART RX.",
+      "version": "1.0.0",
+      "source": "./plugins/serial-monitor",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -10,6 +10,45 @@ namespace SerialMonitor.Core.Tests;
 public sealed class AutomationCliMcpTests
 {
     [Fact]
+    public async Task CapabilitiesExposeCurrentToolSchemasWithoutSelectingAGui()
+    {
+        var (code, described) = await RunCliAsync("describe", "--json");
+        Assert.Equal(0, code);
+        Assert.True(described.GetProperty("success").GetBoolean());
+        var cli = described.GetProperty("data");
+        Assert.Equal(1, cli.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("1.0", cli.GetProperty("controlApiVersion").GetString());
+        Assert.Equal(typeof(CliCommandInput).Assembly.GetName().Version!.ToString(3), cli.GetProperty("cliVersion").GetString());
+        Assert.Equal("1.0.0", cli.GetProperty("minimumPluginVersion").GetString());
+        Assert.Contains("serialctl describe", cli.GetProperty("cliHelp").GetString());
+        Assert.Contains("serialctl configure", cli.GetProperty("cliHelp").GetString());
+
+        // This default does not identify a GUI. Metadata must still be available
+        // so an incompatible installation can be diagnosed before device access.
+        await using var mcp = await McpSession.StartAsync("not-a-running-gui");
+        var response = await mcp.CallAsync("serial_get_capabilities", new { });
+        Assert.False(response.GetProperty("isError").GetBoolean());
+        var metadata = response.GetProperty("structuredContent").GetProperty("data");
+        Assert.Equal(cli.GetRawText(), metadata.GetRawText());
+        var tools = metadata.GetProperty("tools").EnumerateArray().ToArray();
+        Assert.Contains(tools, tool => tool.GetProperty("name").GetString() == "serial_sequence_start");
+        var discovery = tools.Single(tool => tool.GetProperty("name").GetString() == "serial_get_capabilities");
+        Assert.Empty(discovery.GetProperty("inputSchema").GetProperty("properties").EnumerateObject());
+    }
+
+    [Fact]
+    public async Task CapabilitiesRejectTargetArgumentsInsteadOfImplyingGuiCompatibility()
+    {
+        var (code, described) = await RunCliAsync("describe", "--instance", "not-a-running-gui");
+        Assert.Equal(1, code);
+        Assert.False(described.GetProperty("success").GetBoolean());
+        await using var mcp = await McpSession.StartAsync("not-a-running-gui");
+        var response = await mcp.CallAsync("serial_get_capabilities", new { instanceId = "not-a-running-gui" });
+        Assert.True(response.GetProperty("isError").GetBoolean());
+        Assert.Equal("invalid_argument", response.GetProperty("structuredContent").GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task ExecutableConfiguresBothSettingsAndOneSettingWithoutSending()
     {
         await using var gui = await SimulatedGui.StartAsync();

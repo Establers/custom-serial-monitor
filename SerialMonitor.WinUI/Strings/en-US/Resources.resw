@@ -924,11 +924,10 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="AutomationStatus.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view.</value></data>
   <data name="StopAutomation.Content" xml:space="preserve"><value>Stop AI</value></data>
   <data name="StopAutomation.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop RX capture. Already sent commands cannot be undone.</value></data>
-  <data name="AgentSkillTitle.Text" xml:space="preserve"><value>Try the AI control skill</value></data>
-  <data name="AgentSkillIntroBody.Text" xml:space="preserve"><value>Ask Codex, Claude Code or GitHub Copilot to check ports, send commands and review RX logs. Download SerialMonitorSkills.zip separately from the application. CLI use does not require MCP registration.</value></data>
-  <data name="AgentSkillAboutBody.Text" xml:space="preserve"><value>Start AI device control with the shared Codex, Claude Code and GitHub Copilot skill. Download and install the skill ZIP separately.</value></data>
-  <data name="AgentSkillDownloadLink.Content" xml:space="preserve"><value>Get the skill ZIP ↗</value></data>
-  <data name="AgentSkillGuideLink.Content" xml:space="preserve"><value>Skill installation guide ↗</value></data>
+  <data name="AgentPluginTitle.Text" xml:space="preserve"><value>Connect with the AI plugin</value></data>
+  <data name="AgentPluginAboutBody.Text" xml:space="preserve"><value>Start AI device control with the plugin for Codex, Claude Code and GitHub Copilot. Open the Plugin tab for installation and updates.</value></data>
+  <data name="AgentPluginRepositoryLink.Content" xml:space="preserve"><value>GitHub · Establers/custom-serial-monitor ↗</value></data>
+  <data name="AgentPluginGuideLink.Content" xml:space="preserve"><value>Plugin installation and updates ↗</value></data>
   <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: Text logs and text commands with the selected line ending.</value></data>
   <data name="HexModeDescription" xml:space="preserve"><value>HEX: Display and send raw bytes in hexadecimal, without a line ending.</value></data>
   <data name="SaveLogHistoryButton.Content" xml:space="preserve"><value>Export logs...</value></data>
@@ -954,4 +953,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Save all logs retained at the button click to a separate file, including filtered records. Records arriving while the save dialog is open are excluded. Available while live file logging continues.</value></data>
   <data name="LogHistoryPickerTitle" xml:space="preserve"><value>Export logs</value></data>
   <data name="LogHistoryExportAction" xml:space="preserve"><value>Export</value></data>
+  <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
+  <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI plugin installation, updates, usage examples and troubleshooting.</value></data>
 </root>

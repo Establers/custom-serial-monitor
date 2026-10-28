@@ -1,19 +1,72 @@
-# Installing the shared skill
+# Plugin and standalone skill installation
+
+Install the `serial-monitor` plugin from the `serial-monitor-tools` marketplace
+to receive this skill and a local MCP launcher together. Use Serial Monitor 1.6.0
+or later. The launcher checks the CLI's `describe --json` result before starting
+MCP; plugin 1.0.0 requires CLI >=1.6.0 and control API 1.x. The GUI still needs to
+be running for device operations.
+
+## Plugin installation and updates
+
+Install from the GitHub marketplace using only the commands for the intended client:
+
+```powershell
+# Codex desktop / CLI
+codex plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+codex plugin add serial-monitor@serial-monitor-tools
+
+# Claude Code
+claude plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+claude plugin install serial-monitor@serial-monitor-tools --scope user
+
+# GitHub Copilot CLI
+copilot plugin marketplace add https://github.com/Establers/custom-serial-monitor.git
+copilot plugin install serial-monitor@serial-monitor-tools
+```
+
+Start a new session and verify capabilities and the intended GUI with read-only
+queries before device operations. Update using `codex plugin marketplace upgrade
+serial-monitor-tools`, `claude plugin update serial-monitor@serial-monitor-tools`,
+or `copilot plugin update serial-monitor@serial-monitor-tools`, as appropriate.
+Check the installed version and reload the host after updating. App setup updates
+the GUI/CLI; Git-installed plugins use their own update route.
+
+Copilot VS Code supports agent plugins and can discover Copilot CLI installations.
+Manage updates from the interface used to install the plugin. For Codex IDE, use
+its supported standalone skill or manual MCP configuration. Read the
+[plugin guide](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md)
+for client-specific steps and troubleshooting.
+
+The launcher resolves a configured `SERIAL_MONITOR_CLI`, a nearby application,
+a unique running GUI installation, installation records/default paths, PATH or
+a development build. If needed, set `SERIAL_MONITOR_CLI` in the actual AI host's
+environment before it starts; an unrelated shell does not update a running app.
+
+For offline or unpublished development builds, the program's `agent-plugin`
+directory or the extracted `SerialMonitorPlugin` folder can serve as a local
+marketplace. Substitute that path for the GitHub URL and choose one source per
+client. Replace the local source files and reload/restart the host to apply an
+update; those operations do not fetch a new Git version.
+
+Preserve edited standalone skills while migrating. After the plugin passes a
+read-only connection test, disable or remove only the superseded skill/manual
+MCP registration through that client's settings.
+## Legacy standalone skill
 
 This complete folder (SKILL.md, references, scripts, agents) is the portable unit.
 No Claude-only frontmatter, tool pre-approvals or mandatory MCP dependency is used.
 Install the same files into each host's supported discovery location.
 
-Use the separate `SerialMonitorSkills.zip` download when the application is already
+For legacy CLI-only installation, use `SerialMonitorSkills.zip` when the application is already
 installed. Extract it and run its bundled `skills/Install-Skill.ps1`, pointing
 `-CliPath` at the existing application's `tools/serialctl.exe`. The ZIP includes
 installation guides and the complete skill; application/CLI binaries are installed
 separately. For manual installation, copy its `skills/serial-monitor-control` folder
 into one of the locations below and set `SERIAL_MONITOR_CLI` if needed.
 
-The application setup EXE selects only the application's installation directory.
-Install this skill separately from the skill ZIP when wanted. Application upgrades
-leave existing skills unchanged; rerun a new skill ZIP's script when instructions
+Application setup refreshes the bundled local plugin source but does not register
+it in an AI host or replace legacy standalone skills. Install this standalone skill
+separately only when needed. Rerun a new skill ZIP's script when its instructions
 change, using the same client/scope/destination settings.
 
 | Host | Project location | Personal location |
@@ -73,8 +126,8 @@ Moving the application requires repinning the skill manually. For an application
 installed at `D:\Apps\SerialMonitor`, rerun the script with
 `-CliPath 'D:\Apps\SerialMonitor\tools\serialctl.exe'` and the same destination
 options, or set `SERIAL_MONITOR_CLI` in the AI host's environment to that executable.
-Existing MCP registrations keep their previous command: generate the new actual
-path in the app's MCP tab and replace that registration when needed. Uninstalling
+Existing manual MCP registrations keep their previous command: use the app's
+Plugin tab or the manual MCP reference to replace that path when needed. Uninstalling
 the application leaves external AI skill folders intact.
 
 Codex invocation: `$serial-monitor-control` (or its skills picker).

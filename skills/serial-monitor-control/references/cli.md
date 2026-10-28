@@ -5,6 +5,7 @@ once; pass arguments as separate arguments, not a generated shell command string
 
 ```powershell
 $cli = powershell -NoProfile -ExecutionPolicy Bypass -File '<skill-directory>/scripts/Find-SerialCtl.ps1'
+& $cli describe --json
 & $cli instances
 # Set $instance to the actual instanceId from the response, after choosing the target.
 & $cli status --instance $instance
@@ -19,6 +20,14 @@ $cli = powershell -NoProfile -ExecutionPolicy Bypass -File '<skill-directory>/sc
 & $cli read --instance $instance --capture $captureId --offset $nextOffset --limit 4096
 & $cli read --instance $instance --capture $captureId --offset 0 --limit 4096 --format hex
 ```
+
+`describe` (optionally `--json`) returns the standard `success`/`data` JSON envelope
+without opening a GUI connection or COM port. `data` includes `schemaVersion`,
+`controlApiVersion`, `cliVersion`, `minimumPluginVersion`, `features`, and current
+MCP tool definitions in `tools`. Use it to discover the installed CLI's capabilities
+before relying on a new feature. Its result describes the CLI/server, not the version
+of a separately running GUI. For older CLIs that have no `describe`, inspect `help`
+and stay within its documented commands.
 
 COM7 and `status` are syntax examples, not a device specification. Use actual target
 values and documented commands. `connect` reuses a matching connection and rejects

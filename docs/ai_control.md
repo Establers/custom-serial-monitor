@@ -1,13 +1,22 @@
-# AI CLI / MCP로 실행 중인 GUI 제어하기
+# AI Plugin / CLI / MCP로 실행 중인 GUI 제어하기
 
-여러 AI에서 같은 절차를 쓰려면 [공통 제어 스킬](agent_skills.md)을 설치할 수 있습니다.
-기본은 CLI이며 MCP는 선택입니다.
+새 설치는 skill과 로컬 MCP 연결을 함께 제공하는
+[Serial Monitor Plugin](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md)을 사용합니다. GUI의 **Plugin** 탭에서
+Codex·Claude Code·Copilot별 설치·업데이트 명령을 복사할 수 있습니다.
+플러그인 지원이 없는 환경에서는 [단독 skill](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_skills.md)이나 아래 직접 CLI/MCP
+경로를 사용할 수 있습니다. 실제 연결된 MCP 도구가 있으면 해당 도구를 우선 활용합니다.
 
 GUI가 COM 포트를 소유합니다. `serialctl`과 MCP 서버는 같은 Windows 사용자의
 Named Pipe로 실행 중인 GUI에 요청하며 COM 포트를 별도로 열지 않습니다.
 여러 GUI가 켜져 있으면 `instanceId`로 대상을 선택합니다.
 
 ## 시작하기
+
+프로그램 v1.6.0 이상에서는 `serialctl describe --json` 또는 플러그인의
+`serial_get_capabilities`로 CLI/server 버전, 제어 API 버전, 최소 플러그인 버전,
+지원 기능과 도구 스키마를 조회합니다. 이 조회는 GUI나 COM 포트에 접근하지 않습니다.
+실행 중인 GUI 자체가 구버전인지는 별도로 확인해야 합니다. 이전 CLI가 `describe`를
+지원하지 않으면 `help`에 있는 기존 기능만 사용하세요.
 
 새 빌드의 GUI를 실행합니다. 이전 버전으로 이미 켜진 GUI에는 제어 서버가 없으므로
 기존 세션을 정리하고 새 버전으로 실행해야 합니다. 평소처럼 GUI에서 연결하거나
@@ -280,14 +289,13 @@ HEX Step은 `"txMode":"hex"`, `"lineEnding":"none"`으로 지정하고 `command`
 합계는 최대 600000ms, 정의 JSON은 UTF-8 48KiB입니다. 새 자동화 등록은 최대 1000개이며,
 전체 실행의 원본 캡처는 최대 64MiB입니다. 모든 정의 검증은 첫 TX 전에 수행합니다.
 
-## MCP 등록
+## 수동 MCP 등록 (호환 경로)
 
-앱의 **MCP** 탭에서도 이 가이드를 확인할 수 있습니다. 왼쪽 목차(좁은 창은 상단 선택)에서
-빠른 시작, 클라이언트 설치, 사용 예시, 한계·문제 해결을 선택합니다. 빠른 시작에서
-AI 도구와 `serialctl.exe` 경로를 선택하고, 등록 설정 → 연결 테스트 → 1초 RX 수집 순서로
-따라갈 수 있습니다. 연결 테스트는 COM 포트 미연결 상태에서도 가능하며, RX 수집은
-GUI에서 장치를 연결한 뒤 진행합니다. 클라이언트 설치에는 범위와 대체 등록 방법을 안내합니다.
-이 탭은 안내와 클립보드 복사만 제공하며 클라이언트 설정 파일을 자동 수정하지 않습니다.
+기본 설치 안내는 앱의 **Plugin** 탭과 [플러그인 가이드](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md)에 있습니다.
+다음은 플러그인 지원이 없는 환경이나 직접 MCP 등록이 필요한 기존 설치를 위한
+방법입니다. 플러그인 launcher와 같은 기능을 직접 등록하면 도구가 중복될 수 있으므로
+사용할 등록 하나를 정하고, 대체한 기존 항목만 의도적으로 정리하세요.
+연결 테스트는 COM 포트가 미연결이어도 가능하며 실제 RX 수집은 연결 후 수행합니다.
 
 ### CLI와 VS Code 확장별 설정
 
@@ -323,13 +331,14 @@ tool_timeout_sec = 90
 ```
 
 등록 명령만 실행하면 기본 60초 제한이 유지되어 최대 60초 캡처와 충돌할 수 있습니다.
-90초로 설정하고 Codex 대화 또는 확장을 재시작합니다. 앱 MCP 탭의 전체 TOML 예제로
-직접 등록하는 경우에는 이 설정이 이미 포함되어 있습니다.
+90초로 설정하고 Codex 대화 또는 확장을 재시작합니다. 이 제한 시간 설정은 직접
+등록한 서버용이며, 플러그인 설치와 혼동해 중복 서버를 만들지 않습니다.
 
 서버는 stdio를 사용하고 stdout에는 MCP JSON-RPC만 출력합니다. 도구는 다음과 같습니다.
 
 | 도구 | 역할 |
 | --- | --- |
+| `serial_get_capabilities` | CLI/server 지원 기능·제어 API·최소 플러그인 버전과 도구 스키마 조회 (GUI·COM 접근 없음) |
 | `serial_list_instances` | 실행 중인 GUI 조회 |
 | `serial_get_status`, `serial_list_ports` | 연결·설정·오류와 포트 조회 |
 | `serial_set_mode` | GUI Terminal/HEX 모드 변경 (`mode`: `terminal` / `hex`) |
@@ -346,7 +355,7 @@ tool_timeout_sec = 90
 | `serial_sequence_start` | 시퀀스 백그라운드 실행 접수, `runId` 반환 |
 | `serial_sequence_status`, `serial_sequence_cancel` | 실행 상태 조회·지정한 `runId` 중지 |
 
-`serial_list_instances` 이외에는 선택적으로 `instanceId`를 지정합니다. send/capture에는
+`serial_get_capabilities`와 `serial_list_instances` 이외에는 선택적으로 `instanceId`를 지정합니다. send/capture에는
 기대 연결을 검증하는 `port`도 지정할 수 있습니다. 그 외 인자는 도구의 JSON Schema에
 설명됩니다. 명령 목록은 GUI의 저장 명령에서 가져옵니다. 다른 명령은 제품 명령 문서를 AI에
 제공해야 합니다. 서버 자체가 제품 명령을 자동 발견하거나 자체 LLM을 실행하지는 않습니다.
