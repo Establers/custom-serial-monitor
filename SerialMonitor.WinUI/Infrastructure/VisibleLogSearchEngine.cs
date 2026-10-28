@@ -34,7 +34,15 @@ internal readonly record struct VisibleLogMatchedLine(
     int LastTabsBeforeMatchEnd,
     long FirstGlobalMatchIndex,
     LogDirection Direction,
-    VisibleLogSearchCheckpoint[]? OccurrenceCheckpoints);
+    VisibleLogSearchCheckpoint[]? OccurrenceCheckpoints,
+    long TimestampUnixMillisecondsOrUnset = long.MinValue)
+{
+    // Keep one compact value per matching line. The sentinel is outside the
+    // DateTimeOffset range and leaves legacy lines without timestamp metadata.
+    public long? TimestampUnixMilliseconds => TimestampUnixMillisecondsOrUnset == long.MinValue
+        ? null
+        : TimestampUnixMillisecondsOrUnset;
+}
 
 internal readonly record struct VisibleLogSearchCheckpoint(
     int PayloadOffset,
@@ -706,7 +714,8 @@ internal static class VisibleLogSearchEngine
                 lastTabsBeforeMatchEnd,
                 totalMatchCount - matchCount,
                 line.Direction,
-                occurrenceCheckpoints?.ToArray()));
+                occurrenceCheckpoints?.ToArray(),
+                line.TimestampUnixMilliseconds ?? long.MinValue));
         }
 
         cancellationToken.ThrowIfCancellationRequested();

@@ -87,6 +87,14 @@ public sealed class LogLine
     public static string GetTimestampFormatPattern(TimestampDisplayFormat timestampFormat) => timestampFormat switch
     {
         TimestampDisplayFormat.DateTimeSeconds => "yyyy-MM-dd HH:mm:ss",
+        TimestampDisplayFormat.MonthDayTimeMilliseconds => "MM-dd HH:mm:ss.fff",
+        TimestampDisplayFormat.MonthDayTimeSeconds => "MM-dd HH:mm:ss",
+        TimestampDisplayFormat.ShortDateTimeMilliseconds => "yy-MM-dd HH:mm:ss.fff",
+        TimestampDisplayFormat.ShortDateTimeSeconds => "yy-MM-dd HH:mm:ss",
+        TimestampDisplayFormat.SlashDateTimeMilliseconds => "yyyy/MM/dd HH:mm:ss.fff",
+        TimestampDisplayFormat.SlashDateTimeSeconds => "yyyy/MM/dd HH:mm:ss",
+        TimestampDisplayFormat.SlashMonthDayTimeMilliseconds => "MM/dd HH:mm:ss.fff",
+        TimestampDisplayFormat.SlashMonthDayTimeSeconds => "MM/dd HH:mm:ss",
         TimestampDisplayFormat.TimeMilliseconds => "HH:mm:ss.fff",
         TimestampDisplayFormat.TimeSeconds => "HH:mm:ss",
         _ => "yyyy-MM-dd HH:mm:ss.fff"

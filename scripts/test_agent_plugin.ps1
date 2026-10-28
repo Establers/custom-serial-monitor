@@ -271,4 +271,52 @@ $capabilityResponse = @($responses | Where-Object id -eq 4)[0].result
 Assert-True (-not $capabilityResponse.isError) 'Read-only capability discovery failed through MCP.'
 $passed++
 
+# Real clients keep stdin open between requests. An EOF-only fixture cannot
+# detect a buffered stdin pipe that deadlocks the initialize handshake.
+$launcher = Join-Path $pluginRoot 'scripts\Start-SerialMonitorMcp.ps1'
+$arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher +
+    '" -CliPath "' + $CliPath + '"'
+$start = [Diagnostics.ProcessStartInfo]::new($powershell, $arguments)
+$start.UseShellExecute = $false
+$start.CreateNoWindow = $true
+$start.RedirectStandardInput = $true
+$start.RedirectStandardOutput = $true
+$start.RedirectStandardError = $true
+$start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+$start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+$previousInputEncoding = [Console]::InputEncoding
+try {
+    [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+    $process = [Diagnostics.Process]::Start($start)
+}
+finally { [Console]::InputEncoding = $previousInputEncoding }
+try {
+    $errorText = $process.StandardError.ReadToEndAsync()
+    foreach ($request in $requests) {
+        $process.StandardInput.WriteLine(($request | ConvertTo-Json -Depth 8 -Compress))
+        $process.StandardInput.Flush()
+        if (-not $request.ContainsKey('id')) { continue }
+        $replyTask = $process.StandardOutput.ReadLineAsync()
+        Assert-True ($replyTask.Wait(10000)) ('MCP response waited for stdin EOF: ' + $request.method)
+        Assert-True ($null -ne $replyTask.Result) ('MCP closed before replying to ' + $request.method)
+        $reply = $replyTask.Result | ConvertFrom-Json
+        Assert-True ($reply.id -eq $request.id -and -not $reply.error) ('Interactive MCP request failed: ' + $request.method)
+        if ($request.method -eq 'tools/call') {
+            Assert-True (-not $reply.result.isError) 'Interactive capability discovery failed.'
+        }
+    }
+    $trailingOutput = $process.StandardOutput.ReadToEndAsync()
+    $process.StandardInput.Close()
+    Assert-True ($process.WaitForExit(5000)) 'Interactive MCP did not exit after stdin EOF.'
+    Assert-True ([Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($trailingOutput, $errorText), 2000)) 'Interactive MCP streams remained open.'
+    Assert-True ($process.ExitCode -eq 0 -and $errorText.Result -eq '' -and $trailingOutput.Result -eq '') 'Interactive MCP emitted unexpected output or failed to exit cleanly.'
+}
+finally {
+    # Closing input also releases the launcher-owned child on assertion failures.
+    try { $process.StandardInput.Close() } catch { }
+    if (-not $process.HasExited -and -not $process.WaitForExit(2000)) { $process.Kill() }
+    $process.Dispose()
+}
+$passed++
+
 Write-Output "Plugin packaging, compatibility and stdio tests passed: $passed"

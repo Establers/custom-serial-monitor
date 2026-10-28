@@ -6,7 +6,7 @@ public static class CommandSequenceTriggerPolicy
 {
     public static bool CanUseAsTrigger(CommandSequence? sequence)
     {
-        return sequence is { Steps.Count: > 0 };
+        return sequence?.Steps.Any(step => step.IsEnabled) == true;
     }
 
     public static bool SupportsRxTrigger(HighlightMatchDirection direction)

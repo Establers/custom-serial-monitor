@@ -15,6 +15,7 @@
   <link rel="preload" href="./fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/JetBrainsMono-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./xterm.css">
+  <link rel="stylesheet" href="./time-rail.css">
   <style>
     @font-face {
       font-family: "JetBrains Mono Bundled";
@@ -134,6 +135,16 @@
       inset: 0;
       overflow: hidden;
       background: var(--page-background);
+    }
+
+    .log-jump-target {
+      position: absolute;
+      left: 0;
+      right: 12px;
+      z-index: 8;
+      border-left: 3px solid #49b8ff;
+      background: rgba(73, 184, 255, .20);
+      pointer-events: none;
     }
 
     .xterm {
@@ -327,12 +338,16 @@
     <button type="button" data-action="clear">Clear screen</button>
     <button type="button" data-action="quickMarker">Quick marker</button>
     <button type="button" data-action="searchSelected" data-requires-selection="true">Search selected text</button>
+    <button type="button" data-action="navigate">Go to time or position (Ctrl+G)</button>
   </div>
   <div id="hexSelectionHint" aria-hidden="true"></div>
   <script src="./xterm.js"></script>
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
   <script src="./compact-scrollback.js"></script>
+  <script src="./log-navigation.js"></script>
+  <script src="./log-navigation-terminal.js"></script>
+  <script src="./time-rail.js"></script>
   <script>
     const darkTerminalTheme = {
       background: '#0c0d0e',
@@ -582,6 +597,17 @@
     const replaceQueue = [];
     let parsedLogLineIds = [];
     let parsedLogLineTimestamps = [];
+    let parsedLogLineRows = new Float64Array(0);
+    let navigationRevision = 0;
+    let navigationTimeOrder = 'ascending';
+    let navigationLastTimestamp = null;
+    let navigationRows = null;
+    let navigationEngine = null;
+    let timeRail = null;
+    let navigationReplacing = false;
+    const navigationBackStack = [];
+    let navigationHighlight = null;
+    let navigationHighlightTimer = 0;
     let appendQueueHead = 0;
     let replaceQueueHead = 0;
     let parsedLogLineIdHead = 0;
@@ -609,16 +635,27 @@
     const restoreOverlayTitle = document.getElementById('restoreOverlayTitle');
     const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
 
-    function resetParsedLogLineIds() {
+    function resetParsedLogLineIds(resetNavigation = true) {
       parsedLogLineIds.length = 0;
       parsedLogLineTimestamps.length = 0;
+      parsedLogLineRows = new Float64Array(0);
       parsedLogLineIdHead = 0;
       parsedLogLineIdCount = 0;
       lastParsedLogLineIsOpen = false;
+      navigationTimeOrder = 'ascending';
+      navigationLastTimestamp = null;
+      navigationRevision++;
+      if (resetNavigation) navigationBackStack.length = 0;
+      clearNavigationHighlight();
+      if (resetNavigation) timeRail?.reset();
     }
 
     function trimParsedLogLineIds() {
-      const maxRetainedIds = Math.max(1, Number(terminal.options.scrollback || 0) + terminal.rows + 1);
+      // Small height changes must not copy million-entry metadata rings from
+      // the RX parser. Physical-row filtering still excludes expired records;
+      // this bounded headroom only changes allocation at 256-row boundaries.
+      const viewportHeadroom = Math.ceil((terminal.rows + 1) / 256) * 256;
+      const maxRetainedIds = Math.max(1, Number(terminal.options.scrollback || 0) + viewportHeadroom);
       if (parsedLogLineIds.length === maxRetainedIds) {
         return;
       }
@@ -626,15 +663,19 @@
       const count = Math.min(parsedLogLineIdCount, maxRetainedIds);
       const ids = new Array(maxRetainedIds);
       const timestamps = new Array(maxRetainedIds);
+      const rows = new Float64Array(maxRetainedIds);
       for (let index = 0; index < count; index++) {
         const source = (parsedLogLineIdHead + parsedLogLineIdCount - count + index) % parsedLogLineIds.length;
         ids[index] = parsedLogLineIds[source];
         timestamps[index] = parsedLogLineTimestamps[source];
+        rows[index] = parsedLogLineRows[source];
       }
       parsedLogLineIds = ids;
       parsedLogLineTimestamps = timestamps;
+      parsedLogLineRows = rows;
       parsedLogLineIdHead = 0;
       parsedLogLineIdCount = count;
+      navigationRevision++;
     }
 
     function appendParsedLogLineId(lineId, timestamp) {
@@ -642,6 +683,13 @@
       const index = (parsedLogLineIdHead + parsedLogLineIdCount) % parsedLogLineIds.length;
       parsedLogLineIds[index] = lineId;
       parsedLogLineTimestamps[index] = timestamp;
+      parsedLogLineRows[index] = navigationRows?.recordRow() ?? 0;
+      if (!Number.isSafeInteger(timestamp) ||
+          (navigationLastTimestamp !== null && timestamp < navigationLastTimestamp)) {
+        navigationTimeOrder = 'unordered';
+      }
+      if (Number.isSafeInteger(timestamp)) navigationLastTimestamp = timestamp;
+      navigationRevision++;
       if (parsedLogLineIdCount === parsedLogLineIds.length) {
         parsedLogLineIdHead = (parsedLogLineIdHead + 1) % parsedLogLineIds.length;
       } else {
@@ -756,6 +804,7 @@
       // row cache after the write was queued but before its OSC metadata and
       // buffer rows are committed, so invalidate again at the parse boundary.
       invalidateLogicalLineStartRows();
+      timeRail?.refresh();
       if (pointerSelectionGesture) {
         queueHexSelectionHintUpdate();
       }
@@ -807,6 +856,8 @@
         return;
       }
 
+      navigationReplacing = false;
+      timeRail?.refresh();
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
@@ -823,6 +874,8 @@
     }
 
     function failReplace(error, requestId) {
+      navigationReplacing = false;
+      timeRail?.refresh();
       replaceWriting = false;
       replaceQueue.length = 0;
       replaceQueueHead = 0;
@@ -997,6 +1050,14 @@
       window.chrome.webview.postMessage({ type: 'searchShortcut', action, source });
       event.preventDefault();
       event.stopPropagation();
+      return true;
+    }
+
+    function postNavigationShortcut(event) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || String(event.key).toLowerCase() !== 'g') return false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) window.serialMonitorOpenNavigation();
       return true;
     }
 
@@ -1290,6 +1351,7 @@
     }
 
     function showContextMenu(event) {
+      if (!terminalElement.contains(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       hideHexSelectionHint();
@@ -1329,6 +1391,7 @@
     };
 
     window.serialMonitorBeginReplaceLog = function () {
+      navigationReplacing = true;
       hideHexSelectionHint();
       pointerSelectionGesture = false;
       appendQueue.length = 0;
@@ -1338,10 +1401,11 @@
       replaceWriting = false;
       replaceOperationId += 1;
       invalidateLogicalLineStartRows();
-      resetParsedLogLineIds();
+      resetParsedLogLineIds(false);
       // clear() retains the current row and cursor column. An unfinished RX
       // would then be prepended to the first restored log and shift its offsets.
       terminal.reset();
+      navigationRows?.reset();
       return true;
     };
 
@@ -1365,6 +1429,7 @@
     };
 
     window.serialMonitorCancelPendingWrites = function () {
+      navigationReplacing = false;
       for (let index = appendQueueHead; index < appendQueue.length; index += 1) {
         postAppendResult(appendQueue[index], false, 'canceled by clear');
       }
@@ -1440,6 +1505,7 @@
     };
 
     window.serialMonitorClear = function () {
+      navigationReplacing = false;
       hideHexSelectionHint();
       pointerSelectionGesture = false;
       appendQueue.length = 0;
@@ -1451,6 +1517,7 @@
       invalidateLogicalLineStartRows();
       resetParsedLogLineIds();
       terminal.reset();
+      navigationRows?.reset();
       return true;
     };
 
@@ -1488,6 +1555,9 @@
 
       terminal.options.fontFamily = resolvedFontFamily;
       terminal.options.fontSize = parsedFontSize;
+      document.documentElement.style.setProperty('--time-rail-font-family', resolvedFontFamily);
+      document.documentElement.style.setProperty('--time-rail-font-size', `${parsedFontSize}px`);
+      timeRail?.refresh();
       terminal.clearTextureAtlas();
       fitAddon.fit();
       terminal.refresh(0, Math.max(0, terminal.rows - 1));
@@ -1910,7 +1980,7 @@
       };
     }
 
-    function stringOffsetToBufferPosition(match, stringOffset) {
+    function stringOffsetToBufferPosition(match, stringOffset, roundUp) {
       let segmentIndex = match.stringStarts.length - 1;
       for (let i = 0; i < match.stringStarts.length - 1; i++) {
         if (stringOffset < match.stringStarts[i + 1]) {
@@ -1935,20 +2005,30 @@
         }
 
         const chars = cell.getChars();
-        consumed += cell.getCode() === 0 ? 1 : Math.max(1, chars.length);
+        const cellTextLength = cell.getCode() === 0 ? 1 : Math.max(1, chars.length);
+        // A source match can start inside a terminal cell: combining marks and
+        // UTF-16 surrogate pairs share a cell with their base character. Include
+        // that cell rather than selecting the unrelated character after it.
+        if (!roundUp && consumed + cellTextLength > localOffset) {
+          break;
+        }
+
+        consumed += cellTextLength;
       }
 
       return { row, col: Math.min(col, terminal.cols) };
     }
 
     function selectPayloadSearchMatch(match) {
-      const start = stringOffsetToBufferPosition(match, match.startOffset);
-      const end = stringOffsetToBufferPosition(match, match.endOffset);
+      const start = stringOffsetToBufferPosition(match, match.startOffset, false);
+      const end = stringOffsetToBufferPosition(match, match.endOffset, true);
       const size = Math.max(1, ((end.row - start.row) * terminal.cols) + end.col - start.col);
       terminal.select(start.col, start.row, size);
 
       const viewportTop = terminal.buffer.active.viewportY;
-      if (start.row < viewportTop || start.row >= viewportTop + terminal.rows) {
+      const contextRows = Math.min(3, Math.floor(terminal.rows / 2));
+      if (start.row < viewportTop + contextRows ||
+          end.row >= viewportTop + terminal.rows - contextRows) {
         terminal.scrollToLine(Math.max(0, start.row - Math.floor(terminal.rows / 2)));
       }
     }
@@ -1984,6 +2064,10 @@
           }
 
           selectPayloadSearchMatch(target);
+          // Protect the selected location before any queued parser callback can
+          // follow a newly received log. The host also synchronizes its setting
+          // after the successful response, keeping the toolbar/menu consistent.
+          window.serialMonitorSetAutoScrollEnabled(false);
           return { ok: true, found: true };
         }
 
@@ -2010,6 +2094,199 @@
       }, 25);
     }
 
+    function clearNavigationHighlight() {
+      if (navigationHighlightTimer) window.clearTimeout(navigationHighlightTimer);
+      navigationHighlightTimer = 0;
+      navigationHighlight?.remove();
+      navigationHighlight = null;
+    }
+
+    function highlightNavigationRow(row) {
+      clearNavigationHighlight();
+      const screen = terminalElement.querySelector('.xterm-screen');
+      if (!screen) return;
+      const rowHeight = screen.getBoundingClientRect().height / terminal.rows;
+      const visibleRow = row - terminal.buffer.active.viewportY;
+      if (visibleRow < 0 || visibleRow >= terminal.rows) return;
+      navigationHighlight = document.createElement('div');
+      navigationHighlight.className = 'log-jump-target';
+      navigationHighlight.style.top = `${screen.offsetTop + visibleRow * rowHeight}px`;
+      navigationHighlight.style.height = `${rowHeight}px`;
+      terminalElement.appendChild(navigationHighlight);
+      navigationHighlightTimer = window.setTimeout(clearNavigationHighlight, 1800);
+    }
+
+    function captureNavigationAnchor() {
+      const index = navigationRows.viewportRange().startIndex;
+      const sourceIndex = navigationRows.sourceStart() + index;
+      const row = navigationRows.rowAt(index);
+      if (index < 0 || row === null) return null;
+      return {
+        id: navigationRawSource.at(sourceIndex).id,
+        offset: Math.max(0, terminal.buffer.active.viewportY - row),
+        columns: terminal.cols
+      };
+    }
+
+    function jumpToNavigationIndex(index, remember = true, offset = null) {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      if (!Number.isInteger(index) || index < 0) return { ok: false, error: 'out-of-range' };
+      const row = navigationRows.rowAt(index);
+      if (row === null) return { ok: false, error: 'out-of-range' };
+      if (offset !== null) {
+        const nextRow = navigationRows.rowAt(index + 1) ??
+          (terminal.buffer.active.baseY + terminal.buffer.active.cursorY + 1);
+        offset = Math.max(0, Math.min(offset, nextRow - row - 1));
+      }
+      const anchor = remember ? captureNavigationAnchor() : null;
+      // Protect the destination before any queued RX callback can follow live data.
+      window.serialMonitorSetAutoScrollEnabled(false);
+      terminal.scrollToLine(Math.max(0, offset === null ? row - Math.floor(terminal.rows / 2) : row + offset));
+      terminal.clearSelection();
+      searchAddon.clearDecorations();
+      terminal.focus();
+      if (anchor) {
+        navigationBackStack.push(anchor);
+        if (navigationBackStack.length > 64) navigationBackStack.shift();
+      }
+      highlightNavigationRow(row);
+      window.chrome?.webview?.postMessage({ type: 'navigationJump' });
+      const metadata = navigationRawSource.at(navigationRows.sourceStart() + index);
+      return { ok: true, index, timestamp: metadata.timestamp, id: metadata.id };
+    }
+
+    function navigateBack() {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      const anchor = navigationBackStack.pop();
+      if (!anchor) return { ok: false, error: 'no-history', canGoBack: false };
+      const canGoBack = navigationBackStack.length > 0;
+      const index = navigationRows.indexById(anchor.id);
+      if (index < 0) return { ok: false, error: 'expired', canGoBack };
+      const reflowedOffset = Math.floor(anchor.offset * (anchor.columns || terminal.cols) / terminal.cols);
+      return { ...jumpToNavigationIndex(index, false, reflowedOffset), canGoBack };
+    }
+
+    const navigationRawSource = {
+      count: () => parsedLogLineIdCount,
+      at(index) {
+        const slot = (parsedLogLineIdHead + index) % parsedLogLineIds.length;
+        return { id: parsedLogLineIds[slot], timestamp: parsedLogLineTimestamps[slot], row: parsedLogLineRows[slot] };
+      },
+      setRow(index, row) { parsedLogLineRows[(parsedLogLineIdHead + index) % parsedLogLineIds.length] = row; },
+      findId: findParsedLogLineIdIndex
+    };
+
+    navigationRows = SerialMonitorLogNavigationTerminal.create(terminal, navigationRawSource, {
+      isLastLineOpen: () => lastParsedLogLineIsOpen,
+      onChange() { navigationRevision++; timeRail?.refresh(); },
+      onError(error) { window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) }); }
+    });
+    navigationEngine = SerialMonitorLogNavigation.create({
+      count: () => parsedLogLineIdCount - navigationRows.sourceStart(),
+      at: index => navigationRawSource.at(index + navigationRows.sourceStart()),
+      revision: () => navigationRevision,
+      timeOrder: () => navigationTimeOrder
+    });
+    // Navigation controls belong to WinUI. The terminal keeps its entire area
+    // and exposes only bounded metadata, queries and scrolling over this bridge.
+    window.serialMonitorOpenNavigation = () => {
+      window.chrome?.webview?.postMessage({ type: 'openLogNavigation' });
+      return true;
+    };
+    window.serialMonitorResolveNavigation = input => {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      return navigationEngine.resolve(input, navigationRows.currentIndex());
+    };
+    window.serialMonitorNavigate = input => {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      const result = navigationEngine.resolve(input, navigationRows.currentIndex());
+      return result.ok ? jumpToNavigationIndex(result.index) : result;
+    };
+    window.serialMonitorNavigationBack = navigateBack;
+    window.serialMonitorResolveIndex = index => {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      const count = parsedLogLineIdCount - navigationRows.sourceStart();
+      if (!Number.isInteger(index) || index < 0 || index >= count) return { ok: false, error: 'out-of-range' };
+      const metadata = navigationRawSource.at(navigationRows.sourceStart() + index);
+      return { ok: true, index, timestamp: metadata.timestamp, id: metadata.id };
+    };
+    window.serialMonitorNavigateToIndex = (index, expectedId) => {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      if (expectedId !== undefined && expectedId !== null) {
+        index = navigationRows.indexById(String(expectedId));
+        if (index < 0) return { ok: false, error: 'expired' };
+      }
+      const result = window.serialMonitorResolveIndex(index);
+      return result.ok ? jumpToNavigationIndex(result.index) : result;
+    };
+    window.serialMonitorResolveTime = timestamp => {
+      if (navigationReplacing || replaceWriting || navigationRows.isBusy()) return { ok: false, error: 'busy' };
+      const range = navigationEngine.range();
+      if (!Number.isSafeInteger(timestamp) || !range.count || timestamp < range.startTime || timestamp > range.endTime) {
+        return { ok: false, error: 'out-of-range' };
+      }
+      const index = navigationEngine.indexAtTime(timestamp);
+      if (index < 0) return { ok: false, error: 'no-target' };
+      const metadata = navigationRawSource.at(navigationRows.sourceStart() + index);
+      return { ok: true, index, timestamp: metadata.timestamp, id: metadata.id };
+    };
+    window.serialMonitorNavigateToTime = timestamp => {
+      const result = window.serialMonitorResolveTime(timestamp);
+      return result.ok ? jumpToNavigationIndex(result.index) : result;
+    };
+    window.serialMonitorGetNavigationState = () => ({
+      ...navigationEngine.range(),
+      ...navigationRows.viewportRange(),
+      currentIndex: navigationRows.currentIndex(),
+      canGoBack: navigationBackStack.length > 0,
+      busy: navigationReplacing || replaceWriting || navigationRows.isBusy()
+    });
+    window.serialMonitorGetNavigationSnapshot = request => {
+      const state = window.serialMonitorGetNavigationState();
+      const viewportTime = index => index >= 0 && index < state.count
+        ? navigationRawSource.at(navigationRows.sourceStart() + index).timestamp : null;
+      const snapshot = {
+        count: state.count, startTime: state.startTime, endTime: state.endTime,
+        endId: !state.busy && state.count > 0
+          ? navigationRawSource.at(navigationRows.sourceStart() + state.count - 1).id : null,
+        currentIndex: state.currentIndex, currentTimestamp: viewportTime(state.currentIndex),
+        viewportStartIndex: state.startIndex, viewportEndIndex: state.endIndex,
+        canGoBack: state.canGoBack, busy: state.busy,
+        ordered: state.ordered, bins: [], peak: 0, binMilliseconds: 0,
+        histogramStartTime: null, histogramEndTime: null,
+        viewportStartTime: viewportTime(state.startIndex), viewportEndTime: viewportTime(state.endIndex)
+      };
+      const requestedBins = Number(request?.binCount ?? 600);
+      if (state.busy || !state.count || !Number.isFinite(requestedBins) || requestedBins <= 0) return snapshot;
+      const binCount = Math.max(32, Math.min(1600, Math.floor(requestedBins)));
+      const histogram = Number.isFinite(request?.startTime) && Number.isFinite(request?.endTime)
+        ? navigationEngine.histogramRange(binCount, request.startTime, request.endTime)
+        : navigationEngine.histogram(binCount);
+      return {
+        ...snapshot, bins: histogram.bins, peak: histogram.peak, binMilliseconds: histogram.binMilliseconds,
+        histogramStartTime: histogram.startTime, histogramEndTime: histogram.endTime
+      };
+    };
+    try {
+      timeRail = SerialMonitorTimeRail.install({
+        getState: () => window.serialMonitorGetNavigationSnapshot({ binCount: 0 }),
+        resolveTime: window.serialMonitorResolveTime,
+        navigateTime: window.serialMonitorNavigateToTime,
+        resolveIndex: window.serialMonitorResolveIndex,
+        navigateIndex: window.serialMonitorNavigateToIndex,
+        language: new URLSearchParams(window.location.search).get('language') || navigator.language,
+        onLayoutChanged(width) {
+          terminalElement.style.left = `${Math.max(0, Math.min(24, Number(width) || 0))}px`;
+          queueFit();
+        },
+        onError(error) { window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) }); }
+      });
+    } catch (error) {
+      window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) });
+    }
+    terminal.onScroll(() => { clearNavigationHighlight(); timeRail?.refresh(); });
+    window.addEventListener('unload', () => { navigationRows.dispose(); timeRail?.dispose(); });
+
     window.addEventListener('resize', queueFit);
     requestAnimationFrame(queueFit);
 
@@ -2017,6 +2294,8 @@
       if (event.type !== 'keydown') {
         return true;
       }
+
+      if (postNavigationShortcut(event)) return false;
 
       const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
         !event.altKey &&
@@ -2047,6 +2326,7 @@
     });
 
     document.addEventListener('keydown', event => {
+      if (postNavigationShortcut(event)) return;
       if (postAutoScrollToggleShortcut(event, 'xterm-keydown')) {
         return;
       }

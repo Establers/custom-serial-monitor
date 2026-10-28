@@ -20,7 +20,15 @@ public enum TimestampDisplayFormat
     DateTimeMilliseconds,
     DateTimeSeconds,
     TimeMilliseconds,
-    TimeSeconds
+    TimeSeconds,
+    MonthDayTimeMilliseconds,
+    MonthDayTimeSeconds,
+    ShortDateTimeMilliseconds,
+    ShortDateTimeSeconds,
+    SlashDateTimeMilliseconds,
+    SlashDateTimeSeconds,
+    SlashMonthDayTimeMilliseconds,
+    SlashMonthDayTimeSeconds
 }
 
 public enum XtermFontFamily

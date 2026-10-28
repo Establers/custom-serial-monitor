@@ -87,7 +87,7 @@ VS Code Copilot은 `/plugin update serial-monitor@serial-monitor-tools` 또는
 | AI 작업 절차·skill 변경 | 플러그인 업데이트 후 재로드·새 세션 |
 | 버전 호환 오류 | 안내된 프로그램 또는 플러그인을 업데이트 |
 
-프로그램과 플러그인의 버전 번호는 같을 필요가 없습니다. 플러그인 v1.0.0은
+프로그램과 플러그인의 버전 번호는 같을 필요가 없습니다. 플러그인 v1.0.1은
 CLI v1.6.0 이상과 제어 API 1.x를 사용합니다. `serial_get_capabilities` 또는
 `serialctl describe --json`으로 CLI의 버전·지원 기능을 확인할 수 있습니다.
 실행 중인 구버전 GUI는 새 GUI로 다시 실행하세요.
@@ -99,16 +99,22 @@ CLI v1.6.0 이상과 제어 API 1.x를 사용합니다. `serial_get_capabilities
 
 플러그인은 가까운 프로그램 폴더, 실행 중인 GUI, 설치 기록과 기본 경로 등에서
 `serialctl.exe`를 찾습니다. 여러 위치의 프로그램이 실행 중이거나 포터블 경로를
-명시해야 한다면 실제 AI 프로세스의 환경에 `SERIAL_MONITOR_CLI`를 설정하세요.
+명시해야 한다면 `SERIAL_MONITOR_CLI`를 설정하고, AI 호스트가 이 변수를
+플러그인의 stdio MCP 프로세스에 전달하는지 확인하세요.
 
 ```powershell
 $env:SERIAL_MONITOR_CLI = 'D:\Apps\SerialMonitor\tools\serialctl.exe'
-codex
-# 또는 같은 창에서 claude / copilot 실행
+# 사용하는 AI 호스트를 같은 창에서 시작
 ```
 
 이 설정은 현재 PowerShell에서 시작하는 자식 프로세스에 적용됩니다. 이미 실행 중인
 데스크톱 앱에는 전달되지 않으므로 호스트의 환경 설정을 적용하고 앱을 다시 실행하세요.
+
+호스트가 MCP의 환경 변수를 필터링하면 앱을 재시작해도 위 변수만으로는 경로를
+지정할 수 없습니다. Codex CLI 0.164.0-alpha.11.1에서 이 제한을 확인했습니다.
+이 경우 호환되는 프로그램을 설치해 자동 탐색을 사용하거나,
+[직접 MCP 등록](ai_control.md#수동-mcp-등록-호환-경로)으로 실행 파일의 절대 경로를
+지정하세요. 플러그인 캐시의 파일을 직접 수정하면 업데이트 시 사라질 수 있습니다.
 
 ## 기존 skill·MCP에서 전환
 

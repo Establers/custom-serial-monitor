@@ -28,19 +28,19 @@ public readonly record struct VisibleLogSearchLine(
     long LineId,
     string FullText,
     int PayloadStart,
-    LogDirection Direction = LogDirection.System)
+    LogDirection Direction = LogDirection.System,
+    long? TimestampUnixMilliseconds = null)
 {
     public string PayloadText => FullText[PayloadStart..];
 }
 
-public sealed class LogViewModel : ViewModelBase
+public sealed partial class LogViewModel : ViewModelBase
 {
     // Rule snapshots are shared by all lines received under the same rule version.
     private readonly record struct RetainedLogLine(
         long LineId,
         LogLine Line,
-        LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
-        LogRuleMatcher.CompiledHighlightRule[] ViewFilters);
+        LogRuleMatcher.CompiledHighlightRule[] HighlightRules);
 
     private const string AnsiReset = "\u001b[0m";
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
@@ -53,13 +53,12 @@ public sealed class LogViewModel : ViewModelBase
     private const string AnsiBackgroundContrastForegroundCode = "38;5;16";
     private const string XtermLineIdentityOscPrefix = "\u001b]777;";
     private const string XtermOscTerminator = "\u0007";
-    private static readonly string[] DirectionPrefixes = ["RX <", "TX >", "MARK >", "SYS"];
-
     // One queue entry per visible line instead of six separately allocated linked-list nodes.
-    private sealed class VisibleLine(string displayText, string searchText, long id, long timestamp, LogDirection direction, bool hasLineEnding)
+    private sealed class VisibleLine(string displayText, string searchText, int payloadStart, long id, long timestamp, LogDirection direction, bool hasLineEnding)
     {
         public string DisplayText = displayText;
         public string SearchText = searchText;
+        public readonly int PayloadStart = payloadStart;
         public int Length = displayText.Length + (hasLineEnding ? Environment.NewLine.Length : 0);
         public bool HasLineEnding = hasLineEnding;
         public readonly long Id = id;
@@ -69,8 +68,8 @@ public sealed class LogViewModel : ViewModelBase
 
     private int _capacity;
     private readonly Queue<RetainedLogLine> _retainedLines = new();
-    private readonly Queue<int> _retainedVisibleLineContributions = new();
-    private readonly Queue<VisibleLine> _visibleLines = new();
+    private Queue<int> _retainedVisibleLineContributions = new();
+    private Queue<VisibleLine> _visibleLines = new();
     private VisibleLine? _lastVisibleLine;
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule[] _viewFilters = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
@@ -195,6 +194,7 @@ public sealed class LogViewModel : ViewModelBase
         }
 
         var shrinking = capacity < _capacity;
+        _visibleRebuildVersion++;
         _capacity = capacity;
         var trimmed = TrimRetainedLinesToCapacity(out _);
         if (shrinking)
@@ -224,7 +224,14 @@ public sealed class LogViewModel : ViewModelBase
 
     public void SetShowTimestampInLogView(bool showTimestamp)
     {
+        if (_showTimestampInLogView == showTimestamp)
+        {
+            return;
+        }
+
         _showTimestampInLogView = showTimestamp;
+        RebuildVisibleLinesFromRetained();
+        TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetShowRxTxDirectionPrefixInLogView(bool showDirectionPrefix)
@@ -271,19 +278,15 @@ public sealed class LogViewModel : ViewModelBase
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetViewFilter(HighlightRule? viewFilter, bool rebuildExisting = true)
+    public void SetViewFilter(HighlightRule? viewFilter)
     {
-        SetViewFilters(viewFilter is null ? [] : [viewFilter], rebuildExisting);
+        SetViewFilters(viewFilter is null ? [] : [viewFilter]);
     }
 
-    public void SetViewFilters(IEnumerable<HighlightRule> viewFilters, bool rebuildExisting = true)
+    public void SetViewFilters(IEnumerable<HighlightRule> viewFilters)
     {
+        CancelPendingViewFilter();
         _viewFilters = viewFilters.Select(LogRuleMatcher.Compile).ToArray();
-        if (!rebuildExisting)
-        {
-            return;
-        }
-
         RebuildVisibleLinesFromRetained();
         TextRebuilt?.Invoke(this, EventArgs.Empty);
     }
@@ -311,8 +314,9 @@ public sealed class LogViewModel : ViewModelBase
         var appendedVisibleLineCount = 0;
         foreach (var line in lines)
         {
-            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules, _viewFilters);
+            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules);
             _retainedLines.Enqueue(retainedLine);
+            TrackPendingFilterLine(retainedLine);
             var visibleContribution = 0;
             if (line.IsPartialRxTerminator)
             {
@@ -325,7 +329,7 @@ public sealed class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilters(line, retainedLine.ViewFilters))
+            if (!IsVisibleByFilters(line, _viewFilters))
             {
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
@@ -355,6 +359,7 @@ public sealed class LogViewModel : ViewModelBase
                     var taggedPartialDisplayLine = AddVisibleLine(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
+                        formattedPartial.PayloadStart,
                         retainedLine.LineId,
                         line.Timestamp,
                         line.Direction);
@@ -383,6 +388,7 @@ public sealed class LogViewModel : ViewModelBase
             var taggedDisplayLine = AddVisibleLine(
                 formatted.DisplayLine,
                 formatted.SearchableLine,
+                formatted.PayloadStart,
                 retainedLine.LineId,
                 line.Timestamp,
                 line.Direction,
@@ -490,42 +496,78 @@ public sealed class LogViewModel : ViewModelBase
         foreach (var line in _visibleLines)
         {
             results[index++] = new VisibleLogSearchLine(
-                line.Id, line.SearchText, FindPayloadStart(line.SearchText), line.Direction);
+                line.Id, line.SearchText, line.PayloadStart, line.Direction, line.Timestamp);
         }
 
         return results;
     }
 
-    private static int FindPayloadStart(string visibleLine)
+    public bool TryGetSearchLine(LogLine source, out VisibleLogSearchLine searchLine)
     {
-        var contentStart = 0;
-        if (visibleLine.StartsWith("[", StringComparison.Ordinal))
+        ArgumentNullException.ThrowIfNull(source);
+        FlushActivePartialRxLineToNodes();
+        long targetLineId = 0;
+        long activePartialLineId = 0;
+        using var contributions = _retainedVisibleLineContributions.GetEnumerator();
+        foreach (var retained in _retainedLines)
         {
-            var timestampEnd = visibleLine.IndexOf("] ", StringComparison.Ordinal);
-            if (timestampEnd >= 0)
+            if (!contributions.MoveNext())
             {
-                contentStart = timestampEnd + 2;
+                break;
             }
-        }
 
-        var content = visibleLine.AsSpan(contentStart);
-        foreach (var prefix in DirectionPrefixes)
-        {
-            if (!content.StartsWith(prefix, StringComparison.Ordinal))
+            var contribution = contributions.Current;
+            if (contribution > 0)
+            {
+                activePartialLineId = ShouldMergePartialRxVisually(retained.Line)
+                    ? retained.LineId
+                    : 0;
+            }
+            else if (retained.Line.IsPartialRxTerminator)
+            {
+                activePartialLineId = 0;
+            }
+
+            // Streaming rule matches can carry a new LogLine with the retained
+            // tail prepended. Its sequence and exact metadata still identify
+            // the source fragment without guessing from message text.
+            var hasSameIdentity = source.SequenceNumber is { } sequence &&
+                retained.Line.SequenceNumber == sequence &&
+                retained.Line.Direction == source.Direction &&
+                retained.Line.ContentMode == source.ContentMode &&
+                retained.Line.Timestamp == source.Timestamp;
+            if (!ReferenceEquals(retained.Line, source) && !hasSameIdentity)
             {
                 continue;
             }
 
-            var payloadStart = prefix.Length;
-            if (payloadStart < content.Length && content[payloadStart] == ' ')
+            if (contribution > 0)
             {
-                payloadStart++;
+                targetLineId = retained.LineId;
             }
-
-            return contentStart + payloadStart;
+            else if (activePartialLineId > 0 && ShouldMergePartialRxVisually(retained.Line) &&
+                     IsVisibleByFilters(retained.Line, _viewFilters, recordErrors: false))
+            {
+                targetLineId = activePartialLineId;
+            }
+            break;
         }
 
-        return contentStart;
+        if (targetLineId > 0)
+        {
+            foreach (var visible in _visibleLines)
+            {
+                if (visible.Id == targetLineId)
+                {
+                    searchLine = new VisibleLogSearchLine(
+                        visible.Id, visible.SearchText, visible.PayloadStart, visible.Direction, visible.Timestamp);
+                    return true;
+                }
+            }
+        }
+
+        searchLine = default;
+        return false;
     }
 
     public void AddPendingDropCount(int droppedCount)
@@ -540,6 +582,7 @@ public sealed class LogViewModel : ViewModelBase
 
     public void Clear()
     {
+        _visibleRebuildVersion++;
         if (_retainedLines.Count == 0 &&
             _visibleLines.Count == 0)
         {
@@ -561,8 +604,9 @@ public sealed class LogViewModel : ViewModelBase
         TextCleared?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RebuildVisibleLinesFromRetained()
+    private void RebuildVisibleLinesFromRetained(CancellationToken cancellationToken = default)
     {
+        _visibleRebuildVersion++;
         _visibleLines.Clear();
         _lastVisibleLine = null;
         _retainedVisibleLineContributions.Clear();
@@ -571,9 +615,16 @@ public sealed class LogViewModel : ViewModelBase
         _partialRxVisualLength = 0;
         ClearActivePartialRxBuilders();
 
+        AppendRebuiltLines(_retainedLines, cancellationToken);
+        RaiseVisibleCountProperties();
+    }
+
+    private void AppendRebuiltLines(IEnumerable<RetainedLogLine> lines, CancellationToken cancellationToken)
+    {
         var formattingErrors = 0;
-        foreach (var retainedLine in _retainedLines)
+        foreach (var retainedLine in lines)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var line = retainedLine.Line;
             var visibleContribution = 0;
             if (line.IsPartialRxTerminator)
@@ -583,7 +634,7 @@ public sealed class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilters(line, retainedLine.ViewFilters))
+            if (!IsVisibleByFilters(line, _viewFilters))
             {
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
@@ -611,6 +662,7 @@ public sealed class LogViewModel : ViewModelBase
                     AddVisibleLine(
                         formattedPartial.DisplayLine,
                         formattedPartial.SearchableLine,
+                        formattedPartial.PayloadStart,
                         retainedLine.LineId,
                         line.Timestamp,
                         line.Direction);
@@ -634,6 +686,7 @@ public sealed class LogViewModel : ViewModelBase
             AddVisibleLine(
                 formatted.DisplayLine,
                 formatted.SearchableLine,
+                formatted.PayloadStart,
                 retainedLine.LineId,
                 line.Timestamp,
                 line.Direction,
@@ -646,8 +699,6 @@ public sealed class LogViewModel : ViewModelBase
         {
             MaxRetainedLineCountSeen = _retainedLines.Count;
         }
-
-        RaiseVisibleCountProperties();
     }
 
     private int TrimRetainedLinesToCapacity(out int trimCharacterCount)
@@ -756,6 +807,7 @@ public sealed class LogViewModel : ViewModelBase
     private string AddVisibleLine(
         string displayLine,
         string searchableLine,
+        int payloadStart,
         long lineId,
         DateTimeOffset timestamp,
         LogDirection direction,
@@ -766,7 +818,7 @@ public sealed class LogViewModel : ViewModelBase
             (hasLineEnding ? Environment.NewLine : string.Empty);
         // Uncolored display and search share the same string. Store the newline
         // separately instead of keeping another full-length copy of every line.
-        _lastVisibleLine = new VisibleLine(displayLine, searchableLine, lineId, timestampUnixMilliseconds, direction, hasLineEnding);
+        _lastVisibleLine = new VisibleLine(displayLine, searchableLine, payloadStart, lineId, timestampUnixMilliseconds, direction, hasLineEnding);
         _visibleLines.Enqueue(_lastVisibleLine);
         _visibleCharacterCount += _lastVisibleLine.Length;
         return taggedDisplayLine;
@@ -856,7 +908,7 @@ public sealed class LogViewModel : ViewModelBase
     {
         if (_lastVisibleLine is null)
         {
-            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, lineId, timestamp, direction);
+            var taggedDisplayLine = AddVisibleLine(displayText, searchableText, 0, lineId, timestamp, direction);
             BeginActivePartialRxVisualLine(displayText, searchableText);
             _partialRxVisualLength = searchableText.Length;
             return taggedDisplayLine;
@@ -913,7 +965,7 @@ public sealed class LogViewModel : ViewModelBase
             line.Direction == LogDirection.Rx;
     }
 
-    private (string DisplayLine, string SearchableLine, int RawTextLength, bool HasFormattingError) FormatPartialRxVisibleSegment(
+    private (string DisplayLine, string SearchableLine, int PayloadStart, int RawTextLength, bool HasFormattingError) FormatPartialRxVisibleSegment(
         LogLine line,
         IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules)
     {
@@ -932,7 +984,7 @@ public sealed class LogViewModel : ViewModelBase
                     TryFormatTerminalBracketGroups(text, payloadStart: 0, baseColor: null, out var bracketText)
                         ? bracketText
                         : text;
-                return (displayText, searchableText, searchableText.Length, false);
+                return (displayText, searchableText, 0, searchableText.Length, false);
             }
 
             var searchableLine = FormatPlainSafeDisplayLine(
@@ -949,10 +1001,11 @@ public sealed class LogViewModel : ViewModelBase
                 searchableLine,
                 _rxDisplayMode,
                 payloadStart);
-            return (displayLine, searchableLine, text.Length, hasFormattingError);
+            return (displayLine, searchableLine, payloadStart, text.Length, hasFormattingError);
         }
         catch
         {
+            var payloadStart = 0;
             var fallback = _partialRxVisualLineActive
                 ? line.Text
                 : FormatPlainSafeDisplayLine(
@@ -961,17 +1014,18 @@ public sealed class LogViewModel : ViewModelBase
                     _showRxTxDirectionPrefixInLogView,
                     _timestampDisplayFormat,
                     _rxDisplayMode,
-                    out _);
-            return (fallback, fallback, line.Text.Length, true);
+                    out payloadStart);
+            return (fallback, fallback, payloadStart, line.Text.Length, true);
         }
     }
 
-    private (string DisplayLine, string SearchableLine, bool IsHighlighted, bool HasFormattingError) FormatVisibleLine(
+    private (string DisplayLine, string SearchableLine, int PayloadStart, bool IsHighlighted, bool HasFormattingError) FormatVisibleLine(
         LogLine line,
         IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules)
     {
         string displayLine;
         string searchableLine;
+        int payloadStart;
         bool isHighlighted;
         bool hasFormattingError;
         try
@@ -982,7 +1036,7 @@ public sealed class LogViewModel : ViewModelBase
                 _showRxTxDirectionPrefixInLogView,
                 _timestampDisplayFormat,
                 _rxDisplayMode,
-                out var payloadStart);
+                out payloadStart);
             (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(
                 line,
                 highlightRules,
@@ -998,18 +1052,19 @@ public sealed class LogViewModel : ViewModelBase
                 _showRxTxDirectionPrefixInLogView,
                 _timestampDisplayFormat,
                 _rxDisplayMode,
-                out _);
+                out payloadStart);
             displayLine = searchableLine;
             isHighlighted = false;
             hasFormattingError = true;
         }
 
-        return (displayLine, searchableLine, isHighlighted, hasFormattingError);
+        return (displayLine, searchableLine, payloadStart, isHighlighted, hasFormattingError);
     }
 
     private bool IsVisibleByFilters(
         LogLine line,
-        LogRuleMatcher.CompiledHighlightRule[] viewFilters)
+        LogRuleMatcher.CompiledHighlightRule[] viewFilters,
+        bool recordErrors = true)
     {
         if (viewFilters.Length == 0)
         {
@@ -1023,7 +1078,10 @@ public sealed class LogViewModel : ViewModelBase
                 var matched = IsRuleMatch(line, viewFilter, _rxDisplayMode, out var matchError);
                 if (!string.IsNullOrWhiteSpace(matchError))
                 {
-                    ViewFilterMatchErrorCount++;
+                    if (recordErrors)
+                    {
+                        ViewFilterMatchErrorCount++;
+                    }
                     continue;
                 }
 
@@ -1034,7 +1092,10 @@ public sealed class LogViewModel : ViewModelBase
             }
             catch
             {
-                ViewFilterMatchErrorCount++;
+                if (recordErrors)
+                {
+                    ViewFilterMatchErrorCount++;
+                }
             }
         }
 

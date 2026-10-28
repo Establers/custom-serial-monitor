@@ -57,7 +57,7 @@
     <comment>Visible log filter flyout title.</comment>
   </data>
   <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Show every new log line</value>
+    <value>Show all retained and incoming logs</value>
     <comment>Visible log ALL option tooltip.</comment>
   </data>
   <data name="VisibleFilterRuleCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -65,7 +65,7 @@
     <comment>Visible log rule option tooltip.</comment>
   </data>
   <data name="VisibleFilterHelpText.Text" xml:space="preserve">
-    <value>Selected rules are combined with OR.&#x0A;Changes apply to new logs only.</value>
+    <value>Selected rules are combined with OR.&#x0A;Applies to retained and incoming logs. ALL shows everything again.</value>
     <comment>Visible log filter behavior notice.</comment>
   </data>
   <data name="VisibleFilterCancelButton.Content" xml:space="preserve">
@@ -81,20 +81,23 @@
     <comment>Visible log filter option that disables filtering.</comment>
   </data>
   <data name="VisibleFilterAllToolTip" xml:space="preserve">
-    <value>ALL: show every new log line.</value>
+    <value>ALL: show all retained and incoming logs.</value>
     <comment>Dynamic tooltip when no visible log filters are selected.</comment>
   </data>
   <data name="VisibleFilterSelectedToolTipFormat" xml:space="preserve">
-    <value>Selected filters (OR): {0}. Applies to new logs only.</value>
+    <value>Selected filters (OR): {0}. Applies to all retained and incoming logs.</value>
     <comment>Dynamic tooltip format for selected visible log filters.</comment>
   </data>
   <data name="VisibleFilterAllStatus" xml:space="preserve">
-    <value>Visible log filter: ALL. Applies to new logs only.</value>
+    <value>Visible log filter: ALL. Showing all retained and incoming logs.</value>
     <comment>Status text when visible log filtering is disabled.</comment>
   </data>
   <data name="VisibleFilterSelectedStatusFormat" xml:space="preserve">
-    <value>Visible log filters (OR): {0}. Applies to new logs only. Press Clear for a clean filtered view.</value>
+    <value>Visible log filters (OR): {0}. Applied to all retained and incoming logs.</value>
     <comment>Status format after applying visible log filters.</comment>
+  </data>
+  <data name="VisibleFilterApplyingStatus" xml:space="preserve">
+    <value>Applying filter to retained logs...</value>
   </data>
   <data name="StaticUi015.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends.</value>
@@ -116,7 +119,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi020.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Review log events detected by enabled rules.</value>
+    <value>Review log events detected by enabled rules. Double-click an event to jump to its original log.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi022.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -136,7 +139,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi027.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Review matches from the retained in-memory log. Double-click a result to jump to it.</value>
+    <value>Review matches from the retained in-memory log. Double-click a result or press Enter to jump to it.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi029.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -219,14 +222,18 @@
     <value>Create matching rules for events, highlights, filters, and optional notifications.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
+  <data name="StaticUi055.Text" xml:space="preserve">
+    <value>Events/highlights: new logs</value>
+  </data>
   <data name="StaticUi055.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Rule changes always affect only new incoming logs and do not reprocess existing visible logs.</value>
+    <value>Events and highlights apply to new incoming logs. View filters also apply to retained logs; ALL restores hidden logs within the retention limit.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi056.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Add log rule</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
+  <data name="StaticUi056.Content" xml:space="preserve"><value>Add rule</value></data>
   <data name="StaticUi068.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Event: add matching lines to Events</value>
     <comment>Static MainWindow UI text.</comment>
@@ -328,8 +335,11 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi110.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Applies after reconnect.</value>
+    <value>Change the folder while logging is OFF. It applies when logging next starts, without reconnecting.</value>
     <comment>Static MainWindow UI text.</comment>
+  </data>
+  <data name="StaticUi110.Text" xml:space="preserve">
+    <value>OFF only</value>
   </data>
   <data name="StaticUi112.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name.</value>
@@ -436,7 +446,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi167.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Applies immediately to newly displayed lines.</value>
+    <value>Applies immediately and re-renders retained visible logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi169.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -543,8 +553,8 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi232.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Read quick instructions for events, sequences, the COM bridge, and shortcuts.</value>
-    <comment>Static MainWindow UI text.</comment>
+    <value>Essential shortcuts and quick instructions.</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="StaticUi234.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Copy help text</value>
@@ -677,11 +687,11 @@
     <comment>Rule editor tooltip.</comment>
   </data>
   <data name="RuleNotificationCooldownToolTip" xml:space="preserve">
-    <value>Seconds between notifications for this rule (5-3600). Default: 30 seconds.</value>
+    <value>Seconds between notifications for this rule (5-86400). Default: 30 seconds.</value>
     <comment>Rule editor tooltip.</comment>
   </data>
   <data name="RuleTriggerSequenceToolTip" xml:space="preserve">
-    <value>Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running.</value>
+    <value>Create a sequence with steps on the Sequences tab, then select it here. Matching RX data runs it automatically, even when Event is unchecked. (none) disables it. Unavailable for TX-only rules; additional triggers are ignored while any sequence is running.</value>
     <comment>Rule editor tooltip.</comment>
   </data>
   <data name="RuleViewFilterToolTip" xml:space="preserve">
@@ -693,7 +703,7 @@
     <comment>Rule editor validation message.</comment>
   </data>
   <data name="ValidationNotificationCooldownRange" xml:space="preserve">
-    <value>Notify cooldown must be between 5 and 3600 seconds.</value>
+    <value>Notify cooldown must be between 5 and 86400 seconds (24 hours).</value>
     <comment>Rule editor validation message.</comment>
   </data>
   <data name="ValidationNameRequired" xml:space="preserve">
@@ -741,64 +751,40 @@
     <comment>Log restore overlay line-count format.</comment>
   </data>
   <data name="HexFtdiHelpNotice" xml:space="preserve">
-    <value>The default HEX TIMEOUT is 40 ms regardless of baud rate. Adjust it if needed.&#x0A;&#x0A;For the RealSYS CNV485U (USB-RS485), set the Latency Timer to 2 ms. This device uses an FTDI driver; its default 16 ms latency can split a packet when the HEX timeout is short.&#x0A;&#x0A;Device Manager → Ports (COM &amp; LPT) → Properties of the device's COM port → Port Settings → Advanced → Latency Timer (msec): 2. Disconnect and reconnect in the app after changing this setting.&#x0A;&#x0A;This is a USB driver setting, separate from the app's HEX TIMEOUT. Check the same setting for other FTDI USB serial devices if packets are split.</value>
-    <comment>Help tab HEX timeout notice.</comment>
+    <value>Default 40 ms. Increase it if a packet splits across lines; decrease it if packets merge. For FTDI devices, try Latency Timer = 2 ms in the COM port&apos;s advanced settings in Device Manager, then reconnect.</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpQuickStartTitle" xml:space="preserve">
     <value>Quick Start</value>
-    <comment>Help section title.</comment>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpQuickStartBody" xml:space="preserve">
-    <value>1. Select Port and Baud, then press Connect.&#x0A;2. For normal text commands, keep Mode set to Terminal.&#x0A;3. For binary packets, switch Mode to HEX and enter bytes such as A0 A6 E5.&#x0A;4. If file logging is needed, verify that Log is ON.&#x0A;5. Press Save Profile to keep the settings.</value>
-    <comment>Help section body.</comment>
+    <value>Select Port and Baud → Connect.&#x0A;Use Terminal for text, HEX for bytes (A0 A6 E5).&#x0A;Log ON saves to a file; Save Profile keeps your settings.</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpCreateEventsTitle" xml:space="preserve">
-    <value>Create Events</value>
-    <comment>Help section title.</comment>
+    <value>Events</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpCreateEventsBody" xml:space="preserve">
-    <value>1. Press + on the Rules tab.&#x0A;2. Enter Name and Keyword.&#x0A;3. Enable Enabled and Event.&#x0A;4. Select Mode = Terminal for Terminal rules or Mode = HEX for HEX rules.&#x0A;5. Direction = RxOnly is recommended for typical device events.&#x0A;6. Press Save and verify the rule with newly received logs.</value>
-    <comment>Help section body.</comment>
-  </data>
-  <data name="HelpReviewEventsTitle" xml:space="preserve">
-    <value>Review Events</value>
-    <comment>Help section title.</comment>
-  </data>
-  <data name="HelpReviewEventsBody" xml:space="preserve">
-    <value>Review the event time and message in Events.&#x0A;Double-click an event to inspect the surrounding logs in Context.&#x0A;Enable only the Tray, Sound, and Popup notifications you need in the rule editor.&#x0A;All notifications default to OFF, and the default cooldown is 30 seconds.</value>
-    <comment>Help section body.</comment>
+    <value>Rules: + → name, keyword and Mode → enable Enabled and Event → Save.&#x0A;Double-click an event in Events to jump to its retained log.</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpCommandSequencesTitle" xml:space="preserve">
     <value>Command Sequences</value>
-    <comment>Help section title.</comment>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpCommandSequencesBody" xml:space="preserve">
-    <value>1. Create a sequence and add command steps on the Sequences tab.&#x0A;2. Set Command, Line ending and Delay after ms, then arrange the order.&#x0A;3. Connect the device and press Run; Stop cancels the active run.&#x0A;&#x0A;Steps use the main mode at run start unless their JSON specifies TxMode (Terminal/Hex). GUI Run applies per-step mode and delay; CaptureMs and literal Expect checks apply only to CLI/MCP runs. Conditional branches are not supported.&#x0A;With auto reconnect enabled, GUI Run can retry a disconnected failed write; it may already have reached the device. CLI/MCP runs stop on uncertain TX or disconnect and never automatically retry.&#x0A;&#x0A;Use Sequence options to load/export standalone JSON. Import never sends commands. Guide: docs\sequence_authoring.md. Example: docs\sequence_examples.json. Read actual RX to judge product success; interleaved printf may prevent a literal match.</value>
-    <comment>Help section body.</comment>
-  </data>
-  <data name="HelpComBridgeTitle" xml:space="preserve">
-    <value>COM Bridge</value>
-    <comment>Help section title.</comment>
-  </data>
-  <data name="HelpComBridgeBody" xml:space="preserve">
-    <value>Connect to the physical device first.&#x0A;On the Bridge tab, select the app-side port from a com0com pair and press Start bridge.&#x0A;The external program must open the opposite port in the virtual pair.&#x0A;BRIDGE ON means raw bytes are being forwarded in both directions.&#x0A;Logs sent from the external program to the device use the current Mode.&#x0A;Terminal uses the selected encoding and Terminal RxOnly/Both rules.&#x0A;HEX displays raw bytes and uses HEX RxOnly/Both rules.</value>
-    <comment>Help section body.</comment>
-  </data>
-  <data name="HelpModeAndLogsTitle" xml:space="preserve">
-    <value>Mode and Logs</value>
-    <comment>Help section title.</comment>
-  </data>
-  <data name="HelpModeAndLogsBody" xml:space="preserve">
-    <value>The main Mode setting controls both RX display and TX input interpretation.&#x0A;Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.&#x0A;HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.&#x0A;Mode and HEX timeout apply immediately without disconnecting.&#x0A;HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.&#x0A;Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.&#x0A;RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.&#x0A;Clear affects only the screen and does not delete saved files.&#x0A;If Health shows WARNING or ERROR, hover over the footer to inspect the cause or right-click it to copy the status.</value>
-    <comment>Help section body.</comment>
+    <value>Sequences: add a sequence and steps → set command, line ending and delay.&#x0A;Run starts sending; Stop cancels the run.</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpShortcutsTitle" xml:space="preserve">
     <value>Shortcuts</value>
-    <comment>Help section title.</comment>
+    <comment>English essential help text.</comment>
   </data>
   <data name="HelpShortcutsBody" xml:space="preserve">
-    <value>Ctrl+F  Focus search&#x0A;Enter / Shift+Enter  Refresh search and select next / previous&#x0A;F3 / Shift+F3  Move to next / previous result in the last search&#x0A;Ctrl+C  Copy selected log text&#x0A;Ctrl+M  Insert MARK&#x0A;↑ / ↓ in TX input  Move through command history</value>
-    <comment>Help section body.</comment>
+    <value>Ctrl+F  Search&#x0A;F3 / Shift+F3  Next / previous search result&#x0A;Ctrl+G  Go to time, line or percentage</value>
+    <comment>English essential help text.</comment>
   </data>
   <data name="FooterCopyStatusMenuItem.Text" xml:space="preserve">
     <value>Copy status</value>
@@ -845,8 +831,6 @@ Elapsed {2} · Remaining {3}</value>
   <data name="SequenceEditMenu.Text" xml:space="preserve"><value>Edit selected sequence…</value></data>
   <data name="SequenceDeleteMenu.Text" xml:space="preserve"><value>Delete selected sequence…</value></data>
   <data name="SequenceAddStep.Content" xml:space="preserve"><value>+ Step</value></data>
-  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Run sequence</value></data>
-  <data name="SequencePlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Run sequence</value></data>
   <data name="SequenceStop.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop the running sequence, regardless of dropdown selection</value></data>
   <data name="SequenceStop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Stop running sequence</value></data>
   <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Add command to selected sequence</value></data>
@@ -955,4 +939,66 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="LogHistoryExportAction" xml:space="preserve"><value>Export</value></data>
   <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
   <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI plugin installation, updates, usage examples and troubleshooting.</value></data>
+  <data name="LogNavigationLanguage" xml:space="preserve"><value>en</value></data>
+  <data name="LogNavigateButton.Content" xml:space="preserve"><value>Go to...</value></data>
+  <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Go to a time, line number or percentage (Ctrl+G)</value></data>
+  <data name="NativeLogNavigationInputLabel" xml:space="preserve"><value>Time or position</value></data>
+  <data name="NativeLogNavigationInputPlaceholder" xml:space="preserve"><value>14:32:10 · -5m · #500000 · 70%</value></data>
+  <data name="NativeLogNavigationInputHint" xml:space="preserve"><value>HH:mm:ss · YYYY-MM-DD HH:mm:ss · ±5m · #line · %</value></data>
+  <data name="NativeLogNavigationGo" xml:space="preserve"><value>Go</value></data>
+  <data name="NativeLogNavigationBack" xml:space="preserve"><value>Back</value></data>
+  <data name="NativeLogNavigationActivity" xml:space="preserve"><value>Log activity</value></data>
+  <data name="NativeLogNavigationZoomIn" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="NativeLogNavigationZoomOut" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="NativeLogNavigationResetZoom" xml:space="preserve"><value>All</value></data>
+  <data name="NativeLogNavigationGraphHint" xml:space="preserve"><value>Click to jump · Ctrl+wheel zooms</value></data>
+  <data name="NativeLogNavigationNoTime" xml:space="preserve"><value>Time unavailable</value></data>
+  <data name="NativeLogNavigationEmpty" xml:space="preserve"><value>No retained logs yet.</value></data>
+  <data name="NativeLogNavigationRange" xml:space="preserve"><value>{0} – {1} · {2:N0} lines</value></data>
+  <data name="NativeLogNavigationPreview" xml:space="preserve"><value>Destination: {0} · #{1:N0}</value></data>
+  <data name="NativeLogNavigationMoved" xml:space="preserve"><value>Moved to {0} · #{1:N0}</value></data>
+  <data name="NativeLogNavigationReturned" xml:space="preserve"><value>Returned to the previous log position.</value></data>
+  <data name="NativeLogNavigationBridgeError" xml:space="preserve"><value>Log navigation failed: {0}</value></data>
+  <data name="NativeLogNavigationErrorEmpty" xml:space="preserve"><value>Enter a time, relative offset, line number or percentage.</value></data>
+  <data name="NativeLogNavigationErrorInput" xml:space="preserve"><value>Use HH:mm:ss, YYYY-MM-DD HH:mm:ss, -5m, #500000 or 70%.</value></data>
+  <data name="NativeLogNavigationErrorLine" xml:space="preserve"><value>Enter a retained line number starting at #1.</value></data>
+  <data name="NativeLogNavigationErrorPercent" xml:space="preserve"><value>Enter a percentage from 0% to 100%.</value></data>
+  <data name="NativeLogNavigationErrorDate" xml:space="preserve"><value>Enter a valid local date and time.</value></data>
+  <data name="NativeLogNavigationErrorAmbiguous" xml:space="preserve"><value>Logs span several dates. Include YYYY-MM-DD before the time.</value></data>
+  <data name="NativeLogNavigationErrorRange" xml:space="preserve"><value>This position is outside the retained log range.</value></data>
+  <data name="NativeLogNavigationErrorTime" xml:space="preserve"><value>No timestamp is available at this position.</value></data>
+  <data name="NativeLogNavigationErrorExpired" xml:space="preserve"><value>That log has left the retained buffer. Choose another position.</value></data>
+  <data name="NativeLogNavigationErrorHistory" xml:space="preserve"><value>There is no previous position to return to.</value></data>
+  <data name="NativeLogNavigationBusy" xml:space="preserve"><value>The log view is updating. Try again when it finishes.</value></data>
+  <data name="NativeLogNavigationErrorUnavailable" xml:space="preserve"><value>The log view is unavailable. Try again when it is ready.</value></data>
+  <data name="NativeLogNavigationTab.Header" xml:space="preserve"><value>Navigate</value></data>
+  <data name="NativeLogNavigationTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Go to time or position (Ctrl+G), or return to a previous position. The thin timeline at the left of the log also jumps by time.</value></data>
+  <data name="NativeLogNavigationTitle" xml:space="preserve"><value>Go to time or position</value></data>
+  <data name="NativeLogNavigationCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="NativeLogTimePickerTitle" xml:space="preserve"><value>Go to time</value></data>
+  <data name="NativeLogNavigationRangeCount" xml:space="preserve"><value>{0:N0} lines</value></data>
+  <data name="ValidationRulePriorityRange" xml:space="preserve"><value>Priority must be a whole number between -2147483648 and 2147483647.</value></data>
+  <data name="RulePriorityHint.Text" xml:space="preserve"><value>Higher values take precedence</value></data>
+  <data name="RuleCooldownHint.Text" xml:space="preserve"><value>5–86,400 sec · up to 24 h</value></data>
+  <data name="RuleNotificationsLabel.Text" xml:space="preserve"><value>Notifications</value></data>
+  <data name="RuleTriggerSequenceHint" xml:space="preserve"><value>Run the selected command sequence when RX matches this rule. (none) disables it.</value></data>
+  <data name="RuleTriggerSequenceEmptyHint" xml:space="preserve"><value>Create a sequence with steps on the Sequences tab, then select it here to run when RX matches.</value></data>
+  <data name="RuleTriggerSequenceTxOnlyHint" xml:space="preserve"><value>Unavailable for TX-only rules. Choose RxOnly or Both to enable RX triggers.</value></data>
+  <data name="SequenceDuplicateMenu.Text" xml:space="preserve"><value>Duplicate selected sequence</value></data>
+  <data name="SequenceDuplicateStep.Content" xml:space="preserve"><value>Copy step</value></data>
+  <data name="SequenceDuplicateStep.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Duplicate selected sequence step</value></data>
+  <data name="SequenceDuplicateStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Duplicate the selected step directly below it</value></data>
+  <data name="SequenceStartAction" xml:space="preserve"><value>Run sequence</value></data>
+  <data name="SequencePauseAction" xml:space="preserve"><value>Pause after the current send and delay finish</value></data>
+  <data name="SequenceResumeAction" xml:space="preserve"><value>Resume paused sequence</value></data>
+  <data name="SequencePausePendingAction" xml:space="preserve"><value>Continue sequence (cancel pending pause)</value></data>
+  <data name="SequenceEnabledHeader.Text" xml:space="preserve"><value>On</value></data>
+  <data name="SequenceEnabledHeader.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are skipped during execution</value></data>
+  <data name="SequenceCommandHeader.Text" xml:space="preserve"><value>Command</value></data>
+  <data name="SequenceModeHeader.Text" xml:space="preserve"><value>Mode</value></data>
+  <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Enable this sequence step</value></data>
+  <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are kept here but skipped during execution</value></data>
+  <data name="SequenceStepTxModeLabel" xml:space="preserve"><value>TX mode</value></data>
+  <data name="SequenceStepTxModeHelp" xml:space="preserve"><value>Global uses the main TX mode captured at run start. Hex sends bytes as entered and ignores line ending.</value></data>
+  <data name="SequenceStepResponseMetadataHelp" xml:space="preserve"><value>RX collection and response checks are preserved here. Change them in sequence JSON or through CLI/MCP.</value></data>
 </root>

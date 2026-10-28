@@ -46,7 +46,10 @@ async function setTheme(page, theme) {
     await first.evaluate(() => {
       window.serialMonitorAppendLog('retained log\r\n', false, 1);
     });
-    await first.waitForFunction(() => !window.serialMonitorGetAppendQueueState().writing);
+    await first.waitForFunction(() => {
+      const state = window.serialMonitorGetAppendQueueState();
+      return !state.writing && !state.queueLength;
+    });
     await first.evaluate(() => terminal.select(0, 0, 8));
 
     // Changing either instance must leave the other instance's theme intact.

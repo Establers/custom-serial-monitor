@@ -10,7 +10,7 @@ namespace SerialMonitor.WinUI.Infrastructure;
 internal static class AutomationSequenceMapper
 {
     public static AutomationSequenceDefinition Snapshot(CommandSequence sequence, TxSendMode mode, TxLineEndingMode ending) =>
-        new(sequence.Name, sequence.RepeatCount, sequence.Steps.Select(step => new AutomationSequenceStep(
+        new(sequence.Name, sequence.RepeatCount, sequence.Steps.Where(step => step.IsEnabled).Select(step => new AutomationSequenceStep(
             step.Name, step.CommandText, (step.TxMode ?? mode) == TxSendMode.Hex ? "hex" : "text",
             (step.LineEndingMode ?? ending).ToString().ToLowerInvariant(), step.CaptureMs, step.DelayAfterMs,
             step.Expect)).ToArray());

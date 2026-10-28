@@ -1,0 +1,142 @@
+<UserControl
+    x:Class="SerialMonitor.WinUI.Views.LogNavigationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:SerialMonitor.WinUI.Views"
+    Width="280" Height="208" IsTextScaleFactorEnabled="False">
+    <UserControl.Resources>
+        <!-- Fixed text sizes belong to this compact dialog, not the app. -->
+        <Style TargetType="TextBlock">
+            <Setter Property="IsTextScaleFactorEnabled" Value="False" />
+        </Style>
+        <Style TargetType="ToolTip">
+            <Setter Property="IsTextScaleFactorEnabled" Value="False" />
+        </Style>
+        <views:LogTimePartConverter x:Key="TimePartConverter" />
+        <x:Double x:Key="TimePickerValueFontSize">14</x:Double>
+        <x:Double x:Key="ComboBoxThemeMinWidth">0</x:Double>
+        <x:Double x:Key="ComboBoxPopupThemeMinWidth">64</x:Double>
+        <StaticResource x:Key="ComboBoxBackground" ResourceKey="ControlFillColorDefaultBrush" />
+        <StaticResource x:Key="ComboBoxBackgroundFocused" ResourceKey="ControlFillColorDefaultBrush" />
+        <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ControlFillColorSecondaryBrush" />
+        <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+        <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ControlStrokeColorDefaultBrush" />
+        <DataTemplate x:Key="TimePartTemplate">
+            <TextBlock Text="{Binding Converter={StaticResource TimePartConverter}}"
+                       FontSize="{StaticResource TimePickerValueFontSize}" TextAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="YearPartTemplate">
+            <TextBlock Text="{Binding Converter={StaticResource TimePartConverter}, ConverterParameter=4}"
+                       FontSize="{StaticResource TimePickerValueFontSize}" TextAlignment="Center" />
+        </DataTemplate>
+        <Style x:Key="TimePartPickerItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="IsTextScaleFactorEnabled" Value="False" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="TimePartPickerStyle" TargetType="ComboBox">
+            <Setter Property="IsTextScaleFactorEnabled" Value="False" />
+            <Setter Property="FontSize" Value="{StaticResource TimePickerValueFontSize}" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Padding" Value="8,0,0,0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="ItemTemplate" Value="{StaticResource TimePartTemplate}" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource TimePartPickerItemStyle}" />
+            <Setter Property="MaxDropDownHeight" Value="200" />
+        </Style>
+    </UserControl.Resources>
+    <Grid x:Name="NavigationRoot" RowDefinitions="18,32,18,32,76" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="DateLabel" Text="Date" FontSize="13" VerticalAlignment="Center" />
+            <TextBlock x:Name="DateFormatHint" Grid.Column="1" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+        <Grid Grid.Row="1">
+            <Grid x:Name="DateChoices" ColumnDefinitions="Auto,16,Auto,16,Auto" HorizontalAlignment="Left">
+                <ComboBox x:Name="YearPicker" ItemsSource="{Binding Years}"
+                          IsEnabled="{Binding HasRange}" MinWidth="80"
+                          SelectedItem="{Binding SelectedYear, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}"
+                          ItemTemplate="{StaticResource YearPartTemplate}" />
+                <TextBlock Grid.Column="1" Text=" - " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
+                           HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="MonthPicker" Grid.Column="2" ItemsSource="{Binding Months}"
+                          IsEnabled="{Binding HasRange}"
+                          SelectedItem="{Binding SelectedMonth, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}" />
+                <TextBlock Grid.Column="3" Text=" - " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
+                           HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="DayPicker" Grid.Column="4" ItemsSource="{Binding Days}"
+                          IsEnabled="{Binding HasRange}"
+                          SelectedItem="{Binding SelectedDay, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}" />
+            </Grid>
+            <Border x:Name="FixedDateField" Height="32" Padding="8,0" HorizontalAlignment="Left"
+                    CornerRadius="4" BorderThickness="1"
+                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                <TextBlock x:Name="FixedDate" FontSize="{StaticResource TimePickerValueFontSize}" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" IsTextSelectionEnabled="True" />
+            </Border>
+        </Grid>
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="TimeLabel" Text="Time" FontSize="13" VerticalAlignment="Center" />
+            <TextBlock x:Name="TimeFormatHint" Grid.Column="1" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+        <Grid x:Name="TimeChoices" Grid.Row="3" ColumnDefinitions="Auto,16,Auto,16,Auto" HorizontalAlignment="Left">
+                <ComboBox x:Name="HourPicker" ItemsSource="{Binding Hours}"
+                          IsEnabled="{Binding HasRange}"
+                          SelectedItem="{Binding SelectedHour, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}" />
+                <TextBlock Grid.Column="1" Text=" : " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
+                           HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="MinutePicker" Grid.Column="2" ItemsSource="{Binding Minutes}"
+                          IsEnabled="{Binding HasRange}"
+                          SelectedItem="{Binding SelectedMinute, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}" />
+                <TextBlock Grid.Column="3" Text=" : " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
+                           HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="SecondPicker" Grid.Column="4" ItemsSource="{Binding Seconds}"
+                          IsEnabled="{Binding HasRange}"
+                          SelectedItem="{Binding SelectedSecond, Mode=TwoWay}"
+                          Style="{StaticResource TimePartPickerStyle}" />
+        </Grid>
+        <Grid Grid.Row="4" Height="76">
+            <Border x:Name="AvailableRange" Height="76" Padding="8" CornerRadius="4"
+                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
+                    ToolTipService.ToolTip="{Binding RangeText}">
+                <Grid RowDefinitions="18,18,18" RowSpacing="2" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+                        <TextBlock x:Name="RangeLabel" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="{Binding RangeCountText}" FontSize="12" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                    <TextBlock x:Name="RangeStartLabel" Grid.Row="1" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RangeStartText}" FontSize="12"
+                               TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                    <TextBlock x:Name="RangeEndLabel" Grid.Row="2" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RangeEndText}" FontSize="12"
+                               TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                </Grid>
+            </Border>
+            <TextBlock x:Name="ErrorText" Text="{Binding ErrorText}" Visibility="Collapsed"
+                       Height="76" Padding="8" FontSize="13" LineHeight="18" MaxLines="3"
+                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                       AutomationProperties.LiveSetting="Polite" />
+        </Grid>
+    </Grid>
+</UserControl>

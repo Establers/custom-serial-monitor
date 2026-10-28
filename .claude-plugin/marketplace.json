@@ -10,7 +10,7 @@
     {
       "name": "serial-monitor",
       "description": "Control the running Windows Serial Monitor and inspect actual UART RX.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/serial-monitor",
       "policy": {
         "installation": "AVAILABLE",

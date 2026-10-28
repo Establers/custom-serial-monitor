@@ -9,8 +9,23 @@ namespace SerialMonitor.WinUI.Models;
 public sealed class CommandSequenceStep : INotifyPropertyChanged
 {
     private int _stepNumber;
+    private bool _isEnabled = true;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    // Disabled steps remain in the definition but are omitted from every run.
+    // Initializing to true preserves execution of legacy profiles and files.
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set
+        {
+            if (_isEnabled == value) return;
+            _isEnabled = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(RowToolTip));
+        }
+    }
 
     // Optional label used in GUI progress/errors and CLI/MCP step results; never transmitted.
     public string? Name { get; set; }
@@ -88,6 +103,7 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
         get
         {
             var details = $"{StepNumberText} | {CommandText} | TX {TxMode?.ToString() ?? "Global"} | {LineEndingHelpText} | Delay {DelayText} | {AutomationHelpText}";
+            if (!IsEnabled) details = $"Disabled: skipped during execution.{Environment.NewLine}{details}";
             if (!string.IsNullOrWhiteSpace(Name)) details = $"Step name: {Name.Trim()}{Environment.NewLine}{details}";
             if (!string.IsNullOrWhiteSpace(Comment)) details += $"{Environment.NewLine}Comment: {CommentText}";
             return details;

@@ -6,12 +6,12 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class LogViewModelNewLogsOnlyTests
 {
     [Fact]
-    public void ViewFilterChange_RemainsNewLogsOnly_AfterFormattingRebuild()
+    public void ViewFilterChange_ReappliesToRetainedHistory_AfterFormattingRebuild()
     {
         var viewModel = new LogViewModel(capacity: 100);
         viewModel.AddRange(new[] { LogLine.Rx("OLD NONMATCH") });
 
-        viewModel.SetViewFilter(CreateErrorRule(), rebuildExisting: false);
+        viewModel.SetViewFilter(CreateErrorRule());
         viewModel.AddRange(new[]
         {
             LogLine.Rx("NEW NONMATCH"),
@@ -21,7 +21,7 @@ public sealed class LogViewModelNewLogsOnlyTests
         viewModel.SetTimestampDisplayFormat(TimestampDisplayFormat.TimeSeconds);
         var snapshot = viewModel.GetVisibleTextSnapshot();
 
-        Assert.Contains("OLD NONMATCH", snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("OLD NONMATCH", snapshot, StringComparison.Ordinal);
         Assert.DoesNotContain("NEW NONMATCH", snapshot, StringComparison.Ordinal);
         Assert.Contains("NEW ERROR", snapshot, StringComparison.Ordinal);
     }

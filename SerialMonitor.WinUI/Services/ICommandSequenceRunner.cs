@@ -11,5 +11,6 @@ public interface ICommandSequenceRunner
         Func<bool> canRetryFailedSend,
         Action<int> startingStep,
         Action<int> completedSteps,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        SequenceExecutionControl? control = null);
 }

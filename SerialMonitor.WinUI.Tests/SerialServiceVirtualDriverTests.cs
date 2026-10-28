@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Win32;
+using RJCP.IO.Ports;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
@@ -10,6 +11,130 @@ namespace SerialMonitor.WinUI.Tests;
 // environment variables cannot redirect it to a physical device.
 public sealed class SerialServiceVirtualDriverTests
 {
+    [Com0comPair0Fact]
+    public async Task SerialSettingsReachTheWindowsDriverForEveryFrameAndHandshakeOption()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var cases = new List<SerialSettings>();
+        foreach (var baud in new[] { 300, 1200, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 250000, 460800, 921600, 1000000 })
+            cases.Add(new() { BaudRate = baud });
+        foreach (var dataBits in new[] { 5, 6, 7, 8 })
+            cases.Add(new() { DataBits = dataBits });
+        foreach (var parity in Enum.GetValues<SerialParityMode>())
+            cases.Add(new() { Parity = parity });
+        foreach (var stopBits in Enum.GetValues<SerialStopBitsMode>())
+            cases.Add(new() { DataBits = stopBits == SerialStopBitsMode.OnePointFive ? 5 : 8, StopBits = stopBits });
+        foreach (var handshake in Enum.GetValues<SerialHandshakeMode>())
+        foreach (var dtr in new[] { false, true })
+        foreach (var rts in new[] { false, true })
+            cases.Add(new() { Handshake = handshake, DtrEnable = dtr, RtsEnable = rts });
+
+        foreach (var settings in cases)
+        {
+            settings.PortName = "CNCA0";
+            await using var service = new SerialService();
+            await service.ConnectAsync(settings, new(), cancellation.Token);
+            var port = GetOpenPort(service);
+            // This reads GetCommState on the open Windows handle, rather than
+            // merely checking the values cached before Open().
+            Assert.Equal(settings.BaudRate, port.ReadOpenPortBaudRate());
+            Assert.Equal(settings.DataBits, port.DataBits);
+            Assert.Equal(settings.Parity.ToString(), port.Parity.ToString());
+            Assert.Equal(settings.StopBits switch
+            {
+                SerialStopBitsMode.OnePointFive => StopBits.One5,
+                SerialStopBitsMode.Two => StopBits.Two,
+                _ => StopBits.One
+            }, port.StopBits);
+            Assert.True(settings.Handshake.ToString() == port.Handshake.ToString(),
+                $"Requested {settings.Handshake}, DTR={settings.DtrEnable}, RTS={settings.RtsEnable}; driver reports {port.Handshake}.");
+            if (!UsesDtrHandshake(settings.Handshake)) Assert.Equal(settings.DtrEnable, port.DtrEnable);
+            if (!UsesRtsHandshake(settings.Handshake)) Assert.Equal(settings.RtsEnable, port.RtsEnable);
+        }
+    }
+
+    [Com0comPair0Fact]
+    public async Task HardwareHandshakePausesAndResumesActualTransmission()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        VerifyEmulatorEndpoint("CNCB0");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        foreach (var handshake in Enum.GetValues<SerialHandshakeMode>().Where(mode => UsesDtrHandshake(mode) || UsesRtsHandshake(mode)))
+        {
+            await using var peer = new SerialService();
+            await using var sender = new SerialService();
+            await peer.ConnectAsync(new() { PortName = "CNCB0", DtrEnable = true, RtsEnable = true }, new(), cancellation.Token);
+            await sender.ConnectAsync(new() { PortName = "CNCA0", Handshake = handshake }, new(), cancellation.Token);
+            var peerPort = GetOpenPort(peer);
+            var senderPort = GetOpenPort(sender);
+            byte[] before = [0x41, 0x42, 0x43];
+            await sender.SendBytesAsync(before, "", cancellation.Token);
+            Assert.Equal(before, await ReadBytesAsync(peer, before.Length, cancellation.Token));
+
+            if (UsesRtsHandshake(handshake)) peerPort.RtsEnable = false;
+            if (UsesDtrHandshake(handshake)) peerPort.DtrEnable = false;
+            await WaitUntilAsync(() => (!UsesRtsHandshake(handshake) || !senderPort.CtsHolding) &&
+                (!UsesDtrHandshake(handshake) || !senderPort.DsrHolding), cancellation.Token);
+            byte[] paused = [0x44, 0x45, 0x46];
+            await sender.SendBytesAsync(paused, "", cancellation.Token);
+            await AssertNoRxAsync(peer, cancellation.Token);
+
+            peerPort.RtsEnable = true;
+            peerPort.DtrEnable = true;
+            Assert.Equal(paused, await ReadBytesAsync(peer, paused.Length, cancellation.Token));
+        }
+    }
+
+    [Com0comPair0Fact]
+    public async Task SoftwareHandshakeConsumesXoffAndXonAndResumesQueuedTransmission()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        VerifyEmulatorEndpoint("CNCB0");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        foreach (var handshake in new[] { SerialHandshakeMode.XOn, SerialHandshakeMode.RtsXOn, SerialHandshakeMode.DtrXOn, SerialHandshakeMode.DtrRtsXOn })
+        {
+            await using var peer = new SerialService();
+            await using var sender = new SerialService();
+            await peer.ConnectAsync(new() { PortName = "CNCB0", DtrEnable = true, RtsEnable = true }, new(), cancellation.Token);
+            await sender.ConnectAsync(new() { PortName = "CNCA0", Handshake = handshake }, new(), cancellation.Token);
+            await peer.SendBytesAsync([0x13], "", cancellation.Token);
+            await GetOpenPort(peer).FlushAsync(cancellation.Token);
+            await Task.Delay(100, cancellation.Token);
+            byte[] payload = [0x41, 0x42, 0x43];
+            await sender.SendBytesAsync(payload, "", cancellation.Token);
+            await AssertNoRxAsync(peer, cancellation.Token);
+            await peer.SendBytesAsync([0x11], "", cancellation.Token);
+            Assert.Equal(payload, await ReadBytesAsync(peer, payload.Length, cancellation.Token));
+            Assert.False(sender.ReceivedBytes.TryRead(out _));
+        }
+    }
+
+    [Com0comPair0Fact]
+    public async Task TxEndingOptionsProduceExactBytesAndCanChangeWithoutReconnecting()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        VerifyEmulatorEndpoint("CNCB0");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await using var sender = new SerialService();
+        await using var peer = new SerialService();
+        await sender.ConnectAsync(new() { PortName = "CNCA0" }, new(), cancellation.Token);
+        await peer.ConnectAsync(new() { PortName = "CNCB0" }, new(), cancellation.Token);
+        var generation = sender.ReceiveSessionGeneration;
+        foreach (var (ending, suffix) in new[]
+        {
+            (TxLineEndingMode.None, ""), (TxLineEndingMode.Cr, "\r"),
+            (TxLineEndingMode.Lf, "\n"), (TxLineEndingMode.Crlf, "\r\n")
+        })
+        {
+            await sender.SendAsync(new("test", "STATUS") { LineEndingMode = ending }, cancellation.Token);
+            var expected = System.Text.Encoding.UTF8.GetBytes("STATUS" + suffix);
+            Assert.Equal(expected, await ReadBytesAsync(peer, expected.Length, cancellation.Token));
+            Assert.Equal(generation, sender.ReceiveSessionGeneration);
+            await AssertNoRxAsync(peer, cancellation.Token);
+        }
+    }
+
     [Com0comPair0Fact]
     public async Task ExistingWindowsHandlesKeepBinaryRxAndTxAfterLiveBaudChange()
     {
@@ -80,6 +205,26 @@ public sealed class SerialServiceVirtualDriverTests
         Assert.Equal("com0com", endpoint.GetValue("Service"));
         using var parameters = endpoint.OpenSubKey("Device Parameters");
         Assert.Equal(name, parameters?.GetValue("PortName"));
+    }
+
+    private static bool UsesDtrHandshake(SerialHandshakeMode mode) =>
+        mode is SerialHandshakeMode.Dtr or SerialHandshakeMode.DtrXOn or SerialHandshakeMode.DtrRts or SerialHandshakeMode.DtrRtsXOn;
+
+    private static bool UsesRtsHandshake(SerialHandshakeMode mode) =>
+        mode is SerialHandshakeMode.Rts or SerialHandshakeMode.RtsXOn or SerialHandshakeMode.DtrRts or SerialHandshakeMode.DtrRtsXOn;
+
+    private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+    {
+        while (!condition()) await Task.Delay(10, cancellationToken);
+    }
+
+    private static async Task AssertNoRxAsync(SerialService service, CancellationToken cancellationToken)
+    {
+        using var quietWindow = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        quietWindow.CancelAfter(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await service.ReceivedBytes.ReadAsync(quietWindow.Token));
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static BoundaryPreservingSerialPortStream GetOpenPort(SerialService service)

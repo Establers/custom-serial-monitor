@@ -89,6 +89,48 @@ public sealed class VisibleSearchResultTests
         Assert.Equal(11, result.MatchIndex);
         Assert.Equal(7, result.PayloadOffset);
         Assert.Equal(3, result.MatchCountInLine);
-        Assert.Equal("×3", result.MatchCountText);
+    }
+
+    [Theory]
+    [InlineData("SYS status")]
+    [InlineData("SYSTEM ready")]
+    [InlineData("RX < payload")]
+    [InlineData("[16:30:55.091] payload")]
+    [InlineData("  READY")]
+    [InlineData("\tREADY")]
+    public void KnownPayloadBoundary_PreservesDeviceTextWithoutParsingItAsMetadata(string payload)
+    {
+        var result = VisibleSearchResultParser.Create(
+            1, 0, 1, 0, 1, payload, LogDirection.Rx, payloadStart: 0);
+
+        Assert.Equal(string.Empty, result.TimeText);
+        Assert.Equal("RX", result.DirectionText);
+        Assert.Equal(payload, result.MessagePreview);
+    }
+
+    [Theory]
+    [InlineData("[16:30:55.091] ")]
+    [InlineData("[16:30:55.091] RX < ")]
+    public void KnownPayloadBoundary_PreservesLeadingSpacesAndMatchingCoordinates(string prefix)
+    {
+        const string payload = "  SYS READY READY";
+        var result = VisibleSearchResultParser.Create(
+            1, 0, 1, 2, 2, prefix + payload, LogDirection.Rx,
+            searchText: "SYS", payloadStart: prefix.Length);
+
+        Assert.Equal("16:30:55.091", result.TimeText);
+        Assert.Equal("RX", result.DirectionText);
+        Assert.Equal(payload, result.MessagePreview);
+        Assert.Equal("SYS", Assert.Single(result.MessageSegments.Where(segment => segment.IsMatch)).Text);
+        Assert.Equal(payload, string.Concat(result.MessageSegments.Select(segment => segment.Text)));
+    }
+
+    [Fact]
+    public void LegacyParser_DoesNotMistakeSystemLikePayloadForDirection()
+    {
+        var result = VisibleSearchResultParser.Create(1, 0, 1, 0, 1, "SYSTEM ready");
+
+        Assert.Equal(string.Empty, result.DirectionText);
+        Assert.Equal("SYSTEM ready", result.MessagePreview);
     }
 }

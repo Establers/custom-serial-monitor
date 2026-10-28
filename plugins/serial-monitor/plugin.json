@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "serial-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Control the running Windows Serial Monitor, send documented device commands and inspect actual UART RX.",
   "author": {
     "name": "Serial Monitor"

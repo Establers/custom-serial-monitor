@@ -15,28 +15,51 @@ function section(start, end) {
 
 test('history metadata wraps, shrinks, grows and clears with exact IDs and timestamps', () => {
   const terminal = { options: { scrollback: 1000 }, rows: 30, parser: { registerOscHandler() {} } };
-  const context = { terminal };
+  const context = { terminal, clearNavigationHighlight() {} };
   runInNewContext(
     section('    const appendQueue = [];', '    const contextMenu =') +
-    section('    function resetParsedLogLineIds()', '    function normalizeLogText(') +
+    section('    function resetParsedLogLineIds(', '    function normalizeLogText(') +
     section('    function getTimestampForLogicalLineIndex(', '    function getSelectionDeltaMilliseconds('), context);
   const base = 9007199254740993n; // IDs remain exact beyond Number.MAX_SAFE_INTEGER.
   for (let i = 0; i < 5000; i++) context.appendParsedLogLineId(String(base + BigInt(i)), i);
-  assert.equal(context.getParsedLogLineIdCount(), 1031);
-  assert.equal(context.findParsedLogLineIdIndex(String(base + 3968n)), -1);
-  assert.equal(context.findParsedLogLineIdIndex(String(base + 3969n)), 0);
-  assert.equal(context.getTimestampForLogicalLineIndex(0, 1031), 3969);
-  assert.equal(context.getTimestampForLogicalLineIndex(1030, 1031), 4999);
+  assert.equal(context.getParsedLogLineIdCount(), 1256);
+  assert.equal(context.findParsedLogLineIdIndex(String(base + 3743n)), -1);
+  assert.equal(context.findParsedLogLineIdIndex(String(base + 3744n)), 0);
+  assert.equal(context.getTimestampForLogicalLineIndex(0, 1256), 3744);
+  assert.equal(context.getTimestampForLogicalLineIndex(1255, 1256), 4999);
   terminal.options.scrollback = 100;
-  assert.equal(context.getParsedLogLineIdCount(), 131);
-  assert.equal(context.getTimestampForLogicalLineIndex(0, 131), 4869);
+  assert.equal(context.getParsedLogLineIdCount(), 356);
+  assert.equal(context.getTimestampForLogicalLineIndex(0, 356), 4644);
   terminal.options.scrollback = 1_000_000;
-  assert.equal(context.getParsedLogLineIdCount(), 131);
+  assert.equal(context.getParsedLogLineIdCount(), 356);
   context.appendParsedLogLineId(String(base + 5000n), 5000);
-  assert.equal(context.findParsedLogLineIdIndex(String(base + 5000n)), 131);
+  assert.equal(context.findParsedLogLineIdIndex(String(base + 5000n)), 356);
   context.resetParsedLogLineIds();
   assert.equal(context.getParsedLogLineIdCount(), 0);
   assert.equal(context.findParsedLogLineIdIndex(String(base + 5000n)), -1);
+});
+
+test('height-only metadata resizing reuses rings within bounded viewport headroom', () => {
+  const terminal = { options: { scrollback: 1000 }, rows: 30, parser: { registerOscHandler() {} } };
+  const context = { terminal, clearNavigationHighlight() {} };
+  runInNewContext(section('    const appendQueue = [];', '    const contextMenu =') +
+    section('    function resetParsedLogLineIds(', '    function normalizeLogText(') +
+    'globalThis.rings = () => [parsedLogLineIds, parsedLogLineTimestamps, parsedLogLineRows];', context);
+  for (let index = 0; index < 3000; index++) context.appendParsedLogLineId(String(index + 1), index);
+  const original = context.rings();
+  for (const rows of [31, 60, 128, 255, 30]) {
+    terminal.rows = rows;
+    assert.equal(context.getParsedLogLineIdCount(), 1256);
+    context.rings().forEach((ring, index) => assert.equal(ring, original[index], 'height changes in one bucket must not allocate/copy metadata'));
+  }
+  terminal.rows = 256;
+  assert.equal(context.getParsedLogLineIdCount(), 1256);
+  assert.equal(context.rings()[0].length, 1512);
+  assert.notEqual(context.rings()[0], original[0]);
+  terminal.options.scrollback = 100;
+  assert.equal(context.getParsedLogLineIdCount(), 612);
+  assert.equal(context.rings()[0].length, 612, 'explicit scrollback shrink must still be honored immediately');
+  assert.equal(context.findParsedLogLineIdIndex('2389'), 0);
 });
 
 test('shipped xterm retains one million rows and plateaus across three million writes', async t => {

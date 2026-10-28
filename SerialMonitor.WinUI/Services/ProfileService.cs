@@ -1216,7 +1216,7 @@ public sealed class ProfileService : IProfileService
                 rule.BackgroundColor,
                 "event rule background",
                 warnings);
-            rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
+            rule.NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(rule.NotificationCooldownSeconds);
             rule.TriggerSequenceName = string.IsNullOrWhiteSpace(rule.TriggerSequenceName)
                 ? null
                 : rule.TriggerSequenceName.Trim();
@@ -1290,7 +1290,7 @@ public sealed class ProfileService : IProfileService
                 warnings.Add("A log rule match mode was invalid.");
             }
 
-            rule.NotificationCooldownSeconds = Math.Clamp(rule.NotificationCooldownSeconds, 5, 3_600);
+            rule.NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(rule.NotificationCooldownSeconds);
             rule.TriggerSequenceName = string.IsNullOrWhiteSpace(rule.TriggerSequenceName)
                 ? null
                 : rule.TriggerSequenceName.Trim();
@@ -1647,7 +1647,9 @@ public sealed class ProfileService : IProfileService
         ICollection<string> warnings)
     {
         var triggerableSequences = sequences
-            .Where(CommandSequenceTriggerPolicy.CanUseAsTrigger)
+            // A temporary all-disabled definition must retain its existing
+            // rule links so re-enabling steps restores the same workflow.
+            .Where(sequence => sequence.Steps.Count > 0)
             .ToArray();
 
         foreach (var rule in rules)

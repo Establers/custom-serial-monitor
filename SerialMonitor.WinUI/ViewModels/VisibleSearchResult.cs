@@ -40,10 +40,6 @@ public sealed class VisibleSearchResult
 
     public int MatchCountInLine { get; }
 
-    public string MatchCountText => MatchCountInLine > 1
-        ? $"×{MatchCountInLine}"
-        : string.Empty;
-
     public string TimeText { get; }
 
     public string DirectionText { get; }
@@ -69,21 +65,50 @@ internal static class VisibleSearchResultParser
         StringComparison comparison = StringComparison.OrdinalIgnoreCase,
         VisibleLogSearchOptions? searchOptions = null,
         VisibleLogSearchMatcher? searchMatcher = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? payloadStart = null,
+        long? timestampUnixMilliseconds = null)
     {
         var timeText = string.Empty;
-        var bodyText = fullText;
-
-        TrySplitTimestamp(fullText, out timeText, out bodyText);
-        ParseBody(bodyText, out var directionText, out var messagePreview);
-        if (string.IsNullOrEmpty(directionText))
+        string directionText;
+        string messagePreview;
+        if (payloadStart is { } knownPayloadStart)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(knownPayloadStart, nameof(payloadStart));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(knownPayloadStart, fullText.Length, nameof(payloadStart));
+            // Formatting already knows the metadata boundary. Device payloads can
+            // begin with timestamps, direction-like text, and meaningful spaces.
+            TrySplitTimestamp(fullText[..knownPayloadStart], out timeText, out _);
             directionText = direction switch
             {
                 LogDirection.Rx => "RX",
                 LogDirection.Tx => "TX",
-                _ => directionText
+                LogDirection.Mark => "MARK",
+                _ => "SYS"
             };
+            messagePreview = fullText[knownPayloadStart..];
+        }
+        else
+        {
+            TrySplitTimestamp(fullText, out timeText, out var bodyText);
+            ParseBody(bodyText, out directionText, out messagePreview);
+            if (string.IsNullOrEmpty(directionText))
+            {
+                directionText = direction switch
+                {
+                    LogDirection.Rx => "RX",
+                    LogDirection.Tx => "TX",
+                    _ => directionText
+                };
+            }
+        }
+
+        // Search rows keep their reception time even when the main log hides
+        // timestamps or displays them with reduced precision.
+        if (timestampUnixMilliseconds is { } timestamp)
+        {
+            timeText = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).LocalDateTime
+                .ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
         }
 
         var options = searchOptions ?? new VisibleLogSearchOptions(
@@ -157,7 +182,12 @@ internal static class VisibleSearchResultParser
         }
 
         timeText = timeCandidate;
-        bodyText = text[(closingBracketIndex + 1)..].TrimStart();
+        var bodyStart = closingBracketIndex + 1;
+        if (bodyStart < text.Length && text[bodyStart] == ' ')
+        {
+            bodyStart++;
+        }
+        bodyText = text[bodyStart..];
         return true;
     }
 
@@ -198,7 +228,7 @@ internal static class VisibleSearchResultParser
             return;
         }
 
-        if (text.StartsWith("SYS", StringComparison.Ordinal))
+        if (text == "SYS" || text.StartsWith("SYS ", StringComparison.Ordinal))
         {
             directionText = "SYS";
             messagePreview = text.Length > 4 ? text[4..] : string.Empty;

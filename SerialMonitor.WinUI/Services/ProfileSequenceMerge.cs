@@ -16,7 +16,7 @@ internal static class ProfileSequenceMerge
         RepeatCount = sequence.RepeatCount,
         Steps = new ObservableCollection<CommandSequenceStep>(sequence.Steps.Select(step => new CommandSequenceStep
         {
-            Name = step.Name, CommandText = step.CommandText, LineEndingMode = step.LineEndingMode,
+            Name = step.Name, IsEnabled = step.IsEnabled, CommandText = step.CommandText, LineEndingMode = step.LineEndingMode,
             DelayAfterMs = step.DelayAfterMs, Comment = step.Comment, TxMode = step.TxMode,
             CaptureMs = step.CaptureMs, Expect = step.Expect is { } expect ? expect with { } : null
         }))
@@ -55,7 +55,7 @@ internal static class ProfileSequenceMerge
             sequence.Name, sequence.RepeatCount,
             Steps = sequence.Steps.Select(step => new
             {
-                step.Name, step.CommandText, step.LineEndingMode, step.DelayAfterMs,
+                step.Name, step.IsEnabled, step.CommandText, step.LineEndingMode, step.DelayAfterMs,
                 step.Comment, step.TxMode, step.CaptureMs, step.Expect
             })
         });

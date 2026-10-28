@@ -14,48 +14,60 @@ public sealed class CommandSequenceRunner : ICommandSequenceRunner
         Func<bool> canRetryFailedSend,
         Action<int> startingStep,
         Action<int> completedSteps,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SequenceExecutionControl? control = null)
     {
-        var total = checked(sequence.Steps.Count * sequence.RepeatCount);
+        var steps = sequence.Steps.Where(step => step.IsEnabled).ToArray();
+        if (steps.Length == 0)
+            throw new InvalidOperationException("Sequence stopped: enable at least one step before running.");
+        var total = checked(steps.Length * sequence.RepeatCount);
         var attemptsInSlice = 0;
         var sliceStarted = Stopwatch.GetTimestamp();
-        for (var position = 0; position < total; position++)
+        try
         {
-            var step = sequence.Steps[position % sequence.Steps.Count];
-            while (true)
+            for (var position = 0; position < total; position++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (attemptsInSlice >= MaxAttemptsPerSlice || Stopwatch.GetElapsedTime(sliceStarted) >= MaxSliceDuration)
+                var step = steps[position % steps.Length];
+                while (true)
                 {
-                    // Preserve the caller's UI context: callbacks access UI-owned state.
-                    // Task.Yield alone can continuously refill the UI dispatch queue.
-                    // A real timer wait also covers synchronously completed sends/retries.
-                    await Task.Delay(1, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
-                    attemptsInSlice = 0;
-                    sliceStarted = Stopwatch.GetTimestamp();
+                    if (attemptsInSlice >= MaxAttemptsPerSlice || Stopwatch.GetElapsedTime(sliceStarted) >= MaxSliceDuration)
+                    {
+                        // Preserve the caller's UI context: callbacks access UI-owned state.
+                        // Task.Yield alone can continuously refill the UI dispatch queue.
+                        // A real timer wait also covers synchronously completed sends/retries.
+                        await Task.Delay(1, cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        attemptsInSlice = 0;
+                        sliceStarted = Stopwatch.GetTimestamp();
+                    }
+                    attemptsInSlice++;
+                    if (control is not null) await control.WaitAtStepBoundaryAsync(cancellationToken);
+                    if (!await waitUntilReady(cancellationToken))
+                        throw new InvalidOperationException("Sequence stopped: serial connection is unavailable and automatic reconnect is not active.");
+
+                    // Pause may have been requested while reconnecting.
+                    if (control is not null && await control.WaitBeforeSendAsync(cancellationToken))
+                        continue; // Readiness may have changed while paused.
+                    cancellationToken.ThrowIfCancellationRequested();
+                    startingStep(position);
+                    if (await send(step, cancellationToken))
+                        break;
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!canRetryFailedSend())
+                        throw new InvalidOperationException($"Sequence stopped: step failed ({step.DisplayName}).");
+                    // A disconnected write is retried only after the transport is ready.
+                    // Without a device ACK, a failed write can have reached the device.
                 }
-                attemptsInSlice++;
-                if (!await waitUntilReady(cancellationToken))
-                    throw new InvalidOperationException("Sequence stopped: serial connection is unavailable and automatic reconnect is not active.");
 
-                cancellationToken.ThrowIfCancellationRequested();
-                startingStep(position);
-                if (await send(step, cancellationToken))
-                    break;
-
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!canRetryFailedSend())
-                    throw new InvalidOperationException($"Sequence stopped: step failed ({step.DisplayName}).");
-                // A disconnected write is retried only after the transport is ready.
-                // Without a device ACK, a failed write can have reached the device.
+                // Advance only on successful sends. An outage during this delay does
+                // not replay the command; the next iteration waits for reconnection.
+                completedSteps(position + 1);
+                if (step.DelayAfterMs > 0)
+                    await Task.Delay(step.DelayAfterMs, cancellationToken);
             }
-
-            // Advance only on successful sends. An outage during this delay does
-            // not replay the command; the next iteration waits for reconnection.
-            completedSteps(position + 1);
-            if (step.DelayAfterMs > 0)
-                await Task.Delay(step.DelayAfterMs, cancellationToken);
         }
+        finally { control?.EndRun(); }
     }
 }

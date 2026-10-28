@@ -1,4 +1,6 @@
 using SerialMonitor.WinUI.Models;
+using SerialMonitor.WinUI.Infrastructure;
+using SerialMonitor.WinUI.Services;
 using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI.Tests;
@@ -147,6 +149,175 @@ public sealed class LogViewModelSearchContentTests
         var line = Assert.Single(viewModel.GetVisibleSearchContentSnapshot());
 
         Assert.Equal("RX < is part of the device data", line.PayloadText);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void SearchContent_MetadataLikePayloadIsNeverRemoved(bool showTimestamp, bool showDirection)
+    {
+        string[] payloads =
+        [
+            "SYS status", "SYSTEM ready", "RX < data", "TX > data", "MARK > data",
+            "[16:30:55.091] data", "[device] data", "  READY", "\tREADY"
+        ];
+        var viewModel = new LogViewModel(100);
+        viewModel.SetShowTimestampInLogView(showTimestamp);
+        viewModel.SetShowRxTxDirectionPrefixInLogView(showDirection);
+        viewModel.AddRange(payloads.Select(payload => LogLine.Rx(payload)).ToArray());
+
+        var lines = viewModel.GetVisibleSearchContentSnapshot();
+        for (var index = 0; index < payloads.Length; index++)
+        {
+            Assert.Equal(payloads[index], lines[index].PayloadText);
+            Assert.Equal(lines[index].FullText.Length - payloads[index].Length, lines[index].PayloadStart);
+            var snapshot = VisibleLogSearchEngine.Build(
+                [lines[index]],
+                "^" + System.Text.RegularExpressions.Regex.Escape(payloads[index]) + "$",
+                new VisibleLogSearchOptions(UseRegularExpression: true));
+            Assert.Equal(1, snapshot.TotalMatchCount);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void SearchContent_PartialRxPreservesPayloadBoundaryAcrossRebuild(bool showTimestamp, bool showDirection)
+    {
+        var viewModel = new LogViewModel(100);
+        viewModel.SetShowTimestampInLogView(showTimestamp);
+        viewModel.SetShowRxTxDirectionPrefixInLogView(showDirection);
+        viewModel.AddRange(
+        [
+            LogLine.Rx("SYS", isPartialRxSegment: true),
+            LogLine.Rx(" READY", isPartialRxSegment: true)
+        ]);
+
+        var before = Assert.Single(viewModel.GetVisibleSearchContentSnapshot());
+        Assert.Equal("SYS READY", before.PayloadText);
+        viewModel.SetShowRxTxDirectionPrefixInLogView(!showDirection);
+        var after = Assert.Single(viewModel.GetVisibleSearchContentSnapshot());
+        Assert.Equal(before.LineId, after.LineId);
+        Assert.Equal("SYS READY", after.PayloadText);
+    }
+
+    [Fact]
+    public void TryGetSearchLine_UsesSourceIdentityAndRejectsFilteredOrExpiredLogs()
+    {
+        var visible = LogLine.Rx("KEEP first");
+        var hidden = LogLine.Rx("hidden");
+        var viewModel = new LogViewModel(2);
+        viewModel.SetViewFilter(new HighlightRule { Keyword = "KEEP" });
+        viewModel.AddRange([visible, hidden]);
+
+        var expected = Assert.Single(viewModel.GetVisibleSearchContentSnapshot());
+        Assert.True(viewModel.TryGetSearchLine(visible, out var found));
+        Assert.Equal(expected, found);
+        Assert.False(viewModel.TryGetSearchLine(LogLine.Rx("KEEP first"), out _));
+        Assert.False(viewModel.TryGetSearchLine(hidden, out _));
+
+        viewModel.AddRange([LogLine.Rx("KEEP newest")]);
+        Assert.False(viewModel.TryGetSearchLine(visible, out _));
+    }
+
+    [Fact]
+    public void TryGetSearchLine_ResolvesMergedPartialSourceAndRejectsFilteredSegments()
+    {
+        var first = LogLine.Rx("KEEP first", isPartialRxSegment: true);
+        var hidden = LogLine.Rx("hidden", isPartialRxSegment: true);
+        var second = LogLine.Rx(" KEEP second", isPartialRxSegment: true);
+        var viewModel = new LogViewModel(100);
+        viewModel.SetViewFilter(new HighlightRule { Keyword = "KEEP" });
+        viewModel.AddRange([first, hidden, second]);
+
+        Assert.True(viewModel.TryGetSearchLine(second, out var found));
+        Assert.True(viewModel.TryGetSearchLine(first, out var firstLine));
+        Assert.Equal(firstLine.LineId, found.LineId);
+        Assert.Equal("KEEP first KEEP second", found.PayloadText);
+        Assert.False(viewModel.TryGetSearchLine(hidden, out _));
+        viewModel.SetCapacity(1);
+        Assert.False(viewModel.TryGetSearchLine(first, out _));
+        Assert.False(viewModel.TryGetSearchLine(second, out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryGetSearchLine_ResolvesActualStreamingEventSource(bool secondIsPartial)
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var first = new LogLine(timestamp, LogDirection.Rx, "FA", sequenceNumber: 1, isPartialRxSegment: true);
+        var second = new LogLine(timestamp.AddMilliseconds(1), LogDirection.Rx, "ULT",
+            sequenceNumber: 2, isPartialRxSegment: secondIsPartial);
+        var viewModel = new LogViewModel(100);
+        viewModel.AddRange([first, second]);
+        var detectedEvent = await DetectStreamingEventAsync(first, second);
+        var source = Assert.IsType<LogLine>(detectedEvent.SourceLogLine);
+        Assert.NotSame(second, source);
+        Assert.Equal("FAULT", source.Text);
+
+        Assert.True(viewModel.TryGetSearchLine(second, out var expected));
+        Assert.True(viewModel.TryGetSearchLine(source, out var found));
+        Assert.Equal(expected, found);
+        Assert.Equal(secondIsPartial ? "FAULT" : "ULT", found.PayloadText);
+    }
+
+    [Fact]
+    public async Task TryGetSearchLine_StreamingSourceCannotBypassOriginalFragmentFilter()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var first = new LogLine(timestamp, LogDirection.Rx, "FA", sequenceNumber: 1, isPartialRxSegment: true);
+        var hidden = new LogLine(timestamp.AddMilliseconds(1), LogDirection.Rx, "ULT",
+            sequenceNumber: 2, isPartialRxSegment: true);
+        var viewModel = new LogViewModel(100);
+        viewModel.SetViewFilter(new HighlightRule { Keyword = "FA" });
+        viewModel.AddRange([first, hidden]);
+        var detectedEvent = await DetectStreamingEventAsync(first, hidden);
+
+        Assert.True(viewModel.TryGetSearchLine(first, out _));
+        Assert.False(viewModel.TryGetSearchLine(detectedEvent.SourceLogLine!, out _));
+    }
+
+    [Fact]
+    public void TryGetSearchLine_SequenceFallbackRequiresEveryIdentityFieldAndNeverGuessesByText()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var original = new LogLine(timestamp, LogDirection.Rx, "same text", sequenceNumber: 42);
+        var viewModel = new LogViewModel(100);
+        viewModel.AddRange([original]);
+
+        Assert.True(viewModel.TryGetSearchLine(
+            new LogLine(timestamp, LogDirection.Rx, "tail plus same text", sequenceNumber: 42), out _));
+        Assert.False(viewModel.TryGetSearchLine(
+            new LogLine(timestamp, LogDirection.Rx, "same text"), out _));
+        Assert.False(viewModel.TryGetSearchLine(
+            new LogLine(timestamp, LogDirection.Rx, "same text", sequenceNumber: 43), out _));
+        Assert.False(viewModel.TryGetSearchLine(
+            new LogLine(timestamp.AddTicks(1), LogDirection.Rx, "same text", sequenceNumber: 42), out _));
+        Assert.False(viewModel.TryGetSearchLine(
+            new LogLine(timestamp, LogDirection.Tx, "same text", sequenceNumber: 42), out _));
+        Assert.False(viewModel.TryGetSearchLine(
+            new LogLine(timestamp, LogDirection.Rx, "same text", sequenceNumber: 42,
+                contentMode: LogRuleMatchMode.Hex), out _));
+    }
+
+    private static async Task<DetectedEvent> DetectStreamingEventAsync(params LogLine[] lines)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var detector = new EventDetector();
+        await detector.StartAsync([new EventRule { Keyword = "FAULT" }], new EventContextSettings(), timeout.Token);
+        foreach (var line in lines)
+        {
+            Assert.True(detector.TryEnqueue(line));
+        }
+        await detector.StopAsync(timeout.Token);
+        Assert.Equal(1, detector.DetectedEventCount);
+        Assert.True(detector.DetectedEvents.TryRead(out var detected));
+        return Assert.IsType<DetectedEvent>(detected);
     }
 
     [Fact]

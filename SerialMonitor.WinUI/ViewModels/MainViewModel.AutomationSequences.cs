@@ -46,7 +46,7 @@ public sealed partial class MainViewModel
                 var sequence = FindAutomationSequence(args);
                 // Legacy GUI sequences can be much larger than the RPC contract.
                 // Reject before allocating a full JSON copy or truncating commands.
-                if (sequence.Steps.Count > 128 || sequence.Steps.Sum(step => (long)step.CommandText.Length + (step.Name?.Length ?? 0) + (step.Expect?.Value.Length ?? 0)) > 48 * 1024)
+                if (sequence.Steps.Count(step => step.IsEnabled) > 128 || sequence.Steps.Where(step => step.IsEnabled).Sum(step => (long)step.CommandText.Length + (step.Name?.Length ?? 0) + (step.Expect?.Value.Length ?? 0)) > 48 * 1024)
                     throw new AutomationException("definition_too_large", "This GUI sequence exceeds automation limits. Split it into smaller sequences.");
                 var snapshot = AutomationSequenceMapper.Snapshot(sequence, SelectedTxSendMode, SelectedTxLineEnding);
                 if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(snapshot, AutomationJson.Options)) > 48 * 1024)

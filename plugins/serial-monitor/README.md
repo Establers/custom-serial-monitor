@@ -11,8 +11,12 @@ The launcher discovers `tools/serialctl.exe` beside a bundled local marketplace,
 from a uniquely located running GUI (including portable apps whose plugins were
 cached elsewhere), through installer registration, or at the default per-user
 install location. Several running GUI instances from one folder share one CLI;
-different folders require explicit selection. Set `SERIAL_MONITOR_CLI` in the AI host's environment to explicitly
-select another installation. Restart the AI host after changing its environment.
+different folders require explicit selection. `SERIAL_MONITOR_CLI` selects another
+installation when the AI host passes that variable to its stdio MCP process.
+Restart the AI host after changing its environment. Hosts that filter MCP
+environment variables, including Codex CLI 0.164.0-alpha.11.1, need automatic
+application discovery or manual MCP registration with an absolute executable path;
+setting the variable in the parent shell alone is insufficient.
 The launcher performs a bounded, read-only `serialctl describe --json` compatibility
 check before starting MCP. It never opens a port, starts the GUI or sends device
 commands during discovery.

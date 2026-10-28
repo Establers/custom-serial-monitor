@@ -45,6 +45,22 @@ real hardware when available.
   `sequence cancel --run ID`; control returns after RX has been saved. Manual
   TX, sequence editing, profile replacement and Bridge must be blocked while
   running. Disconnect during a step; no further steps or automatic TX retries.
+- [ ] In Sequences, create three MOCK commands with a visible delay and disable
+  the middle step. Run twice: only the first and third commands/delays execute,
+  progress counts four active steps and the displayed editor step numbers stay
+  1 and 3. Disable all: Run is unavailable. Re-enable and export/reload/save/restart:
+  checkbox state and all original steps remain. A legacy JSON without IsEnabled
+  opens with all steps enabled. CLI/MCP also omits disabled commands and delays.
+- [ ] Copy a step and a sequence, then edit the copy. Verify the original keeps
+  its command, mode, enabled state and metadata. The list shows only command
+  text on one line, including when a step has a name or multiline payload.
+  In the step dialog, change Global/Terminal/Hex; invalid explicit HEX cannot be saved.
+- [ ] Use the single sequence play/pause button: Play starts, the icon changes
+  to Pause, and clicking it waits for the current send/delay before pausing.
+  The icon changes back to Play; clicking it continues the same run. Cancel a
+  pending pause by clicking Play again; Stop cancels while paused. Pause during automatic
+  reconnect must still hold after reconnect. Successful TX must not replay.
+  Check editing is locked during the run and CLI/MCP exposes Stop only.
 - [ ] Compare optional expected `abcd` with actual `abcd` and `ab12c3d4`.
   Verify `matched` and `not_matched` respectively, without treating a miss as
   product failure or retrying. Follow captureId/nextOffset to inspect complete
@@ -401,6 +417,20 @@ real hardware when available.
 
 ## Highlight Rules
 
+- [ ] Open Add/Edit log rule and confirm all options, including `Case sensitive`,
+  are visible. Check the two-column fields and notification row in dark/light
+  themes, at 100%/150% scaling, and with a short window (content should scroll).
+- [ ] Confirm all eight checkboxes and their labels share the same vertical
+  center in checked, unchecked, and disabled states.
+- [ ] Read the explanation below RX trigger sequence: `(none)` disables it;
+  with no executable sequence it points to Sequences; with TxOnly it explains
+  that RxOnly or Both is required. Select a sequence and match RX with Event
+  unchecked: commands should run once, with additional triggers ignored while busy.
+- [ ] Set Priority to `100000` and cooldown to `86400`, save, reopen, and reload
+  the profile. Both values must remain unchanged. Invalid Priority or cooldown
+  outside `5`–`86400` must keep the editor open with an inline error.
+- [ ] Switch the editor's Mode to HEX: `Case sensitive` becomes unavailable;
+  switch back to Terminal and confirm its previous check state is retained.
 - [ ] Open Rules tab.
 - [ ] Confirm the rule editor and rule list label the selector as `Mode`, with
   `Terminal` and `HEX` choices (not `Match = Text/HEX`).
@@ -411,8 +441,13 @@ real hardware when available.
   only the HEX rule creates events/highlights.
 - [ ] Mark both rules as filters and confirm the Filter flyout lists only rules
   for the current mode.
-- [ ] Check both rules, select `Apply`, and confirm future lines matching either
-  rule are visible while non-matching future lines are hidden.
+- [ ] Receive matching and non-matching lines before opening Filter. Check both
+  rules, select `Apply`, and confirm existing and future lines matching either
+  rule are visible while other lines are hidden. Apply `ALL` and confirm hidden
+  retained lines return in their original order without Clear.
+- [ ] With a large retained history and live RX, rapidly switch filters, change
+  capacity/format, or Clear during filtering. Confirm the latest filter wins,
+  RX/file logging continue, memory stays bounded, and removed lines never return.
 - [ ] Reopen the Filter flyout, change the checks, close it without applying, and
   confirm the active filter selection is unchanged.
 - [ ] Select `ALL` and confirm the individual rules are cleared; switching modes
@@ -547,6 +582,19 @@ real hardware when available.
 
 ## Settings Validation
 
+- [ ] While connected with LOG OFF, change the save folder by typing or Browse.
+  Confirm no reconnect is required, start logging and verify the file is in the
+  new folder. While LOG ON, both folder editors must be disabled.
+- [ ] Enter a slow or unavailable network log folder. The window must remain
+  responsive, validation must report failure, and the last valid folder must
+  remain selected. Repeated retries must not accumulate filesystem workers.
+- [ ] Change the log folder or file name with LOG OFF. Confirm the apply status
+  says the next logging start and its pending count clears after logging starts.
+  Load or reset a profile and confirm earlier pending settings are cleared.
+- [ ] In HEX mode, the TX ending selector must be disabled both in the toolbar
+  and Settings. Return to Terminal and confirm the previous ending is retained.
+- [ ] Toggle timestamp visibility with retained logs and no incoming RX. Existing
+  timestamps must disappear/reappear immediately; the tooltip must describe this.
 - [ ] Enter invalid numeric values such as `abc`, `-1`, `0` where invalid, and
   an extremely large number.
 - [ ] Confirm the app does not crash.
@@ -688,18 +736,27 @@ real hardware when available.
 - [ ] Confirm stale profile or search-result states are not treated as health
   errors.
 
-## Time/position navigation and activity graph
+## Time/position navigation and thin time rail
 
-- [ ] Confirm the default terminal has no additional activity bar and uses its full available height. The Navigate inspector tab must use the same native styles as Events and Search.
-- [ ] With an empty buffer, open Ctrl+G and verify helpful empty-state validation in a native WinUI ContentDialog. Receive logs and confirm the Go to toolbar button opens the same dialog; Escape/Cancel must restore focus without moving the log.
-- [ ] Jump by local HH:mm:ss, full YYYY-MM-DD HH:mm:ss.fff, #1, #500000, 0%, 70%, and 100%. Check destination preview, centered highlight and surrounding context.
-- [ ] From a historical position, use -5m and +30s. Confirm the current viewport center is the reference, rather than wall clock/latest RX.
-- [ ] Try invalid dates, missing dates across midnight, out-of-range times, #0 and 101%. Errors must stay in the dialog without moving or affecting RX.
-- [ ] Select Navigate, click a peak and an idle interval; hover for time/count/rate, zoom with +/- and Ctrl+wheel, reset to All. Test chart arrows/Home/End/Enter. Switch tabs, collapse/expand the inspector and minimize/restore the window; graph refreshes must stop while hidden and resume with current data.
+- [ ] Confirm the terminal has a thin vertical time rail at its left (about two characters, at most 24 px), retains its full available height, and shows no horizontal activity/peak graph or Navigate inspector tab.
+- [ ] With an empty buffer, open Ctrl+G and verify helpful empty-state validation with disabled time fields/Go. Receive logs, close/reopen and confirm the range becomes available. Ctrl+G and the log context menu must open the same native dialog; Escape/Cancel must restore focus without moving the log.
+- [ ] Open Ctrl+G at a historical position and confirm the corresponding time is selected with focus on Minutes. Change Hours/Minutes/Seconds by mouse wheel and native keyboard arrows. Open a dropdown and verify its list keeps normal wheel scrolling. The dialog and button positions must remain stable.
+- [ ] Receive 200 logs with an identical millisecond timestamp, open Ctrl+G after that timestamp, and select a later idle time: Go must target log 200 by its frozen ID. Receive more logs while the dialog is open and repeat; it must still target the original log 200. If that ID is evicted, show an expired-position message without jumping to another log. An ordinary request exactly at the shared timestamp must still target its first matching log.
+- [ ] Minimize/restore or close the window while Ctrl+G metadata is loading: the canceled opening must not show a stale empty dialog. A later Ctrl+G must open a fresh session; an already-open dialog must retain its selection across minimize/restore.
+- [ ] Compare RX/file counts with the native dialog closed, open, and while changing selectors. Keep width-reflow timing separate: the current bundled xterm can spend several seconds changing width with one million retained rows; normal height changes must reuse the metadata rings.
+- [ ] Open on a single-day range and confirm its date is fixed text. Repeat across midnight, month/year boundaries and leap day; native Year/Month/Day choices must expose only valid dates/times within the captured range.
+- [ ] Keep receiving while the dialog is open: the range, selector lists and chosen time must stay fixed. Close/reopen to capture a fresh oldest-retained-to-current-wall-clock range. No polling or text preview should compete with selector changes.
+- [ ] During a long RX idle interval, select a time after the last recorded log and press Go; it must land on the last retained log. Choose an interval between recorded timestamps and confirm it lands on the first log at or after that time.
+- [ ] In a small window, check the date/time fields, two-line range and error text without raw JSON/Int64/conversion messages. Full trimmed status must remain available by tooltip, and reopening must clear previous errors.
+- [ ] Hover the time rail near its top, middle and bottom. Check the actual destination's local date/time tooltip, including across midnight and an interval without logs. Click to jump and confirm the viewport band follows the selected log range.
+- [ ] Focus the rail, select a time with arrows/Home/End and press Enter. Escape hides the tooltip. Empty, single-timestamp and system-clock-regressed logs must remain usable without misleading time labels.
+- [ ] Turn visible timestamp prefixes off and confirm the rail still shows actual timestamps and navigates by time. With genuinely missing/invalid timestamps, verify it instead shows #line/count and percentage, stays clickable and marks the viewport by retained position. Multiple equal timestamps must allow selecting distinct log positions.
+- [ ] Save timestamp display OFF, restart into an empty log view and receive the first logs without changing any setting. The empty startup restore must complete and the rail must become clickable immediately after the first batch. Repeat with timestamp display ON and through later ON/OFF changes; a presentation change must never be required to enable navigation.
+- [ ] With no real timestamp metadata, Ctrl+G time fields/Go must be disabled with a helpful message while ordinal rail navigation and available Back history still work. Evict a hovered ordinal target before clicking: show an expired-position message instead of jumping to a different log at that index.
 - [ ] Receive new RX after a jump and confirm the chosen viewport stays in place, Auto Scroll is off, RX/file logs continue, and view pause is unchanged.
-- [ ] Use Back repeatedly, including a wrapped log offset before and after column resize. After retention eviction, an expired Back anchor must report unavailable rather than jump elsewhere.
-- [ ] With one million retained lines, drag/resize the window, jump to #500000 and inspect peaks. No repeated whole-buffer scans, unbounded history, or frozen receive controls.
-- [ ] Verify Ctrl+C/Ctrl+M/Ctrl+F inside the native jump input do not copy terminal selection, create markers, or focus the main search. Tab/Shift+Tab must stay within the native dialog and Escape must close it. No HTML popup or browser-native controls should appear.
+- [ ] Use Back from the Ctrl+G dialog repeatedly, including a wrapped log offset before and after column resize. After retention eviction, an expired Back anchor must report unavailable rather than jump elsewhere.
+- [ ] With one million retained lines, drag/resize the window, use the rail near its middle and open the time selector. No histogram requests, repeated whole-buffer scans, unbounded history, or frozen receive controls.
+- [ ] Verify Tab/Shift+Tab, arrow keys and Enter operate native date/time fields without toggling terminal Auto Scroll. Escape must close the native dialog or its open dropdown. No HTML popup or browser-native controls should appear.
 - [ ] Verify Korean/English, light/dark/high contrast, narrow widths, clear/mode change, full screen restore, and a system clock regression.
 
 ## AI Plugin / CLI / MCP

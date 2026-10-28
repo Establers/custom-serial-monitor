@@ -37,7 +37,7 @@ public sealed class DetectedEvent
         TrayNotificationEnabled = trayNotificationEnabled;
         SoundNotificationEnabled = soundNotificationEnabled;
         PopupNotificationEnabled = popupNotificationEnabled;
-        NotificationCooldownSeconds = Math.Clamp(notificationCooldownSeconds, 5, 3_600);
+        NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(notificationCooldownSeconds);
         ShowInEventList = showInEventList;
         TriggerSequenceName = string.IsNullOrWhiteSpace(triggerSequenceName)
             ? null

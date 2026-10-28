@@ -38,7 +38,7 @@ public sealed class RuntimeComponentIsolationTests
         first.AddRange([LogLine.Rx("first-only")]);
         second.AddRange([LogLine.Rx("second-only")]);
         var retained = second.GetXtermTextSnapshot();
-        first.SetViewFilter(new HighlightRule { Name = "filter", Keyword = "ERROR", Enabled = true }, rebuildExisting: true);
+        first.SetViewFilter(new HighlightRule { Name = "filter", Keyword = "ERROR", Enabled = true });
         first.SetRxDisplayMode(RxDisplayMode.Hex);
         first.SetCapacity(10);
         first.Clear();

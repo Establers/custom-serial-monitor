@@ -3,7 +3,7 @@
 Install the `serial-monitor` plugin from the `serial-monitor-tools` marketplace
 to receive this skill and a local MCP launcher together. Use Serial Monitor 1.6.0
 or later. The launcher checks the CLI's `describe --json` result before starting
-MCP; plugin 1.0.0 requires CLI >=1.6.0 and control API 1.x. The GUI still needs to
+MCP; plugin 1.0.x requires CLI >=1.6.0 and control API 1.x. The GUI still needs to
 be running for device operations.
 
 ## Plugin installation and updates
@@ -40,7 +40,11 @@ for client-specific steps and troubleshooting.
 The launcher resolves a configured `SERIAL_MONITOR_CLI`, a nearby application,
 a unique running GUI installation, installation records/default paths, PATH or
 a development build. If needed, set `SERIAL_MONITOR_CLI` in the actual AI host's
-environment before it starts; an unrelated shell does not update a running app.
+environment before it starts and verify that the host forwards it to stdio MCP;
+an unrelated shell does not update a running app. Some hosts filter MCP environment
+variables: Codex CLI 0.164.0-alpha.11.1 does not forward this variable by default.
+For those hosts, use automatic application discovery or manual MCP registration
+with an absolute executable path instead of relying on the parent shell variable.
 
 For offline or unpublished development builds, the program's `agent-plugin`
 directory or the extracted `SerialMonitorPlugin` folder can serve as a local

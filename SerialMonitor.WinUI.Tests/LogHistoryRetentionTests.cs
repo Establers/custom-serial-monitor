@@ -29,6 +29,41 @@ public sealed class LogHistoryRetentionTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task MillionLineHistory_CanFilterAndRestoreWithoutChangingRetention()
+    {
+        const int capacity = 1_000_000;
+        var log = new LogViewModel(capacity);
+        var batch = new LogLine[1000];
+        for (var start = 0; start < capacity; start += batch.Length)
+        {
+            for (var index = 0; index < batch.Length; index++)
+            {
+                var id = start + index;
+                batch[index] = LogLine.Rx($"{(id % 1000 == 0 ? "ERROR" : "INFO")} packet {id:D8}");
+            }
+            log.AddRange(batch);
+        }
+
+        var timer = Stopwatch.StartNew();
+        var filtering = log.SetViewFiltersAsync([new HighlightRule { Keyword = "ERROR", Enabled = true }]);
+        var captureMs = timer.Elapsed.TotalMilliseconds;
+        Assert.False(filtering.IsCompleted);
+        Assert.True(await filtering);
+        output.WriteLine($"1M filter: capture {captureMs:F1} ms, total {timer.Elapsed.TotalSeconds:F2} s");
+        Assert.Equal(1000, log.CurrentVisibleLineCount);
+        Assert.Equal(capacity, log.TotalRetainedLineCount);
+        timer.Restart();
+        Assert.True(await log.SetViewFiltersAsync([]));
+        output.WriteLine($"1M ALL restore: {timer.Elapsed.TotalSeconds:F2} s");
+        Assert.Equal(capacity, log.CurrentVisibleLineCount);
+        Assert.Equal(capacity, log.TotalRetainedLineCount);
+        Assert.Equal(0, log.DroppedVisibleLineCount);
+        var restored = log.GetVisibleSearchContentSnapshot();
+        Assert.Equal(1, restored[0].LineId);
+        Assert.Equal(capacity, restored[^1].LineId);
+    }
+
+    [Fact]
     public void MillionLineHistory_RollsOverWithoutRebuildOrGrowingLiveMemory()
     {
         const int capacity = 1_000_000;

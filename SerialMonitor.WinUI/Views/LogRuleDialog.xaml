@@ -1,0 +1,153 @@
+<ContentDialog
+    x:Class="SerialMonitor.WinUI.Views.LogRuleDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Style="{StaticResource DefaultContentDialogStyle}"
+    PrimaryButtonText="Save"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    FontSize="13"
+    PrimaryButtonClick="Save_Click">
+    <ContentDialog.Resources>
+        <DataTemplate x:Key="AlignedCheckBoxContentTemplate">
+            <TextBlock Text="{Binding}" TextLineBounds="Tight" TextWrapping="Wrap" />
+        </DataTemplate>
+        <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="8,3,8,3" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="FontSize" Value="13" />
+            <!-- The native 8,5,0,0 padding shifts centered compact labels down. -->
+            <Setter Property="Padding" Value="8,0,0,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ContentTemplate" Value="{StaticResource AlignedCheckBoxContentTemplate}" />
+        </Style>
+        <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </ContentDialog.Resources>
+    <ContentDialog.TitleTemplate>
+        <DataTemplate>
+            <TextBlock Text="{Binding}" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap" />
+        </DataTemplate>
+    </ContentDialog.TitleTemplate>
+
+    <Grid MinWidth="460" ColumnSpacing="12" RowSpacing="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="Name" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox x:Name="NameBox" PlaceholderText="e.g. RESET" AutomationProperties.Name="Name" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="4">
+            <TextBlock Text="Keyword" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox x:Name="KeywordBox" PlaceholderText="ERROR or 49 4E" AutomationProperties.Name="Keyword" />
+        </StackPanel>
+
+        <CheckBox x:Name="EnabledBox" Grid.Row="1" Content="Enabled" />
+        <CheckBox x:Name="CaseBox" Grid.Row="1" Grid.Column="1" Content="Case sensitive" />
+
+        <StackPanel Grid.Row="2" Spacing="4">
+            <TextBlock Text="Mode" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox x:Name="ModeBox" AutomationProperties.Name="Mode">
+                <ComboBoxItem Content="Terminal" />
+                <ComboBoxItem Content="HEX" />
+            </ComboBox>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
+            <TextBlock Text="Direction" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox x:Name="DirectionBox" AutomationProperties.Name="Direction" />
+        </StackPanel>
+
+        <Grid Grid.Row="3" Grid.ColumnSpan="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <CheckBox x:Name="EventBox" Content="Event" />
+            <CheckBox x:Name="HighlightBox" Grid.Column="1" Content="Highlight" />
+            <CheckBox x:Name="FilterBox" Grid.Column="2" Content="Filter" />
+        </Grid>
+
+        <StackPanel Grid.Row="4" Spacing="4">
+            <TextBlock Text="Color" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox x:Name="ForegroundBox" AutomationProperties.Name="Color" />
+        </StackPanel>
+        <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+            <TextBlock Text="Background" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox x:Name="BackgroundBox" AutomationProperties.Name="Background" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Spacing="4">
+            <TextBlock Text="Priority" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox x:Name="PriorityBox" InputScope="Number" AutomationProperties.Name="Priority" />
+            <TextBlock x:Uid="RulePriorityHint" Text="Higher values take precedence" Style="{StaticResource FieldLabelStyle}" />
+        </StackPanel>
+        <StackPanel Grid.Row="5" Grid.Column="1" Spacing="4">
+            <TextBlock Text="Notify cooldown (sec)" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox x:Name="CooldownBox" InputScope="Number" AutomationProperties.Name="Notify cooldown (sec)" />
+            <TextBlock x:Uid="RuleCooldownHint" Text="5–86,400 sec · up to 24 h" Style="{StaticResource FieldLabelStyle}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Spacing="4">
+            <TextBlock Text="RX trigger sequence" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox x:Name="TriggerSequenceBox" AutomationProperties.Name="RX trigger sequence" />
+            <TextBlock x:Name="TriggerSequenceHint" Style="{StaticResource FieldLabelStyle}"
+                       Text="Run the selected command sequence when RX matches this rule. (none) disables it." />
+        </StackPanel>
+
+        <Border Grid.Row="7" Grid.ColumnSpan="2" BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" Padding="0,10,0,0">
+            <StackPanel Spacing="4">
+                <TextBlock x:Uid="RuleNotificationsLabel" Text="Notifications" Style="{StaticResource FieldLabelStyle}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <CheckBox x:Name="TrayBox" Content="Tray" />
+                    <CheckBox x:Name="SoundBox" Grid.Column="1" Content="Sound" />
+                    <CheckBox x:Name="PopupBox" Grid.Column="2" Content="Popup" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="ErrorText" Grid.Row="8" Grid.ColumnSpan="2" Visibility="Collapsed"
+                   FontSize="12" TextWrapping="WrapWholeWords"
+                   Foreground="{ThemeResource ErrorTextBrush}" AutomationProperties.LiveSetting="Assertive" />
+    </Grid>
+</ContentDialog>

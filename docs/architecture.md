@@ -110,6 +110,40 @@ capture can clean them up.
   producer, flushes accepted log input, and waits for file/event fan-out before
   those consumers stop. Start/stop operations are serialized through this drain.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
+- The xterm navigation modules read the existing bounded OSC ID/timestamp ring.
+  `log-navigation.js` resolves times/relative offsets/retained ordinals/percentages
+  with binary searches for ordered timestamps.
+  Clock regressions use bounded rolling block summaries. `log-navigation-terminal.js`
+  tracks physical row anchors and trim offsets, rebuilding after column reflow in
+  4 ms slices. Navigation refreshes never scan or decode the complete terminal buffer.
+  `time-rail.js` renders a narrow vertical time axis beside the terminal, preserving
+  its full available height. Hover resolves the actual destination timestamp and
+  click/keyboard navigation jumps to it; the rail also marks the visible time range.
+  Hidden timestamp prefixes never affect its metadata. Missing/invalid timestamps
+  or a shared timestamp across multiple logs switch the rail to retained ordinals;
+  stable hovered IDs prevent an eviction from silently moving a click to another log.
+  Its throttled refreshes read bounded metadata and never request histograms or
+  scan terminal history. No horizontal activity/peak graph is rendered. WinUI owns
+  the on-demand Ctrl+G ContentDialog, using native controls and application theme
+  resources; navigation has no inspector tab. `ILogNavigationBridge` transfers
+  navigation metadata and results between the native view model and the terminal.
+  WebView2 can encode integral timestamps with exponent notation, so the bridge
+  validates their exact numeric value before converting to nullable Int64 fields.
+  Raw transport/JSON errors stay in diagnostics. `LogTimePickerViewModel` captures
+  the retained range and wall clock once when Ctrl+G opens, constrains native date/
+  time selector choices to that frozen range. Idle-time selections use the last
+  retained log's stable ID captured at opening, preserving the exact record even
+  when timestamps are duplicated or new RX arrives. Expired IDs are rejected
+  without a timestamp fallback. It has no polling or text-preview loop. The dialog uses
+  brief status messages in fixed-height regions and cancels its work when closed.
+  A successful action closes without a second metadata request. Opening sessions
+  invalidated by minimizing or shutdown are discarded before showing a dialog.
+  Metadata rings reserve viewport capacity in 256-row blocks, avoiding full ring
+  copies during normal height changes. Width changes still invoke xterm's native
+  history reflow, which remains a separate performance bottleneck at one million rows.
+  A successful jump disables following locally before notifying WinUI;
+  RX, file logging and view-pause state are unaffected.
+  The Back stack contains at most 64 stable IDs with wrapped-row offsets.
 - `MainViewModel` coordinates lifecycle and fans parsed lines out to downstream
   components. It currently also contains search, profile application, command,
   diagnostics, and UI-state coordination; this is the main refactoring target.
@@ -157,6 +191,14 @@ capture can clean them up.
   transport continues unchanged.
 - UI work is marshalled through the WinUI dispatcher and appended in batches.
 - Visible logs and events are bounded; complete history belongs on disk.
+- View filters are a projection of the entire retained log history. Changing the
+  selection rebuilds that projection; ALL restores hidden retained records in
+  their original order and with stable line IDs. Highlight rule snapshots remain
+  tied to receipt time. Filtering never changes event detection or file logging.
+- Filter formatting uses a detached snapshot on one cancellable worker. A bounded
+  queue collects live records for catch-up before publishing on the UI thread.
+  Clear, format/capacity changes, and catch-up overflow restart from current
+  history so removed records cannot be restored by an older calculation.
 - Long-running workers accept cancellation and catch/report non-cancellation
   failures.
 - Shutdown stops producers before consumers and gives writers a bounded interval

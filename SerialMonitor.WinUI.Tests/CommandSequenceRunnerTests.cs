@@ -185,6 +185,164 @@ public sealed class CommandSequenceRunnerTests
         Assert.Equal(connected ? 1 : 0, sends);
     }
 
+    [Fact]
+    public async Task PauseDuringSend_FinishesCurrentTxAndDelayBeforePausing()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var control = new SequenceExecutionControl();
+        var sending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishSend = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var paused = PausedSignal(control);
+        var sequence = Sequence();
+        sequence.Steps[0].DelayAfterMs = 50;
+        var sent = new List<string>();
+        var completed = new List<int>();
+        var delayClock = new System.Diagnostics.Stopwatch();
+        var run = new CommandSequenceRunner().RunAsync(sequence,
+            _ => Task.FromResult(true),
+            async (step, token) =>
+            {
+                sent.Add(step.CommandText);
+                if (sent.Count == 1)
+                {
+                    sending.SetResult();
+                    await finishSend.Task.WaitAsync(token);
+                    delayClock.Start();
+                }
+                return true;
+            }, () => true, _ => { }, completed.Add, timeout.Token, control);
+
+        await sending.Task.WaitAsync(timeout.Token);
+        control.Pause();
+        Assert.True(control.IsPauseRequested);
+        Assert.False(control.IsPaused);
+        finishSend.SetResult();
+        await paused.Task.WaitAsync(timeout.Token);
+        Assert.True(delayClock.Elapsed >= TimeSpan.FromMilliseconds(40));
+        Assert.Equal(new[] { "A" }, sent);
+        Assert.Equal(new[] { 1 }, completed);
+        Assert.False(run.IsCompleted);
+
+        control.Resume();
+        await run.WaitAsync(timeout.Token);
+        Assert.Equal(new[] { "A", "B" }, sent);
+        Assert.False(control.IsPaused);
+    }
+
+    [Fact]
+    public async Task PauseDuringReconnect_HoldsBeforeSendingAndResumeDoesNotReplay()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var control = new SequenceExecutionControl();
+        var reconnecting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconnect = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var checkingAgain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconnectAgain = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var paused = PausedSignal(control);
+        var sent = new List<string>();
+        var checks = 0;
+        var run = new CommandSequenceRunner().RunAsync(Sequence(),
+            async token =>
+            {
+                if (++checks == 1)
+                {
+                    reconnecting.SetResult();
+                    return await reconnect.Task.WaitAsync(token);
+                }
+                if (checks == 2)
+                {
+                    checkingAgain.SetResult();
+                    return await reconnectAgain.Task.WaitAsync(token);
+                }
+                return true;
+            },
+            (step, _) => { sent.Add(step.CommandText); return Task.FromResult(true); },
+            () => true, _ => { }, _ => { }, timeout.Token, control);
+
+        await reconnecting.Task.WaitAsync(timeout.Token);
+        control.Pause();
+        reconnect.SetResult(true);
+        await paused.Task.WaitAsync(timeout.Token);
+        Assert.Empty(sent);
+
+        control.Resume();
+        await checkingAgain.Task.WaitAsync(timeout.Token);
+        Assert.Empty(sent); // The earlier readiness result was invalidated by the pause.
+        reconnectAgain.SetResult(true);
+        await run.WaitAsync(timeout.Token);
+        Assert.Equal(new[] { "A", "B" }, sent);
+    }
+
+    [Fact]
+    public async Task StopWhilePaused_WakesWaitAndPreventsAnyLaterSend()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var control = new SequenceExecutionControl();
+        control.Pause();
+        var paused = PausedSignal(control);
+        var sends = 0;
+        var readyChecks = 0;
+        var run = new CommandSequenceRunner().RunAsync(Sequence(),
+            _ => { readyChecks++; return Task.FromResult(true); },
+            (_, _) => { sends++; return Task.FromResult(true); },
+            () => true, _ => { }, _ => { }, stop.Token, control);
+
+        await paused.Task.WaitAsync(timeout.Token);
+        stop.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(timeout.Token));
+        control.Resume();
+        Assert.Equal(0, sends);
+        Assert.Equal(0, readyChecks);
+        Assert.False(control.IsPaused);
+    }
+
+    [Fact]
+    public async Task DisabledSteps_AreSkippedWithFrozenRunOrderAndEnabledProgress()
+    {
+        var sequence = Sequence(repeats: 2);
+        sequence.Steps[0].IsEnabled = false;
+        var sent = new List<string>();
+        var started = new List<int>();
+        var completed = new List<int>();
+        await new CommandSequenceRunner().RunAsync(sequence,
+            _ => Task.FromResult(true),
+            (step, _) =>
+            {
+                sent.Add(step.CommandText);
+                // Editing availability after start cannot add work to this run.
+                sequence.Steps[0].IsEnabled = true;
+                sequence.Steps[1].IsEnabled = false;
+                return Task.FromResult(true);
+            }, () => true, started.Add, completed.Add, CancellationToken.None);
+        Assert.Equal(new[] { "B", "B" }, sent);
+        Assert.Equal(new[] { 0, 1 }, started);
+        Assert.Equal(new[] { 1, 2 }, completed);
+    }
+
+    [Fact]
+    public async Task AllDisabledSequence_FailsBeforeReadinessOrTx()
+    {
+        var sequence = Sequence();
+        foreach (var step in sequence.Steps) step.IsEnabled = false;
+        var readyChecks = 0;
+        var sends = 0;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new CommandSequenceRunner().RunAsync(sequence,
+            _ => { readyChecks++; return Task.FromResult(true); },
+            (_, _) => { sends++; return Task.FromResult(true); },
+            () => false, _ => { }, _ => { }, CancellationToken.None));
+        Assert.Contains("enable at least one step", error.Message);
+        Assert.Equal(0, readyChecks);
+        Assert.Equal(0, sends);
+    }
+
+    private static TaskCompletionSource PausedSignal(SequenceExecutionControl control)
+    {
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        control.StateChanged += () => { if (control.IsPaused) paused.TrySetResult(); };
+        return paused;
+    }
+
     private static CommandSequence Sequence(int repeats = 1) => new()
     {
         Name = "Test",

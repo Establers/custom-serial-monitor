@@ -448,6 +448,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private CancellationTokenSource? _searchCancellation;
     private CancellationTokenSource? _searchResultBuildCancellation;
     private long _searchGeneration;
+    private long _searchContentRevision;
+    private long _searchNavigationRevision;
     private bool _isSearchRunning;
     private int _lastSearchSnapshotLineCount;
     private long _lastSearchSnapshotCaptureMs;
@@ -702,6 +704,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         Immediate,
         ReconnectRequired,
+        NextLogStart,
         NextSession,
         ProfileOnly
     }
@@ -824,8 +827,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OpenCurrentLogLocationCommand = new AsyncRelayCommand(OpenCurrentLogLocationAsync);
         OpenCurrentSerialLogCommand = new AsyncRelayCommand(OpenCurrentSerialLogAsync, CanOpenCurrentSerialLog);
         CopySerialLogPathCommand = new AsyncRelayCommand(CopySerialLogPathAsync, CanUseCurrentSerialLogPath);
-        ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync, () => !IsBusy);
-        SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => !IsBusy && !IsAutomationBusy && !_isProfileSaveActive);
+        ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync,
+            () => !IsBusy && (FileLoggingEnabled || !_isLogSaveDirectoryValidating));
+        SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync,
+            () => !IsBusy && !IsAutomationBusy && !_isProfileSaveActive && !_isLogSaveDirectoryValidating);
         LoadProfileCommand = new AsyncRelayCommand(
             LoadProfileAsync,
             () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
@@ -854,6 +859,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             RunCommandSequenceAsync,
             CanRunCommandSequence);
         StopCommandSequenceCommand = new AsyncRelayCommand(StopCommandSequenceAsync, () => IsSequenceRunning);
+        InitializeSequenceDebugCommands();
         SetSessionCommand = new AsyncRelayCommand(SetSessionAsync, () => !IsBusy && !FileLoggingEnabled);
         EndSessionCommand = new AsyncRelayCommand(EndSessionAsync, () => !IsBusy && !FileLoggingEnabled && !string.IsNullOrWhiteSpace(CurrentSessionName));
         RefreshBridgePortsCommand = new AsyncRelayCommand(RefreshBridgePortsAsync);
@@ -1155,10 +1161,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var selected = GetSelectedVisibleLogFilterOptions();
             return selected.Count == 0
-                ? UiText.Get("VisibleFilterAllToolTip", "ALL: show every new log line.")
+                ? UiText.Get("VisibleFilterAllToolTip", "ALL: show all retained and incoming logs.")
                 : UiText.Format(
                     "VisibleFilterSelectedToolTipFormat",
-                    "Selected filters (OR): {0}. Applies to new logs only.",
+                    "Selected filters (OR): {0}. Applies to all retained and incoming logs.",
                     string.Join(", ", selected.Select(option => option.DisplayName)));
         }
     }
@@ -1209,6 +1215,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(SequenceCompletedStepsText));
                 RefreshSelectedCommandSequenceStepNumbers();
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
+                NotifySequenceDebugCommandStates();
                 RefreshStatusBar();
             }
         }
@@ -1229,6 +1236,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 OnPropertyChanged(nameof(HasSelectedCommandSequenceStep));
                 OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
+                NotifySequenceDebugCommandStates();
             }
         }
     }
@@ -1241,7 +1249,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string SelectedCommandSequenceStepCountText => SelectedCommandSequenceStepCount == 0
         ? "No steps."
-        : $"{SelectedCommandSequenceStepCount:N0} steps";
+        : $"{SelectedCommandSequenceEnabledStepCount:N0}/{SelectedCommandSequenceStepCount:N0} enabled";
 
     public string SelectedCommandSequenceName => SelectedCommandSequence?.Name ?? "(none)";
 
@@ -1262,6 +1270,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
                 StopCommandSequenceCommand.NotifyCanExecuteChanged();
+                NotifySequenceDebugCommandStates();
                 StartBridgeCommand.NotifyCanExecuteChanged();
             }
         }
@@ -1327,7 +1336,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public int CommandSequenceCount => CommandSequences.Count;
 
-    public string SequenceRuntimeStateText => IsSequenceRunning ? "Running" : "Stopped";
+    public string SequenceRuntimeStateText => !IsSequenceRunning ? "Stopped" :
+        _sequenceExecutionControl?.IsPaused == true ? "Paused" :
+        _sequenceExecutionControl?.IsPauseRequested == true ? "Pausing" : "Running";
 
     public string SequenceCurrentStepDisplayText => IsSequenceRunning ? CurrentSequenceStepText : "(none)";
 
@@ -1337,13 +1348,13 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var total = IsSequenceRunning
                 ? _runningSequenceTotalSteps
-                : (SelectedCommandSequence?.Steps.Count ?? 0) * (SelectedCommandSequence?.RepeatCount ?? 1);
+                : SelectedCommandSequenceEnabledStepCount * (SelectedCommandSequence?.RepeatCount ?? 1);
             return $"{CompletedSequenceSteps:N0}/{total:N0}";
         }
     }
 
     public string SequenceStatusText => IsSequenceRunning
-        ? $"Running {RunningSequenceName}: step {CompletedSequenceSteps + 1:N0}, {CurrentSequenceStepText}"
+        ? $"{SequenceRuntimeStateText} {RunningSequenceName}: {CompletedSequenceSteps:N0}/{_runningSequenceTotalSteps:N0} sent, {CurrentSequenceStepText}"
         : string.IsNullOrWhiteSpace(LastSequenceError)
             ? $"Stopped | selected {SelectedCommandSequenceName}"
             : $"Stopped | last error: {LastSequenceError}";
@@ -1527,6 +1538,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         new(TimestampDisplayFormat.DateTimeMilliseconds, "yyyy-MM-dd HH:mm:ss.fff"),
         new(TimestampDisplayFormat.DateTimeSeconds, "yyyy-MM-dd HH:mm:ss"),
+        new(TimestampDisplayFormat.ShortDateTimeMilliseconds, "yy-MM-dd HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.ShortDateTimeSeconds, "yy-MM-dd HH:mm:ss"),
+        new(TimestampDisplayFormat.MonthDayTimeMilliseconds, "MM-dd HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.MonthDayTimeSeconds, "MM-dd HH:mm:ss"),
+        new(TimestampDisplayFormat.SlashDateTimeMilliseconds, "yyyy/MM/dd HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.SlashDateTimeSeconds, "yyyy/MM/dd HH:mm:ss"),
+        new(TimestampDisplayFormat.SlashMonthDayTimeMilliseconds, "MM/dd HH:mm:ss.fff"),
+        new(TimestampDisplayFormat.SlashMonthDayTimeSeconds, "MM/dd HH:mm:ss"),
         new(TimestampDisplayFormat.TimeMilliseconds, "HH:mm:ss.fff"),
         new(TimestampDisplayFormat.TimeSeconds, "HH:mm:ss")
     };
@@ -2337,25 +2356,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public string LogSaveDirectory
     {
         get => _currentLogSettings.SaveDirectory;
-        set
-        {
-            var normalized = value?.Trim() ?? string.Empty;
-            if (!TryValidateSaveDirectory(normalized, out var validatedDirectory))
-            {
-                OnPropertyChanged();
-                return;
-            }
-
-            if (string.Equals(_currentLogSettings.SaveDirectory, validatedDirectory, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _currentLogSettings.SaveDirectory = validatedDirectory;
-            _currentSerialSettings.SaveDirectory = validatedDirectory;
-            RecordSettingsChange("Log save directory", SettingsApplyBehavior.ReconnectRequired, validatedDirectory);
-            OnPropertyChanged();
-        }
+        set => _ = SetLogSaveDirectoryAsync(value);
     }
 
     public bool SizeRotationEnabled
@@ -2621,6 +2622,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanEditConnectionSettings));
                 OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
                 OnPropertyChanged(nameof(CanEditLogFileName));
+                OnPropertyChanged(nameof(CanEditLogSaveDirectory));
                 OnPropertyChanged(nameof(CanManualDisconnect));
                 OnPropertyChanged(nameof(CanConnect));
                 OnPropertyChanged(nameof(CanEditCommandSequences));
@@ -2642,6 +2644,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanConnect =>
         !IsConnected &&
+        !_isLogSaveDirectoryValidating &&
         !IsAutomationBusy &&
         !IsBusy &&
         !IsAutoReconnectRunning &&
@@ -2792,7 +2795,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(LastTimestampDisplayModeChangeTimeText));
                 OnPropertyChanged(nameof(LastTimestampDisplayModeError));
                 RefreshSelectedEventContextText();
-                MarkSearchResultsStale();
+                InvalidateSearchResultsForCriteriaChange();
                 RecordSettingsChange("Show timestamp in log view", SettingsApplyBehavior.Immediate, value ? "shown" : "hidden");
             }
             catch (Exception ex)
@@ -2817,7 +2820,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             SetVisibleLogRebuildReason("RX/TX direction prefix display change");
             Log.SetShowRxTxDirectionPrefixInLogView(value);
             OnPropertyChanged();
-            MarkSearchResultsStale();
+            InvalidateSearchResultsForCriteriaChange();
             RecordSettingsChange(
                 "Show RX/TX direction prefixes in log view",
                 SettingsApplyBehavior.Immediate,
@@ -3378,7 +3381,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             if (SetProperty(ref _sessionName, value))
             {
-                RecordSettingsChange("Log file name", SettingsApplyBehavior.Immediate, string.IsNullOrWhiteSpace(value) ? "(automatic)" : value);
+                RecordSettingsChange("Log file name", SettingsApplyBehavior.NextLogStart, string.IsNullOrWhiteSpace(value) ? "(automatic)" : value);
                 OnPropertyChanged(nameof(LogFileName));
                 OnPropertyChanged(nameof(ConfiguredLogFileNameDisplayText));
             }
@@ -3916,7 +3919,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public int PendingRestartRequiredSettingsCount => _pendingRestartSettings.Count;
 
     public string SettingsPendingSummaryText =>
-        $"Pending: reconnect {PendingReconnectRequiredSettingsCount:N0}, next start {PendingRestartRequiredSettingsCount:N0}";
+        $"Pending: reconnect {PendingReconnectRequiredSettingsCount:N0}, log start {PendingLogStartSettingsCount:N0}, next start {PendingRestartRequiredSettingsCount:N0}";
 
     public long StatusChangedThreadMarshalErrorCount => Interlocked.Read(ref _statusChangedThreadMarshalErrorCount);
 
@@ -3990,15 +3993,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string HexFtdiHelpNoticeText => UiText.Get(
         "HexFtdiHelpNotice",
-        """
-        The default HEX TIMEOUT is 40 ms regardless of baud rate. Adjust it if needed.
-
-        For the RealSYS CNV485U (USB-RS485), set the Latency Timer to 2 ms. This device uses an FTDI driver; its default 16 ms latency can split a packet when the HEX timeout is short.
-
-        Device Manager → Ports (COM & LPT) → Properties of the device's COM port → Port Settings → Advanced → Latency Timer (msec): 2. Disconnect and reconnect in the app after changing this setting.
-
-        This is a USB driver setting, separate from the app's HEX TIMEOUT. Check the same setting for other FTDI USB serial devices if packets are split.
-        """);
+        "Default 40 ms. Increase it if a packet splits across lines; decrease it if packets merge. For FTDI devices, try Latency Timer = 2 ms in the COM port's advanced settings in Device Manager, then reconnect.");
 
     public IReadOnlyList<HelpSection> HelpSections { get; } = CreateHelpSections();
 
@@ -4007,98 +4002,38 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return
         [
             new HelpSection(
+                UiText.Get("HelpShortcutsTitle", "Shortcuts"),
+                UiText.Get(
+                    "HelpShortcutsBody",
+                    """
+                    Ctrl+F  Search
+                    F3 / Shift+F3  Next / previous search result
+                    Ctrl+G  Go to time, line or percentage
+                    """)),
+            new HelpSection(
                 UiText.Get("HelpQuickStartTitle", "Quick Start"),
                 UiText.Get(
                     "HelpQuickStartBody",
                     """
-                    1. Select Port and Baud, then press Connect.
-                    2. For normal text commands, keep Mode set to Terminal.
-                    3. For binary packets, switch Mode to HEX and enter bytes such as A0 A6 E5.
-                    4. If file logging is needed, verify that Log is ON.
-                    5. Press Save Profile to keep the settings.
+                    Select Port and Baud → Connect.
+                    Use Terminal for text, HEX for bytes (A0 A6 E5).
+                    Log ON saves to a file; Save Profile keeps your settings.
                     """)),
             new HelpSection(
-                UiText.Get("HelpCreateEventsTitle", "Create Events"),
+                UiText.Get("HelpCreateEventsTitle", "Events"),
                 UiText.Get(
                     "HelpCreateEventsBody",
                     """
-                    1. Press + on the Rules tab.
-                    2. Enter Name and Keyword.
-                    3. Enable Enabled and Event.
-                    4. Select Mode = Terminal for Terminal rules or Mode = HEX for HEX rules.
-                    5. Direction = RxOnly is recommended for typical device events.
-                    6. Press Save and verify the rule with newly received logs.
-                    """)),
-            new HelpSection(
-                UiText.Get("HelpReviewEventsTitle", "Review Events"),
-                UiText.Get(
-                    "HelpReviewEventsBody",
-                    """
-                    Review the event time and message in Events.
-                    Double-click an event to inspect the surrounding logs in Context.
-                    Enable only the Tray, Sound, and Popup notifications you need in the rule editor.
-                    All notifications default to OFF, and the default cooldown is 30 seconds.
+                    Rules: + → name, keyword and Mode → enable Enabled and Event → Save.
+                    Double-click an event in Events to jump to its retained log.
                     """)),
             new HelpSection(
                 UiText.Get("HelpCommandSequencesTitle", "Command Sequences"),
                 UiText.Get(
                     "HelpCommandSequencesBody",
                     """
-                    1. Press the upper + on the Sequences tab to create a sequence.
-                    2. Press the lower + to add command steps.
-                    3. Set Command, Line ending, and Delay after ms.
-                    4. Use Up and Dn to change the order.
-                    5. After connecting the device, press Run to start or Stop to cancel.
-
-                    Steps use the main Mode at run start unless their JSON specifies TxMode (Terminal/Hex).
-                    GUI Run honors per-step TxMode and delays. CaptureMs and literal Expect checks apply only to CLI/MCP runs; conditional branches are not supported.
-                    With Auto reconnect enabled, an interrupted GUI run pauses until recovery.
-                    Successful steps are not replayed; a failed write is retried and may have reached the device already.
-                    Stop or manual Disconnect cancels the run, including reconnect waiting.
-
-                    AI JSON guide (Korean): docs\sequence_authoring.md beside the executable. Open it in a text editor and give it to AI with your device commands.
-                    Example: docs\sequence_examples.json. Load/export standalone JSON through Sequence options; import never runs it.
-                    CLI/MCP runs retain all RX, stop on uncertain TX/disconnect and never automatically retry a command.
-                    """)),
-            new HelpSection(
-                UiText.Get("HelpComBridgeTitle", "COM Bridge"),
-                UiText.Get(
-                    "HelpComBridgeBody",
-                    """
-                    Connect to the physical device first.
-                    On the Bridge tab, select the app-side port from a com0com pair and press Start bridge.
-                    The external program must open the opposite port in the virtual pair.
-                    BRIDGE ON means raw bytes are being forwarded in both directions.
-                    Logs sent from the external program to the device use the current Mode.
-                    Terminal uses the selected encoding and Terminal RxOnly/Both rules.
-                    HEX displays raw bytes and uses HEX RxOnly/Both rules.
-                    """)),
-            new HelpSection(
-                UiText.Get("HelpModeAndLogsTitle", "Mode and Logs"),
-                UiText.Get(
-                    "HelpModeAndLogsBody",
-                    """
-                    The main Mode setting controls both RX display and TX input interpretation.
-                    Terminal displays RX line by line with the selected Encoding and appends the selected TX line ending.
-                    HEX displays raw RX bytes in hexadecimal and sends TX input as exact bytes without a line ending.
-                    Mode and HEX timeout apply immediately without disconnecting.
-                    HEX timeout is the idle time used to group received bytes into one line. Too short can split packets; too long can merge neighboring packets.
-                    Pause View freezes the current display and skips received lines from the screen while paused. New logs resume after Resume Live.
-                    RX, parsing, and event detection continue while paused. File saving follows the View pause option on the Log tab.
-                    Clear affects only the screen and does not delete saved files.
-                    If Health shows WARNING or ERROR, hover over the footer to inspect the cause or right-click it to copy the status.
-                    """)),
-            new HelpSection(
-                UiText.Get("HelpShortcutsTitle", "Shortcuts"),
-                UiText.Get(
-                    "HelpShortcutsBody",
-                    """
-                    Ctrl+F  Focus search
-                    Enter / Shift+Enter  Refresh search and select next / previous
-                    F3 / Shift+F3  Move to next / previous result in the last search
-                    Ctrl+C  Copy selected log text
-                    Ctrl+M  Insert MARK
-                    ↑ / ↓ in TX input  Move through command history
+                    Sequences: add a sequence and steps → set command, line ending and delay.
+                    Run starts sending; Stop cancels the run.
                     """))
         ];
     }
@@ -4106,7 +4041,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public string HelpGuideText => string.Join(
         $"{Environment.NewLine}{Environment.NewLine}",
         HelpSections.Select(section =>
-            $"{section.Title}{Environment.NewLine}{Environment.NewLine}{section.Body}"));
+            $"{section.Title}{Environment.NewLine}{section.Body}"));
 
     public string AboutVersionText
     {
@@ -4250,6 +4185,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         CancelLogHistoryExport();
+        _settingsValidationCancellation.Cancel();
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
@@ -4363,6 +4299,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _settingsValidationCancellation.Cancel();
+        Log.CancelPendingViewFilter();
         CancelLogHistoryExport();
         Log.PropertyChanged -= OnLogHistoryPropertyChanged;
         if (_logHistoryExportProgressTimer is not null)
@@ -4426,6 +4364,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventNotificationCancellation.Dispose();
         _bridgeVisualLogCancellation.Dispose();
         _searchShortcutCancellation.Dispose();
+        _settingsValidationCancellation.Dispose();
         // Live capture must finish cleanup before an optional export can consume
         // any of MainWindow's three-second disposal budget.
         if (_logHistoryExportTask is { } exportTask)
@@ -4818,7 +4757,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task SaveProfileAsync()
     {
-        if (IsAutomationBusy || IsBusy || _isProfileSaveActive)
+        if (IsAutomationBusy || IsBusy || _isProfileSaveActive || _isLogSaveDirectoryValidating)
         {
             SetStatus("Wait for the current operation before saving a profile.");
             return;
@@ -5221,19 +5160,38 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var snapshot = _activeSearchSnapshot;
-        if (snapshot is null || snapshot.TotalMatchCount == 0)
+        if (!CanNavigateSearchSnapshot() || snapshot is null)
         {
-            SetStatus("Click Search or press Enter in the search box to search first.");
+            SetStatus(_isSearchRunning
+                ? "Search is still running."
+                : "Click Search or press Enter in the search box to search first.");
             return;
         }
 
+        var navigationRevision = Interlocked.Increment(ref _searchNavigationRevision);
         var currentPosition = _currentSearchPosition;
         var position = await Task.Run(
-            () => ResolveNavigationPosition(snapshot, currentPosition, movement),
+            () => VisibleSearchNavigation.ResolveNavigationPosition(snapshot, currentPosition, movement, cancellationToken),
             cancellationToken);
         if (!position.HasValue ||
             expectedSearchGeneration != Interlocked.Read(ref _searchGeneration) ||
+            navigationRevision != Interlocked.Read(ref _searchNavigationRevision) ||
             !ReferenceEquals(snapshot, _activeSearchSnapshot))
+        {
+            return;
+        }
+
+        var pageIndex = VisibleSearchNavigation.GetPageForPosition(snapshot, position.Value, SearchResultPageSize).PageIndex;
+        if (pageIndex != _searchResultPageIndex &&
+            !await UpdateSearchResultsPageAsync(snapshot, pageIndex, expectedSearchGeneration, cancellationToken, navigationRevision))
+        {
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested ||
+            expectedSearchGeneration != Interlocked.Read(ref _searchGeneration) ||
+            navigationRevision != Interlocked.Read(ref _searchNavigationRevision) ||
+            !ReferenceEquals(snapshot, _activeSearchSnapshot) || !CanNavigateSearchSnapshot())
         {
             return;
         }
@@ -5293,7 +5251,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         VisibleLogSearchSnapshot snapshot,
         VisibleLogSearchPage page,
         IReadOnlyList<VisibleSearchResult> results,
-        VisibleLogSearchPosition? selectedPosition)
+        VisibleLogSearchPosition? selectedPosition,
+        bool snapshotIsFresh)
     {
         _activeSearchSnapshot = snapshot;
         OnPropertyChanged(nameof(AppliedSearchCriteriaText));
@@ -5301,7 +5260,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         SearchMatchCount = snapshot.TotalMatchCount;
         AreSearchResultsStale = SearchResultFreshnessPolicy.AfterRendering(
             AreSearchResultsStale,
-            snapshotIsFresh: true);
+            snapshotIsFresh);
         _areSearchCriteriaStale = false;
 
         var hasCurrentMatch = selectedPosition.HasValue &&
@@ -5318,8 +5277,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         SearchResultStatusText = snapshot.TotalMatchCount == 0
-            ? "Manual · No matches"
-            : FormatSearchResultPageStatus(snapshot, page, isStale: false);
+            ? (AreSearchResultsStale ? "Stale · No matches · Refresh to update" : "Manual · No matches")
+            : FormatSearchResultPageStatus(snapshot, page, AreSearchResultsStale);
         NotifySearchResultPageProperties();
         RecordSearchResultsRebuild();
         _lastSearchResultBuildError = string.Empty;
@@ -5330,6 +5289,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         SearchMove move,
         bool showLatestResultsPage = false)
     {
+        Interlocked.Increment(ref _xtermSearchRequestId);
+        Interlocked.Increment(ref _searchNavigationRevision);
         if (string.IsNullOrWhiteSpace(SearchText))
         {
             Interlocked.Increment(ref _searchGeneration);
@@ -5354,6 +5315,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             var searchText = SearchText;
             var captureStopwatch = Stopwatch.StartNew();
             var searchLines = Log.GetVisibleSearchContentSnapshot();
+            var contentRevision = _searchContentRevision;
             captureStopwatch.Stop();
             Volatile.Write(ref _lastSearchSnapshotLineCount, searchLines.Count);
             Interlocked.Exchange(ref _lastSearchSnapshotCaptureMs, captureStopwatch.ElapsedMilliseconds);
@@ -5384,22 +5346,25 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 _areSearchCriteriaStale,
                 showLatestResultsPage,
                 _searchResultPageIndex);
-            var page = snapshot.GetMatchedLinePage(requestedPageIndex, SearchResultPageSize);
             var resultApplyStopwatch = Stopwatch.StartNew();
             var pending = await Task.Run(
                 () =>
                 {
+                    var selectedPosition = snapshot.TotalMatchCount == 0
+                        ? null
+                        : VisibleSearchNavigation.ResolveSearchPosition(
+                            snapshot,
+                            move == SearchMove.Previous ? -1 : move == SearchMove.Next ? 1 : 0,
+                            previousLineId,
+                            previousPayloadOffset);
+                    var pageIndex = move != SearchMove.None && selectedPosition.HasValue
+                        ? VisibleSearchNavigation.GetPageForPosition(snapshot, selectedPosition.Value, SearchResultPageSize).PageIndex
+                        : requestedPageIndex;
+                    var page = snapshot.GetMatchedLinePage(pageIndex, SearchResultPageSize);
                     var results = snapshot.TotalMatchCount == 0
                         ? new List<VisibleSearchResult>()
                         : BuildVisibleSearchResults(snapshot, page, cancellation.Token);
-                    var selectedPosition = snapshot.TotalMatchCount == 0
-                        ? null
-                        : ResolveSearchPosition(
-                            snapshot,
-                            move,
-                            previousLineId,
-                            previousPayloadOffset);
-                    return (Results: results, SelectedPosition: selectedPosition);
+                    return (Results: results, SelectedPosition: selectedPosition, Page: page);
                 },
                 cancellation.Token);
             resultApplyStopwatch.Stop();
@@ -5415,9 +5380,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
             CommitFreshSearchResults(
                 snapshot,
-                page,
+                pending.Page,
                 pending.Results,
-                pending.SelectedPosition);
+                pending.SelectedPosition,
+                snapshotIsFresh: contentRevision == _searchContentRevision);
 
             if (snapshot.TotalMatchCount == 0)
             {
@@ -5478,8 +5444,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         VisibleLogSearchSnapshot snapshot,
         int requestedPageIndex,
         long expectedSearchGeneration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? expectedNavigationRevision = null)
     {
+        var navigationRevision = expectedNavigationRevision ?? Interlocked.Increment(ref _searchNavigationRevision);
         var buildGeneration = Interlocked.Increment(ref _searchResultBuildGeneration);
         CancelActiveSearchResultBuild();
         var buildCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -5495,6 +5463,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
             if (buildToken.IsCancellationRequested ||
                 expectedSearchGeneration != Interlocked.Read(ref _searchGeneration) ||
+                navigationRevision != Interlocked.Read(ref _searchNavigationRevision) ||
                 buildGeneration != Interlocked.Read(ref _searchResultBuildGeneration) ||
                 !ReferenceEquals(snapshot, _activeSearchSnapshot))
             {
@@ -5507,6 +5476,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             NotifySearchResultPageProperties();
             RestoreSearchResultSelection(previousSelection);
             RecordSearchResultsRebuild();
+            NotifySearchCommandStates();
             _lastSearchResultBuildError = string.Empty;
             OnPropertyChanged(nameof(LastSearchResultBuildError));
             return true;
@@ -5564,7 +5534,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 snapshot.Comparison,
                 snapshot.Options,
                 matcher,
-                cancellationToken));
+                cancellationToken,
+                payloadStart: line.PayloadStart,
+                timestampUnixMilliseconds: line.TimestampUnixMilliseconds));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -5583,71 +5555,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             : page.PageCount > 1
                 ? $"Manual · page {page.PageIndex + 1:N0}/{page.PageCount:N0} · lines {firstLineNumber:N0}–{lastLineNumber:N0}/{snapshot.MatchedLines.Length:N0}"
                 : $"Manual · {page.Count:N0} matching lines";
-    }
-
-    private static VisibleLogSearchPosition? ResolveNavigationPosition(
-        VisibleLogSearchSnapshot snapshot,
-        VisibleLogSearchPosition? currentPosition,
-        int movement)
-    {
-        if (movement == 0)
-        {
-            return currentPosition;
-        }
-
-        var movePrevious = movement < 0;
-        var remaining = Math.Abs((long)movement);
-        var position = default(VisibleLogSearchPosition);
-        var found = currentPosition.HasValue
-            ? Assign(currentPosition.Value, out position)
-            : movePrevious
-                ? snapshot.TryGetLast(out position)
-                : snapshot.TryGetFirst(out position);
-        if (!found)
-        {
-            return null;
-        }
-
-        if (!currentPosition.HasValue)
-        {
-            remaining--;
-        }
-
-        remaining %= snapshot.TotalMatchCount;
-
-        while (remaining-- > 0)
-        {
-            found = movePrevious
-                ? snapshot.TryGetPrevious(position, out position)
-                : snapshot.TryGetNext(position, out position);
-            if (!found)
-            {
-                return null;
-            }
-        }
-
-        return position;
-    }
-
-    private static VisibleLogSearchPosition? ResolveSearchPosition(
-        VisibleLogSearchSnapshot snapshot,
-        SearchMove move,
-        long? previousLineId,
-        int? previousPayloadOffset)
-    {
-        var restoredPosition = default(VisibleLogSearchPosition);
-        var restored = previousLineId.HasValue && previousPayloadOffset.HasValue &&
-            snapshot.TryFind(previousLineId.Value, previousPayloadOffset.Value, out restoredPosition);
-        VisibleLogSearchPosition selectedPosition;
-        var selected = move switch
-        {
-            SearchMove.Next when restored => snapshot.TryGetNext(restoredPosition, out selectedPosition),
-            SearchMove.Previous when restored => snapshot.TryGetPrevious(restoredPosition, out selectedPosition),
-            SearchMove.Previous => snapshot.TryGetLast(out selectedPosition),
-            _ when restored => Assign(restoredPosition, out selectedPosition),
-            _ => snapshot.TryGetFirst(out selectedPosition)
-        };
-        return selected ? selectedPosition : null;
     }
 
     private void RestoreSearchResultSelection(VisibleSearchResult? previousSelection)
@@ -5688,6 +5595,16 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void MarkSearchResultsStale()
     {
+        _searchContentRevision++;
+        if (!string.IsNullOrWhiteSpace(_lastSearchError))
+        {
+            AreSearchResultsStale = true;
+            SearchResultStatusText = SearchResults.Count > 0
+                ? $"Stale · {_lastSearchError}"
+                : _lastSearchError;
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(SearchText))
         {
             AreSearchResultsStale = _activeSearchSnapshot is not null || SearchResults.Count > 0;
@@ -5705,16 +5622,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void InvalidateSearchResultsForCriteriaChange()
     {
+        Interlocked.Increment(ref _xtermSearchRequestId);
         Interlocked.Increment(ref _searchGeneration);
         Interlocked.Increment(ref _searchResultBuildGeneration);
         CancelActiveSearch();
         _areSearchCriteriaStale = true;
+        ClearSearchError();
         MarkSearchResultsStale();
         NotifySearchCommandStates();
     }
 
     private void ClearSearchResultsForVisibleLogReset()
     {
+        Interlocked.Increment(ref _xtermSearchRequestId);
         Interlocked.Increment(ref _searchGeneration);
         Interlocked.Increment(ref _searchResultBuildGeneration);
         CancelActiveSearch();
@@ -5774,6 +5694,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSearchError));
     }
 
+    public bool IsCurrentXtermSearchRequest(XtermSearchRequest request) =>
+        request.RequestId == Interlocked.Read(ref _xtermSearchRequestId);
+
     private void RequestXtermSearch(SearchMove move)
     {
         if (string.IsNullOrWhiteSpace(SearchText) || _areSearchCriteriaStale)
@@ -5812,6 +5735,52 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    public void JumpToEventSource(DetectedEvent detectedEvent)
+    {
+        Interlocked.Increment(ref _searchNavigationRevision);
+        try
+        {
+            if (detectedEvent.SourceLogLine is not { } source ||
+                !Log.TryGetSearchLine(source, out var line))
+            {
+                SetStatus("The event's original log is no longer in the visible log buffer or was filtered out.");
+                return;
+            }
+
+            var payload = line.PayloadText;
+            var length = Math.Min(payload.Length, 256);
+            if (length > 0 && length < payload.Length && char.IsHighSurrogate(payload[length - 1]))
+            {
+                length--;
+            }
+
+            if (length == 0)
+            {
+                SetStatus("The event's original log has no visible text to select.");
+                return;
+            }
+
+            var expectedText = payload[..length];
+            XtermSearchRequested?.Invoke(this, new XtermSearchRequest(
+                Interlocked.Increment(ref _xtermSearchRequestId),
+                expectedText,
+                isCaseSensitive: true,
+                direction: "next",
+                targetLineId: line.LineId,
+                targetPayloadOffset: 0,
+                targetPayloadStart: line.PayloadStart,
+                matchLength: length,
+                expectedText: expectedText,
+                tabsBeforeMatch: 0,
+                tabsBeforeMatchEnd: expectedText.Count(character => character == '\t')));
+            SetStatus($"Event selected in the original log: {detectedEvent.RuleName}");
+        }
+        catch (Exception ex)
+        {
+            RecordEventSelectionError($"Event log jump failed: {ex.Message}");
+        }
+    }
+
     public async Task JumpToSearchResultAsync(VisibleSearchResult? result)
     {
         if (result is null)
@@ -5833,7 +5802,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
-            SelectedSearchResult = result;
+            var navigationRevision = Interlocked.Increment(ref _searchNavigationRevision);
             var snapshot = _activeSearchSnapshot;
             if (snapshot is null)
             {
@@ -5848,6 +5817,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return found ? position : (VisibleLogSearchPosition?)null;
             });
             if (generation != Interlocked.Read(ref _searchGeneration) ||
+                navigationRevision != Interlocked.Read(ref _searchNavigationRevision) ||
                 !ReferenceEquals(snapshot, _activeSearchSnapshot))
             {
                 return;
@@ -6310,7 +6280,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(LastTimestampDisplayModeChangeTimeText));
             OnPropertyChanged(nameof(LastTimestampDisplayModeError));
             RefreshSelectedEventContextText();
-            MarkSearchResultsStale();
+            InvalidateSearchResultsForCriteriaChange();
             RecordSettingsChange("Timestamp format", SettingsApplyBehavior.Immediate, value.DisplayName);
         }
     }
@@ -7322,7 +7292,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             if (!CommandSequenceTriggerPolicy.CanUseAsTrigger(sequence))
             {
                 RecordSequenceError(
-                    $"Rule '{ruleName}' trigger skipped: sequence '{sequenceName}' has no steps.");
+                    $"Rule '{ruleName}' trigger skipped: sequence '{sequenceName}' has no enabled steps.");
                 return;
             }
 
@@ -7369,7 +7339,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             pending.ShowTray = detectedEvent.TrayNotificationEnabled;
             pending.PlaySound = detectedEvent.SoundNotificationEnabled;
             pending.ShowPopup = detectedEvent.PopupNotificationEnabled;
-            pending.CooldownSeconds = Math.Clamp(detectedEvent.NotificationCooldownSeconds, 5, 3_600);
+            pending.CooldownSeconds = RuleNotificationLimits.ClampCooldown(detectedEvent.NotificationCooldownSeconds);
             if (pending.IsScheduled)
             {
                 return;
@@ -7967,7 +7937,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             !IsBridgeActive &&
             !IsSequenceRunning &&
             sequence is not null &&
-            sequence.Steps.Count > 0;
+            sequence.Steps.Any(step => step.IsEnabled);
     }
 
     private async Task RunCommandSequenceAsync(object? parameter)
@@ -7977,12 +7947,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!CanRunCommandSequence(parameter) || sourceSequence is null)
         {
             RecordSequenceError(IsConnected
-                ? "Sequence run failed: select a sequence with at least one step."
+                ? "Sequence run failed: select a sequence with at least one enabled step."
                 : "Sequence run failed: serial port is disconnected.");
             return;
         }
 
-        var sequence = CloneCommandSequence(sourceSequence);
+        var sequence = CommandSequenceExecutionPlan.Create(sourceSequence);
         foreach (var step in sequence.Steps)
         {
             step.LineEndingMode ??= SelectedTxLineEnding;
@@ -7998,6 +7968,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _sequenceCancellation?.Dispose();
         _sequenceCancellation = new CancellationTokenSource();
         var cancellationToken = _sequenceCancellation.Token;
+        var executionControl = new SequenceExecutionControl();
+        _sequenceExecutionControl = executionControl;
+        executionControl.StateChanged += OnSequenceExecutionControlChanged;
 
         IsSequenceRunning = true;
         RunningSequenceName = sequence.Name;
@@ -8049,11 +8022,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     var repeatIndex = position / sequence.Steps.Count;
                     var step = sequence.Steps[index];
                     CurrentSequenceStepText = sequence.RepeatCount == 1
-                        ? $"{index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}"
-                        : $"repeat {repeatIndex + 1:N0}/{sequence.RepeatCount:N0}, step {index + 1:N0}/{sequence.Steps.Count:N0} {step.DisplayName}";
+                        ? $"step #{step.StepNumber:N0} ({index + 1:N0}/{sequence.Steps.Count:N0} enabled) {step.DisplayName}"
+                        : $"repeat {repeatIndex + 1:N0}/{sequence.RepeatCount:N0}, step #{step.StepNumber:N0} ({index + 1:N0}/{sequence.Steps.Count:N0} enabled) {step.DisplayName}";
                 },
                 completed => CompletedSequenceSteps = completed,
-                cancellationToken);
+                cancellationToken, executionControl);
 
             _sequenceTxActivity.SetPhase("Completed");
             RecordSequenceStatus($"Sequence completed: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})");
@@ -8070,6 +8043,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
+            executionControl.StateChanged -= OnSequenceExecutionControlChanged;
+            _sequenceExecutionControl = null;
             IsSequenceRunning = false;
             RunningSequenceName = "(none)";
             CurrentSequenceStepText = "(none)";
@@ -8093,6 +8068,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SequenceStopCount));
         if (IsAutomationBusy) _automationController?.CancelActiveSequence();
         _sequenceCancellation?.Cancel();
+        NotifySequenceDebugCommandStates();
         _sequenceTxActivity.SetPhase("Stopping");
         RefreshSequenceTxActivity();
         RecordSequenceStatus("Stopping command sequence...");
@@ -9340,7 +9316,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         if (applyFilter && (_visibleLogFilterSelection.CurrentCount > 0 || selectionChanged))
         {
-            ApplyVisibleLogFilters(recordStatus: false);
+            _ = ApplyVisibleLogFiltersAsync(recordStatus: false);
         }
     }
 
@@ -9360,7 +9336,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         NotifyPendingVisibleLogFilterStateChanged(wasPending);
     }
 
-    public void ApplyVisibleLogFilterEdit()
+    public async Task ApplyVisibleLogFilterEditAsync()
     {
         var wasPending = _visibleLogFilterSelection.HasPendingChanges;
         var selectedKeys = VisibleLogFilterOptions
@@ -9372,18 +9348,24 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _visibleLogFilterSelection.ApplyDraft();
         SynchronizeVisibleLogFilterDraft();
         NotifyPendingVisibleLogFilterStateChanged(wasPending);
-        ApplyVisibleLogFilters(recordStatus: true);
+        await ApplyVisibleLogFiltersAsync(recordStatus: true);
     }
 
-    private void ApplyVisibleLogFilters(bool recordStatus)
+    private async Task ApplyVisibleLogFiltersAsync(bool recordStatus)
     {
         try
         {
             var selected = GetSelectedVisibleLogFilterOptions();
-            RecordAutomaticRuleRerenderSuppressed();
-            Log.SetViewFilters(
-                selected.Select(option => option.Rule!).ToArray(),
-                rebuildExisting: false);
+            SetVisibleLogRebuildReason("visible log filter change");
+            if (recordStatus)
+            {
+                SetStatus(UiText.Get("VisibleFilterApplyingStatus", "Applying filter to retained logs..."));
+            }
+            if (!await Log.SetViewFiltersAsync(selected.Select(option => option.Rule!).ToArray()))
+            {
+                return;
+            }
+            MarkSearchResultsStale();
             _lastVisibleFilterChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             _lastVisibleFilterError = string.Empty;
             OnPropertyChanged(nameof(CurrentVisibleFilterText));
@@ -9397,10 +9379,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 SetStatus(selected.Count == 0
                     ? UiText.Get(
                         "VisibleFilterAllStatus",
-                        "Visible log filter: ALL. Applies to new logs only.")
+                        "Visible log filter: ALL. Showing all retained and incoming logs.")
                     : UiText.Format(
                         "VisibleFilterSelectedStatusFormat",
-                        "Visible log filters (OR): {0}. Applies to new logs only. Press Clear for a clean filtered view.",
+                        "Visible log filters (OR): {0}. Applied to all retained and incoming logs.",
                         string.Join(", ", selected.Select(option => option.DisplayName))));
             }
 
@@ -9601,7 +9583,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(RuleChangesSinceClearCount));
         OnPropertyChanged(nameof(LastRuleChangeLiveOnlyTimeText));
 
-        return $"{status}. Applies to new logs only.";
+        return $"{status}. Events and highlights apply to new logs; view filters reapply to retained logs.";
     }
 
     private void RecordRuleEditStatus(string message)
@@ -9724,6 +9706,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasSelectedCommandSequenceStep));
         OnPropertyChanged(nameof(SelectedCommandSequenceStepCount));
         OnPropertyChanged(nameof(SelectedCommandSequenceStepCountText));
+        OnPropertyChanged(nameof(SelectedCommandSequenceEnabledStepCount));
         OnPropertyChanged(nameof(SelectedCommandSequenceName));
         OnPropertyChanged(nameof(SequenceStatusText));
         OnPropertyChanged(nameof(SequenceRuntimeStateText));
@@ -9732,6 +9715,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSequenceActionStatus));
         RunCommandSequenceCommand.NotifyCanExecuteChanged();
         StopCommandSequenceCommand.NotifyCanExecuteChanged();
+        NotifySequenceDebugCommandStates();
         RefreshStatusBar();
     }
 
@@ -9776,7 +9760,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             normalized.MatchDirection = HighlightMatchDirection.Both;
         }
 
-        normalized.NotificationCooldownSeconds = Math.Clamp(normalized.NotificationCooldownSeconds, 5, 3_600);
+        normalized.NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(normalized.NotificationCooldownSeconds);
         normalized.TriggerSequenceName = string.IsNullOrWhiteSpace(normalized.TriggerSequenceName)
             ? null
             : normalized.TriggerSequenceName.Trim();
@@ -9882,7 +9866,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             normalized.MatchDirection = EventMatchDirection.RxOnly;
         }
 
-        normalized.NotificationCooldownSeconds = Math.Clamp(normalized.NotificationCooldownSeconds, 5, 3_600);
+        normalized.NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(normalized.NotificationCooldownSeconds);
 
         return true;
     }
@@ -10049,7 +10033,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             if ((step.TxMode ?? defaultMode) != TxSendMode.Hex) continue;
             if (!HexPayloadParser.TryParse(step.CommandText, out _, out var parseError))
             {
-                error = $"step {index} ({step.DisplayName}): {parseError}";
+                error = $"step {(step.StepNumber > 0 ? step.StepNumber : index)} ({step.DisplayName}): {parseError}";
                 return false;
             }
         }
@@ -10902,8 +10886,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var package = new DataPackage();
             package.SetText(
-                $"HEX TIMEOUT{Environment.NewLine}{HexFtdiHelpNoticeText}" +
-                $"{Environment.NewLine}{Environment.NewLine}{HelpGuideText}");
+                $"{HelpGuideText}{Environment.NewLine}{Environment.NewLine}" +
+                $"HEX TIMEOUT{Environment.NewLine}{HexFtdiHelpNoticeText}");
             Clipboard.SetContent(package);
             Clipboard.Flush();
             SetStatus("Help guide copied to clipboard");
@@ -11204,6 +11188,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         var gateEntered = false;
         Interlocked.Increment(ref _fileLoggingTransitionCount);
         OnPropertyChanged(nameof(CanEditLogFileName));
+        OnPropertyChanged(nameof(CanEditLogSaveDirectory));
         try
         {
             await _connectionLifecycleGate.WaitAsync();
@@ -11217,6 +11202,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
             if (enabled)
             {
+                if (_isLogSaveDirectoryValidating)
+                {
+                    RecordLogToggleAction("Wait for the log folder check to finish before starting logging.");
+                    return;
+                }
+
                 if (!PrepareLogFileNameForNewRun())
                 {
                     NotifyFileLoggingStateChanged();
@@ -11271,6 +11262,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
             Interlocked.Decrement(ref _fileLoggingTransitionCount);
             OnPropertyChanged(nameof(CanEditLogFileName));
+            OnPropertyChanged(nameof(CanEditLogSaveDirectory));
         }
     }
 
@@ -11280,6 +11272,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             ApplySizeRotationSettings();
             await _fileLogWriter.StartAsync(directory, cancellationToken);
+            ClearPendingLogStartSettings();
             _fileWriterDroppedHealthBaseline = _fileLogWriter.DroppedLineCount;
             _fileWriterErrorHealthBaseline = _fileLogWriter.FileErrorCount;
             RefreshLogFileActionProperties();
@@ -11359,7 +11352,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public void SetLogSaveDirectoryFromPicker(string? selectedDirectory)
+    public async Task SetLogSaveDirectoryFromPickerAsync(string? selectedDirectory)
     {
         try
         {
@@ -11369,8 +11362,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            if (!TryValidateSaveDirectory(selectedDirectory, out var validatedDirectory))
+            var version = _logDestinationVersion;
+            if (!await SetLogSaveDirectoryAsync(selectedDirectory))
             {
+                if (_settingsValidationCancellation.IsCancellationRequested || version != _logDestinationVersion)
+                {
+                    return;
+                }
+
                 var message = string.IsNullOrWhiteSpace(LastSettingsValidationError)
                     ? "Log folder browse failed: selected directory is invalid."
                     : $"Log folder browse failed: {LastSettingsValidationError}";
@@ -11379,10 +11378,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            LogSaveDirectory = validatedDirectory;
-            RecordSaveDirectoryAction(IsConnected
-                ? $"Selected log folder; reconnect required: {validatedDirectory}"
-                : $"Selected log folder: {validatedDirectory}");
+            RecordSaveDirectoryAction($"Selected log folder; applies when logging next starts: {LogSaveDirectory}");
         }
         catch (Exception ex)
         {
@@ -11600,40 +11596,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    private bool TryValidateSaveDirectory(string directory, out string validatedDirectory)
-    {
-        validatedDirectory = string.Empty;
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            RecordSettingsValidationError("Log save directory must not be empty.");
-            return false;
-        }
-
-        try
-        {
-            validatedDirectory = Path.GetFullPath(directory.Trim());
-            Directory.CreateDirectory(validatedDirectory);
-
-            var probePath = Path.Combine(validatedDirectory, $".serialmonitor_write_test_{Guid.NewGuid():N}.tmp");
-            using (new FileStream(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose))
-            {
-            }
-
-            if (File.Exists(probePath))
-            {
-                File.Delete(probePath);
-            }
-
-            return true;
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException or System.Security.SecurityException)
-        {
-            RecordSettingsValidationError($"Log save directory is invalid or not writable: {ex.Message}");
-            validatedDirectory = string.Empty;
-            return false;
-        }
-    }
-
     private static string FormatByteCount(long bytes)
     {
         const long gib = 1024L * 1024 * 1024;
@@ -11669,12 +11631,20 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             case SettingsApplyBehavior.Immediate:
                 _pendingReconnectSettings.Remove(safeName);
                 _pendingRestartSettings.Remove(safeName);
+                _pendingLogStartSettings.Remove(safeName);
                 _lastSettingsApplyStatus = $"{safeName}: applied immediately.";
                 break;
             case SettingsApplyBehavior.ReconnectRequired:
                 _pendingReconnectSettings.Add(safeName);
                 _pendingRestartSettings.Remove(safeName);
+                _pendingLogStartSettings.Remove(safeName);
                 _lastSettingsApplyStatus = $"{safeName}: saved. Reconnect required.";
+                break;
+            case SettingsApplyBehavior.NextLogStart:
+                _pendingReconnectSettings.Remove(safeName);
+                _pendingRestartSettings.Remove(safeName);
+                _pendingLogStartSettings.Add(safeName);
+                _lastSettingsApplyStatus = $"{safeName}: saved. Applies when logging next starts.";
                 break;
             case SettingsApplyBehavior.NextSession:
                 _pendingRestartSettings.Add(safeName);
@@ -11747,6 +11717,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ProfileNormalizationCount));
         OnPropertyChanged(nameof(PendingReconnectRequiredSettingsCount));
         OnPropertyChanged(nameof(PendingRestartRequiredSettingsCount));
+        OnPropertyChanged(nameof(PendingLogStartSettingsCount));
         OnPropertyChanged(nameof(SettingsPendingSummaryText));
     }
 
@@ -12239,6 +12210,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyProfile(AppProfile profile)
     {
+        _logDestinationVersion++;
         var previousSuppress = _suppressSettingsApplyRecording;
         _suppressSettingsApplyRecording = true;
         try
@@ -12352,6 +12324,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CurrentSessionDisplayText));
         OnPropertyChanged(nameof(SessionStartedTimeText));
         OnPropertyChanged(nameof(ActiveLogFileName));
+        ClearPendingSettings();
         RefreshSettingsProperties();
         NotifyRuleEditorStateChanged();
         NotifyCommandEditorStateChanged();
@@ -12424,6 +12397,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CanEditConnectionSettings));
         OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
         OnPropertyChanged(nameof(CanEditLogFileName));
+        OnPropertyChanged(nameof(CanEditLogSaveDirectory));
         OnPropertyChanged(nameof(SelectedDataBits));
         OnPropertyChanged(nameof(SelectedParity));
         OnPropertyChanged(nameof(SelectedStopBits));
@@ -12704,17 +12678,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private static CommandSequenceStep CloneCommandSequenceStep(CommandSequenceStep step)
     {
-        return new CommandSequenceStep
-        {
-            Name = step.Name,
-            CommandText = step.CommandText,
-            LineEndingMode = step.LineEndingMode,
-            DelayAfterMs = step.DelayAfterMs,
-            Comment = step.Comment,
-            TxMode = step.TxMode,
-            CaptureMs = step.CaptureMs,
-            Expect = step.Expect is null ? null : step.Expect with { }
-        };
+        return CommandSequenceExecutionPlan.CloneStep(step);
     }
 
     private void OnBackgroundError(object? sender, string message)
@@ -13689,6 +13653,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         SendMockCrlfCommand.NotifyCanExecuteChanged();
         RunCommandSequenceCommand.NotifyCanExecuteChanged();
         StopCommandSequenceCommand.NotifyCanExecuteChanged();
+        NotifySequenceDebugCommandStates();
         NotifyLogFileActionCommandStates();
     }
 
@@ -13708,6 +13673,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(FileLoggingToolTip));
         OnPropertyChanged(nameof(FileLoggingWhileViewPaused));
         OnPropertyChanged(nameof(CanEditLogFileName));
+        OnPropertyChanged(nameof(CanEditLogSaveDirectory));
         OnPropertyChanged(nameof(CurrentSerialLogPath));
         SetFooter(CreateFooterStatus());
         RefreshLogFileActionProperties();

@@ -21,7 +21,10 @@ public sealed class LogViewModelMultiFilterTests
         Assert.Equal(0, viewModel.CurrentVisibleLineCount);
         Assert.Empty(viewModel.GetVisibleTextSnapshot());
 
-        viewModel.SetViewFilters([], rebuildExisting: false);
+        viewModel.SetViewFilters([]);
+        Assert.Equal(2, viewModel.CurrentVisibleLineCount);
+        Assert.Contains("ERROR command", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
+        Assert.Contains("OK", viewModel.GetVisibleTextSnapshot(), StringComparison.Ordinal);
         viewModel.AddRange([LogLine.Tx("new command"), LogLine.Rx("new reply")]);
         var visible = viewModel.GetVisibleTextSnapshot();
         Assert.Contains("new command", visible, StringComparison.Ordinal);
@@ -60,19 +63,19 @@ public sealed class LogViewModelMultiFilterTests
     }
 
     [Fact]
-    public void ViewFilterChanges_RemainNewLogsOnly_AfterFormattingRebuild()
+    public void ViewFilterChanges_ReapplyToAllRetainedLines_AfterFormattingRebuild()
     {
         var viewModel = new LogViewModel(capacity: 100);
-        viewModel.SetViewFilters([CreateTerminalRule("ERROR")], rebuildExisting: false);
+        viewModel.SetViewFilters([CreateTerminalRule("ERROR")]);
         viewModel.AddRange([LogLine.Rx("OLD ERROR"), LogLine.Rx("OLD WARN")]);
 
-        viewModel.SetViewFilters([CreateTerminalRule("WARN")], rebuildExisting: false);
+        viewModel.SetViewFilters([CreateTerminalRule("WARN")]);
         viewModel.AddRange([LogLine.Rx("NEW ERROR"), LogLine.Rx("NEW WARN")]);
         viewModel.SetTimestampDisplayFormat(TimestampDisplayFormat.TimeSeconds);
 
         var snapshot = viewModel.GetVisibleTextSnapshot();
-        Assert.Contains("OLD ERROR", snapshot, StringComparison.Ordinal);
-        Assert.DoesNotContain("OLD WARN", snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("OLD ERROR", snapshot, StringComparison.Ordinal);
+        Assert.Contains("OLD WARN", snapshot, StringComparison.Ordinal);
         Assert.DoesNotContain("NEW ERROR", snapshot, StringComparison.Ordinal);
         Assert.Contains("NEW WARN", snapshot, StringComparison.Ordinal);
     }

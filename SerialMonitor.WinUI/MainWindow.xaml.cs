@@ -77,6 +77,7 @@ public sealed partial class MainWindow : Window
     private int _pendingLiveXtermLines;
     private bool _isXtermReady;
     private bool _eventAutoScrollQueued;
+    private bool _searchResultScrollQueued;
     private bool _eventAutoScrollPendingAfterBackpressure;
     private bool _isPointerOverEventList;
     private bool _xtermFitQueued;
@@ -202,6 +203,7 @@ public sealed partial class MainWindow : Window
 
         Root.DataContext = _viewModel;
         InitializePortAliasUi();
+        InitializeLogNavigationUi();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.Events.BatchApplied += OnDetectedEventsBatchApplied;
         _viewModel.Log.TextBatchAppended += OnLogTextBatchAppended;
@@ -255,6 +257,7 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        UpdateLogNavigationActivity();
         _portAlias.Dispose();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
@@ -319,6 +322,7 @@ public sealed partial class MainWindow : Window
 
         _isWindowMinimized = isMinimized;
         _isVisualAppendSuspendedForMinimize = isMinimized;
+        UpdateLogNavigationActivity();
         _viewModel.RecordWindowMinimizeState(isMinimized);
         _viewModel.SetVisualAppendSuspendedForMinimize(isMinimized);
 
@@ -344,6 +348,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        DisposeLogNavigationUi();
         _portAlias.PropertyChanged -= OnPortAliasPropertyChanged;
         _portAlias.Dispose();
         _updates.Dispose();
@@ -930,10 +935,11 @@ public sealed partial class MainWindow : Window
         _viewModel.CancelVisibleLogFilterEdit();
     }
 
-    private void ApplyVisibleLogFilterButton_Click(object sender, RoutedEventArgs args)
+    private async void ApplyVisibleLogFilterButton_Click(object sender, RoutedEventArgs args)
     {
-        _viewModel.ApplyVisibleLogFilterEdit();
+        var applyTask = _viewModel.ApplyVisibleLogFilterEditAsync();
         VisibleLogFilterFlyout.Hide();
+        await applyTask;
     }
 
     private void CancelVisibleLogFilterButton_Click(object sender, RoutedEventArgs args)
@@ -2456,7 +2462,8 @@ public sealed partial class MainWindow : Window
                     CoreWebView2HostResourceAccessKind.Allow);
             }
             XtermLogWebView.NavigationCompleted += OnXtermNavigationCompleted;
-            XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}");
+            var timeRailLanguage = Uri.EscapeDataString(UiText.Get("LogNavigationLanguage", "en"));
+            XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}&language={timeRailLanguage}");
         }
         catch (Exception ex)
         {
@@ -2515,6 +2522,7 @@ public sealed partial class MainWindow : Window
 
         _isXtermReady = true;
         _viewModel.SetXtermReady(true);
+        UpdateLogNavigationActivity();
         await SyncXtermColorSchemeAsync();
         await SyncXtermScrollbackSizeAsync();
         await SyncXtermFontAsync();
@@ -2546,6 +2554,28 @@ public sealed partial class MainWindow : Window
         if (args.PropertyName == nameof(MainViewModel.IsSequenceRunning))
         {
             UpdateSequenceStateVisuals();
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.SelectedSearchResult) &&
+            _viewModel.SelectedSearchResult is not null && !_searchResultScrollQueued)
+        {
+            // Bindings and the page's item containers settle before scrolling.
+            _searchResultScrollQueued = true;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _searchResultScrollQueued = false;
+                try
+                {
+                    if (!IsClosingOrClosed && _viewModel.SelectedSearchResult is { } selected)
+                    {
+                        SearchResultsListView.ScrollIntoView(selected);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _viewModel.RecordSearchTabLayoutError($"Search result scroll failed: {ex.Message}");
+                }
+            });
         }
 
         if (args.PropertyName == nameof(MainViewModel.EffectiveXtermScrollbackSize))
@@ -2854,6 +2884,23 @@ public sealed partial class MainWindow : Window
             }
 
             var messageType = typeElement.GetString();
+            if (string.Equals(messageType, "openLogNavigation", StringComparison.Ordinal))
+            {
+                _ = OpenLogNavigationAsync();
+                return;
+            }
+            if (string.Equals(messageType, "navigationJump", StringComparison.Ordinal))
+            {
+                _viewModel.IsAutoScrollEnabled = false;
+                return;
+            }
+
+            if (string.Equals(messageType, "navigationError", StringComparison.Ordinal))
+            {
+                var error = root.TryGetProperty("error", out var navigationError) ? navigationError.GetString() : "unknown error";
+                _viewModel.RecordXtermLayoutError($"Log navigation failed: {error}");
+                return;
+            }
             if (string.Equals(messageType, "xtermAppendCompleted", StringComparison.Ordinal))
             {
                 if (!root.TryGetProperty("requestId", out var requestIdElement) ||
@@ -3032,6 +3079,10 @@ public sealed partial class MainWindow : Window
 
                 case "searchSelected":
                     await _viewModel.SearchSelectedTextFromXtermAsync(selectedText);
+                    break;
+
+                case "navigate":
+                    await OpenLogNavigationAsync();
                     break;
 
                 default:
@@ -3960,6 +4011,15 @@ public sealed partial class MainWindow : Window
 
     private static IEnumerable<string> SplitXtermFullRenderTransportText(string text)
     {
+        // BeginReplace must always have a matching Commit, including when the
+        // startup snapshot is empty. The empty chunk is a protocol boundary;
+        // JavaScript acknowledges it without scheduling a terminal write.
+        if (text.Length == 0)
+        {
+            yield return string.Empty;
+            yield break;
+        }
+
         for (var start = 0; start < text.Length;)
         {
             var end = Math.Min(text.Length, start + XtermFullRenderTransportMaxChars);
@@ -4101,7 +4161,8 @@ public sealed partial class MainWindow : Window
 
     private async Task SearchXtermAsync(XtermSearchRequest request, CancellationToken cancellationToken)
     {
-        if (IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        if (IsClosingOrClosed || _isVisualAppendSuspendedForMinimize ||
+            !_viewModel.IsCurrentXtermSearchRequest(request))
         {
             return;
         }
@@ -4117,6 +4178,10 @@ public sealed partial class MainWindow : Window
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!_viewModel.IsCurrentXtermSearchRequest(request))
+            {
+                return;
+            }
             searchTimeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             searchTimeoutCancellation.CancelAfter(XtermSearchTimeout);
             var searchCancellationToken = searchTimeoutCancellation.Token;
@@ -4142,6 +4207,11 @@ public sealed partial class MainWindow : Window
                 .AsTask(searchCancellationToken);
             searchStopwatch.Stop();
 
+            if (!_viewModel.IsCurrentXtermSearchRequest(request))
+            {
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(resultJson))
             {
                 _viewModel.RecordXtermSearchError("xterm search failed: empty bridge response.");
@@ -4164,6 +4234,10 @@ public sealed partial class MainWindow : Window
 
             var found = root.TryGetProperty("found", out var foundElement) &&
                 foundElement.ValueKind == JsonValueKind.True;
+            if (found)
+            {
+                _viewModel.IsAutoScrollEnabled = false;
+            }
             _viewModel.RecordXtermSearchResult(found, searchStopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -4287,7 +4361,8 @@ public sealed partial class MainWindow : Window
             }
 
             EventListView.SelectedItem = detectedEvent;
-            SelectEventAndShowContext(detectedEvent);
+            _viewModel.SelectEventFromUi(detectedEvent);
+            _viewModel.JumpToEventSource(detectedEvent);
             args.Handled = true;
         }
         catch (Exception ex)
@@ -4326,14 +4401,6 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            if (ReferenceEquals(InspectorTabView.SelectedItem, ContextTabViewItem))
-            {
-                _viewModel.RecordContextTabActivated();
-                _viewModel.RefreshSelectedEventContextForUi();
-                InspectorTabView.UpdateLayout();
-                ContextTabViewItem.UpdateLayout();
-            }
-
             if (ReferenceEquals(InspectorTabView.SelectedItem, RulesTabViewItem))
             {
                 InspectorTabView.UpdateLayout();
@@ -4360,17 +4427,23 @@ public sealed partial class MainWindow : Window
         _viewModel.CopyStatusCommand.Execute(null);
     }
 
-    private void SelectEventAndShowContext(DetectedEvent detectedEvent)
+    private async void SearchResultsListView_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        _viewModel.SelectEventFromUi(detectedEvent);
-        _viewModel.RefreshSelectedEventContextForUi();
-        InspectorTabView.SelectedItem = ContextTabViewItem;
-        InspectorTabView.UpdateLayout();
-        ContextTabViewItem.UpdateLayout();
-        DispatcherQueue.TryEnqueue(() =>
+        if (args.Key != VirtualKey.Enter ||
+            IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
         {
-            _viewModel.RefreshSelectedEventContextForUi();
-        });
+            return;
+        }
+
+        args.Handled = true;
+        try
+        {
+            await _viewModel.JumpToSearchResultAsync(_viewModel.SelectedSearchResult);
+        }
+        catch (Exception ex)
+        {
+            _viewModel.RecordXtermSearchError($"Search result jump failed: {ex.Message}");
+        }
     }
 
     private void QueueEventAutoScrollToLatest(bool selectLatest)
@@ -4488,6 +4561,14 @@ public sealed partial class MainWindow : Window
     {
         if (IsWebViewSource(args.OriginalSource))
         {
+            return;
+        }
+
+        if (args.Key == VirtualKey.G && IsModifierDown(VirtualKey.Control) &&
+            !IsModifierDown(VirtualKey.Menu) && !IsModifierDown(VirtualKey.Shift))
+        {
+            args.Handled = true;
+            await OpenLogNavigationAsync();
             return;
         }
 
@@ -4676,7 +4757,7 @@ public sealed partial class MainWindow : Window
             WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
 
             var folder = await picker.PickSingleFolderAsync();
-            _viewModel.SetLogSaveDirectoryFromPicker(folder?.Path);
+            await _viewModel.SetLogSaveDirectoryFromPickerAsync(folder?.Path);
         }
         catch (Exception ex)
         {
@@ -5201,6 +5282,24 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void DuplicateCommandSequence_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.DuplicateSelectedCommandSequence();
+    }
+
+    private void DuplicateCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    {
+        _viewModel.DuplicateSelectedCommandSequenceStep();
+    }
+
+    private void CommandSequenceStepEnabled_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is CheckBox { DataContext: CommandSequenceStep step } checkBox)
+        {
+            _viewModel.SetCommandSequenceStepEnabled(step, checkBox.IsChecked == true);
+        }
+    }
+
     private async void DeleteCommandSequence_Click(object sender, RoutedEventArgs args)
     {
         if (_viewModel.SelectedCommandSequence is null)
@@ -5267,7 +5366,7 @@ public sealed partial class MainWindow : Window
             var current = args.OriginalSource as DependencyObject;
             while (current is not null && current != CommandSequenceStepListView)
             {
-                if (current is Button)
+                if (current is Button or CheckBox)
                 {
                     return;
                 }
@@ -5331,198 +5430,12 @@ public sealed partial class MainWindow : Window
 
     private async Task<LogRule?> ShowLogRuleDialogAsync(string title, LogRule source)
     {
-        var nameBox = CreateDialogTextBox(source.Name, "e.g. RESET");
-        var keywordBox = CreateDialogTextBox(source.Keyword, "ERROR or 49 4E");
-        var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
-        var eventBox = new CheckBox { Content = "Event", IsChecked = source.UseForEvent };
-        var highlightBox = new CheckBox { Content = "Highlight", IsChecked = source.UseForHighlight };
-        var filterBox = new CheckBox { Content = "Filter", IsChecked = source.UseAsViewFilter };
-        var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
-        var modeBox = CreateLogRuleModeComboBox(source.Mode);
-        var directionBox = CreateEnumComboBox(source.MatchDirection);
-        var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
-        var backgroundOptions = new[] { "(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray" };
-        var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
-        var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
-        var trayNotificationBox = new CheckBox { Content = "Tray", IsChecked = source.TrayNotificationEnabled };
-        var soundNotificationBox = new CheckBox { Content = "Sound", IsChecked = source.SoundNotificationEnabled };
-        var popupNotificationBox = new CheckBox { Content = "Popup", IsChecked = source.PopupNotificationEnabled };
-        var notificationCooldownBox = CreateDialogTextBox(
-            Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
-            "30");
-        var triggerSequenceOptions = new[] { "(none)" }
-            .Concat(_viewModel.CommandSequences
-                .Where(CommandSequenceTriggerPolicy.CanUseAsTrigger)
-                .Select(sequence => sequence.Name))
-            .ToArray();
-        var triggerSequenceBox = CreateStringComboBox(
-            triggerSequenceOptions,
-            string.IsNullOrWhiteSpace(source.TriggerSequenceName) ? "(none)" : source.TriggerSequenceName);
-        var errorText = CreateDialogErrorText();
-
-        void UpdateTriggerSequenceAvailability()
+        var dialog = new Views.LogRuleDialog(source, _viewModel.HighlightColorPresets, _viewModel.CommandSequences)
         {
-            var direction = directionBox.SelectedItem is HighlightMatchDirection selectedDirection
-                ? selectedDirection
-                : HighlightMatchDirection.Both;
-            var isAvailable = CommandSequenceTriggerPolicy.SupportsRxTrigger(direction);
-            triggerSequenceBox.IsEnabled = isAvailable;
-            if (!isAvailable)
-            {
-                triggerSequenceBox.SelectedItem = triggerSequenceOptions[0];
-            }
-        }
-
-        directionBox.SelectionChanged += (_, _) => UpdateTriggerSequenceAvailability();
-        UpdateTriggerSequenceAvailability();
-
-        ToolTipService.SetToolTip(eventBox, UiText.Get(
-            "RuleEventToolTip",
-            "Event: add matching lines to Events."));
-        ToolTipService.SetToolTip(highlightBox, UiText.Get(
-            "RuleHighlightToolTip",
-            "Highlight: color matching lines in the log view."));
-        ToolTipService.SetToolTip(filterBox, UiText.Get(
-            "RuleFilterToolTip",
-            "Filter: make this rule available in the Filter dropdown."));
-        ToolTipService.SetToolTip(modeBox, UiText.Get(
-            "RuleModeToolTip",
-            "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
-        ToolTipService.SetToolTip(caseBox, UiText.Get(
-            "RuleCaseToolTip",
-            "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
-        ToolTipService.SetToolTip(trayNotificationBox, UiText.Get(
-            "RuleTrayNotificationToolTip",
-            "Windows tray balloon. OFF by default. Events are grouped per rule."));
-        ToolTipService.SetToolTip(soundNotificationBox, UiText.Get(
-            "RuleSoundNotificationToolTip",
-            "Play one Windows alert sound per grouped notification. OFF by default."));
-        ToolTipService.SetToolTip(popupNotificationBox, UiText.Get(
-            "RulePopupNotificationToolTip",
-            "Show a non-blocking in-app popup for 8 seconds. OFF by default."));
-        ToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
-            "RuleNotificationCooldownToolTip",
-            "Seconds between notifications for this rule (5-3600). Default: 30 seconds."));
-        ToolTipService.SetToolTip(triggerSequenceBox, UiText.Get(
-            "RuleTriggerSequenceToolTip",
-            "Run the selected non-empty sequence when this rule matches RX data. Disabled for TX-only rules. Repeated matches are ignored while a sequence is already running."));
-
-        foreach (var input in new FrameworkElement[]
-                 {
-                     nameBox, keywordBox, modeBox, directionBox, foregroundBox,
-                     backgroundBox, priorityBox, notificationCooldownBox, triggerSequenceBox
-                 })
-        {
-            input.MinWidth = 0;
-            input.HorizontalAlignment = HorizontalAlignment.Stretch;
-        }
-
-        var panel = new Grid
-        {
-            MinWidth = 430,
-            ColumnSpacing = 4,
-            RowSpacing = 4
+            XamlRoot = Root.XamlRoot,
+            Title = title
         };
-        for (var column = 0; column < 4; column++)
-        {
-            panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        }
-
-        for (var row = 0; row < 7; row++)
-        {
-            panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
-
-        AddDialogGridChild(panel, CreateDialogField("Name", nameBox), row: 0, column: 0, columnSpan: 2);
-        AddDialogGridChild(panel, CreateDialogField("Keyword", keywordBox), row: 0, column: 2, columnSpan: 2);
-        AddDialogGridChild(
-            panel,
-            CreateInlineDialogRow(enabledBox, eventBox, highlightBox, filterBox, caseBox),
-            row: 1,
-            column: 0,
-            columnSpan: 4);
-        AddDialogGridChild(panel, CreateDialogField("Mode", modeBox), row: 2, column: 0);
-        AddDialogGridChild(panel, CreateDialogField("Direction", directionBox), row: 2, column: 1);
-        AddDialogGridChild(panel, CreateDialogField("Color", foregroundBox), row: 2, column: 2);
-        AddDialogGridChild(panel, CreateDialogField("Background", backgroundBox), row: 2, column: 3);
-        AddDialogGridChild(panel, CreateDialogField("Priority", priorityBox), row: 3, column: 0, columnSpan: 2);
-        AddDialogGridChild(
-            panel,
-            CreateDialogField("Notify cooldown (sec)", notificationCooldownBox),
-            row: 3,
-            column: 2,
-            columnSpan: 2);
-        AddDialogGridChild(
-            panel,
-            CreateDialogField("RX trigger sequence", triggerSequenceBox),
-            row: 4,
-            column: 0,
-            columnSpan: 4);
-        AddDialogGridChild(
-            panel,
-            CreateInlineDialogRow(trayNotificationBox, soundNotificationBox, popupNotificationBox),
-            row: 5,
-            column: 0,
-            columnSpan: 4);
-        AddDialogGridChild(panel, errorText, row: 6, column: 0, columnSpan: 4);
-
-        var result = await ShowValidatedEditorDialogAsync(title, panel, clickArgs =>
-        {
-            if (string.IsNullOrWhiteSpace(keywordBox.Text))
-            {
-                errorText.Text = UiText.Get("ValidationKeywordRequired", "Keyword is required.");
-                errorText.Visibility = Visibility.Visible;
-                clickArgs.Cancel = true;
-                return;
-            }
-
-            if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
-                cooldown is < 5 or > 3_600)
-            {
-                errorText.Text = UiText.Get(
-                    "ValidationNotificationCooldownRange",
-                    "Notify cooldown must be between 5 and 3600 seconds.");
-                errorText.Visibility = Visibility.Visible;
-                clickArgs.Cancel = true;
-            }
-        });
-        if (result != ContentDialogResult.Primary)
-        {
-            return null;
-        }
-
-        var priority = int.TryParse(priorityBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPriority)
-            ? parsedPriority
-            : source.Priority;
-        var background = GetSelectedString(backgroundBox, "(none)");
-        var triggerSequenceName = GetSelectedString(triggerSequenceBox, "(none)");
-        var matchDirection = directionBox.SelectedItem is HighlightMatchDirection direction
-            ? direction
-            : HighlightMatchDirection.Both;
-
-        return new LogRule
-        {
-            Name = nameBox.Text,
-            Keyword = keywordBox.Text,
-            Enabled = enabledBox.IsChecked == true,
-            UseForEvent = eventBox.IsChecked == true,
-            UseForHighlight = highlightBox.IsChecked == true,
-            UseAsViewFilter = filterBox.IsChecked == true,
-            CaseSensitive = caseBox.IsChecked == true,
-            Mode = GetSelectedLogRuleMode(modeBox),
-            MatchDirection = matchDirection,
-            ForegroundColor = GetSelectedString(foregroundBox, "Default"),
-            BackgroundColor = background == "(none)" ? null : background,
-            Priority = priority,
-            TrayNotificationEnabled = trayNotificationBox.IsChecked == true,
-            SoundNotificationEnabled = soundNotificationBox.IsChecked == true,
-            PopupNotificationEnabled = popupNotificationBox.IsChecked == true,
-            NotificationCooldownSeconds = int.Parse(notificationCooldownBox.Text, CultureInfo.InvariantCulture),
-            TriggerSequenceName = CommandSequenceTriggerPolicy.SupportsRxTrigger(matchDirection) &&
-                triggerSequenceName != "(none)"
-                ? triggerSequenceName
-                : null
-        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary ? dialog.Rule : null;
     }
 
     private async Task<EventRule?> ShowEventRuleDialogAsync(string title, EventRule source)
@@ -5537,7 +5450,7 @@ public sealed partial class MainWindow : Window
         var soundNotificationBox = new CheckBox { Content = "Sound", IsChecked = source.SoundNotificationEnabled };
         var popupNotificationBox = new CheckBox { Content = "Popup", IsChecked = source.PopupNotificationEnabled };
         var notificationCooldownBox = CreateDialogTextBox(
-            Math.Clamp(source.NotificationCooldownSeconds, 5, 3_600).ToString(CultureInfo.InvariantCulture),
+            RuleNotificationLimits.ClampCooldown(source.NotificationCooldownSeconds).ToString(CultureInfo.InvariantCulture),
             "30");
         var errorText = CreateDialogErrorText();
         ToolTipService.SetToolTip(modeBox, UiText.Get(
@@ -5548,7 +5461,7 @@ public sealed partial class MainWindow : Window
             "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
         ToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
             "RuleNotificationCooldownToolTip",
-            "Seconds between notifications for this rule (5-3600). Default: 30 seconds."));
+            "Seconds between notifications for this rule (5-86400). Default: 30 seconds."));
 
         var panel = CreateDialogPanel();
         panel.Children.Add(CreateDialogField("Name", nameBox));
@@ -5571,11 +5484,11 @@ public sealed partial class MainWindow : Window
             }
 
             if (!int.TryParse(notificationCooldownBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cooldown) ||
-                cooldown is < 5 or > 3_600)
+                cooldown < RuleNotificationLimits.MinCooldownSeconds || cooldown > RuleNotificationLimits.MaxCooldownSeconds)
             {
                 errorText.Text = UiText.Get(
                     "ValidationNotificationCooldownRange",
-                    "Notify cooldown must be between 5 and 3600 seconds.");
+                    "Notify cooldown must be between 5 and 86400 seconds (24 hours).");
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -5792,8 +5705,11 @@ public sealed partial class MainWindow : Window
         var nameBox = CreateDialogTextBox(source.Name ?? string.Empty,
             UiText.Get("SequenceStepNamePlaceholder", "e.g. Read firmware version"));
         var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
+        var modeBox = CreateStringComboBox(new[] { "Global", "Terminal", "Hex" }, source.TxMode?.ToString() ?? "Global");
         var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
         var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
+        endingBox.IsEnabled = source.TxMode != TxSendMode.Hex;
+        modeBox.SelectionChanged += (_, _) => endingBox.IsEnabled = GetSelectedString(modeBox, "Global") != "Hex";
         ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
         var delayBox = CreateDialogTextBox(source.DelayAfterMs.ToString(CultureInfo.InvariantCulture), "Delay after ms");
         var commentBox = CreateDialogTextBox(source.Comment ?? string.Empty,
@@ -5810,29 +5726,51 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepNameLabel", "Step name (optional)"), nameBox));
         panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepNameHelp",
             "Short label for progress, errors and CLI/MCP results. If blank, the GUI shows the command.")));
+        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepTxModeLabel", "TX mode"), modeBox));
+        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepTxModeHelp",
+            "Global uses the main TX mode captured at run start. Hex sends bytes as entered and ignores line ending.")));
         panel.Children.Add(CreateDialogField("Line ending", endingBox));
         panel.Children.Add(CreateDialogHint(LineEndingHelpText));
         panel.Children.Add(CreateDialogField("Delay after ms", delayBox));
         panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepCommentLabel", "Comment (optional)"), commentBox));
         panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepCommentHelp",
             "Extra context shown in the step tooltip and saved in JSON. Does not affect execution.")));
-        panel.Children.Add(CreateDialogHint($"TX mode: {source.TxMode?.ToString() ?? "Global"}. {source.AutomationHelpText} These fields are preserved when editing here; change them in sequence JSON or through CLI/MCP."));
+        panel.Children.Add(CreateDialogHint(source.AutomationHelpText));
+        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepResponseMetadataHelp",
+            "RX collection and response checks are preserved here. Change them in sequence JSON or through CLI/MCP.")));
         panel.Children.Add(errorText);
 
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
             Title = title,
-            Content = panel,
+            Content = new ScrollViewer
+            {
+                Content = panel,
+                MaxHeight = 520,
+                VerticalScrollMode = ScrollMode.Enabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollMode = ScrollMode.Disabled,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            },
             PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary
         };
-        dialog.PrimaryButtonClick += (_, clickArgs) =>
+        dialog.PrimaryButtonClick += (dialogSender, clickArgs) =>
         {
-            if (string.IsNullOrEmpty(commandBox.Text) || (source.TxMode is null && string.IsNullOrWhiteSpace(commandBox.Text)))
+            var selectedMode = GetSelectedString(modeBox, "Global");
+            if (string.IsNullOrEmpty(commandBox.Text) || (selectedMode == "Global" && string.IsNullOrWhiteSpace(commandBox.Text)))
             {
                 errorText.Text = UiText.Get("ValidationCommandRequired", "Command text is required.");
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+
+            if (selectedMode == "Hex" && !HexPayloadParser.TryParse(commandBox.Text, out var parsedHexBytes, out var hexError))
+            {
+                errorText.Text = hexError;
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
                 return;
@@ -5865,7 +5803,13 @@ public sealed partial class MainWindow : Window
             LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
             DelayAfterMs = parsedDelay,
             Comment = string.IsNullOrWhiteSpace(commentBox.Text) ? null : commentBox.Text,
-            TxMode = source.TxMode,
+            IsEnabled = source.IsEnabled,
+            TxMode = GetSelectedString(modeBox, "Global") switch
+            {
+                "Terminal" => TxSendMode.Terminal,
+                "Hex" => TxSendMode.Hex,
+                _ => null
+            },
             CaptureMs = source.CaptureMs,
             Expect = source.Expect is null ? null : source.Expect with { }
         };
@@ -6297,6 +6241,7 @@ public sealed partial class MainWindow : Window
             LineEndingMode = step.LineEndingMode,
             DelayAfterMs = step.DelayAfterMs,
             Comment = step.Comment,
+            IsEnabled = step.IsEnabled,
             TxMode = step.TxMode,
             CaptureMs = step.CaptureMs,
             Expect = step.Expect is null ? null : step.Expect with { }

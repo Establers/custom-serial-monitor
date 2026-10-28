@@ -56,7 +56,17 @@ namespace SerialMonitor.Plugin {
             }
         }
         private static async Task ForwardInputAsync(Stream source, Stream destination) {
-            try { await source.CopyToAsync(destination).ConfigureAwait(false); }
+            try {
+                var buffer = new byte[8192];
+                int count;
+                while ((count = await source.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0) {
+                    await destination.WriteAsync(buffer, 0, count).ConfigureAwait(false);
+                    // The child's stdin FileStream buffers small writes. MCP clients
+                    // keep stdin open while waiting for each response, so flush each
+                    // chunk rather than waiting for the buffer to fill or reach EOF.
+                    await destination.FlushAsync().ConfigureAwait(false);
+                }
+            }
             catch (IOException) { }
             catch (ObjectDisposedException) { }
             finally { destination.Dispose(); }
