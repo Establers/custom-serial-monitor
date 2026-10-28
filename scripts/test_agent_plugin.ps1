@@ -30,7 +30,15 @@ function Run-Launcher([string]$Root, [string]$Executable, [string]$Mode, [string
     $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
     $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
     foreach ($name in $Environment.Keys) { $start.EnvironmentVariables[$name] = $Environment[$name] }
-    $process = [Diagnostics.Process]::Start($start)
+    # .NET Framework takes redirected stdin's encoding from Console.InputEncoding
+    # during Start; ProcessStartInfo.StandardInputEncoding is unavailable on PS5.
+    # A UTF-8 BOM would turn the first initialize request into a JSON parse error.
+    $previousInputEncoding = [Console]::InputEncoding
+    try {
+        [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+        $process = [Diagnostics.Process]::Start($start)
+    }
+    finally { [Console]::InputEncoding = $previousInputEncoding }
     try {
         $output = $process.StandardOutput.ReadToEndAsync()
         $errorText = $process.StandardError.ReadToEndAsync()
@@ -245,11 +253,18 @@ $requests = @(
     @{ jsonrpc = '2.0'; id = 4; method = 'tools/call'; params = @{ name = 'serial_get_capabilities'; arguments = @{} } }
 )
 $inputText = (@($requests | ForEach-Object { $_ | ConvertTo-Json -Depth 8 -Compress }) -join "`n") + "`n"
-$result = Run-Launcher $pluginRoot $CliPath 'mcp' $inputText
+# Reproduce GitHub Actions' Windows PowerShell console default on every machine.
+$previousInputEncoding = [Console]::InputEncoding
+try {
+    [Console]::InputEncoding = [Text.UTF8Encoding]::new($true)
+    $result = Run-Launcher $pluginRoot $CliPath 'mcp' $inputText
+}
+finally { [Console]::InputEncoding = $previousInputEncoding }
 Assert-True ($result.ExitCode -eq 0 -and $result.Error -eq '') ('End-to-end MCP launcher failed: ' + $result.Error)
 $responses = @($result.Output -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
 Assert-True ($responses.Count -eq 4) 'MCP launcher added stdout text, lost responses or failed to preserve EOF.'
-Assert-True (@($responses | Where-Object { $_.error }).Count -eq 0) 'MCP launcher returned JSON-RPC errors.'
+$rpcErrors = @($responses | Where-Object { $_.error })
+Assert-True ($rpcErrors.Count -eq 0) ('MCP launcher returned JSON-RPC errors: ' + ($rpcErrors | ConvertTo-Json -Depth 6 -Compress))
 $tools = @($responses | Where-Object id -eq 3)[0].result.tools
 Assert-True (@($tools | Where-Object name -eq 'serial_get_capabilities').Count -eq 1) 'Live discovery tool is missing from MCP.'
 $capabilityResponse = @($responses | Where-Object id -eq 4)[0].result
