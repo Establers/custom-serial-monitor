@@ -53,8 +53,8 @@ public sealed class ShortcutArchitectureBuildTests
             var start = new ProcessStartInfo("dotnet") { WorkingDirectory = directory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
             foreach (var argument in new[] { "msbuild", project, "-t:ValidateShortcutArchitecture", "-nologo" }) start.ArgumentList.Add(argument);
             using var process = Process.Start(start)!;
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = process.StandardError.ReadToEndAsync();
+            var output = ReadProcessStreamAsync(process.StandardOutput);
+            var errors = ReadProcessStreamAsync(process.StandardError);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             try { await process.WaitForExitAsync(timeout.Token); }
             catch { process.Kill(entireProcessTree: true); throw; }
@@ -67,4 +67,10 @@ public sealed class ShortcutArchitectureBuildTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    // Windows redirected process pipes are synchronous streams. Their async
+    // reads can block shared pool workers until MSBuild exits; drain the two
+    // fixture streams on dedicated threads, as the Core probes do.
+    private static Task<string> ReadProcessStreamAsync(StreamReader reader) => Task.Factory.StartNew(
+        reader.ReadToEnd, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 }
