@@ -10,11 +10,13 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
 {
     private readonly CancellationTokenSource _stop = new();
     private readonly Stack<long> _previous = new();
-    private readonly Stack<(long Offset, byte[] Prefix)> _previousRx = new();
+    private readonly Stack<(long Offset, byte[] Prefix, SequenceRxPageContinuation Continuation)> _previousRx = new();
     private CancellationTokenSource? _detailStop;
     private byte[] _rxPrefix = [], _rxTail = [];
+    private SequenceRxPageContinuation _rxContinuation, _rxTailContinuation;
     private bool _loadingRx;
     public byte[] RxDecoderPrefix => _rxPrefix;
+    internal SequenceRxPageContinuation RxPageContinuation => _rxContinuation;
     private IReadOnlyList<SequenceRxSlice> _rxSlices = [];
     public IReadOnlyList<SequenceRxSlice> RxSlices => _rxSlices;
     private SequenceRunSummary? _selectedRun;
@@ -90,6 +92,7 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
             // may immediately start a new detail read; never cancel that new read.
             _detailStop?.Cancel(); _previousRx.Clear(); _rx = []; _rxSlices = [];
             _rxPrefix = []; _rxTail = []; Detail = "";
+            _rxContinuation = _rxTailContinuation = default;
             SetProperty(ref _selectedStep, value);
             OnPropertyChanged(nameof(RxBytes)); OnPropertyChanged(nameof(CanNextRx)); OnPropertyChanged(nameof(CanPreviousRx));
         }
@@ -134,7 +137,7 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
                     if (_reloadRuns) continue;
                     if (SelectedRun is not { } run)
                     {
-                        Summary = "저장된 실행 결과가 없습니다. 활성 RX Check가 포함된 시퀀스를 실행하면 여기에 표시됩니다.";
+                        Summary = "저장된 실행 결과가 없습니다. 결과 파일을 삭제한 경우 목록에서도 사라집니다. 활성 RX Check가 포함된 시퀀스를 실행하면 새 결과가 저장됩니다.";
                         Error = "";
                         break;
                     }
@@ -253,12 +256,17 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
         if (nextRx && !CanNextRx) return;
         var start = step.RxStart;
         byte[] prefix = step.RxDecoderPrefix ?? [];
+        SequenceRxPageContinuation continuation = default;
         if (previousRx)
         {
             if (!_previousRx.TryPop(out var previous)) return;
-            start = previous.Offset; prefix = previous.Prefix;
+            start = previous.Offset; prefix = previous.Prefix; continuation = previous.Continuation;
         }
-        else if (nextRx) { _previousRx.Push((_rxStart, _rxPrefix)); start = _rxStart + _rx.Length; prefix = _rxTail; }
+        else if (nextRx)
+        {
+            _previousRx.Push((_rxStart, _rxPrefix, _rxContinuation));
+            start = _rxStart + _rx.Length; prefix = _rxTail; continuation = _rxTailContinuation;
+        }
         else _previousRx.Clear();
         _loadingRx = true;
         _detailStop?.Cancel(); _detailStop?.Dispose();
@@ -267,8 +275,14 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
         {
             var slices = await store.ReadRxTimelineAsync(run.RunId, start, step.RxEnd, request.Token);
             if (_disposed || request.IsCancellationRequested || SelectedStep?.Id != step.Id || SelectedRun?.RunId != run.RunId) return;
+            if (slices.Count > 0 && !continuation.CanContinue(slices[0]))
+            {
+                continuation = default;
+                prefix = [];
+            }
             _rxStart = start; _rxSlices = slices; _rx = slices.SelectMany(row => row.Bytes).ToArray();
-            _rxPrefix = prefix; _rxTail = SequenceTimelineFormatter.PendingBytes(_rx, RxEncoding, prefix);
+            _rxPrefix = prefix; _rxTail = SequenceTimelineFormatter.PendingBytes(slices, RxEncoding, prefix);
+            _rxContinuation = continuation; _rxTailContinuation = continuation.Advance(slices);
             var rx = step.StepKind == "RxCheck";
             var result = rx ? SequenceResultStatusConverter.Text(step.CheckStatus) : SequenceResultStatusConverter.Text(step.SendStatus);
             Detail = $"회차 {step.Repeat} · 단계 #{step.Step} · {step.KindText} · {result}" +

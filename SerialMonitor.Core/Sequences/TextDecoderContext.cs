@@ -4,7 +4,7 @@ namespace SerialMonitor.Core.Sequences;
 
 // Retains only the unfinished character, never prior decoded text. Callers
 // advance this over bounded pages before taking a response-range boundary.
-internal sealed class TextDecoderContext
+public sealed class TextDecoderContext
 {
     private readonly Decoder _decoder;
     private readonly char[] _chars;

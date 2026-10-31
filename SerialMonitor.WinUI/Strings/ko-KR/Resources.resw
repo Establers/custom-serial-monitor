@@ -53,8 +53,24 @@
     <comment>English: Select visible log filters</comment>
   </data>
   <data name="VisibleFilterFlyoutTitle.Text" xml:space="preserve">
-    <value>필터</value>
-    <comment>English: Filter</comment>
+    <value>로그 필터</value>
+    <comment>English: Log filters</comment>
+  </data>
+  <data name="VisibleFilterAllCheckBox.Content" xml:space="preserve">
+    <value>전체 로그</value>
+    <comment>Show all logs without filtering.</comment>
+  </data>
+  <data name="VisibleFilterAllSummaryText" xml:space="preserve">
+    <value>전체 표시</value>
+  </data>
+  <data name="VisibleFilterSelectedCountFormat" xml:space="preserve">
+    <value>{0}개 선택</value>
+  </data>
+  <data name="VisibleFilterRulesLabel.Text" xml:space="preserve">
+    <value>규칙 선택</value>
+  </data>
+  <data name="VisibleFilterMatchHint.Text" xml:space="preserve">
+    <value>하나라도 일치하면 표시</value>
   </data>
   <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>보관 중인 로그와 새 로그를 모두 표시합니다</value>
@@ -65,8 +81,8 @@
     <comment>English: Include lines matching this rule</comment>
   </data>
   <data name="VisibleFilterHelpText.Text" xml:space="preserve">
-    <value>선택한 규칙은 OR 조건으로 결합됩니다.&#x0A;기존 로그와 새 로그에 적용되며, 전체를 선택하면 모두 다시 표시됩니다.</value>
-    <comment>English: Selected rules are combined with OR. Applies to retained and incoming logs. ALL shows everything again.</comment>
+    <value>기존 로그와 새 로그에 함께 적용됩니다.</value>
+    <comment>English: Applies to retained and incoming logs.</comment>
   </data>
   <data name="VisibleFilterCancelButton.Content" xml:space="preserve">
     <value>취소</value>

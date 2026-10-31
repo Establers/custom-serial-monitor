@@ -41,6 +41,8 @@ public sealed partial class LogNavigationView : UserControl
 
     public void FocusInput() => HourPicker.Focus(FocusState.Programmatic);
 
+    internal void SetPrimaryActionFocusTarget(Control? target) => SecondPicker.ConfirmationFocusTarget = target;
+
     private void ApplyLabels()
     {
         var korean = UiText.Get("LogNavigationLanguage", "en") == "ko";
@@ -58,7 +60,7 @@ public sealed partial class LogNavigationView : UserControl
         for (var index = 0; index < pickers.Length; index++)
         {
             AutomationProperties.SetName(pickers[index], names[index]);
-            var hint = korean ? $"{names[index]} · 방향키 또는 마우스 휠로 변경" : $"{names[index]} · use arrow keys or scroll to change";
+            var hint = korean ? $"{names[index]} · 숫자 입력, 방향키 또는 마우스 휠로 변경" : $"{names[index]} · type digits, use arrow keys or scroll to change";
             AutomationProperties.SetHelpText(pickers[index], hint);
             ToolTipService.SetToolTip(pickers[index], hint);
         }

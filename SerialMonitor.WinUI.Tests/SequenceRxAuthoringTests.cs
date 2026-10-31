@@ -111,11 +111,10 @@ public sealed class SequenceRxAuthoringTests
         var bytes = Encoding.UTF8.GetBytes("준비");
         var lines = SequenceTimelineFormatter.Format(row,
             [new(0, bytes[..2], rx), new(2, bytes[2..], rx.AddMilliseconds(5))], Encoding.UTF8);
-        Assert.Equal(new[] { "TX", "RX", "RX" }, lines.Select(line => line.Direction));
+        Assert.Equal(new[] { "TX", "RX" }, lines.Select(line => line.Direction));
         Assert.Equal("2026-10-31 23:59:59.975", lines[0].Time);
-        Assert.Equal("2026-11-01 00:00:00.025", lines[1].Time);
-        Assert.Equal(rx.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), lines[1].Time);
-        Assert.Equal(rx.AddMilliseconds(5).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), lines[2].Time);
+        Assert.Equal("2026-11-01 00:00:00.030", lines[1].Time);
+        Assert.Equal(rx.AddMilliseconds(5).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), lines[1].Time);
         Assert.Equal("준비", string.Concat(lines.Skip(1).SelectMany(l => l.Parts).Select(p => p.Text)));
         Assert.DoesNotContain("�", string.Concat(lines.SelectMany(l => l.Parts).Select(p => p.Text)));
     }

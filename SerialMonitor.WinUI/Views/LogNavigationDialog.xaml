@@ -357,9 +357,9 @@
                                     <ColumnDefinition x:Name="SecondSpacer" Width="{ThemeResource ContentDialogButtonSpacing}" />
                                     <ColumnDefinition x:Name="PrimaryColumn" Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Button x:Name="SecondaryButton" Grid.Column="0" IsTabStop="False" Content="{TemplateBinding SecondaryButtonText}" IsEnabled="{TemplateBinding IsSecondaryButtonEnabled}" Style="{TemplateBinding SecondaryButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
-                                <Button x:Name="CloseButton" IsTabStop="False" Grid.Column="2" Content="{TemplateBinding CloseButtonText}" Style="{TemplateBinding CloseButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
-                                <Button x:Name="PrimaryButton" Grid.Column="4" IsTabStop="False" Content="{TemplateBinding PrimaryButtonText}" IsEnabled="{TemplateBinding IsPrimaryButtonEnabled}" Style="{TemplateBinding PrimaryButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
+                                <Button x:Name="SecondaryButton" Grid.Column="0" IsTabStop="False" TabIndex="8" Content="{TemplateBinding SecondaryButtonText}" IsEnabled="{TemplateBinding IsSecondaryButtonEnabled}" Style="{TemplateBinding SecondaryButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
+                                <Button x:Name="CloseButton" IsTabStop="False" TabIndex="7" Grid.Column="2" Content="{TemplateBinding CloseButtonText}" Style="{TemplateBinding CloseButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
+                                <Button x:Name="PrimaryButton" Grid.Column="4" IsTabStop="False" TabIndex="6" Content="{TemplateBinding PrimaryButtonText}" IsEnabled="{TemplateBinding IsPrimaryButtonEnabled}" Style="{TemplateBinding PrimaryButtonStyle}" ElementSoundMode="FocusOnly" HorizontalAlignment="Stretch" />
                             </Grid>
                         </Grid>
                     </Border>

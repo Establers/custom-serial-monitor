@@ -1183,6 +1183,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasPendingVisibleLogFilterChanges => _visibleLogFilterSelection.HasPendingChanges;
 
+    public string PendingVisibleFilterSummaryText => _visibleLogFilterSelection.DraftCount == 0
+        ? UiText.Get("VisibleFilterAllSummaryText", "All logs")
+        : UiText.Format("VisibleFilterSelectedCountFormat", "{0} selected", _visibleLogFilterSelection.DraftCount);
+
     public int AvailableViewFilterCount => VisibleLogFilterOptions.Count;
 
     public string LastVisibleFilterChangeTimeText => _lastVisibleFilterChangeTimeText;
@@ -9618,6 +9622,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             .ToArray();
         var wasPending = _visibleLogFilterSelection.HasPendingChanges;
         _visibleLogFilterSelection.ReplaceDraft(draftKeys);
+        OnPropertyChanged(nameof(PendingVisibleFilterSummaryText));
         if (wasPending != _visibleLogFilterSelection.HasPendingChanges)
         {
             OnPropertyChanged(nameof(HasPendingVisibleLogFilterChanges));

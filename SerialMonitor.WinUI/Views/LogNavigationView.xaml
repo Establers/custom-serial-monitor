@@ -29,7 +29,7 @@
             <TextBlock Text="{Binding Converter={StaticResource TimePartConverter}, ConverterParameter=4}"
                        FontSize="{StaticResource TimePickerValueFontSize}" TextAlignment="Center" />
         </DataTemplate>
-        <Style x:Key="TimePartPickerItemStyle" TargetType="ComboBoxItem">
+        <Style x:Key="TimePartPickerItemStyle" TargetType="ComboBoxItem" BasedOn="{StaticResource DefaultComboBoxItemStyle}">
             <Setter Property="IsTextScaleFactorEnabled" Value="False" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="28" />
@@ -37,7 +37,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
-        <Style x:Key="TimePartPickerStyle" TargetType="ComboBox">
+        <Style x:Key="TimePartPickerStyle" TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="IsTextScaleFactorEnabled" Value="False" />
             <Setter Property="FontSize" Value="{StaticResource TimePickerValueFontSize}" />
             <Setter Property="Height" Value="32" />
@@ -64,22 +64,22 @@
         </Grid>
         <Grid Grid.Row="1">
             <Grid x:Name="DateChoices" ColumnDefinitions="Auto,16,Auto,16,Auto" HorizontalAlignment="Left">
-                <ComboBox x:Name="YearPicker" ItemsSource="{Binding Years}"
+                <views:NumericTimePartPicker x:Name="YearPicker" ItemsSource="{Binding Years}" DigitCount="4" TabIndex="0"
                           IsEnabled="{Binding HasRange}" MinWidth="80"
-                          SelectedItem="{Binding SelectedYear, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedYear, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}"
                           ItemTemplate="{StaticResource YearPartTemplate}" />
                 <TextBlock Grid.Column="1" Text=" - " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
                            HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="MonthPicker" Grid.Column="2" ItemsSource="{Binding Months}"
+                <views:NumericTimePartPicker x:Name="MonthPicker" Grid.Column="2" ItemsSource="{Binding Months}" TabIndex="1"
                           IsEnabled="{Binding HasRange}"
-                          SelectedItem="{Binding SelectedMonth, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedMonth, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}" />
                 <TextBlock Grid.Column="3" Text=" - " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
                            HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="DayPicker" Grid.Column="4" ItemsSource="{Binding Days}"
+                <views:NumericTimePartPicker x:Name="DayPicker" Grid.Column="4" ItemsSource="{Binding Days}" TabIndex="2"
                           IsEnabled="{Binding HasRange}"
-                          SelectedItem="{Binding SelectedDay, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedDay, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}" />
             </Grid>
             <Border x:Name="FixedDateField" Height="32" Padding="8,0" HorizontalAlignment="Left"
@@ -96,21 +96,21 @@
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </Grid>
         <Grid x:Name="TimeChoices" Grid.Row="3" ColumnDefinitions="Auto,16,Auto,16,Auto" HorizontalAlignment="Left">
-                <ComboBox x:Name="HourPicker" ItemsSource="{Binding Hours}"
+                <views:NumericTimePartPicker x:Name="HourPicker" ItemsSource="{Binding Hours}" TabIndex="3"
                           IsEnabled="{Binding HasRange}"
-                          SelectedItem="{Binding SelectedHour, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedHour, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}" />
                 <TextBlock Grid.Column="1" Text=" : " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
                            HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="MinutePicker" Grid.Column="2" ItemsSource="{Binding Minutes}"
+                <views:NumericTimePartPicker x:Name="MinutePicker" Grid.Column="2" ItemsSource="{Binding Minutes}" TabIndex="4"
                           IsEnabled="{Binding HasRange}"
-                          SelectedItem="{Binding SelectedMinute, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedMinute, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}" />
                 <TextBlock Grid.Column="3" Text=" : " xml:space="preserve" FontSize="14" VerticalAlignment="Center"
                            HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="SecondPicker" Grid.Column="4" ItemsSource="{Binding Seconds}"
+                <views:NumericTimePartPicker x:Name="SecondPicker" Grid.Column="4" ItemsSource="{Binding Seconds}" TabIndex="5"
                           IsEnabled="{Binding HasRange}"
-                          SelectedItem="{Binding SelectedSecond, Mode=TwoWay}"
+                          CommittedValue="{Binding SelectedSecond, Mode=TwoWay}"
                           Style="{StaticResource TimePartPickerStyle}" />
         </Grid>
         <Grid Grid.Row="4" Height="76">

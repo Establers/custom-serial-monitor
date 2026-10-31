@@ -27,6 +27,8 @@
                            ToolTipService.ToolTip="{Binding Converter={StaticResource DisplayModeToolTipConverter}}" />
             </DataTemplate>
 
+            <x:Double x:Key="CompactCheckBoxSize">14</x:Double>
+            <x:Double x:Key="CompactCheckBoxSpacing">4</x:Double>
             <ControlTemplate x:Key="CompactCheckBoxTemplate"
                              TargetType="CheckBox">
                 <Grid x:Name="CheckRoot"
@@ -126,7 +128,7 @@
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
 
-                    <Grid ColumnSpacing="4"
+                    <Grid ColumnSpacing="{ThemeResource CompactCheckBoxSpacing}"
                           VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16" />
@@ -134,8 +136,8 @@
                         </Grid.ColumnDefinitions>
 
                         <Border x:Name="CheckBorder"
-                                Width="14"
-                                Height="14"
+                                Width="{ThemeResource CompactCheckBoxSize}"
+                                Height="{ThemeResource CompactCheckBoxSize}"
                                 BorderThickness="1"
                                 CornerRadius="3"
                                 BorderBrush="{ThemeResource CompactCheckBoxBorderBrush}"
@@ -737,19 +739,53 @@
                 <Setter Property="Template"
                         Value="{StaticResource CompactCheckBoxTemplate}" />
             </Style>
+            <DataTemplate x:Key="FilterFlyoutCheckBoxContentTemplate">
+                <TextBlock Text="{Binding}" FontSize="12" LineHeight="16" MaxWidth="200"
+                           LineStackingStrategy="BlockLineHeight" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </DataTemplate>
+            <DataTemplate x:Key="FilterFlyoutRuleContentTemplate">
+                <TextBlock Text="{Binding}" FontFamily="Consolas" FontSize="12" LineHeight="16" MaxWidth="200"
+                           LineStackingStrategy="BlockLineHeight" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </DataTemplate>
             <Style x:Key="FilterFlyoutCheckBoxStyle"
                    TargetType="CheckBox"
                    BasedOn="{StaticResource CompactCheckBoxStyle}">
                 <Setter Property="Height"
-                        Value="18" />
+                        Value="28" />
                 <Setter Property="MinHeight"
-                        Value="18" />
+                        Value="28" />
                 <Setter Property="MinWidth"
                         Value="0" />
                 <Setter Property="FontSize"
-                        Value="11" />
+                        Value="12" />
+                <Setter Property="Margin"
+                        Value="4,0" />
                 <Setter Property="HorizontalAlignment"
                         Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Stretch" />
+                <Setter Property="VerticalContentAlignment"
+                        Value="Center" />
+                <Setter Property="ContentTemplate"
+                        Value="{StaticResource FilterFlyoutCheckBoxContentTemplate}" />
+            </Style>
+            <Style x:Key="FilterFlyoutCancelButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="MinHeight" Value="30" />
+                <Setter Property="MinWidth" Value="64" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Padding" Value="12,4" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="FilterFlyoutApplyButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="MinHeight" Value="30" />
+                <Setter Property="MinWidth" Value="64" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Padding" Value="12,4" />
+                <Setter Property="CornerRadius" Value="6" />
             </Style>
             <Style x:Key="CompactLabelTextStyle"
                    TargetType="TextBlock">
@@ -1483,53 +1519,81 @@
                                         Placement="BottomEdgeAlignedLeft"
                                         Opening="VisibleLogFilterFlyout_Opening"
                                         Closed="VisibleLogFilterFlyout_Closed">
-                                    <Border MinWidth="180"
-                                            MaxWidth="260">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock x:Uid="VisibleFilterFlyoutTitle"
-                                                       Text="Filter"
-                                                       FontSize="12"
-                                                       FontWeight="SemiBold" />
+                                    <Flyout.FlyoutPresenterStyle>
+                                        <Style TargetType="FlyoutPresenter" BasedOn="{StaticResource DefaultFlyoutPresenterStyle}">
+                                            <Setter Property="Padding" Value="12" />
+                                            <Setter Property="CornerRadius" Value="8" />
+                                        </Style>
+                                    </Flyout.FlyoutPresenterStyle>
+                                    <Border Width="248" MaxWidth="280">
+                                        <Border.Resources>
+                                            <!-- Keep the rest of the app's compact checkboxes at 14. -->
+                                            <x:Double x:Key="CompactCheckBoxSize">16</x:Double>
+                                            <x:Double x:Key="CompactCheckBoxSpacing">6</x:Double>
+                                        </Border.Resources>
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="4,0,4,0">
+                                                <TextBlock x:Uid="VisibleFilterFlyoutTitle"
+                                                           Text="Log filters" FontSize="14" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                                <Border Grid.Column="1" Padding="8,3" CornerRadius="10"
+                                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                                    <TextBlock Text="{Binding PendingVisibleFilterSummaryText}" FontSize="11"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               AutomationProperties.LiveSetting="Polite" />
+                                                </Border>
+                                            </Grid>
                                             <CheckBox x:Uid="VisibleFilterAllCheckBox"
-                                                      Content="{Binding AllVisibleLogFilterOption.DisplayName}"
+                                                      Content="All logs"
+                                                      FontWeight="SemiBold"
                                                       Style="{StaticResource FilterFlyoutCheckBoxStyle}"
                                                       IsChecked="{Binding AllVisibleLogFilterOption.IsChecked, Mode=TwoWay}"
                                                       ToolTipService.ToolTip="Show all retained and incoming logs" />
                                             <Border Height="1"
-                                                    Margin="0,1"
                                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                            <ScrollViewer MaxHeight="220"
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="4,0,4,0">
+                                                <TextBlock x:Uid="VisibleFilterRulesLabel" Text="Rules" FontSize="11"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock x:Uid="VisibleFilterMatchHint" Grid.Column="1" Text="Match any rule" FontSize="11"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </Grid>
+                                            <ScrollViewer MaxHeight="224"
+                                                          IsTabStop="False"
+                                                          HorizontalScrollMode="Disabled"
+                                                          HorizontalScrollBarVisibility="Disabled"
                                                           VerticalScrollMode="Auto"
                                                           VerticalScrollBarVisibility="Auto">
                                                 <ItemsControl ItemsSource="{Binding VisibleLogFilterOptions}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <CheckBox x:Uid="VisibleFilterRuleCheckBox"
+                                                            <CheckBox AutomationProperties.Name="{Binding DisplayName}"
                                                                       Content="{Binding DisplayName}"
+                                                                      ContentTemplate="{StaticResource FilterFlyoutRuleContentTemplate}"
                                                                       Style="{StaticResource FilterFlyoutCheckBoxStyle}"
                                                                       IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                      ToolTipService.ToolTip="Include lines matching this rule" />
+                                                                      ToolTipService.ToolTip="{Binding DisplayName}" />
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
                                             </ScrollViewer>
                                             <TextBlock x:Uid="VisibleFilterHelpText"
-                                                       Text="Selected rules are combined with OR.&#x0a;Applies to retained and incoming logs. ALL shows everything again."
-                                                       Margin="0,2,0,0"
-                                                       FontSize="10"
-                                                       Opacity="0.7"
+                                                       Text="Applies to retained and incoming logs."
+                                                       Margin="4,0"
+                                                       FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                        TextWrapping="Wrap" />
+                                            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                             <Grid ColumnDefinitions="*,Auto,Auto"
-                                                  ColumnSpacing="4">
+                                                  ColumnSpacing="8">
                                                 <Button x:Uid="VisibleFilterCancelButton"
                                                         Grid.Column="1"
                                                         Content="Cancel"
-                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        Style="{StaticResource FilterFlyoutCancelButtonStyle}"
                                                         Click="CancelVisibleLogFilterButton_Click" />
                                                 <Button x:Uid="VisibleFilterApplyButton"
                                                         Grid.Column="2"
                                                         Content="Apply"
-                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        Style="{StaticResource FilterFlyoutApplyButtonStyle}"
                                                         IsEnabled="{Binding HasPendingVisibleLogFilterChanges}"
                                                         Click="ApplyVisibleLogFilterButton_Click" />
                                             </Grid>

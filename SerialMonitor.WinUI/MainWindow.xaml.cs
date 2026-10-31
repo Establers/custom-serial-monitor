@@ -2550,6 +2550,10 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName is nameof(MainViewModel.SelectedRxLineEnding) or
+            nameof(MainViewModel.SelectedTimestampDisplayFormatOption) or
+            nameof(MainViewModel.ShowTimestampInLogView) or nameof(MainViewModel.ShowRxTxDirectionPrefixInLogView))
+            UpdateSequenceResultLogPresentation();
         if (args.PropertyName == nameof(MainViewModel.SavedCommandShortcuts))
         {
             _ = SyncXtermCommandShortcutsAsync();

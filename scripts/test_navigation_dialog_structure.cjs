@@ -29,10 +29,12 @@ test('navigation is opened on demand and has no inspector tab', () => {
   assert.match(host, /async void LogNavigateButton_Click\b[\s\S]*?await OpenLogNavigationAsync\(\)/);
 });
 
-test('native date/time selectors replace the freeform input', () => {
+test('bounded numeric date/time selectors replace the freeform input', () => {
   assert.doesNotMatch(view, /<TextBox\b/);
   for (const part of ['Year', 'Month', 'Day', 'Hour', 'Minute', 'Second']) {
-    assert.match(view, new RegExp(`<ComboBox\\b[^>]*x:Name="${part}Picker"`));
+    const picker = view.match(new RegExp(`<views:NumericTimePartPicker\\b[^>]*x:Name="${part}Picker"[^>]*>`))?.[0];
+    assert.ok(picker, `Missing numeric ${part} picker`);
+    assert.equal(attribute(picker, 'CommittedValue'), `{Binding Selected${part}, Mode=TwoWay}`);
   }
   assert.match(view, /IsEnabled="\{Binding HasRange\}"/);
 });

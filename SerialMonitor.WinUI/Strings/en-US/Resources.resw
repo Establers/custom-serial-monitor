@@ -53,8 +53,24 @@
     <comment>Accessible name for the visible log filter button.</comment>
   </data>
   <data name="VisibleFilterFlyoutTitle.Text" xml:space="preserve">
-    <value>Filter</value>
+    <value>Log filters</value>
     <comment>Visible log filter flyout title.</comment>
+  </data>
+  <data name="VisibleFilterAllCheckBox.Content" xml:space="preserve">
+    <value>All logs</value>
+    <comment>Show all logs without filtering.</comment>
+  </data>
+  <data name="VisibleFilterAllSummaryText" xml:space="preserve">
+    <value>All logs</value>
+  </data>
+  <data name="VisibleFilterSelectedCountFormat" xml:space="preserve">
+    <value>{0} selected</value>
+  </data>
+  <data name="VisibleFilterRulesLabel.Text" xml:space="preserve">
+    <value>Rules</value>
+  </data>
+  <data name="VisibleFilterMatchHint.Text" xml:space="preserve">
+    <value>Match any rule</value>
   </data>
   <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Show all retained and incoming logs</value>
@@ -65,7 +81,7 @@
     <comment>Visible log rule option tooltip.</comment>
   </data>
   <data name="VisibleFilterHelpText.Text" xml:space="preserve">
-    <value>Selected rules are combined with OR.&#x0A;Applies to retained and incoming logs. ALL shows everything again.</value>
+    <value>Applies to retained and incoming logs.</value>
     <comment>Visible log filter behavior notice.</comment>
   </data>
   <data name="VisibleFilterCancelButton.Content" xml:space="preserve">

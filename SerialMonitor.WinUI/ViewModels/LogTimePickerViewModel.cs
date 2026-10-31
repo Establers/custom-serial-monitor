@@ -202,25 +202,25 @@ public sealed class LogTimePickerViewModel : ViewModelBase, IDisposable
         try
         {
             if (!HasRange) return;
-            _years = Enumerable.Range(_localMinimum.Year, _localMaximum.Year - _localMinimum.Year + 1).ToArray();
+            _years = ReuseChoices(_years, Enumerable.Range(_localMinimum.Year, _localMaximum.Year - _localMinimum.Year + 1).ToArray());
             _year = ClampChoice(_years, _year);
-            _months = Choices(1, 12, value => Bucket(_year!.Value, value, 1), value => EndOfMonth(_year!.Value, value));
+            _months = ReuseChoices(_months, Choices(1, 12, value => Bucket(_year!.Value, value, 1), value => EndOfMonth(_year!.Value, value)));
             _month = ClampChoice(_months, _month);
             if (_month is null) { ClearChildren(1); return; }
-            _days = Choices(1, DateTime.DaysInMonth(_year!.Value, _month.Value),
-                value => Bucket(_year.Value, _month.Value, value), value => End(Bucket(_year.Value, _month.Value, value), TimeSpan.FromDays(1)));
+            _days = ReuseChoices(_days, Choices(1, DateTime.DaysInMonth(_year!.Value, _month.Value),
+                value => Bucket(_year.Value, _month.Value, value), value => End(Bucket(_year.Value, _month.Value, value), TimeSpan.FromDays(1))));
             _day = ClampChoice(_days, _day);
             if (_day is null) { ClearChildren(2); return; }
             var date = Bucket(_year!.Value, _month.Value, _day.Value);
-            _hours = Choices(0, 23, value => date.AddHours(value), value => End(date.AddHours(value), TimeSpan.FromHours(1)));
+            _hours = ReuseChoices(_hours, Choices(0, 23, value => date.AddHours(value), value => End(date.AddHours(value), TimeSpan.FromHours(1))));
             _hour = ClampChoice(_hours, _hour);
             if (_hour is null) { ClearChildren(3); return; }
             var hour = date.AddHours(_hour.Value);
-            _minutes = Choices(0, 59, value => hour.AddMinutes(value), value => End(hour.AddMinutes(value), TimeSpan.FromMinutes(1)));
+            _minutes = ReuseChoices(_minutes, Choices(0, 59, value => hour.AddMinutes(value), value => End(hour.AddMinutes(value), TimeSpan.FromMinutes(1))));
             _minute = ClampChoice(_minutes, _minute);
             if (_minute is null) { ClearChildren(4); return; }
             var minute = hour.AddMinutes(_minute.Value);
-            _seconds = Choices(0, 59, value => minute.AddSeconds(value), value => End(minute.AddSeconds(value), TimeSpan.FromSeconds(1)));
+            _seconds = ReuseChoices(_seconds, Choices(0, 59, value => minute.AddSeconds(value), value => End(minute.AddSeconds(value), TimeSpan.FromSeconds(1))));
             _second = ClampChoice(_seconds, _second);
         }
         finally
@@ -232,6 +232,11 @@ public sealed class LogTimePickerViewModel : ViewModelBase, IDisposable
             NotifyState();
         }
     }
+
+    // Retain item containers and focus when a different time part changes but
+    // this list still contains exactly the same available values.
+    private static IReadOnlyList<int> ReuseChoices(IReadOnlyList<int> previous, IReadOnlyList<int> next) =>
+        previous.SequenceEqual(next) ? previous : next;
 
     private IReadOnlyList<int> Choices(int first, int last, Func<int, DateTime> start, Func<int, DateTime> end)
     {

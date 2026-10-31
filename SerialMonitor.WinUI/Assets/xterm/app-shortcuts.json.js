@@ -19,6 +19,7 @@ globalThis.serialMonitorShortcutDefinitions = [
   { "action": "Copy", "gestures": ["Ctrl+C", "Ctrl+Insert"], "ignoreModifiers": ["Shift"], "acceptMetaAsControl": true, "resourceId": "ShortcutActionCopy", "description": "copy" },
   { "action": "AutoScroll", "gestures": ["Enter"], "resourceId": "ShortcutActionConfirm", "description": "Auto Scroll" },
   { "action": "FocusNavigation", "gestures": ["Tab", "Space", "F6", "F10"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionFocus", "description": "focus navigation and control activation" },
+  { "action": "FocusNext", "gestures": ["Tab"], "resourceId": "ShortcutActionFocus", "description": "move to the next control" },
   { "action": "TextNavigation", "gestures": ["Left", "Right", "Up", "Down", "Home", "End", "PageUp", "PageDown"], "ignoreModifiers": ["Ctrl", "Shift"], "resourceId": "ShortcutActionNavigation", "description": "text, list, history and log navigation" },
   { "action": "TextEditing", "gestures": ["Backspace", "Delete", "Insert", "Ctrl+A", "Ctrl+X", "Ctrl+V", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z", "Shift+Insert", "Shift+Delete"], "resourceId": "ShortcutActionEditing", "description": "text editing" },
   { "action": "BrowserControls", "gestures": ["F5", "Shift+F5", "Ctrl+F5", "Ctrl+Shift+F5", "F7", "F12", "Ctrl+0", "Ctrl+P", "Ctrl+R", "Ctrl+Shift+R", "Ctrl+Shift+G", "Ctrl+Shift+C", "Ctrl+Shift+I", "Ctrl+Shift+J", "Ctrl+J", "Ctrl+Minus", "Ctrl+Plus", "Ctrl+Shift+Plus", "Alt+Left", "Alt+Right"], "resourceId": "ShortcutActionBrowser", "description": "built-in log browser controls" },
