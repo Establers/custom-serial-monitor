@@ -12,5 +12,6 @@ public interface ICommandSequenceRunner
         Action<int> startingStep,
         Action<int> completedSteps,
         CancellationToken cancellationToken,
-        SequenceExecutionControl? control = null);
+        SequenceExecutionControl? control = null,
+        ICommandSequenceObserver? observer = null);
 }

@@ -33,6 +33,7 @@ public sealed class LogPipeline : ILogPipeline
     private long _hexAcceptedByteCount;
     private long _hexEmittedByteCount;
     private long _sequenceNumber;
+    private long _nextRxStreamOffset;
     private int _partialLineBufferLength;
     private int _lastRxChunkBytes;
     private long _lastRxChunkGapTicks = -1;
@@ -156,6 +157,7 @@ public sealed class LogPipeline : ILogPipeline
             await StopCurrentPipelineAsync(CancellationToken.None);
             _terminalDecoder = null;
             _lineParser.Clear();
+            _nextRxStreamOffset = 0;
             _hexPendingBytes.Clear();
             Volatile.Write(ref _hexPendingByteCount, 0);
             Volatile.Write(ref _hexCurrentGroupByteCount, 0);
@@ -562,6 +564,8 @@ public sealed class LogPipeline : ILogPipeline
         var drainedAny = false;
         while (GetConfiguredRxDisplayMode() == RxDisplayMode.Hex && source.TryRead(out var chunk))
         {
+            if (await EndDiscontinuousInputAsync(chunk, settings, RxDisplayMode.Hex, cancellationToken))
+                lastReceivedTimestamp = null;
             var bytes = chunk.Bytes;
             if (bytes.Length == 0)
             {
@@ -697,12 +701,36 @@ public sealed class LogPipeline : ILogPipeline
     {
         while (GetConfiguredRxDisplayMode() == RxDisplayMode.Terminal && source.TryRead(out var chunk))
         {
+            await EndDiscontinuousInputAsync(chunk, settings, RxDisplayMode.Terminal, cancellationToken);
             await ProcessRxChunkAsync(chunk.Bytes, chunk.ReceivedTimestamp, settings, cancellationToken);
             if (_lineParser.PartialBufferLength >= PartialFlushThresholdBytes)
             {
                 await FlushPartialRxAsync(settings, cancellationToken);
             }
         }
+    }
+
+    private async Task<bool> EndDiscontinuousInputAsync(ReceivedByteChunk chunk, SerialSettings settings,
+        RxDisplayMode mode, CancellationToken cancellationToken)
+    {
+        if (chunk.StreamOffset is not { } offset) return false;
+        var expected = _nextRxStreamOffset;
+        _nextRxStreamOffset = offset + chunk.Bytes.LongLength;
+        if (offset == expected) return false;
+
+        // Preserve accepted bytes on each side, but never decode or match across
+        // missing input. A transport gap is independent of display segmentation.
+        if (mode == RxDisplayMode.Hex) await FlushHexGroupAsync(settings, cancellationToken);
+        else await FinalizeTerminalPartialForModeSwitchAsync(settings, cancellationToken);
+        _lineParser.Clear();
+        _terminalDecoder = null;
+        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(Interlocked.Increment(ref _sequenceNumber)), cancellationToken);
+        var message = offset > expected
+            ? $"RX data gap: {offset - expected:N0} byte(s) omitted before parser input."
+            : "RX data gap: parser input moved backwards in the transport stream.";
+        await _logs.Writer.WriteAsync(LogLine.System(message), cancellationToken);
+        Error?.Invoke(this, message);
+        return true;
     }
 
     private async Task ProcessRxChunkAsync(

@@ -1,0 +1,48 @@
+{
+  "_manual": [
+    "GUI import example for FormatVersion 3: separate TX and RX Check steps. Commands and patterns are illustrative; replace them with the actual device protocol before running. Import never sends.",
+    "TX uses Kind=Tx and nonempty CommandText. RX Check uses Kind=RxCheck, empty CommandText, and RxPattern. DelayAfterMs is the whole RX check window, even after an early match; a miss does not branch or retry.",
+    "RX TxMode=null inherits the preceding enabled TX mode within the same repeat. Terminal patterns are literal and case-sensitive. HEX ?? matches one byte; at least one fixed byte is required.",
+    "RX Check observes original bytes received since the preceding TX in the same repeat and connection, including fast responses during the TX delay.",
+    "CLI/MCP cannot get, execute or overwrite this RX Check definition. Do not pass this PascalCase GUI import file to sequence save or serial_sequence_save. Existing TX-only automation uses its separate lowercase schema and CaptureMs/Expect fields."
+  ],
+  "FormatVersion": 3,
+  "Name": "응답 패턴 확인 예제",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "문자 상태 조회",
+      "CommandText": "status",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "문자 응답 확인",
+      "CommandText": "",
+      "RxPattern": "STATE=READY",
+      "TxMode": null,
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1000
+    },
+    {
+      "Kind": "Tx",
+      "Name": "HEX 조회 패킷",
+      "CommandText": "AA 10",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "HEX 응답 확인",
+      "CommandText": "",
+      "RxPattern": "AA 55 ?? 00",
+      "TxMode": null,
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1000
+    }
+  ]
+}

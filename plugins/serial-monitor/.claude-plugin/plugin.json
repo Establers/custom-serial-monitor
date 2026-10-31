@@ -1,6 +1,6 @@
 {
   "name": "serial-monitor",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Control the running Windows Serial Monitor and inspect actual UART RX.",
   "author": {
     "name": "Serial Monitor"

@@ -27,6 +27,7 @@ internal static class CommandSequenceExecutionPlan
     public static CommandSequenceStep CloneStep(CommandSequenceStep step) => new()
     {
         IsEnabled = step.IsEnabled,
+        Kind = step.Kind,
         Name = step.Name,
         CommandText = step.CommandText,
         LineEndingMode = step.LineEndingMode,
@@ -35,6 +36,7 @@ internal static class CommandSequenceExecutionPlan
         TxMode = step.TxMode,
         CaptureMs = step.CaptureMs,
         Expect = step.Expect is null ? null : step.Expect with { },
+        ResponseCheck = step.ResponseCheck is null ? null : step.ResponseCheck with { },
         StepNumber = step.StepNumber
     };
 }

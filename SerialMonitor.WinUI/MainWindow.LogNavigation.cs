@@ -14,6 +14,11 @@ public sealed partial class MainWindow
     private bool _navigationDialogOpen;
     private long _navigationActivityVersion;
 
+    private async void LogNavigateButton_Click(object sender, RoutedEventArgs args)
+    {
+        await OpenLogNavigationAsync();
+    }
+
     private void InitializeLogNavigationUi()
     {
         _navigationViewModel = new LogTimePickerViewModel(new XtermLogNavigationBridge(

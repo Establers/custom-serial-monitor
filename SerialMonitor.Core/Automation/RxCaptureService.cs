@@ -6,13 +6,14 @@ using System.Threading.Channels;
 namespace SerialMonitor.Core.Automation;
 
 public sealed record CaptureConnection(bool Connected, long Generation, long SerialErrorCount);
-public sealed record CaptureOptions(int DurationMs = 2000, string? Command = null, string TxMode = "text", string LineEnding = "crlf");
+public sealed record CaptureOptions(int DurationMs = 2000, string? Command = null, string TxMode = "text", string LineEnding = "crlf",
+    string? PreviewFormat = null);
 public sealed record CaptureResult(
     string CaptureId, string CaptureStatus, string SendStatus, string? Command, string Port,
     long SessionGeneration, DateTimeOffset StartedAt, DateTimeOffset EndedAt,
     int RequestedDurationMs, long ReceivedBytes, long StoredBytes, long DroppedBytes,
     long SerialErrors, bool RxGapDetected, string? Error, string RawFile, string TextFile,
-    string TxMode = "text", string LineEnding = "crlf");
+    string TxMode = "text", string LineEnding = "crlf", string? PreviewFormat = null);
 public sealed record CapturePage(string CaptureId, string Format, long Offset, long NextOffset,
     long TotalBytes, bool HasMore, string Text);
 
@@ -24,6 +25,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
     private readonly object _storageGate = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CaptureSession? _active;
+    private CancellationTokenSource? _operationStop;
     private bool _disposed;
     public string DirectoryPath { get; } = Path.GetFullPath(directory);
 
@@ -47,19 +49,30 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
 
     public void ConnectionChanged(CaptureConnection connection)
     {
-        lock (_gate)
-        {
-            if (_active is { } active && (!connection.Connected || connection.Generation != active.Generation))
-                active.Interrupt("disconnected");
-        }
+        lock (_gate) ApplyConnectionChanged(connection);
+    }
+
+    // Status callbacks may wait behind another callback or a new capture. Read
+    // the live state under the capture lock rather than carrying a stale snapshot.
+    public void RefreshConnection(Func<CaptureConnection> getConnection)
+    {
+        lock (_gate) { if (_active is not null) ApplyConnectionChanged(getConnection()); }
+    }
+
+    private void ApplyConnectionChanged(CaptureConnection connection)
+    {
+        if (_active is { } active && connection.Generation >= active.Generation &&
+            (!connection.Connected || connection.Generation != active.Generation))
+            active.Interrupt("disconnected");
     }
 
     public bool Cancel()
     {
         lock (_gate)
         {
-            if (_active is null) return false;
-            _active.Interrupt("canceled");
+            if (_active is not null) { _active.Interrupt("canceled"); return true; }
+            if (_operationStop is null) return false;
+            CancelPreparation(_operationStop);
             return true;
         }
     }
@@ -68,11 +81,28 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         Func<CaptureConnection> getConnection, Func<CancellationToken, Task>? send,
         CancellationToken cancellationToken)
     {
-        lock (_gate) ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!await _operationGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
-            throw new AutomationException("busy", "Another capture is active.");
-        try { return await CaptureCoreAsync(options, port, encoding, getConnection, send, cancellationToken).ConfigureAwait(false); }
-        finally { _operationGate.Release(); }
+        using var operationStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            // This is a zero-wait probe. Publish preparation ownership in the
+            // same critical section, leaving no acquired-but-uncancelable gap.
+            if (!_operationGate.Wait(0, cancellationToken))
+                throw new AutomationException("busy", "Another capture is active.");
+            _operationStop = operationStop;
+        }
+        try
+        {
+            return await CaptureCoreAsync(options, port, encoding, getConnection, send, operationStop.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_operationStop, operationStop)) _operationStop = null;
+                _operationGate.Release();
+            }
+        }
     }
 
     private async Task<CaptureResult> CaptureCoreAsync(CaptureOptions options, string port, Encoding encoding,
@@ -82,6 +112,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         if (options.DurationMs is < 0 or > 60000)
             throw new AutomationException("invalid_argument", "durationMs must be between 0 and 60000.");
         var initial = getConnection();
+        cancellationToken.ThrowIfCancellationRequested();
         if (!initial.Connected) throw new AutomationException("disconnected", "Connect a device first.");
         Directory.CreateDirectory(DirectoryPath);
         await Task.Run(Prune, cancellationToken).ConfigureAwait(false);
@@ -101,6 +132,11 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.Interrupted.Token);
         try
         {
+            // Subscribe first, but do not TX until the raw/text files and
+            // decoder have actually initialized successfully.
+            await session.Ready.WaitAsync(operation.Token).ConfigureAwait(false);
+            if (session.WriteError is { } initializationError)
+                throw new AutomationException("write_error", initializationError);
             cancellationToken.ThrowIfCancellationRequested();
             if (getConnection() is var current && (!current.Connected || current.Generation != initial.Generation))
                 throw new AutomationException("disconnected", "The receive session changed before TX.");
@@ -137,7 +173,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             initial.Generation, session.StartedAt, session.EndedAt, options.DurationMs,
             session.ReceivedBytes, session.StoredBytes, session.DroppedBytes, serialErrors,
             session.DroppedBytes > 0 || serialErrors > 0 || session.WriteError is not null, error, rawPath, textPath,
-            options.TxMode, options.LineEnding);
+            options.TxMode, options.LineEnding, options.PreviewFormat);
         try
         {
             await File.WriteAllTextAsync(MetadataPath(id), JsonSerializer.Serialize(result, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false);
@@ -275,10 +311,19 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             if (_disposed) return;
             _disposed = true;
             _active?.Interrupt("canceled");
+            if (_operationStop is { } preparing) CancelPreparation(preparing);
         }
         await _operationGate.WaitAsync().ConfigureAwait(false);
         _operationGate.Release();
         _operationGate.Dispose();
+    }
+
+    private static void CancelPreparation(CancellationTokenSource stop)
+    {
+        var cancellation = stop.CancelAsync();
+        if (!cancellation.IsCompletedSuccessfully)
+            _ = cancellation.ContinueWith(task => System.Diagnostics.Trace.TraceError("Capture cancellation: {0}", task.Exception),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private sealed class CaptureSession : IAsyncDisposable
@@ -288,6 +333,8 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         private readonly Channel<byte[]> _queue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(1024)
         { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait });
         private readonly Task _writer;
+        private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Ready => _ready.Task;
         private readonly CancellationTokenSource _writeStop = new();
         private readonly long _startedTimestamp = Stopwatch.GetTimestamp();
         private long _pendingBytes;
@@ -359,6 +406,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
                 await using var text = new StreamWriter(new FileStream(textPath, FileMode.CreateNew, FileAccess.Write,
                     FileShare.Read, 65536, FileOptions.Asynchronous), new UTF8Encoding(false));
                 var decoder = encoding.GetDecoder();
+                _ready.TrySetResult();
                 await foreach (var bytes in _queue.Reader.ReadAllAsync(_writeStop.Token).ConfigureAwait(false))
                 {
                     await raw.WriteAsync(bytes, _writeStop.Token).ConfigureAwait(false);
@@ -377,6 +425,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             catch (Exception ex)
             {
                 WriteError = ex.Message;
+                _ready.TrySetResult();
                 _queue.Writer.TryComplete();
                 while (_queue.Reader.TryRead(out _)) { }
                 Interrupt("write_error");

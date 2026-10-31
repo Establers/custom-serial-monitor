@@ -1,0 +1,90 @@
+{
+  "name": "F103RB LAB - CLI smoke",
+  "repeatCount": 1,
+  "steps": [
+    {
+      "command": "ID?",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1"
+      },
+      "name": "Identify",
+      "lineEnding": "crlf",
+      "captureMs": 700
+    },
+    {
+      "command": "STOP",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "OK STOP"
+      },
+      "name": "Stop",
+      "lineEnding": "crlf",
+      "captureMs": 500
+    },
+    {
+      "command": "FAULT CLEAR",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "OK FAULT CLEAR"
+      },
+      "name": "Clear faults",
+      "lineEnding": "crlf",
+      "captureMs": 500
+    },
+    {
+      "command": "PING automation",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "PONG automation"
+      },
+      "name": "PING",
+      "lineEnding": "crlf",
+      "captureMs": 500
+    },
+    {
+      "command": "SPLIT 20 CLI-SPLIT-OK",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "CLI-SPLIT-OK"
+      },
+      "name": "Split response",
+      "lineEnding": "crlf",
+      "captureMs": 1000
+    },
+    {
+      "command": "BURST 100 16",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "BURST seq=100 "
+      },
+      "name": "Burst",
+      "lineEnding": "crlf",
+      "captureMs": 1500
+    },
+    {
+      "command": "STATUS?",
+      "delayAfterMs": 0,
+      "txMode": "text",
+      "expect": {
+        "kind": "text",
+        "value": "rx_drops=0 uart_errors=0"
+      },
+      "name": "Status",
+      "lineEnding": "crlf",
+      "captureMs": 500
+    }
+  ]
+}

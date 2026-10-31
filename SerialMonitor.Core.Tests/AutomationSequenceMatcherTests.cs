@@ -6,6 +6,41 @@ namespace SerialMonitor.Core.Tests;
 public sealed class AutomationSequenceMatcherTests
 {
     [Theory]
+    [InlineData("A", "not_matched")]
+    [InlineData("갂", "matched")]
+    public async Task Cp949TextUsesCharactersRatherThanTrailBytes(string expected, string status)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var encoding = Encoding.GetEncoding(949);
+        var path = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllBytesAsync(path, encoding.GetBytes("갂"));
+            Assert.Equal(status, await AutomationSequenceMatcher.EvaluateAsync(path, 0, 2, new("text", expected), encoding, false));
+            Assert.Equal("matched", await AutomationSequenceMatcher.EvaluateAsync(path, 0, 2, new("hex", "41"), encoding, false));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData("ks_c_5601-1987", "갂", "A", "not_matched")]
+    [InlineData("ks_c_5601-1987", "갂A갂", "갂A갂", "matched")]
+    [InlineData("utf-8", "😀A😀", "😀A😀", "matched")]
+    public async Task TextDecodingSurvivesTheFileReadBoundary(string encodingName, string rx, string expected, string status)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var encoding = Encoding.GetEncoding(encodingName);
+        var path = Path.GetTempFileName();
+        try
+        {
+            var bytes = encoding.GetBytes(new string('x', 16383) + rx);
+            await File.WriteAllBytesAsync(path, bytes);
+            Assert.Equal(status, await AutomationSequenceMatcher.EvaluateAsync(path, 0, bytes.Length, new("text", expected), encoding, false));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
     [InlineData("abcd", "text", "abcd", "matched")]
     [InlineData("ab12c3d4", "text", "abcd", "not_matched")]
     [InlineData("abcd", "hex", "61 62\t63\n64", "matched")]

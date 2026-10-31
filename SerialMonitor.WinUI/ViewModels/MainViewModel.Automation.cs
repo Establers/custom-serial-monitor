@@ -10,6 +10,7 @@ public sealed partial class MainViewModel
     private RxCaptureService? _captures;
     private AutomationPipeHost? _automationHost;
     private AutomationController? _automationController;
+    private Task? _automationStopTask;
     private readonly AutomationControlGate _automationControl = new();
     private int _activeGuiSends;
     private bool _isProfileSaveActive;
@@ -51,38 +52,67 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async Task StopAutomationAsync()
+    private Task StopAutomationAsync(CancellationToken cancellationToken = default)
+    {
+        if (_automationStopTask is null)
+        {
+            _automationStopTask = StopAutomationCoreAsync();
+            // A timed-out caller may already have closed the window when cleanup
+            // eventually fails. Observe and report that late exception as well.
+            _ = _automationStopTask.ContinueWith(task =>
+                RuntimeDiagnostics.RecordError("Automation.Stop", task.Exception!), CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+        return _automationStopTask.WaitAsync(cancellationToken);
+    }
+
+    private async Task StopAutomationCoreAsync()
     {
         _automationController?.CancelActiveSequence();
         _captures?.Cancel();
         if (_automationHost is { } host)
         {
-            _automationHost = null;
-            await host.DisposeAsync();
+            try { await host.StopAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception ex) { RuntimeDiagnostics.RecordError("Automation.Host.Stop", ex); }
+            finally { _automationHost = null; }
         }
         if (_automationController is { } controller)
         {
             _automationController = null;
-            await controller.DisposeAsync();
+            try { await controller.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { RuntimeDiagnostics.RecordError("Automation.Controller.Stop", ex); }
         }
         _serialService.CaptureBytesReceived -= OnCaptureBytes;
         _serialService.StatusChanged -= OnCaptureConnectionChanged;
         if (_captures is { } captures)
         {
             _captures = null;
-            await captures.DisposeAsync();
+            await captures.DisposeAsync().ConfigureAwait(false);
         }
     }
 
     private void OnCaptureBytes(long generation, ReceivedByteChunk chunk) =>
         _captures?.Offer(generation, chunk.Bytes, chunk.ReceivedTimestamp);
 
-    private CaptureConnection CaptureConnectionSnapshot => new(_serialService.IsConnected,
-        _serialService.ReceiveSessionGeneration, _serialService.SerialFrameErrorCount + _serialService.SerialParityErrorCount +
-        _serialService.SerialOverrunErrorCount + _serialService.SerialRxOverErrorCount);
+    private CaptureConnection CaptureConnectionSnapshot
+    {
+        get
+        {
+            // A reconnect can occur between separate state reads. Never combine
+            // the old session's disconnected flag with the new generation.
+            while (true)
+            {
+                var generation = _serialService.ReceiveSessionGeneration;
+                var connected = _serialService.IsConnected;
+                var errors = _serialService.SerialFrameErrorCount + _serialService.SerialParityErrorCount +
+                    _serialService.SerialOverrunErrorCount + _serialService.SerialRxOverErrorCount;
+                if (generation == _serialService.ReceiveSessionGeneration) return new(connected, generation, errors);
+            }
+        }
+    }
 
     private void OnCaptureConnectionChanged(object? sender, EventArgs args) =>
-        _captures?.ConnectionChanged(CaptureConnectionSnapshot);
+        _captures?.RefreshConnection(() => CaptureConnectionSnapshot);
 
     private AutomationDeviceState AutomationState()
     {
@@ -131,8 +161,10 @@ public sealed partial class MainViewModel
         var cleanup = operation is "release" or "capture_result" or "sequence_progress";
         if (Volatile.Read(ref _shutdownStarted) != 0 && !cleanup)
             throw new AutomationException("shutting_down", "The GUI is shutting down.");
-        if (!cleanup) await InitializeAsync();
+        if (!cleanup) await InitializeAsync().WaitAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        if (Volatile.Read(ref _shutdownStarted) != 0 && !cleanup)
+            throw new AutomationException("shutting_down", "The GUI is shutting down.");
         switch (operation)
         {
             case "status": return AutomationState();
@@ -146,15 +178,13 @@ public sealed partial class MainViewModel
                 var ports = await _serialService.GetAvailablePortsAsync(cancellationToken);
                 return new { ports };
             case "list_commands":
-                return new
+                return AutomationCommandPaging.Create(Commands.SavedCommands.Count, index =>
                 {
-                    commands = Commands.SavedCommands.Select(c => new
-                    {
-                        c.Name, command = c.CommandText, txMode = "text",
-                        lineEnding = (c.LineEndingMode ?? SelectedTxLineEnding).ToString().ToLowerInvariant(),
-                        recommendedDurationMs = 2000
-                    }).ToArray()
-                };
+                    var command = Commands.SavedCommands[index];
+                    var hex = SelectedTxSendMode == TxSendMode.Hex;
+                    return new(command.Name, command.CommandText, hex ? "hex" : "text",
+                        hex ? "none" : (command.LineEndingMode ?? SelectedTxLineEnding).ToString().ToLowerInvariant());
+                }, args);
             case "reserve":
                 if (AutomationState().Busy || !_automationControl.TryReserveAutomation())
                     throw new AutomationException("busy", "GUI TX, sequence, bridge, reconnect, connection change or another AI/CLI operation is active.");
@@ -162,8 +192,16 @@ public sealed partial class MainViewModel
                 SetAutomationStatus(UiText.Get("AutomationActive", "AI/CLI active — RX capture / control"));
                 return AutomationState();
             case "release":
-                _automationControl.ReleaseAutomation();
-                SetAutomationStatus(_automationLastResult ?? UiText.Get("AutomationReady", "AI/CLI ready"));
+                try
+                {
+                    if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("sequenceProgress", out var finalProgress))
+                        ApplyAutomationSequenceProgress(finalProgress);
+                }
+                finally
+                {
+                    _automationControl.ReleaseAutomation();
+                    SetAutomationStatus(_automationLastResult ?? UiText.Get("AutomationReady", "AI/CLI ready"));
+                }
                 return AutomationState();
             case "capture_result":
                 var captureStatus = args.String("captureStatus") ?? "unknown";
@@ -213,6 +251,7 @@ public sealed partial class MainViewModel
             case "send":
             {
                 if (!IsAutomationBusy) throw new AutomationException("busy", "No control reservation.");
+                AutomationSendContext.Verify(args, CaptureConnectionSnapshot);
                 var command = args.String("command") ?? throw new AutomationException("invalid_argument", "command is required.");
                 SetAutomationStatus("AI/CLI RX: " + (command.Length > 40 ? command[..40] + "…" : command));
                 if (!Enum.TryParse<TxLineEndingMode>(args.String("lineEnding", "crlf"), true, out var ending))
@@ -232,18 +271,8 @@ public sealed partial class MainViewModel
         public CaptureConnection Connection => owner.CaptureConnectionSnapshot;
 
         public Task<object> InvokeAsync(string operation, JsonElement args, CancellationToken cancellationToken)
-        {
-            var completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            async void Run()
-            {
-                try { completion.TrySetResult(await owner.InvokeAutomationOnUiAsync(operation, args, cancellationToken)); }
-                catch (OperationCanceledException) { completion.TrySetCanceled(cancellationToken); }
-                catch (Exception ex) { completion.TrySetException(ex); }
-            }
-            if (owner._dispatcherQueue.HasThreadAccess) Run();
-            else if (!owner._dispatcherQueue.TryEnqueue(Run))
-                completion.TrySetException(new AutomationException("gui_unavailable", "GUI dispatcher is unavailable."));
-            return completion.Task;
-        }
+            => AutomationDispatch.InvokeAsync(owner._dispatcherQueue.HasThreadAccess,
+                callback => owner._dispatcherQueue.TryEnqueue(() => callback()),
+                () => owner.InvokeAutomationOnUiAsync(operation, args, cancellationToken), cancellationToken);
     }
 }

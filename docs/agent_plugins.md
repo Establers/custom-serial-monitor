@@ -87,13 +87,37 @@ VS Code Copilot은 `/plugin update serial-monitor@serial-monitor-tools` 또는
 | AI 작업 절차·skill 변경 | 플러그인 업데이트 후 재로드·새 세션 |
 | 버전 호환 오류 | 안내된 프로그램 또는 플러그인을 업데이트 |
 
-프로그램과 플러그인의 버전 번호는 같을 필요가 없습니다. 플러그인 v1.0.1은
-CLI v1.6.0 이상과 제어 API 1.x를 사용합니다. `serial_get_capabilities` 또는
+프로그램과 플러그인의 버전 번호는 같을 필요가 없습니다. 현재 플러그인은 **v1.0.2**이며
+CLI v1.6.0 이상과 제어 API 1.x를 사용합니다. 최근 CLI·MCP 입력 검증, 취소·종료,
+포화 상태의 취소 경로, 원래 연결 세션에 묶인 TX, 캡처 페이지와 다중 바이트 문자
+경계를 지키는 시퀀스 기대값 검사는 **프로그램 v1.6.2**에 포함됩니다. 최소 호환 버전을
+충족해도 수정사항까지 설치된 것은 아니므로 GUI와 CLI를 함께 v1.6.2 이상으로
+업데이트하세요. `serial_get_capabilities` 또는
 `serialctl describe --json`으로 CLI의 버전·지원 기능을 확인할 수 있습니다.
 실행 중인 구버전 GUI는 새 GUI로 다시 실행하세요.
 
 프로그램 설치 전에 진행 중인 수집·시퀀스를 마치고 GUI와 MCP 연결을 종료합니다.
 설치 후 GUI를 실행하고 MCP를 다시 연결하세요.
+
+단독 skill을 사용한다면 프로그램 업데이트만으로 바뀌지 않습니다. 새
+`SerialMonitorSkills.zip`의 설치 스크립트를 기존과 같은 클라이언트·범위·경로로
+다시 실행하세요. `serial-monitor.local.json`이나 수동 MCP의 실행 경로가 예전
+`artifacts`/빌드/설치 폴더를 가리키는지도 확인합니다. 새 MCP 연결에서
+`serial_get_capabilities`의 `data.cliVersion`을 확인한 뒤 `serial_list_instances`와
+`serial_get_status`로 사용할 GUI를 조회하세요. CLI의 버전 조회만으로 실행 중인
+GUI까지 새 버전으로 바뀌지는 않습니다. 연결 점검에 TX는 필요하지 않습니다.
+
+개발 중에는 같은 v1.6.2 표기 안에서도 코드가 계속 바뀔 수 있습니다. 구현과 리뷰가
+끝난 소스를 기준으로 GUI·CLI·플러그인·단독 skill 배포본을 함께 다시 만들고 검증하세요.
+앞서 만든 설치 파일·ZIP은 이후 수정사항을 자동으로 포함하지 않습니다. 실행 중인
+장치 작업 때문에 설치를 미뤘다면 스킬 내용만 갱신하고, 프로그램 교체·MCP 재연결은
+그 작업을 마친 뒤 적용합니다. GUI와 CLI를 모두 갱신해야 일반 연결 포화 시의
+취소 전용 경로와 세션 변경 보호를 함께 사용할 수 있습니다.
+
+자동화 시퀀스의 공개 입력은 기존 TX 전용 `captureMs`/리터럴 `expect` 계약을 유지합니다.
+새 GUI RX Check는 별도 v3 GUI JSON으로 불러오며, 활성 RX Check를 포함한 정의의
+CLI/MCP 조회·실행은 `unsupported_sequence_feature`로 거절합니다. 이를 우회하려고
+검사 조건을 지우거나 패턴을 장치 명령으로 보내지 마세요.
 
 ## 실행 파일을 찾지 못할 때
 
@@ -142,11 +166,18 @@ Git 설치 명령은 플러그인 파일이 저장소의 배포 브랜치에 게
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package_agent_plugin.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test_agent_plugin.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check_release_payload.ps1 -PortableDirectory release\SerialMonitorPortable
 ```
 
 원본 skill은 `skills/serial-monitor-control`이며 패키징이
 `plugins/serial-monitor/skills/serial-monitor-control`에 동기화합니다. Git 배포에는
 생성된 skill과 manifest·마켓플레이스 목록을 함께 반영하고 새 플러그인 버전을 사용하세요.
+Codex 원본에는 `.agents/plugins/marketplace.json`, Claude Code·Copilot 호환 원본에는
+`.claude-plugin/marketplace.json`을 함께 제공합니다. ZIP·프로그램 번들에도 둘 다
+포함됩니다. 설치 파일 생성 전 검증은 GUI·CLI·인스톨러 버전과 실제 번들의
+플러그인 파일·CLI 호환성을 검사하며, `-SkipPublish`에서도 오래된 번들을 거부합니다.
+이 검사는 버전과 패키지 사본의 일치를 확인합니다. 같은 버전 안의 C# 코드 변경은
+최종 소스 확정 후 프로그램을 새로 빌드·publish하여 반영해야 합니다.
 패키지 생성만으로 GitHub 릴리스나 공개 디렉터리에 게시되지는 않습니다.
 클라이언트별 검증은 [수동 체크리스트](https://github.com/Establers/custom-serial-monitor/blob/main/docs/manual_test_checklist.md)를 참고하세요.
 

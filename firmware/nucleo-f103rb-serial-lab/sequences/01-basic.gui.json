@@ -1,0 +1,194 @@
+{
+  "FormatVersion": 3,
+  "Name": "F103RB LAB - Basic",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "Stop prior generators",
+      "CommandText": "STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Stop prior generators / RX",
+      "CommandText": "",
+      "RxPattern": "OK STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Clear injected faults",
+      "CommandText": "FAULT CLEAR",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Clear injected faults / RX",
+      "CommandText": "",
+      "RxPattern": "OK FAULT CLEAR",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Identify board",
+      "CommandText": "ID?",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Identify board / RX",
+      "CommandText": "",
+      "RxPattern": "ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "PING",
+      "CommandText": "PING onboard",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "PING / RX",
+      "CommandText": "",
+      "RxPattern": "PONG onboard",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Preserve spaces",
+      "CommandText": "ECHO   spaced  ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Preserve spaces / RX",
+      "CommandText": "",
+      "RxPattern": "ECHO   spaced  ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "UTF-8 fixture",
+      "CommandText": "UTF8",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "UTF-8 fixture / RX",
+      "CommandText": "",
+      "RxPattern": "UTF8 ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Log levels / events",
+      "CommandText": "LEVELS",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Log levels / events / RX",
+      "CommandText": "",
+      "RxPattern": "[ERROR] test error",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "LD2 on",
+      "CommandText": "LED ON",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "LD2 on / RX",
+      "CommandText": "",
+      "RxPattern": "OK LED ON",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "LD2 off",
+      "CommandText": "LED OFF",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "LD2 off / RX",
+      "CommandText": "",
+      "RxPattern": "OK LED OFF",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "User button",
+      "CommandText": "BUTTON?",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "User button / RX",
+      "CommandText": "",
+      "RxPattern": "BUTTON ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Status",
+      "CommandText": "STATUS?",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Status / RX",
+      "CommandText": "",
+      "RxPattern": "rx_drops=0 uart_errors=0",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    }
+  ]
+}

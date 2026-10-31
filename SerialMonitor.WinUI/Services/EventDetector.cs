@@ -23,7 +23,14 @@ public sealed class EventDetector : IEventDetector
     private Task? _detectorTask;
     private LogRuleMatcher.CompiledEventRule[] _rules = Array.Empty<LogRuleMatcher.CompiledEventRule>();
     private EventContextSettings _contextSettings = new();
-    private readonly Queue<LogLine> _beforeContextBuffer = new();
+    private readonly Queue<IArchivedLogLine> _beforeContextBuffer = new();
+    private ContextLineArchive? _contextArchive;
+    private string? _contextArchiveFailure;
+    private ChannelMemoryBudget<LogLine> _inputMemory = NewInputMemory();
+    private ChannelMemoryBudget<DetectedEvent> _eventMemory = NewEventMemory();
+    private ChannelMemoryBudget<DetectedEventContext> _contextMemory = NewContextMemory();
+    private readonly object _inputAdmissionGate = new();
+    private bool _inputGapPending;
     private readonly List<EventContextCapture> _pendingContextCaptures = new();
     private DetectedEvent? _lastDetectedEvent;
     private string? _lastError;
@@ -60,11 +67,15 @@ public sealed class EventDetector : IEventDetector
 
     public event EventHandler? StatusChanged;
 
-    public ChannelReader<DetectedEvent> DetectedEvents => _events.Reader;
+    public ChannelReader<DetectedEvent> DetectedEvents => _eventMemory.Wrap(_events.Reader);
 
     public ChannelReader<DetectedEvent> SequenceTriggerEvents => _sequenceTriggerEvents.Reader;
 
-    public ChannelReader<DetectedEventContext> CompletedEventContexts => _completedContexts.Reader;
+    public ChannelReader<DetectedEventContext> CompletedEventContexts => _contextMemory.Wrap(_completedContexts.Reader);
+
+    private static ChannelMemoryBudget<LogLine> NewInputMemory() => new(EventViewMemoryPolicy.DetectorInputBytes, LogViewMemoryPolicy.EstimateRetainedBytes);
+    private static ChannelMemoryBudget<DetectedEvent> NewEventMemory() => new(EventViewMemoryPolicy.DetectorOutputBytes, EventViewMemoryPolicy.Estimate);
+    private static ChannelMemoryBudget<DetectedEventContext> NewContextMemory() => new(EventViewMemoryPolicy.DetectorOutputBytes, EventViewMemoryPolicy.Estimate);
 
     public bool IsRunning
     {
@@ -214,6 +225,13 @@ public sealed class EventDetector : IEventDetector
             _beforeContextBuffer.Clear();
             _streamingMatcher.Reset();
             _pendingContextCaptures.Clear();
+            if (_contextArchive is not null) await _contextArchive.DisposeAsync();
+            _contextArchive = new ContextLineArchive();
+            _contextArchiveFailure = null;
+            _inputMemory = NewInputMemory();
+            _inputGapPending = false;
+            _eventMemory = NewEventMemory();
+            _contextMemory = NewContextMemory();
             Volatile.Write(ref _isContextCaptureOverloadActive, 0);
             SetActivePendingContextCount();
             _input = CreateInputQueue();
@@ -243,15 +261,30 @@ public sealed class EventDetector : IEventDetector
             return false;
         }
 
-        Interlocked.Increment(ref _pendingInputLineCount);
-        if (_input.Writer.TryWrite(line))
+        lock (_inputAdmissionGate)
         {
-            return true;
+            // A rejected reconnect/terminator must not let the next accepted
+            // record inherit matching state, including sources without IDs.
+            if ((!_inputGapPending || TryWriteInput(LogLine.RxPartialTerminator())) && TryWriteInput(line))
+            {
+                _inputGapPending = false;
+                return true;
+            }
+            _inputGapPending = true;
         }
-
-        Interlocked.Decrement(ref _pendingInputLineCount);
         Interlocked.Increment(ref _droppedInputLineCount);
         RaiseStatusChanged();
+        return false;
+    }
+
+    private bool TryWriteInput(LogLine line)
+    {
+        var reserved = _inputMemory.TryReserve(line);
+        if (!reserved) return false;
+        Interlocked.Increment(ref _pendingInputLineCount);
+        if (_input.Writer.TryWrite(line)) return true;
+        Interlocked.Decrement(ref _pendingInputLineCount);
+        _inputMemory.Release(line);
         return false;
     }
 
@@ -325,6 +358,7 @@ public sealed class EventDetector : IEventDetector
         try
         {
             await StopCurrentAsync(CancellationToken.None);
+            if (_contextArchive is not null) await _contextArchive.DisposeAsync();
         }
         finally
         {
@@ -371,22 +405,27 @@ public sealed class EventDetector : IEventDetector
         {
             await foreach (var line in _input.Reader.ReadAllAsync(cancellationToken))
             {
+                _inputMemory.Release(line);
                 Interlocked.Decrement(ref _pendingInputLineCount);
                 if (line.IsPartialRxTerminator)
                 {
                     _streamingMatcher.Reset();
                     continue;
                 }
-                CaptureAfterContext(line);
+                var contextLine = await ArchiveContextLineAsync(line, cancellationToken);
+                if (contextLine is not null) CaptureAfterContext(contextLine);
+                else CompletePendingContextCaptures();
 
                 var captureContextForNewEvents = !IsContextCaptureOverloadActive;
                 foreach (var detectedEvent in Detect(line, captureContextForNewEvents))
                 {
                     RecordDetectedEvent(detectedEvent);
 
+                    var reserved = !DetectedEventRoutingPolicy.RequiresGeneralEventDelivery(detectedEvent) || _eventMemory.TryReserve(detectedEvent);
                     if (DetectedEventRoutingPolicy.RequiresGeneralEventDelivery(detectedEvent) &&
-                        !_events.Writer.TryWrite(detectedEvent))
+                        (!reserved || !_events.Writer.TryWrite(detectedEvent)))
                     {
+                        if (reserved) _eventMemory.Release(detectedEvent);
                         Interlocked.Increment(ref _droppedOutputEventCount);
                     }
 
@@ -401,11 +440,28 @@ public sealed class EventDetector : IEventDetector
 
                     if (detectedEvent.ShowInEventList)
                     {
-                        StartContextCapture(detectedEvent);
+                        // A streaming match may prepend an earlier suffix to its
+                        // display text. Evidence stores the actual received row;
+                        // the preceding original row is already in before-context.
+                        var source = contextLine;
+                        if (source is not null)
+                        {
+                            var captureEvent = new DetectedEvent(detectedEvent.Timestamp, detectedEvent.RuleName,
+                                detectedEvent.Keyword, detectedEvent.Direction, string.Empty,
+                                beforeContextLines: detectedEvent.BeforeContextLines, id: detectedEvent.Id,
+                                trayNotificationEnabled: detectedEvent.TrayNotificationEnabled,
+                                soundNotificationEnabled: detectedEvent.SoundNotificationEnabled,
+                                popupNotificationEnabled: detectedEvent.PopupNotificationEnabled,
+                                notificationCooldownSeconds: detectedEvent.NotificationCooldownSeconds,
+                                showInEventList: detectedEvent.ShowInEventList, triggerSequenceName: detectedEvent.TriggerSequenceName,
+                                buildMessageSegments: false, archivedSource: source);
+                            StartContextCapture(captureEvent);
+                        }
+                        else Interlocked.Increment(ref _contextCaptureFailedCount);
                     }
                 }
 
-                AddBeforeContext(line);
+                if (contextLine is not null) AddBeforeContext(contextLine);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -429,8 +485,9 @@ public sealed class EventDetector : IEventDetector
             }
             finally
             {
-                while (_input.Reader.TryRead(out _))
+                while (_input.Reader.TryRead(out var abandoned))
                 {
+                    _inputMemory.Release(abandoned);
                     Interlocked.Decrement(ref _pendingInputLineCount);
                     Interlocked.Increment(ref _droppedInputLineCount);
                 }
@@ -487,7 +544,7 @@ public sealed class EventDetector : IEventDetector
                 if (sourceRule.ShowInEventList)
                 {
                     beforeContext ??= captureContextForNewEvents
-                        ? _beforeContextBuffer.ToArray()
+                        ? new ArchivedLogLines(_beforeContextBuffer.ToArray())
                         : Array.Empty<LogLine>();
                     eventBeforeContext = beforeContext;
                 }
@@ -519,8 +576,22 @@ public sealed class EventDetector : IEventDetector
                     matchRanges: matchRanges,
                     matchForegroundColor: sourceRule.HighlightColor,
                     matchBackgroundColor: sourceRule.BackgroundColor,
-                    buildMessageSegments: buildMessageSegments);
+                    buildMessageSegments: buildMessageSegments, contextError: _contextArchiveFailure);
             }
+        }
+    }
+
+    private async Task<IArchivedLogLine?> ArchiveContextLineAsync(LogLine line, CancellationToken token)
+    {
+        if (_contextArchiveFailure is not null) return null;
+        try { return await _contextArchive!.AppendAsync(line, token); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _contextArchiveFailure = ex.Message;
+            _beforeContextBuffer.Clear();
+            Interlocked.Increment(ref _contextCaptureFailedCount);
+            ReportError("Event context archival failed; event matching continues, context is incomplete: " + ex.Message);
+            return null;
         }
     }
 
@@ -569,7 +640,7 @@ public sealed class EventDetector : IEventDetector
         }
     }
 
-    private void AddBeforeContext(LogLine line)
+    private void AddBeforeContext(IArchivedLogLine line)
     {
         _beforeContextBuffer.Enqueue(line);
         var contextSettings = Volatile.Read(ref _contextSettings);
@@ -580,7 +651,7 @@ public sealed class EventDetector : IEventDetector
         }
     }
 
-    private void CaptureAfterContext(LogLine line)
+    private void CaptureAfterContext(IArchivedLogLine line)
     {
         if (_pendingContextCaptures.Count == 0)
         {
@@ -680,6 +751,7 @@ public sealed class EventDetector : IEventDetector
 
         foreach (var capture in _pendingContextCaptures)
         {
+            capture.Error ??= _contextArchiveFailure;
             QueueCompletedContextCapture(capture);
         }
 
@@ -698,11 +770,13 @@ public sealed class EventDetector : IEventDetector
     private void QueueCompletedContextUpdate(EventContextCapture capture)
     {
         var context = capture.ToDetectedEventContext();
-        if (_completedContexts.Writer.TryWrite(context))
+        var reserved = _contextMemory.TryReserve(context);
+        if (reserved && _completedContexts.Writer.TryWrite(context))
         {
             return;
         }
 
+        if (reserved) _contextMemory.Release(context);
         Interlocked.Increment(ref _contextCaptureFailedCount);
         ReportError("Event context UI queue is full. Dropped event context UI update.");
     }
@@ -898,7 +972,7 @@ public sealed class EventDetector : IEventDetector
 
     private sealed class EventContextCapture
     {
-        private readonly List<LogLine> _afterContextLines;
+        private readonly List<IArchivedLogLine> _afterContextLines;
 
         public EventContextCapture(
             DetectedEvent detectedEvent,
@@ -910,14 +984,15 @@ public sealed class EventDetector : IEventDetector
             BeforeContextLines = beforeContextLines;
             BeforeContextLineLimit = Math.Max(0, beforeContextLineLimit);
             AfterContextLineLimit = Math.Max(0, afterContextLineLimit);
-            _afterContextLines = new List<LogLine>(AfterContextLineLimit);
+            _afterContextLines = new List<IArchivedLogLine>(AfterContextLineLimit);
         }
 
         public DetectedEvent Event { get; }
+        public string? Error { get; set; }
 
         public IReadOnlyList<LogLine> BeforeContextLines { get; }
 
-        public IReadOnlyList<LogLine> AfterContextLines => _afterContextLines;
+        public IReadOnlyList<LogLine> AfterContextLines => new ArchivedLogLines(_afterContextLines);
 
         public int BeforeContextLineLimit { get; }
 
@@ -925,7 +1000,7 @@ public sealed class EventDetector : IEventDetector
 
         public bool IsComplete => _afterContextLines.Count >= AfterContextLineLimit;
 
-        public void AddAfterLine(LogLine line)
+        public void AddAfterLine(IArchivedLogLine line)
         {
             if (IsComplete)
             {
@@ -939,11 +1014,11 @@ public sealed class EventDetector : IEventDetector
         {
             return new DetectedEventContext(
                 Event,
-                BeforeContextLines.ToArray(),
-                _afterContextLines.ToArray(),
+                BeforeContextLines,
+                new ArchivedLogLines(_afterContextLines.ToArray()),
                 BeforeContextLineLimit,
                 AfterContextLineLimit,
-                DateTimeOffset.Now);
+                DateTimeOffset.Now, Error);
         }
     }
 }

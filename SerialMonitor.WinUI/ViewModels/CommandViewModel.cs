@@ -78,8 +78,7 @@ public sealed class CommandViewModel : ViewModelBase
 
     public void AddToHistory(string commandText, DateTimeOffset? sentAt = null)
     {
-        var normalized = NormalizeCommandText(commandText);
-        if (string.IsNullOrWhiteSpace(normalized))
+        if (string.IsNullOrWhiteSpace(commandText))
         {
             return;
         }
@@ -88,7 +87,7 @@ public sealed class CommandViewModel : ViewModelBase
         {
             var timestamp = sentAt ?? DateTimeOffset.Now;
             var existing = CommandHistory.FirstOrDefault(
-                entry => string.Equals(entry.CommandText, normalized, StringComparison.Ordinal));
+                entry => string.Equals(entry.CommandText, commandText, StringComparison.Ordinal));
 
             if (existing is not null)
             {
@@ -98,7 +97,7 @@ public sealed class CommandViewModel : ViewModelBase
             // Reinsert with the latest timestamp so recall and persisted history use send order.
             CommandHistory.Insert(0, new CommandHistoryEntry
             {
-                CommandText = normalized,
+                CommandText = commandText,
                 LastSentTime = timestamp
             });
 
@@ -109,7 +108,7 @@ public sealed class CommandViewModel : ViewModelBase
 
             _historyCursor = -1;
             _historyDraft = string.Empty;
-            _lastHistoryCommand = normalized;
+            _lastHistoryCommand = commandText;
             _lastHistoryUpdateTime = timestamp;
             _lastHistoryError = string.Empty;
             NotifyHistoryPropertiesChanged();
@@ -197,6 +196,7 @@ public sealed class CommandViewModel : ViewModelBase
     public IReadOnlyList<CommandHistoryEntry> GetHistorySnapshot()
     {
         return CommandHistory
+            .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.CommandText))
             .Select(CloneHistoryEntry)
             .ToArray();
     }
@@ -207,8 +207,8 @@ public sealed class CommandViewModel : ViewModelBase
         if (history is not null)
         {
             foreach (var entry in history
+                         .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.CommandText))
                          .Select(CloneHistoryEntry)
-                         .Where(entry => !string.IsNullOrWhiteSpace(entry.CommandText))
                          .OrderByDescending(entry => entry.LastSentTime)
                          .DistinctBy(entry => entry.CommandText, StringComparer.Ordinal)
                          .Take(DefaultMaxHistoryCount))
@@ -262,13 +262,9 @@ public sealed class CommandViewModel : ViewModelBase
     {
         return new CommandHistoryEntry
         {
-            CommandText = NormalizeCommandText(entry.CommandText),
+            // Preserve the payload separately from display names and filter queries.
+            CommandText = entry.CommandText,
             LastSentTime = entry.LastSentTime == default ? DateTimeOffset.Now : entry.LastSentTime
         };
-    }
-
-    private static string NormalizeCommandText(string? commandText)
-    {
-        return commandText?.Trim() ?? string.Empty;
     }
 }

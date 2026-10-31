@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 using SerialMonitor.WinUI.ViewModels;
@@ -23,7 +24,8 @@ public sealed class LogHistoryExportPerformanceTests(ITestOutputHelper output)
         try
         {
             var timestamp = DateTimeOffset.Now;
-            var log = new LogViewModel(capacity);
+            var log = new LogViewModel(capacity, new LogViewMemoryPolicy(RetainedBytes: 1024L * 1024 * 1024,
+                VisibleCharacters: 256L * 1024 * 1024));
             var batch = new LogLine[1_000];
             for (var start = 0; start < capacity; start += batch.Length)
             {

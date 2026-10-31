@@ -263,7 +263,7 @@ public sealed class LogViewModelSearchContentTests
         Assert.True(viewModel.TryGetSearchLine(second, out var expected));
         Assert.True(viewModel.TryGetSearchLine(source, out var found));
         Assert.Equal(expected, found);
-        Assert.Equal(secondIsPartial ? "FAULT" : "ULT", found.PayloadText);
+        Assert.Equal("FAULT", found.PayloadText);
     }
 
     [Fact]

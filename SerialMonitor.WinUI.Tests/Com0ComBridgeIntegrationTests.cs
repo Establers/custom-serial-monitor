@@ -13,6 +13,101 @@ public sealed class Com0ComBridgeIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task TwoPairs_CanceledStopWaitsForOldManualBeforeRestart_AndNewTxStillReachesDevice(bool lateFailure)
+    {
+        if (Environment.GetEnvironmentVariable("SERIAL_COM0COM_ROUTING_TEST") != "1")
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var device = new SerialPortStream("CNCB0", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        using var partner = new SerialPortStream("COM5", 115200, 8, Parity.None, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            ReadTimeout = Timeout.Infinite,
+            WriteTimeout = 1000
+        };
+        device.Open();
+        partner.Open();
+        await using var serial = new SerialService();
+        await using var bridge = new SerialBridgeService();
+        var errors = new ConcurrentQueue<string>();
+        serial.Error += (_, message) => errors.Enqueue(message);
+        bridge.Error += (_, message) => errors.Enqueue(message);
+        serial.RawBytesReceived += chunk => bridge.TryEnqueueDeviceChunk(chunk);
+        var deviceSettings = new SerialSettings { PortName = "CNCA0", BaudRate = 115200 };
+        var bridgeSettings = new BridgeSettings { VirtualPortName = "COM4", ManualTxIdleGuardMs = 0 };
+        await serial.ConnectAsync(deviceSettings, new(), timeout.Token);
+        Task StartBridgeAsync() => bridge.StartAsync(bridgeSettings, deviceSettings,
+            (bytes, token) => serial.SendBytesAsync(bytes, string.Empty, token), timeout.Token);
+        await StartBridgeAsync();
+        serial.SetRawBridgePriorityEnabled(true);
+
+        for (var iteration = 0; iteration < 5; iteration++)
+        {
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var oldManual = bridge.QueueManualTransmitAsync(async _ =>
+            {
+                entered.TrySetResult();
+                await release.Task; // Model a write that has not finished observing cancellation.
+                if (lateFailure) throw new IOException("Injected late TX failure");
+            }, timeout.Token);
+            Task? restart = null;
+            try
+            {
+                await entered.Task.WaitAsync(timeout.Token);
+                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => bridge.StopAsync(stop.Token));
+                Assert.Equal(ManualTransmitResult.Canceled, await oldManual.WaitAsync(timeout.Token));
+
+                restart = StartBridgeAsync();
+                await Task.Delay(100, timeout.Token);
+                Assert.False(restart.IsCompleted);
+                Assert.False(bridge.IsRunning);
+                release.TrySetResult();
+                await restart.WaitAsync(timeout.Token);
+                Assert.True(bridge.IsRunning);
+
+                var manualBytes = new byte[] { 0xA1, (byte)iteration, 0xA2 };
+                Assert.Equal(ManualTransmitResult.Sent, await bridge.QueueManualTransmitAsync(
+                    token => serial.SendBytesAsync(manualBytes, string.Empty, token), timeout.Token)
+                    .WaitAsync(timeout.Token));
+                Assert.Equal(manualBytes, await ReadExactlyAsync(device, manualBytes.Length, timeout.Token));
+
+                var deviceRx = new byte[] { 0xB1, (byte)iteration, 0xB2 };
+                await device.WriteAsync(deviceRx, timeout.Token);
+                Assert.Equal(deviceRx, await ReadExactlyAsync(partner, deviceRx.Length, timeout.Token));
+                var externalTx = new byte[] { 0xC1, (byte)iteration, 0xC2 };
+                await partner.WriteAsync(externalTx, timeout.Token);
+                Assert.Equal(externalTx, await ReadExactlyAsync(device, externalTx.Length, timeout.Token));
+                Assert.Equal(ManualTxState.Idle, bridge.ManualTxState);
+                Assert.Null(bridge.LastError);
+            }
+            finally
+            {
+                release.TrySetResult();
+                if (restart is not null)
+                {
+                    await Record.ExceptionAsync(() => restart.WaitAsync(timeout.Token));
+                }
+            }
+        }
+
+        await bridge.StopAsync(timeout.Token);
+        await serial.DisconnectAsync(timeout.Token);
+        Assert.Empty(errors);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task TwoPairs_ForwardDeviceRxAndExternalTx_ButDoNotMirrorManualTx(bool nativeIdleTimeout)
     {
         if (Environment.GetEnvironmentVariable("SERIAL_COM0COM_ROUTING_TEST") != "1")

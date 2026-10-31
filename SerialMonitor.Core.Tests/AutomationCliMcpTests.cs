@@ -7,7 +7,7 @@ using SerialMonitor.Core.Automation;
 
 namespace SerialMonitor.Core.Tests;
 
-public sealed class AutomationCliMcpTests
+public sealed partial class AutomationCliMcpTests
 {
     [Fact]
     public async Task CapabilitiesExposeCurrentToolSchemasWithoutSelectingAGui()
@@ -243,23 +243,65 @@ public sealed class AutomationCliMcpTests
         finally { File.Delete(path); }
     }
 
+    [Fact]
+    public async Task CliAndMcpCp949TextChecksRespectCharactersWhileHexStillMatchesRawBytes()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        await using var gui = await SimulatedGui.StartAsync();
+        gui.Device.RxEncoding = "Cp949";
+        gui.Device.ResponseOverride = Encoding.GetEncoding(949).GetBytes("갂");
+        await using var mcp = await McpSession.StartAsync(gui.InstanceId);
+        var path = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(path, """
+                {"name":"CP949 boundaries","repeatCount":1,"steps":[
+                  {"command":"01","txMode":"hex","lineEnding":"none","captureMs":0,"delayAfterMs":0,"expect":{"kind":"text","value":"A"}},
+                  {"command":"status","txMode":"text","lineEnding":"none","captureMs":0,"delayAfterMs":0,"expect":{"kind":"text","value":"갂"}},
+                  {"command":"03","txMode":"hex","lineEnding":"none","captureMs":0,"delayAfterMs":0,"expect":{"kind":"hex","value":"41"}}
+                ]}
+                """);
+            var (saved, _) = await RunCliAsync("sequence", "save", "--file", path, "--instance", gui.InstanceId);
+            Assert.Equal(0, saved); Assert.Equal(0, gui.Device.SendCount);
+            var started = await mcp.CallAsync("serial_sequence_start", new { name = "CP949 boundaries", port = "COM7" });
+            Assert.False(started.GetProperty("isError").GetBoolean());
+            var id = started.GetProperty("structuredContent").GetProperty("data").GetProperty("runId").GetString()!;
+            JsonElement run;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            do
+            {
+                var (code, result) = await RunCliAsync("sequence", "status", "--run", id, "--instance", gui.InstanceId);
+                Assert.Equal(0, code); run = result.GetProperty("data");
+                if (run.GetProperty("state").GetString() == "running") await Task.Delay(10, timeout.Token);
+            } while (run.GetProperty("state").GetString() == "running");
+            Assert.Equal("completed", run.GetProperty("state").GetString());
+            Assert.Equal(new[] { "not_matched", "matched", "matched" }, run.GetProperty("steps").EnumerateArray().Select(step => step.GetProperty("matchStatus").GetString()));
+            Assert.Equal(3, gui.Device.SendCount); Assert.Equal(new byte[] { 3 }, gui.Device.LastTx);
+            Assert.False(gui.Device.Reserved);
+        }
+        finally { File.Delete(path); }
+    }
+
     private static async Task<(int ExitCode, JsonElement Result)> RunCliAsync(params string[] arguments)
     {
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
-            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
         };
         start.ArgumentList.Add(typeof(CliCommandInput).Assembly.Location);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
+        var stdout = ProcessStreamReader.ReadToEndAsync(process.StandardOutput);
+        var stderr = ProcessStreamReader.ReadToEndAsync(process.StandardError);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         try { await process.WaitForExitAsync(timeout.Token); }
         finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
         var error = await stderr;
         Assert.True(string.IsNullOrEmpty(error), error);
-        return (process.ExitCode, JsonSerializer.Deserialize<JsonElement>(await stdout));
+        var text = await stdout;
+        try { return (process.ExitCode, JsonSerializer.Deserialize<JsonElement>(text)); }
+        catch (JsonException ex) { throw new Xunit.Sdk.XunitException("Invalid CLI JSON: " + JsonSerializer.Serialize(text) + " " + ex.Message); }
     }
 
     private sealed class SimulatedGui : IAsyncDisposable
@@ -305,9 +347,14 @@ public sealed class AutomationCliMcpTests
     private sealed class SimulatedDevice(RxCaptureService captures) : IAutomationDevice
     {
         public static readonly byte[] ResponseBytes = [0x00, 0xFF, 0x80, 0x0D, 0x0A, 0x7F, 0x01, 0xAB, 0xAA, 0x55];
+        public byte[]? ResponseOverride { get; set; }
+        public string RxEncoding { get; set; } = "Utf8";
         public CaptureConnection Connection => new(true, 1, 0);
         public bool Reserved { get; private set; }
         public int SendCount { get; private set; }
+        public int DisconnectCount { get; private set; }
+        public string? FailOperation { get; set; }
+        public int SavedCommandCount { get; set; }
         public byte[] LastTx { get; private set; } = [];
         public string Mode => "terminal";
         private int _baudRate = 115200;
@@ -317,8 +364,17 @@ public sealed class AutomationCliMcpTests
         public Task<object> InvokeAsync(string operation, JsonElement arguments, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (operation == FailOperation)
+            {
+                if (operation == "release") Reserved = false;
+                throw new AutomationException("gui_unavailable", "Injected " + operation + " failure.");
+            }
             switch (operation)
             {
+                case "disconnect": DisconnectCount++; break;
+                case "list_commands":
+                    return Task.FromResult<object>(AutomationCommandPaging.Create(SavedCommandCount,
+                        index => new("Command " + index, new string('\u0001', 16384), "text", "none"), arguments));
                 case "reserve":
                     if (Reserved) throw new AutomationException("busy", "Reserved.");
                     Reserved = true;
@@ -345,12 +401,17 @@ public sealed class AutomationCliMcpTests
                         ? Convert.FromHexString(string.Concat(command.Where(character => !char.IsWhiteSpace(character))))
                         : Encoding.UTF8.GetBytes(command);
                     // Deliberately fragment a binary response across arbitrary host reads.
-                    captures.Offer(1, ResponseBytes[..1], Stopwatch.GetTimestamp());
-                    captures.Offer(1, ResponseBytes[1..7], Stopwatch.GetTimestamp());
-                    captures.Offer(1, ResponseBytes[7..], Stopwatch.GetTimestamp());
+                    if (ResponseOverride is { } response)
+                        foreach (var value in response) captures.Offer(1, [value], Stopwatch.GetTimestamp());
+                    else
+                    {
+                        captures.Offer(1, ResponseBytes[..1], Stopwatch.GetTimestamp());
+                        captures.Offer(1, ResponseBytes[1..7], Stopwatch.GetTimestamp());
+                        captures.Offer(1, ResponseBytes[7..], Stopwatch.GetTimestamp());
+                    }
                     break;
             }
-            return Task.FromResult<object>(new AutomationDeviceState(true, "COM7", _baudRate, 1, "Utf8", 0, Reserved, null,
+            return Task.FromResult<object>(new AutomationDeviceState(true, "COM7", _baudRate, 1, RxEncoding, 0, Reserved, null,
                 Mode: Mode, ByteTimeoutMs: _byteTimeoutMs));
         }
     }
@@ -395,6 +456,7 @@ public sealed class AutomationCliMcpTests
         private string _current = "";
         private int _offset;
         public void Send(object value) => _lines.Writer.TryWrite(JsonSerializer.Serialize(value, AutomationJson.Options) + "\n");
+        public void SendRaw(string value) => _lines.Writer.TryWrite(value + "\n");
         public void Finish() => _lines.Writer.TryComplete();
         public override async ValueTask<int> ReadAsync(Memory<char> buffer, CancellationToken cancellationToken = default)
         {

@@ -1,0 +1,41 @@
+{
+  "FormatVersion": 3,
+  "Name": "F103RB LAB - Expected timeout then recovery",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "Intentional missing reply",
+      "CommandText": "SILENT",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Intentional missing reply / RX",
+      "CommandText": "",
+      "RxPattern": "THIS-MUST-NOT-ARRIVE",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 500
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Continue after expected miss",
+      "CommandText": "PING after-timeout",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Continue after expected miss / RX",
+      "CommandText": "",
+      "RxPattern": "PONG after-timeout",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    }
+  ]
+}

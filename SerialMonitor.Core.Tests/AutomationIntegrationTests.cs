@@ -22,6 +22,10 @@ public sealed class AutomationIntegrationTests : IDisposable
         await using var host = new AutomationPipeHost("instance-" + Guid.NewGuid().ToString("N"), controller.HandleAsync, errors.Add,
             Path.Combine(_root, "instances"));
         host.Start();
+        // A direct in-process RPC can complete before the separate async
+        // discovery publication. External CLI clients select discovery first.
+        using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (AutomationDiscovery.List(Path.Combine(_root, "instances")).Count == 0) await Task.Delay(5, startup.Token);
         var result = await AutomationPipeClient.CallAsync(host.Instance, "send_and_capture", new { command = "status", durationMs = 10 }, default);
         Assert.True(result.Success, result.Error?.Message);
         Assert.Equal("abc1d234\r\n> ", result.Data.GetProperty("page").GetProperty("text").GetString());

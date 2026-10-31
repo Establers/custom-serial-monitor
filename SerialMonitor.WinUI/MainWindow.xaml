@@ -1193,7 +1193,8 @@
                       MinWidth="0"
                       HorizontalAlignment="Left"
                       VerticalAlignment="Center">
-                    <TextBlock Grid.Column="0"
+                    <TextBlock x:Name="ConnectionStateTextBlock"
+                               Grid.Column="0"
                                Text="{Binding ConnectionStateText}"
                                Style="{StaticResource CompactLabelTextStyle}"
                                FontWeight="SemiBold"
@@ -1358,6 +1359,12 @@
                                       UseLayoutRounding="False"
                                       Glyph="&#xE74D;" />
                         </Button>
+                        <Button x:Uid="LogNavigateButton" x:Name="LogNavigateButton"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Content="Go to..."
+                                AutomationProperties.Name="Go to time"
+                                ToolTipService.ToolTip="Go to time (Ctrl+G)"
+                                Click="LogNavigateButton_Click" />
                     </StackPanel>
                     <Button x:Uid="StaticUi006" x:Name="LogToolbarScrollBackButton"
                             Grid.Column="1"
@@ -1957,7 +1964,7 @@
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="4"
-                                      ColumnDefinitions="*,Auto,Auto">
+                                      ColumnDefinitions="*,Auto,Auto,Auto">
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="4"
                                                 VerticalAlignment="Center">
@@ -1976,6 +1983,10 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             ToolTipService.ToolTip="Select latest event"
                                             Click="SelectLatestEvent_Click" />
+                                    <Button x:Uid="EventContextButton" Grid.Column="3" Content="Context"
+                                            IsEnabled="{Binding SelectedEventContextAvailable}"
+                                            Style="{StaticResource RuleActionButtonStyle}"
+                                            Click="ShowEventContext_Click" />
                                 </Grid>
                             </Border>
 
@@ -2220,13 +2231,17 @@
                                             ToolTipService.ToolTip="{Binding SequenceRunButtonToolTip}">
                                         <FontIcon Glyph="{Binding SequenceRunButtonGlyph}" FontSize="14" />
                                     </Button>
-                                    <Button x:Uid="SequenceStop" Grid.Column="7"
+                                    <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="4">
+                                    <Button x:Uid="SequenceStop"
                                             Command="{Binding StopCommandSequenceCommand}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             AutomationProperties.Name="Stop running sequence"
                                             ToolTipService.ToolTip="Stop the running sequence, regardless of dropdown selection">
                                         <FontIcon Glyph="&#xE71A;" FontSize="14" />
                                     </Button>
+                                    <Button Content="실행 결과" Style="{StaticResource RuleActionButtonStyle}"
+                                            AutomationProperties.Name="시퀀스 실행 결과 열기" Click="OpenSequenceResults_Click" />
+                                    </StackPanel>
                                 </Grid>
                             </Border>
 
@@ -2256,8 +2271,14 @@
                                             Content="+ Step"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
-                                            Click="AddCommandSequenceStep_Click"
-                                            ToolTipService.ToolTip="Add step" />
+                                            ToolTipService.ToolTip="Add TX or RX Check step">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem Text="TX" Click="AddCommandSequenceStep_Click" />
+                                                <MenuFlyoutItem Text="RX Check" Click="AddCommandSequenceRxStep_Click" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
                                     <Button x:Uid="SequenceDuplicateStep" Grid.Column="4"
                                             Content="Copy step"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
@@ -2266,17 +2287,21 @@
                                             AutomationProperties.Name="Duplicate selected sequence step"
                                             ToolTipService.ToolTip="Duplicate the selected step directly below it" />
                                     <Button x:Uid="StaticUi045" Grid.Column="6"
-                                            Content="Up"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepUp_Click"
-                                            ToolTipService.ToolTip="Move step up" />
+                                            AutomationProperties.Name="Move step up"
+                                            ToolTipService.ToolTip="Move step up">
+                                        <FontIcon Glyph="&#xE74A;" FontSize="12" />
+                                    </Button>
                                     <Button x:Uid="StaticUi046" Grid.Column="7"
-                                            Content="Dn"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepDown_Click"
-                                            ToolTipService.ToolTip="Move step down" />
+                                            AutomationProperties.Name="Move step down"
+                                            ToolTipService.ToolTip="Move step down">
+                                        <FontIcon Glyph="&#xE74B;" FontSize="12" />
+                                    </Button>
                                 </Grid>
                             </Border>
 
@@ -2288,27 +2313,28 @@
                                       RowDefinitions="Auto,*">
                                     <Grid ColumnSpacing="4"
                                           MinHeight="20"
-                                          ColumnDefinitions="28,24,*,54,54,58,70">
+                                          ColumnDefinitions="28,20,58,*,44,40,60,54">
                                         <TextBlock x:Uid="SequenceEnabledHeader" Text="On"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}"
                                                    ToolTipService.ToolTip="Unchecked steps are skipped during execution" />
                                         <TextBlock Grid.Column="1" Text="#"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
-                                        <TextBlock x:Uid="SequenceCommandHeader" Grid.Column="2"
+                                        <TextBlock Grid.Column="2" Text="유형" Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                        <TextBlock x:Uid="SequenceCommandHeader" Grid.Column="3"
                                                    Text="Command"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
-                                        <TextBlock x:Uid="SequenceModeHeader" Grid.Column="3"
+                                        <TextBlock x:Uid="SequenceModeHeader" Grid.Column="4"
                                                    Text="Mode"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
-                                        <TextBlock x:Uid="StaticUi048" Grid.Column="4"
+                                        <TextBlock x:Uid="StaticUi048" Grid.Column="5"
                                                    Text="Ending"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}"
                                                    ToolTipService.ToolTip="Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n" />
-                                        <TextBlock Grid.Column="5"
-                                                   Text="Delay"
+                                        <TextBlock Grid.Column="6"
+                                                   Text="ms"
                                                    HorizontalAlignment="Right"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
-                                        <TextBlock Grid.Column="6"
+                                        <TextBlock Grid.Column="7"
                                                    Text="Actions"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
                                     </Grid>
@@ -2320,6 +2346,11 @@
                                               SelectedItem="{Binding SelectedCommandSequenceStep, Mode=TwoWay}"
                                               IsEnabled="{Binding CanEditCommandSequences}"
                                               SelectionMode="Single"
+                                              AllowDrop="{Binding CanEditSelectedCommandSequence}"
+                                              CanDragItems="{Binding CanEditSelectedCommandSequence}"
+                                              CanReorderItems="{Binding CanEditSelectedCommandSequence}"
+                                              DragItemsStarting="CommandSequenceStepListView_DragItemsStarting"
+                                              DragItemsCompleted="CommandSequenceStepListView_DragItemsCompleted"
                                               DoubleTapped="CommandSequenceStepListView_DoubleTapped"
                                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               ScrollViewer.VerticalScrollMode="Enabled"
@@ -2332,7 +2363,7 @@
                                             <DataTemplate>
                                                 <Grid ColumnSpacing="4"
                                                       MinHeight="24"
-                                                      ColumnDefinitions="28,24,*,54,54,58,70">
+                                                      ColumnDefinitions="28,20,58,*,44,40,60,54">
                                                     <ToolTipService.ToolTip>
                                                         <ToolTip>
                                                             <TextBlock Text="{Binding RowToolTip}"
@@ -2348,36 +2379,42 @@
                                                     <TextBlock Grid.Column="1" Text="{Binding StepNumberText}"
                                                                FontFamily="Consolas"
                                                                Style="{StaticResource CompactCellTextStyle}" />
-                                                    <TextBlock Grid.Column="2"
+                                                    <TextBlock Grid.Column="2" Text="{Binding KindText}" FontSize="11" FontWeight="SemiBold"
+                                                               Style="{StaticResource CompactCellTextStyle}" />
+                                                    <TextBlock Grid.Column="3"
                                                                Text="{Binding CommandText}"
                                                                FontFamily="Consolas"
                                                                TextWrapping="NoWrap" MaxLines="1" TextTrimming="CharacterEllipsis"
                                                                Style="{StaticResource CompactCellTextStyle}" />
-                                                    <TextBlock Grid.Column="3"
-                                                               Text="{Binding TxMode, TargetNullValue=Global}"
-                                                               Style="{StaticResource CompactCellTextStyle}" />
                                                     <TextBlock Grid.Column="4"
+                                                               Text="{Binding ModeText}"
+                                                               Style="{StaticResource CompactCellTextStyle}" />
+                                                    <TextBlock Grid.Column="5"
                                                                Text="{Binding LineEndingText}"
                                                                Style="{StaticResource CompactCellTextStyle}"
                                                                ToolTipService.ToolTip="{Binding LineEndingHelpText}" />
-                                                    <TextBlock Grid.Column="5"
+                                                    <TextBlock Grid.Column="6"
                                                                Text="{Binding DelayText}"
                                                                HorizontalAlignment="Right"
                                                                Style="{StaticResource CompactCellTextStyle}" />
-                                                    <StackPanel Grid.Column="6"
+                                                    <StackPanel Grid.Column="7"
                                                                 Orientation="Horizontal"
                                                                 Spacing="2"
                                                                 VerticalAlignment="Center">
-                                                        <Button x:Uid="StaticUi051" Content="Edit"
+                                                        <Button x:Uid="StaticUi051"
                                                                 AutomationProperties.Name="Edit this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="EditCommandSequenceStepRow_Click"
-                                                                ToolTipService.ToolTip="Edit step" />
-                                                        <Button x:Uid="StaticUi052" Content="Del"
+                                                                ToolTipService.ToolTip="Edit step">
+                                                            <FontIcon Glyph="&#xE70F;" FontSize="12" />
+                                                        </Button>
+                                                        <Button x:Uid="StaticUi052"
                                                                 AutomationProperties.Name="Delete this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="DeleteCommandSequenceStepRow_Click"
-                                                                ToolTipService.ToolTip="Delete step" />
+                                                                ToolTipService.ToolTip="Delete step">
+                                                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                                        </Button>
                                                     </StackPanel>
                                                 </Grid>
                                             </DataTemplate>

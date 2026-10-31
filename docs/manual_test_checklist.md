@@ -22,6 +22,36 @@ real hardware when available.
 
 ## Startup
 
+- [ ] Run a plain TX sequence with no enabled RX Check, including one with
+  only disabled RX Check steps. Confirm no sequence-run folder/RX capture is
+  created and result storage adds no wait before/between TX. Existing normal
+  file logging must still follow its own Log ON/OFF setting.
+- [ ] In the sequence step editor, add separate TX and RX Check steps; in HEX use `AA 55 ?? 00`
+  with 1000ms. The time input must remain editable, and an early match must still wait the full 1000ms. Split RX into AA / 55 37 / 00 and merge it with unrelated
+  bytes: verify matching across chunks. Invalid nibble wildcards/all-wildcard
+  patterns must fail before TX. A text pattern must remain literal/case-sensitive.
+- [ ] Run mixed checked/unchecked/disabled steps for several repeats. A timeout
+  must continue in order without retrying. Pause waits for response observation
+  plus the normal delay; Stop cancels immediately without erasing an already
+  completed match. Disconnect must not match bytes from a new connection generation.
+- [ ] Verify an immediate RX during the preceding TX delay can satisfy the next RX Check.
+  The RX step must never send its pattern or apply a second delay; earlier repeats and post-reconnect RX must not supply a match for the preceding TX.
+- [ ] Receive a complete response before disconnect/reconnect, both during the TX delay and during RX Check.
+  Verify it remains matched with the original RX time and highlight. Repeat with an incomplete old response:
+  bytes received after disconnect (including a complete reply on the new connection) must not complete the match.
+- [ ] Confirm each TX/RX line shows its original HH:mm:ss.fff time, including split UTF-8/CP949 characters and RX paging.
+- [ ] Open execution results while running: confirm the summary, repeat/status
+  filters, 200-row paging, RX paging and match highlighting. Close/reopen the
+  window and restart the app: stored results remain. Normal Log OFF must not
+  discard sequence results. Closing the main window must close its results window.
+- [ ] Verify legacy v1 files retain Expect/CaptureMs and their existing CLI/MCP
+  semantics. Export with RX Check uses v3 (v2 attached checks migrate to explicit steps) and preserves it across copy,
+  reorder, profile merge and restart. Legacy CLI/MCP must explicitly reject live
+  conditions and attempts to overwrite them, with no device TX/profile mutation.
+- [ ] While a GUI sequence is starting, checking, paused, reconnecting or flushing
+  results, CLI/MCP mutations and bridge startup must return busy; manual TX must
+  be blocked. While CLI/MCP owns capture, GUI sequence start must be disabled.
+
 - [ ] In Terminal mode, split UTF-8 Korean bytes after the first/second byte of
   a character at a partial flush boundary (128 bytes or 250 ms idle). Repeat
   with CP949 split after the leading byte. Verify the combined text is intact,
@@ -406,6 +436,9 @@ real hardware when available.
 
 ## Event Notifications
 
+- [ ] In both Terminal and HEX, turn Event OFF, leave RX trigger sequence at
+  `(none)`, and enable each of Tray, Sound, and Popup separately. Matching data
+  should notify without adding an Events row or starting a sequence.
 - [ ] Confirm Tray, Sound, and Popup are all OFF for existing/default rules.
 - [ ] Enable Popup for one MOCK event rule and keep cooldown at 30 seconds.
 - [ ] Confirm a matching MOCK event shows one non-blocking popup after about 1 second.
@@ -417,6 +450,21 @@ real hardware when available.
 
 ## Highlight Rules
 
+- [ ] Delete every rule, save the profile, and restart. Rules must stay empty.
+- [ ] Choose Orange as a rule's background, open Edit, save, and reload the
+  profile. Orange must remain selected in both Terminal and HEX rules.
+- [ ] In Terminal, send `FA` and then `ULT` without a newline, with Event,
+  Highlight, and Filter configured for `FAULT`. Detection and the filtered
+  log must include `FAULT`, and the completing fragment must be highlighted.
+  Repeat with the newline included in the final write, and after an async
+  filter change. The final fragment must stay on the existing logical line.
+- [ ] Repeat the split test with an equivalent HEX rule. Separate records must
+  not match; a complete pattern in a later record must match and highlight.
+- [ ] Let the filtered match's hidden prefix expire from the retained buffer.
+  The view must agree with Refresh/ALL, without stale prefixes or broken timestamps.
+- [ ] Load legacy event and highlight rules sharing a name/keyword but using
+  different RX/TX directions. Preserve both directions; also preserve distinct
+  case-sensitive Terminal keywords and separate highlight priorities.
 - [ ] Open Add/Edit log rule and confirm all options, including `Case sensitive`,
   are visible. Check the two-column fields and notification row in dark/light
   themes, at 100%/150% scaling, and with a short window (content should scroll).
@@ -736,10 +784,10 @@ real hardware when available.
 - [ ] Confirm stale profile or search-result states are not treated as health
   errors.
 
-## Time/position navigation and thin time rail
+## Time/position navigation
 
-- [ ] Confirm the terminal has a thin vertical time rail at its left (about two characters, at most 24 px), retains its full available height, and shows no horizontal activity/peak graph or Navigate inspector tab.
-- [ ] With an empty buffer, open Ctrl+G and verify helpful empty-state validation with disabled time fields/Go. Receive logs, close/reopen and confirm the range becomes available. Ctrl+G and the log context menu must open the same native dialog; Escape/Cancel must restore focus without moving the log.
+- [ ] Confirm the terminal uses its full available width and height without a time rail, activity/peak graph or Navigate inspector tab. The fixed log toolbar must show Go to in both Korean and English, including when the other toolbar controls are scrolled.
+- [ ] With an empty buffer, open Ctrl+G and verify helpful empty-state validation with disabled time fields/Go. Receive logs, close/reopen and confirm the range becomes available. Ctrl+G and the toolbar's Go to button must open the same native dialog; the log context menu has no separate navigation item. Escape/Cancel must restore focus without moving the log.
 - [ ] Open Ctrl+G at a historical position and confirm the corresponding time is selected with focus on Minutes. Change Hours/Minutes/Seconds by mouse wheel and native keyboard arrows. Open a dropdown and verify its list keeps normal wheel scrolling. The dialog and button positions must remain stable.
 - [ ] Receive 200 logs with an identical millisecond timestamp, open Ctrl+G after that timestamp, and select a later idle time: Go must target log 200 by its frozen ID. Receive more logs while the dialog is open and repeat; it must still target the original log 200. If that ID is evicted, show an expired-position message without jumping to another log. An ordinary request exactly at the shared timestamp must still target its first matching log.
 - [ ] Minimize/restore or close the window while Ctrl+G metadata is loading: the canceled opening must not show a stale empty dialog. A later Ctrl+G must open a fresh session; an already-open dialog must retain its selection across minimize/restore.
@@ -748,14 +796,12 @@ real hardware when available.
 - [ ] Keep receiving while the dialog is open: the range, selector lists and chosen time must stay fixed. Close/reopen to capture a fresh oldest-retained-to-current-wall-clock range. No polling or text preview should compete with selector changes.
 - [ ] During a long RX idle interval, select a time after the last recorded log and press Go; it must land on the last retained log. Choose an interval between recorded timestamps and confirm it lands on the first log at or after that time.
 - [ ] In a small window, check the date/time fields, two-line range and error text without raw JSON/Int64/conversion messages. Full trimmed status must remain available by tooltip, and reopening must clear previous errors.
-- [ ] Hover the time rail near its top, middle and bottom. Check the actual destination's local date/time tooltip, including across midnight and an interval without logs. Click to jump and confirm the viewport band follows the selected log range.
-- [ ] Focus the rail, select a time with arrows/Home/End and press Enter. Escape hides the tooltip. Empty, single-timestamp and system-clock-regressed logs must remain usable without misleading time labels.
-- [ ] Turn visible timestamp prefixes off and confirm the rail still shows actual timestamps and navigates by time. With genuinely missing/invalid timestamps, verify it instead shows #line/count and percentage, stays clickable and marks the viewport by retained position. Multiple equal timestamps must allow selecting distinct log positions.
-- [ ] Save timestamp display OFF, restart into an empty log view and receive the first logs without changing any setting. The empty startup restore must complete and the rail must become clickable immediately after the first batch. Repeat with timestamp display ON and through later ON/OFF changes; a presentation change must never be required to enable navigation.
-- [ ] With no real timestamp metadata, Ctrl+G time fields/Go must be disabled with a helpful message while ordinal rail navigation and available Back history still work. Evict a hovered ordinal target before clicking: show an expired-position message instead of jumping to a different log at that index.
+- [ ] Turn visible timestamp prefixes off and confirm Ctrl+G still navigates by the retained internal timestamps.
+- [ ] Save timestamp display OFF, restart into an empty log view and receive the first logs without changing any setting. The empty startup restore must complete and Ctrl+G must be usable immediately after the first batch. Repeat with timestamp display ON and through later ON/OFF changes; a presentation change must never be required to enable navigation.
+- [ ] With no real timestamp metadata, Ctrl+G time fields/Go must be disabled with a helpful message while available Back history still works.
 - [ ] Receive new RX after a jump and confirm the chosen viewport stays in place, Auto Scroll is off, RX/file logs continue, and view pause is unchanged.
 - [ ] Use Back from the Ctrl+G dialog repeatedly, including a wrapped log offset before and after column resize. After retention eviction, an expired Back anchor must report unavailable rather than jump elsewhere.
-- [ ] With one million retained lines, drag/resize the window, use the rail near its middle and open the time selector. No histogram requests, repeated whole-buffer scans, unbounded history, or frozen receive controls.
+- [ ] With one million retained lines, drag/resize the window and open the time selector from both Ctrl+G and the toolbar. No histogram requests, repeated whole-buffer scans, unbounded history, or frozen receive controls.
 - [ ] Verify Tab/Shift+Tab, arrow keys and Enter operate native date/time fields without toggling terminal Auto Scroll. Escape must close the native dialog or its open dropdown. No HTML popup or browser-native controls should appear.
 - [ ] Verify Korean/English, light/dark/high contrast, narrow widths, clear/mode change, full screen restore, and a system clock regression.
 

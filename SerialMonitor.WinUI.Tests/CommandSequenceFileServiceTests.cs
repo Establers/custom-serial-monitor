@@ -32,7 +32,7 @@ public sealed class CommandSequenceFileServiceTests
     }
 
     [Theory]
-    [InlineData("\"FormatVersion\":1", "\"FormatVersion\":2")]
+    [InlineData("\"FormatVersion\":1", "\"FormatVersion\":4")]
     [InlineData("\"FormatVersion\":1,", "")]
     [InlineData("\"RepeatCount\":2", "\"RepeatCount\":0")]
     [InlineData("\"RepeatCount\":2", "\"RepeatCount\":10000")]

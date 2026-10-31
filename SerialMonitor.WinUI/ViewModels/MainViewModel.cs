@@ -240,7 +240,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private const int MaxRetainedEventContexts = 5_000;
     private const int SearchResultPageSize = 1_000;
-    private const int MaxSearchHistoryCount = 50;
+    private const int MaxSearchHistoryCount = ProfileInputHistory.MaxSearchHistoryCount;
     private const int PendingVisualWarningThreshold = 5_000;
     private const int SmoothVisualRenderIntervalMs = 16;
     private const int EventRenderIntervalMs = 250;
@@ -286,10 +286,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly ISerialBridgeService _bridgeService;
     private readonly IBridgeLogProcessor _bridgeLogProcessor;
     private readonly IProfileService _profileService;
-    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly IUiThreadDispatcher _dispatcherQueue;
     private readonly UiBatchDispatcher<LogLine> _logBatchDispatcher;
     private readonly UiBatchDispatcher<DetectedEvent> _eventBatchDispatcher;
-    private readonly UiBatchDispatcher<DetectedEventContext> _eventContextBatchDispatcher;
+    private readonly UiBatchDispatcher<EventEvidenceReference> _eventContextBatchDispatcher;
     private readonly CoalescingAsyncOperation _portRefreshOperation;
     private readonly LatestRequestAsyncOperation<SearchShortcutRequest> _searchShortcutOperation;
     private readonly DispatcherQueueTimer _statusTimer;
@@ -309,7 +309,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly SemaphoreSlim _bridgeLifecycleGate = new(1, 1);
     private readonly object _viewPauseGate = new();
     private readonly ViewPauseStateMachine _viewPause = new();
-    private readonly Dictionary<Guid, DetectedEventContext> _eventContextsById = new();
+    private readonly Dictionary<Guid, EventEvidenceReference> _eventContextsById = new();
     private readonly Queue<Guid> _eventContextOrder = new();
     private CancellationTokenSource? _connectionCancellation;
     private CancellationTokenSource? _autoReconnectCancellation;
@@ -327,6 +327,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private int _autoReconnectSessionServicesPreserved;
     private long _pendingLogDropCount;
     private int _backgroundStatusSnapshotDirty;
+    private int _serialConnectionFaulted;
     private int _fileLogStatusSnapshotDirty;
     private (bool Active, string Status, string? Path, string? Error)? _lastFileLogUiSnapshot;
     private string? _selectedPort;
@@ -762,16 +763,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         IBridgeLogProcessor bridgeLogProcessor,
         IProfileService profileService,
         DispatcherQueue dispatcherQueue,
-        ILogHistoryExporter? logHistoryExporter = null)
+        ILogHistoryExporter? logHistoryExporter = null,
+        IEventEvidenceStore? eventEvidenceStore = null)
     {
         _serialService = serialService;
         _logPipeline = logPipeline;
         _fileLogWriter = fileLogWriter;
         _eventDetector = eventDetector;
+        _eventEvidenceStore = eventEvidenceStore ?? new EventEvidenceStore();
+        _eventEvidenceStore.Error += OnBackgroundError;
         _bridgeService = bridgeService;
         _bridgeLogProcessor = bridgeLogProcessor;
         _profileService = profileService;
-        _dispatcherQueue = dispatcherQueue;
+        _dispatcherQueue = new UiThreadDispatcher(dispatcherQueue);
         _logHistoryExporter = logHistoryExporter ?? new LogHistoryExporter();
         Log.PropertyChanged += OnLogHistoryPropertyChanged;
         _portRefreshOperation = new CoalescingAsyncOperation(RefreshPortsOnceAsync);
@@ -794,21 +798,27 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             maxBatchCost: SmoothVisualAppendMaxChars,
             getItemCost: line => 64L + (SelectedRxDisplayMode == RxDisplayMode.Hex && line.Direction == LogDirection.Rx
                 ? (line.RawBytes?.LongLength ?? 0) * 3
-                : line.Text.Length));
+                : line.Text.Length),
+            maxPendingBytes: LogViewMemoryPolicy.PendingBytes,
+            getRetainedBytes: LogViewMemoryPolicy.EstimateRetainedBytes);
 
         _eventBatchDispatcher = new UiBatchDispatcher<DetectedEvent>(
             dispatcherQueue,
             TimeSpan.FromMilliseconds(EventRenderIntervalMs),
             ApplyEventRenderBatch,
             maxPendingItems: 5_000,
-            maxItemsPerTick: EventUiMaxItemsPerTick);
+            maxItemsPerTick: EventUiMaxItemsPerTick,
+            maxPendingBytes: EventViewMemoryPolicy.PendingBytes,
+            getRetainedBytes: EventViewMemoryPolicy.Estimate);
 
-        _eventContextBatchDispatcher = new UiBatchDispatcher<DetectedEventContext>(
+        _eventContextBatchDispatcher = new UiBatchDispatcher<EventEvidenceReference>(
             dispatcherQueue,
             TimeSpan.FromMilliseconds(EventRenderIntervalMs),
             ApplyEventContextBatch,
-            maxPendingItems: 5_000,
-            maxItemsPerTick: EventUiMaxItemsPerTick);
+            maxPendingItems: 256,
+            maxItemsPerTick: EventUiMaxItemsPerTick,
+            maxPendingBytes: 4 * 1024 * 1024,
+            getRetainedBytes: _ => EventEvidenceReference.ReservedMemoryBytes);
 
         ConnectCommand = new AsyncRelayCommand(ConnectAsync, () => CanConnect);
         ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => CanToggleConnection);
@@ -816,7 +826,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         SendCommand = new AsyncRelayCommand(SendCurrentCommandAsync, CanSendCurrentCommand);
         SendSavedCommandCommand = new AsyncRelayCommand(
             SendSavedCommandAsync,
-            parameter => IsConnected && !IsBusy && !IsManualTxBusy && parameter is TxCommand);
+            parameter => CanSendManualTx && parameter is TxCommand);
         AddMarkerCommand = new AsyncRelayCommand(AddMarkerAsync, () => IsConnected && !IsBusy);
         AddDefaultMarkerCommand = new AsyncRelayCommand(AddDefaultMarkerAsync, () => IsConnected && !IsBusy);
         ToggleLogRenderingPauseCommand = new AsyncRelayCommand(ToggleLogRenderingPauseAsync);
@@ -850,6 +860,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             ShowNextSearchResultsPageAsync,
             CanShowNextSearchResultsPage);
         CopyEventContextCommand = new AsyncRelayCommand(CopyEventContextAsync, CanCopyEventContext);
+        PreviousEventContextPageCommand = new AsyncRelayCommand(PreviousEventContextPageAsync, () => !_isEventContextLoading && _eventContextPageStarts.Count > 1);
+        NextEventContextPageCommand = new AsyncRelayCommand(NextEventContextPageAsync, () => !_isEventContextLoading && _eventContextPage?.HasMore == true);
         SelectLatestEventCommand = new AsyncRelayCommand(SelectLatestEventAsync, CanSelectLatestEvent);
         StartMockStressCommand = new AsyncRelayCommand(StartMockStressAsync, () => CanStartMockStress);
         StopMockStressCommand = new AsyncRelayCommand(StopMockStressAsync, () => CanStopMockStress);
@@ -1270,6 +1282,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(CanEditSelectedCommandSequenceStep));
                 RunCommandSequenceCommand.NotifyCanExecuteChanged();
                 StopCommandSequenceCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(CanSendManualTx));
+                SendCommand.NotifyCanExecuteChanged();
+                SendSavedCommandCommand.NotifyCanExecuteChanged();
                 NotifySequenceDebugCommandStates();
                 StartBridgeCommand.NotifyCanExecuteChanged();
             }
@@ -1457,7 +1472,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanEditBridgePort => !IsBridgeActive && !IsBridgeStarting && !IsBusy;
 
     public bool CanStartBridge =>
-        IsConnected &&
+        !IsShuttingDown && IsConnected &&
         !IsAutomationBusy &&
         !IsBridgeStarting &&
         !IsBusy &&
@@ -1524,7 +1539,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsManualTxBusy => IsBridgeActive && ManualTxState != ManualTxState.Idle;
 
-    public bool CanSendManualTx => IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy;
+    private bool IsShuttingDown => Volatile.Read(ref _shutdownStarted) != 0;
+
+    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -1626,6 +1643,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SetProperty(ref _selectedPort, displayValue))
             {
                 _currentSerialSettings.PortName = GetActualPortName(displayValue) ?? string.Empty;
+                if (!_suppressSettingsApplyRecording && !IsConnected && !IsAutoReconnectRunning)
+                    SwitchPortInputHistory(GetActualPortName(displayValue));
                 OnPropertyChanged(nameof(SelectedActualPortName));
                 RecordPortSelectionChange(_suppressSettingsApplyRecording
                     ? $"Restored port selection: {displayValue ?? "(none)"}"
@@ -2581,6 +2600,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             if (SetProperty(ref _isConnected, value))
             {
+                if (!value && !IsAutoReconnectRunning)
+                    SwitchPortInputHistory(GetActualPortName(SelectedPort));
                 OnPropertyChanged(nameof(ConnectionButtonText));
                 OnPropertyChanged(nameof(ConnectionStateText));
                 OnPropertyChanged(nameof(CompactConnectionStatusText));
@@ -2643,7 +2664,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanToggleConnection => IsAutoReconnectRunning || (IsConnected ? CanManualDisconnect : CanConnect);
 
     public bool CanConnect =>
-        !IsConnected &&
+        !IsShuttingDown && !IsConnected &&
         !_isLogSaveDirectoryValidating &&
         !IsAutomationBusy &&
         !IsBusy &&
@@ -3095,6 +3116,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string ConnectionStateText =>
         $"{_serialService.ConnectionState}: {SelectedPort ?? "(no port selected)"} @ {SelectedBaudRate:N0} bps";
+
+    public bool IsSerialConnectionFaulted => Volatile.Read(ref _serialConnectionFaulted) != 0;
 
     public string CompactConnectionStatusText => string.IsNullOrWhiteSpace(StatusText)
         ? ConnectionStateText
@@ -3651,7 +3674,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     public bool SelectedEventContextAvailable =>
-        SelectedEvent is not null && _eventContextsById.ContainsKey(SelectedEvent.Id);
+        SelectedEvent is not null && (_eventContextsById.ContainsKey(SelectedEvent.Id) || SelectedEvent.Evidence is not null);
 
     public bool IsEventAutoScrollEnabled
     {
@@ -3695,7 +3718,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             return _eventContextsById.TryGetValue(SelectedEvent.Id, out var context)
-                ? context.BeforeContextLines.Count + 1 + context.AfterContextLines.Count
+                ? context.BeforeCount + 1 + context.AfterCount
                 : SelectedEvent.BeforeContextLines.Count + 1 + SelectedEvent.AfterContextLines.Count;
         }
     }
@@ -4179,11 +4202,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async Task ShutdownAsync(TimeSpan timeout)
     {
-        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
-        {
-            return;
-        }
-
+        using var shutdownCancellation = new CancellationTokenSource(timeout);
+        if (!TryBeginShutdown()) return;
         CancelLogHistoryExport();
         _settingsValidationCancellation.Cancel();
         Interlocked.Increment(ref _searchGeneration);
@@ -4198,20 +4218,18 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _shutdownDisconnectError = string.Empty;
         _shutdownFileFlushError = string.Empty;
         _shutdownProfileSaveError = string.Empty;
-        _wasSequenceRunningDuringShutdown = IsSequenceRunning;
         _wasSerialConnectedDuringShutdown = IsConnected || _serialService.IsConnected;
         NotifyShutdownPropertiesChanged();
         SetStatus("Shutting down...");
         RefreshStatusBar();
 
         var cleanupErrors = new List<string>();
-        using var shutdownCancellation = new CancellationTokenSource(timeout);
 
         try
         {
             // Finish/stop pending automation persistence before taking the shutdown
             // snapshot, otherwise an in-flight registration could be overwritten.
-            try { await StopAutomationAsync(); }
+            try { await StopAutomationAsync(shutdownCancellation.Token); }
             catch (Exception ex)
             {
                 cleanupErrors.Add($"Shutdown automation stop failed: {ex.Message}");
@@ -4220,8 +4238,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             // Persist preferences before disconnect/flush can consume the shutdown timeout.
             try
             {
+                if (_startupProfileTask is not null)
+                    await _startupProfileTask.WaitAsync(shutdownCancellation.Token);
                 var profile = CreateProfileFromCurrentState();
-                await _profileService.SaveAsync(CurrentProfilePath, profile, shutdownCancellation.Token);
+                await _profileService.SaveAsync(CurrentProfilePath, profile, shutdownCancellation.Token).WaitAsync(shutdownCancellation.Token);
                 RefreshProfileProperties();
             }
             catch (Exception ex)
@@ -4250,7 +4270,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 // DisconnectAsync is idempotent and also owns cancellation of an
                 // active reconnect loop plus cleanup of its preserved session services.
-                await DisconnectAsync(shutdownCancellation.Token);
+                await DisconnectAsync(shutdownCancellation.Token).WaitAsync(shutdownCancellation.Token);
             }
             catch (Exception ex)
             {
@@ -4260,7 +4280,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
             try
             {
-                await _fileLogWriter.StopAsync(shutdownCancellation.Token);
+                await _fileLogWriter.StopAsync(shutdownCancellation.Token).WaitAsync(shutdownCancellation.Token);
             }
             catch (Exception ex)
             {
@@ -4297,6 +4317,22 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private bool TryBeginShutdown()
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return false;
+        _eventPresentationStop?.Cancel();
+        _wasSequenceRunningDuringShutdown = IsSequenceRunning;
+        // Cancel before waiting for automation persistence or any other cleanup.
+        _sequenceCancellation?.Cancel();
+        _automationController?.CancelActiveSequence();
+        OnPropertyChanged(nameof(CanSendManualTx));
+        OnPropertyChanged(nameof(CanConnect));
+        OnPropertyChanged(nameof(CanStartBridge));
+        StartBridgeCommand.NotifyCanExecuteChanged();
+        NotifyCommandStates();
+        return true;
+    }
+
     public async ValueTask DisposeAsync()
     {
         _settingsValidationCancellation.Cancel();
@@ -4308,7 +4344,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             _logHistoryExportProgressTimer.Stop();
             _logHistoryExportProgressTimer.Tick -= OnLogHistoryExportProgressTick;
         }
-        await StopAutomationAsync();
+        using (var automationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+        {
+            try { await StopAutomationAsync(automationDeadline.Token); }
+            catch (OperationCanceledException) when (automationDeadline.IsCancellationRequested)
+            { RuntimeDiagnostics.RecordError("Dispose.Automation", new TimeoutException("Automation cleanup is still pending.")); }
+        }
         Interlocked.Increment(ref _searchGeneration);
         _searchShortcutCancellation.Cancel();
         CancelActiveSearch();
@@ -4358,6 +4399,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         await _serialService.DisposeAsync();
         await _fileLogWriter.DisposeAsync();
         await _eventDetector.DisposeAsync();
+        _eventPresentationStop.Cancel();
+        _eventContextReadCancellation?.Cancel();
+        if (_eventContextReadTask is not null) await _eventContextReadTask;
+        if (_eventContextExportTask is not null) await RecordEventExportCompletionAsync(_eventContextExportTask);
+        _eventEvidenceStore.Error -= OnBackgroundError;
+        await _eventEvidenceStore.DisposeAsync();
         _logBatchDispatcher.Dispose();
         _eventBatchDispatcher.Dispose();
         _eventContextBatchDispatcher.Dispose();
@@ -4430,6 +4477,13 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         Interlocked.Increment(ref _portRefreshGeneration);
         return _portRefreshOperation.RunAsync();
+    }
+
+    public Task RefreshPortsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // A reconnect may stop waiting without canceling another caller's scan.
+        return RefreshPortsAsync().WaitAsync(cancellationToken);
     }
 
     private async Task RefreshPortsOnceAsync()
@@ -6023,6 +6077,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartBridgeAsync()
     {
+        if (IsShuttingDown) return;
         var startup = _automationControl.TryBeginBridgeStart();
         if (startup is null) { SetStatus("AI/CLI or bridge startup is active. Stop it before starting the bridge."); return; }
         NotifyBridgePropertiesChanged();
@@ -6056,6 +6111,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartBridgeSessionAsync()
     {
+        if (IsShuttingDown) return;
         var devicePort = GetActualPortName(SelectedPort);
         var virtualPort = SelectedBridgePort?.Trim();
         if (!_serialService.IsConnected)
@@ -6245,13 +6301,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task ConnectAsync(CancellationToken cancellationToken, bool isAutomation = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (IsShuttingDown) return;
         if (IsAutomationBusy && !isAutomation) return;
         Volatile.Write(ref _autoReconnectArmed, 0);
         await _connectionLifecycleGate.WaitAsync(cancellationToken);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (IsAutomationBusy && !isAutomation) return;
+            if (IsShuttingDown || (IsAutomationBusy && !isAutomation)) return;
             await ConnectCoreAsync(cancellationToken);
         }
         finally
@@ -6500,6 +6557,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void RecordConnectSucceeded(SerialSettings settings)
     {
+        SwitchPortInputHistory(settings.PortName);
         _lastConnectRequestedPort = settings.PortName;
         _lastConnectRequestedBaud = settings.BaudRate;
         _lastSuccessfulSerialSettings = settings.Clone();
@@ -6885,10 +6943,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var detectedEvent in _eventDetector.DetectedEvents.ReadAllAsync(cancellationToken))
             {
-                var routing = DetectedEventRoutingPolicy.Decide(detectedEvent);
+                var displayEvent = await _eventEvidenceStore.StoreEventAsync(detectedEvent, _eventPresentationStop.Token);
+                var routing = DetectedEventRoutingPolicy.Decide(displayEvent);
                 if (routing.ShowInEventList)
                 {
-                    var dropped = _eventBatchDispatcher.Post(detectedEvent);
+                    var dropped = _eventBatchDispatcher.Post(displayEvent);
                     if (dropped > 0)
                     {
                         Interlocked.Add(ref _eventUiDroppedCount, dropped);
@@ -6897,7 +6956,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
                 if (routing.QueueNotification)
                 {
-                    QueueEventNotification(detectedEvent);
+                    QueueEventNotification(displayEvent);
                 }
             }
         }
@@ -7057,7 +7116,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 SetStatus($"Auto reconnect attempt {attempt:N0} for {settings.PortName} in {delay.TotalSeconds:0} s...");
                 await Task.Delay(delay, cancellationToken);
 
-                await RefreshPortsAsync();
+                await RefreshPortsAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!ContainsActualPort(_lastAvailableActualPorts, settings.PortName))
                 {
@@ -7441,7 +7500,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             await foreach (var context in _eventDetector.CompletedEventContexts.ReadAllAsync(cancellationToken))
             {
-                var dropped = _eventContextBatchDispatcher.Post(context);
+                var reference = await _eventEvidenceStore.StoreContextAsync(context, _eventPresentationStop.Token);
+                var dropped = _eventContextBatchDispatcher.Post(reference);
                 if (dropped > 0)
                 {
                     Interlocked.Add(ref _eventContextUiDroppedCount, dropped);
@@ -7461,13 +7521,13 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task SendCurrentCommandAsync()
     {
-        var text = Commands.CurrentCommandText.Trim();
+        var text = Commands.CurrentCommandText;
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        var sent = await SendCommandAsync(new TxCommand(text, text), addToHistory: true);
+        var sent = await SendCommandAsync(new TxCommand(text.Trim(), text), addToHistory: true);
         if (sent)
         {
             Commands.CurrentCommandText = string.Empty;
@@ -7931,17 +7991,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         var sequence = parameter is SequenceRunRequest request
             ? request.Sequence
             : SelectedCommandSequence;
-        return IsConnected &&
+        return !IsShuttingDown && IsConnected &&
             !IsBusy &&
             !IsAutomationBusy &&
             !IsBridgeActive &&
+            !IsBridgeStarting &&
             !IsSequenceRunning &&
-            sequence is not null &&
+            _activeGuiSends == 0 && sequence is not null &&
             sequence.Steps.Any(step => step.IsEnabled);
     }
 
     private async Task RunCommandSequenceAsync(object? parameter)
     {
+        if (IsShuttingDown) return;
         var request = parameter as SequenceRunRequest;
         var sourceSequence = request?.Sequence ?? SelectedCommandSequence;
         if (!CanRunCommandSequence(parameter) || sourceSequence is null)
@@ -7959,11 +8021,27 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         var runSource = request?.Source ?? "manual run";
         var sequenceSendMode = NormalizeTxSendMode(SelectedTxSendMode);
-        if (!TryValidateHexSequenceSteps(sequence.Steps, sequenceSendMode, out var validationError))
+        if (!TryValidateSequenceTransmitSteps(sequence.Steps, sequenceSendMode, out var validationError))
         {
             RecordSequenceError($"Sequence run failed: {validationError}");
             return;
         }
+
+        try
+        {
+            var precedingMode = sequenceSendMode;
+            foreach (var step in sequence.Steps)
+            {
+                if (step.Kind == CommandSequenceStepKind.Tx) precedingMode = step.TxMode ?? sequenceSendMode;
+                else
+                {
+                    step.TxMode ??= precedingMode;
+                    new SerialMonitor.Core.Sequences.ResponseCheck(step.TxMode == TxSendMode.Hex ? "hex" : "text", step.CommandText).Validate(SequenceResponseEncoding());
+                }
+                step.ResponseCheck?.Validate(SequenceResponseEncoding());
+            }
+        }
+        catch (ArgumentException ex) { RecordSequenceError("Sequence response check invalid: " + ex.Message); return; }
 
         _sequenceCancellation?.Dispose();
         _sequenceCancellation = new CancellationTokenSource();
@@ -7977,7 +8055,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         CurrentSequenceStepText = "(starting)";
         CompletedSequenceSteps = 0;
         _runningSequenceTotalSteps = sequence.Steps.Count * sequence.RepeatCount;
-        _sequenceTxActivity.Begin(sequence.Name, _runningSequenceTotalSteps);
+        _sequenceTxActivity.Begin(sequence.Name, sequence.Steps.Count(step => step.Kind == CommandSequenceStepKind.Tx) * sequence.RepeatCount);
         RefreshSequenceTxActivity();
         _lastSequenceError = string.Empty;
         _lastSequenceActionStatus = $"Running sequence: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})";
@@ -7988,8 +8066,30 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         SetStatus(_lastSequenceActionStatus);
         RefreshStatusBar();
 
+        SerialMonitor.Core.Sequences.SequenceRunSession? recording = null;
+        CancellationTokenSource? recordingCancellation = null;
+        var resultState = "completed";
+        string? resultError = null;
         try
         {
+            ICommandSequenceObserver? observer = null;
+            // Plain TX sequences retain their original path: no RX collection,
+            // result files or storage waits before/between sends.
+            if (sequence.Steps.Any(step => step.Kind == CommandSequenceStepKind.RxCheck || step.ResponseCheck is not null))
+            {
+                var definition = CreateSequenceRunDefinition(sequence, sequenceSendMode);
+                recording = await SerialMonitor.Core.Sequences.SequenceRunSession.StartAsync(SequenceResultsStore,
+                    definition, SequenceResponseEncoding(), cancellationToken);
+                AttachSequenceRecording(recording);
+                recordingCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, recording.FailureToken);
+                cancellationToken = recordingCancellation.Token;
+                observer = new SequenceRunObserver(recording, definition, () => _serialService.ReceiveSessionGeneration, phase =>
+                {
+                    if (phase == "Delay") _sequenceTxActivity.BeginDelay();
+                    else _sequenceTxActivity.SetPhase(phase);
+                    RefreshSequenceTxActivity();
+                });
+            }
             await _sequenceRunner.RunAsync(
                 sequence,
                 WaitForSequenceConnectionAsync,
@@ -7999,7 +8099,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     {
                         LineEndingMode = step.LineEndingMode
                     }, addToHistory: false, modeOverride: step.TxMode ?? sequenceSendMode, cancellationToken: token,
-                        preserveWhitespace: step.TxMode.HasValue);
+                        preserveWhitespace: step.TxMode.HasValue, isSequence: true);
                     if (sent) _sequenceTxActivity.Sent(step.CommandText, step.DelayAfterMs);
                     else _sequenceTxActivity.FailedAttempt();
                     return sent;
@@ -8021,28 +8121,49 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     var index = position % sequence.Steps.Count;
                     var repeatIndex = position / sequence.Steps.Count;
                     var step = sequence.Steps[index];
+                    if (step.Kind == CommandSequenceStepKind.RxCheck) _sequenceTxActivity.SetPhase("RX Check");
                     CurrentSequenceStepText = sequence.RepeatCount == 1
                         ? $"step #{step.StepNumber:N0} ({index + 1:N0}/{sequence.Steps.Count:N0} enabled) {step.DisplayName}"
                         : $"repeat {repeatIndex + 1:N0}/{sequence.RepeatCount:N0}, step #{step.StepNumber:N0} ({index + 1:N0}/{sequence.Steps.Count:N0} enabled) {step.DisplayName}";
                 },
                 completed => CompletedSequenceSteps = completed,
-                cancellationToken, executionControl);
+                cancellationToken, executionControl, observer);
 
             _sequenceTxActivity.SetPhase("Completed");
             RecordSequenceStatus($"Sequence completed: {sequence.Name} ({sequence.RepeatCount:N0}x, {runSource})");
         }
+        catch (OperationCanceledException) when (recording?.Fault is not null)
+        {
+            resultState = "failed"; resultError = recording.Fault;
+            _sequenceTxActivity.SetPhase("Result recording failed");
+            RecordSequenceError("Sequence stopped: " + resultError);
+        }
         catch (OperationCanceledException)
         {
+            resultState = "canceled";
             _sequenceTxActivity.SetPhase("Stopped");
             RecordSequenceStatus($"Sequence stopped: {sequence.Name}");
         }
         catch (Exception ex)
         {
+            resultState = "failed"; resultError = ex.Message;
             _sequenceTxActivity.SetPhase($"Error: {ex.Message}");
             RecordSequenceError($"Sequence failed: {ex.Message}");
         }
         finally
         {
+            if (recording is not null)
+            {
+                DetachSequenceRecording();
+                try { await recording.FinishAsync(resultState, resultError); }
+                catch (Exception ex) { RecordSequenceError("Saving sequence results failed: " + ex.Message); }
+                finally
+                {
+                    try { await recording.DisposeAsync(); }
+                    catch (Exception ex) { RecordSequenceError("Closing sequence results failed: " + ex.Message); }
+                }
+            }
+            recordingCancellation?.Dispose();
             executionControl.StateChanged -= OnSequenceExecutionControlChanged;
             _sequenceExecutionControl = null;
             IsSequenceRunning = false;
@@ -8096,6 +8217,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (IsShuttingDown) return false;
             if (IsConnected && _serialService.ConnectionState == SerialConnectionState.Connected &&
                 !IsAutoReconnectRunning && !IsBusy && !IsBridgeActive)
             {
@@ -8124,15 +8246,23 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default, bool isAutomation = false, bool preserveWhitespace = false)
+    private async Task<bool> SendCommandAsync(TxCommand sourceCommand, bool addToHistory, TxSendMode? modeOverride = null, CancellationToken cancellationToken = default, bool isAutomation = false, bool preserveWhitespace = false, bool isSequence = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (IsShuttingDown) return false;
+        if (IsSequenceRunning && !isSequence && !isAutomation)
+        {
+            RecordTxError("TX busy: a sequence owns the response observation window.");
+            return false;
+        }
         if (IsAutomationBusy && !isAutomation)
         {
             RecordTxError("TX busy: AI/CLI is collecting RX. Stop the capture before sending another command.");
             return false;
         }
-        var commandText = isAutomation || preserveWhitespace ? sourceCommand.CommandText : sourceCommand.CommandText.Trim();
+        // Payload is wire data. The flags below control blank-input validation,
+        // not whether nonblank commands may lose leading/trailing bytes.
+        var commandText = sourceCommand.CommandText;
         if (commandText.Length == 0 || (!isAutomation && !preserveWhitespace && string.IsNullOrWhiteSpace(commandText)))
         {
             return false;
@@ -8146,6 +8276,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         var lineEndingMode = sourceCommand.LineEndingMode ?? SelectedTxLineEnding;
         var sendMode = NormalizeTxSendMode(modeOverride ?? SelectedTxSendMode);
+        var historyPort = CaptureTransmitHistoryPort();
         var command = new TxCommand(sourceCommand.Name, commandText)
         {
             LineEndingMode = lineEndingMode,
@@ -8156,27 +8287,19 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(CanChangeTerminalMode));
         try
         {
-            var txRawBytes = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(lineEndingMode));
-            var txByteCount = txRawBytes.Length;
+            byte[] txRawBytes;
             var hexParseError = string.Empty;
-
-            switch (sendMode)
+            try
             {
-                case TxSendMode.Hex:
-                    if (!HexPayloadParser.TryParse(command.CommandText, out var hexPayload, out hexParseError))
-                    {
-                        RecordTxAttemptDiagnostics(sendMode, command.CommandText, 0, hexParseError);
-                        RecordTxError("Invalid HEX TX input.");
-                        return false;
-                    }
-
-                    txByteCount = hexPayload.Length;
-                    txRawBytes = hexPayload;
-                    break;
-
-                default:
-                    break;
+                txRawBytes = TxPayloadEncoder.Encode(command.CommandText, sendMode, lineEndingMode);
             }
+            catch (ArgumentException ex) when (sendMode == TxSendMode.Hex)
+            {
+                RecordTxAttemptDiagnostics(sendMode, command.CommandText, 0, ex.Message);
+                RecordTxError("Invalid HEX TX input.");
+                return false;
+            }
+            var txByteCount = txRawBytes.Length;
 
             var txDisplayText = FormatTxLogText(sendMode, command.CommandText, txRawBytes);
 
@@ -8204,6 +8327,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 await _serialService.SendBytesAsync(txRawBytes, txDisplayText, cancellationToken);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             var txLine = LogLine.Tx(
                 txDisplayText,
                 txRawBytes,
@@ -8215,7 +8339,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             TxSent?.Invoke(this, EventArgs.Empty);
             if (addToHistory)
             {
-                Commands.AddToHistory(command.CommandText);
+                RecordTransmittedCommandHistory(historyPort, command.CommandText);
             }
 
             SetFooter(CreateFooterStatus());
@@ -8271,17 +8395,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return mode == TxSendMode.Hex
             ? FormatBytesAsHex(rawBytes)
             : commandText;
-    }
-
-    private static string ToLineEnding(TxLineEndingMode mode)
-    {
-        return mode switch
-        {
-            TxLineEndingMode.Cr => "\r",
-            TxLineEndingMode.Lf => "\n",
-            TxLineEndingMode.Crlf => "\r\n",
-            _ => string.Empty
-        };
     }
 
     public bool NavigateCommandHistory(int direction)
@@ -9253,7 +9366,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         foreach (var rule in LogRules)
         {
-            if ((rule.UseForEvent || !string.IsNullOrWhiteSpace(rule.TriggerSequenceName)) &&
+            if (rule.RequiresEventDetection &&
                 !string.IsNullOrWhiteSpace(rule.Keyword))
             {
                 EventRules.Add(CreateEventRuleFromLogRule(rule));
@@ -9924,7 +10037,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         normalized = CloneTxCommand(command);
-        normalized.CommandText = normalized.CommandText.Trim();
         normalized.Name = normalized.Name.Trim();
         if (!TryNormalizeSavedCommandShortcut(normalized.OptionalShortcut, out var normalizedShortcut, out var shortcutError))
         {
@@ -9979,8 +10091,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         normalized = new CommandSequenceStep();
         error = string.Empty;
+        if (!Enum.IsDefined(step.Kind)) { error = "Invalid sequence step kind."; return false; }
 
-        if (string.IsNullOrEmpty(step.CommandText) || (!step.TxMode.HasValue && string.IsNullOrWhiteSpace(step.CommandText)))
+        if (string.IsNullOrEmpty(step.CommandText) || (step.Kind == CommandSequenceStepKind.Tx && !step.TxMode.HasValue && string.IsNullOrWhiteSpace(step.CommandText)))
         {
             error = "Sequence step command text is required.";
             return false;
@@ -10013,15 +10126,17 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             try { _ = AutomationSequenceMatcher.PatternBytes(step.Expect, Encoding.UTF8); }
             catch (AutomationException ex) { error = ex.Message; return false; }
         }
+        try { step.ResponseCheck?.Validate(); }
+        catch (ArgumentException ex) { error = ex.Message; return false; }
 
         normalized = CloneCommandSequenceStep(step);
-        if (normalized.TxMode is null) normalized.CommandText = normalized.CommandText.Trim();
+        if (normalized.Kind == CommandSequenceStepKind.Tx && normalized.TxMode is null) normalized.CommandText = normalized.CommandText.Trim();
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? null : normalized.Name.Trim();
         normalized.Comment = string.IsNullOrWhiteSpace(normalized.Comment) ? null : normalized.Comment.Trim();
         return true;
     }
 
-    private static bool TryValidateHexSequenceSteps(
+    private static bool TryValidateSequenceTransmitSteps(
         IEnumerable<CommandSequenceStep> steps,
         TxSendMode defaultMode,
         out string error)
@@ -10030,7 +10145,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         foreach (var step in steps)
         {
             index++;
-            if ((step.TxMode ?? defaultMode) != TxSendMode.Hex) continue;
+            if (SingleLineCommandText.IsMultilineTerminalTx(step, defaultMode))
+            {
+                error = $"step {(step.StepNumber > 0 ? step.StepNumber : index)}: TX contains embedded line breaks. Edit it as one line or split it into separate TX steps; use Line ending for the terminator.";
+                return false;
+            }
+            if (step.Kind == CommandSequenceStepKind.RxCheck || (step.TxMode ?? defaultMode) != TxSendMode.Hex) continue;
             if (!HexPayloadParser.TryParse(step.CommandText, out _, out var parseError))
             {
                 error = $"step {(step.StepNumber > 0 ? step.StepNumber : index)} ({step.DisplayName}): {parseError}";
@@ -11141,7 +11261,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool CanCopyEventContext()
     {
-        return SelectedEvent is not null && !string.IsNullOrWhiteSpace(SelectedEventContextText);
+        return !_isEventContextLoading && _eventContextPage is not null &&
+            SelectedEvent is not null && !string.IsNullOrWhiteSpace(SelectedEventContextText);
     }
 
     private Task OpenLogFolderAsync() => OpenLogLocationAsync(useCurrentLogDirectory: false);
@@ -11947,7 +12068,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(EventSelectionLostCount));
     }
 
-    private void ApplyEventContextBatch(IReadOnlyList<DetectedEventContext> contexts)
+    private void ApplyEventContextBatch(IReadOnlyList<EventEvidenceReference> contexts)
     {
         if (contexts.Count == 0)
         {
@@ -11997,104 +12118,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return removedCount;
     }
 
-    private void RefreshSelectedEventContextText()
-    {
-        try
-        {
-            if (SelectedEvent is null)
-            {
-                SelectedEventContextStatusText = "Select an event.";
-                SelectedEventContextText = "Select an event.";
-                OnPropertyChanged(nameof(SelectedEventContextHeaderText));
-                return;
-            }
-
-            _eventContextsById.TryGetValue(SelectedEvent.Id, out var completedContext);
-            SelectedEventContextStatusText = completedContext is null
-                ? CreateMissingContextStatus()
-                : $"before {completedContext.BeforeContextLines.Count:N0} / after {completedContext.AfterContextLines.Count:N0}";
-            SelectedEventContextText = BuildEventContextText(SelectedEvent, completedContext);
-            OnPropertyChanged(nameof(SelectedEventContextLineCount));
-            OnPropertyChanged(nameof(SelectedEventContextHeaderText));
-            CopyEventContextCommand.NotifyCanExecuteChanged();
-            Interlocked.Increment(ref _contextRefreshCount);
-            _lastContextRefreshError = string.Empty;
-            OnPropertyChanged(nameof(ContextRefreshCount));
-            OnPropertyChanged(nameof(LastContextRefreshError));
-        }
-        catch (Exception ex)
-        {
-            Interlocked.Increment(ref _contextRefreshErrorCount);
-            _lastContextRefreshError = $"Event context refresh failed: {ex.Message}";
-            OnPropertyChanged(nameof(ContextRefreshErrorCount));
-            OnPropertyChanged(nameof(LastContextRefreshError));
-            RecordEventContextUiError($"Event context display failed: {ex.Message}");
-        }
-    }
-
     private string CreateMissingContextStatus()
     {
         return IsConnected || _eventDetector.ActivePendingContextCount > 0
             ? "Context pending..."
             : "Context unavailable.";
-    }
-
-    private string BuildEventContextText(DetectedEvent detectedEvent, DetectedEventContext? completedContext)
-    {
-        var beforeLines = completedContext?.BeforeContextLines ?? detectedEvent.BeforeContextLines;
-        var afterLines = completedContext?.AfterContextLines;
-        var beforeLimit = completedContext?.BeforeContextLineLimit ?? _currentEventContextSettings.BeforeContextLines;
-        var afterLimit = completedContext?.AfterContextLineLimit ?? _currentEventContextSettings.AfterContextLines;
-        var builder = new StringBuilder();
-
-        builder.AppendLine($"BEFORE ({beforeLimit:N0})");
-        AppendLogLines(builder, beforeLines);
-
-        builder.AppendLine();
-        builder.AppendLine("MATCHED");
-        builder.AppendLine(detectedEvent.SourceLogLine is not null
-            ? FormatContextLogLine(detectedEvent.SourceLogLine)
-            : FormatContextEventLine(detectedEvent));
-
-        builder.AppendLine();
-        builder.AppendLine($"AFTER ({afterLimit:N0})");
-        if (afterLines is null)
-        {
-            builder.AppendLine(CreateMissingContextStatus());
-        }
-        else
-        {
-            AppendLogLines(builder, afterLines);
-        }
-        return builder.ToString();
-    }
-
-    private void AppendLogLines(StringBuilder builder, IReadOnlyList<LogLine> lines)
-    {
-        if (lines.Count == 0)
-        {
-            builder.AppendLine("(none)");
-            return;
-        }
-
-        foreach (var line in lines)
-        {
-            builder.AppendLine(FormatContextLogLine(line));
-        }
-    }
-
-    private string FormatContextLogLine(LogLine line)
-    {
-        return ShowTimestampInLogView
-            ? line.Format(_currentUiSettings.TimestampDisplayFormat)
-            : $"{line.DirectionText} {line.Text}";
-    }
-
-    private string FormatContextEventLine(DetectedEvent detectedEvent)
-    {
-        return ShowTimestampInLogView
-            ? detectedEvent.Formatted
-            : $"{detectedEvent.DirectionText} {detectedEvent.Message}";
     }
 
     private static string FormatDirection(LogDirection direction)
@@ -12157,6 +12185,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private AppProfile CreateProfileFromCurrentState()
     {
+        CaptureCurrentPortInputHistory();
         var serialSettings = CreateCurrentSettings();
         var logSettings = _currentLogSettings.Clone();
         logSettings.SaveDirectory = serialSettings.SaveDirectory;
@@ -12168,6 +12197,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         uiSettings.SearchWholeWord = IsSearchWholeWord;
         uiSettings.SearchUseRegularExpression = IsSearchRegularExpression;
         uiSettings.LastSearchText = SearchText;
+        uiSettings.SearchHistory = _searchHistory.ToList();
         uiSettings.MarkerText = MarkerText;
         uiSettings.RxDisplayMode = SelectedRxDisplayMode;
         uiSettings.TxSendMode = SelectedTxSendMode;
@@ -12197,6 +12227,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             HighlightRules = HighlightRules.Select(CloneHighlightRule).ToList(),
             SavedCommands = Commands.SavedCommands.Select(CloneTxCommand).ToList(),
             CommandHistory = Commands.GetHistorySnapshot().ToList(),
+            PortHistories = _portInputHistories.Snapshot(),
+            ActiveHistoryPort = _portInputHistories.ActivePort,
+            PortHistoryMigrationVersion = 1,
             CommandSequences = CommandSequences.Select(CloneCommandSequence).ToList()
         };
     }
@@ -12300,7 +12333,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 Commands.SavedCommands.Add(command);
             }
             SelectedSavedCommand = Commands.SavedCommands.FirstOrDefault();
-            Commands.LoadHistory(profile.CommandHistory);
+            RestorePortInputHistory(profile);
 
             CommandSequences.Clear();
             foreach (var sequence in profile.CommandSequences.Select(CloneCommandSequence))
@@ -12343,6 +12376,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         _markerText = settings.MarkerText?.Trim() ?? string.Empty;
         _searchText = settings.LastSearchText ?? string.Empty;
+        RestoreSearchHistory(settings.SearchHistory);
         _isSearchCaseSensitive = settings.SearchCaseSensitive;
         _isSearchWholeWord = settings.SearchWholeWord;
         _isSearchRegularExpression = settings.SearchUseRegularExpression;
@@ -12683,6 +12717,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnBackgroundError(object? sender, string message)
     {
+        if (ReferenceEquals(sender, _serialService))
+            CaptureSerialConnectionFaultState();
         SetActiveBackgroundHealthError(sender, message);
         RunOnUiThread(() =>
         {
@@ -12769,6 +12805,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSerialStatusChanged(object? sender, EventArgs args)
     {
+        CaptureSerialConnectionFaultState();
         if (_serialService.IsConnected && string.IsNullOrWhiteSpace(_serialService.LastError))
         {
             ClearActiveBackgroundHealthError(_serialService);
@@ -12799,6 +12836,17 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Volatile.Write(ref _backgroundStatusSnapshotDirty, 1);
+    }
+
+    private void CaptureSerialConnectionFaultState()
+    {
+        // Keep the failure visible through reconnect cleanup/waiting states.
+        // Idle RX, view pause, and a normal manual disconnect never set it.
+        var state = _serialService.ConnectionState;
+        if (state == SerialConnectionState.Faulted)
+            Interlocked.Exchange(ref _serialConnectionFaulted, 1);
+        else if (state == SerialConnectionState.Connected && string.IsNullOrWhiteSpace(_serialService.LastError))
+            Interlocked.Exchange(ref _serialConnectionFaulted, 0);
     }
 
     private async Task StopBridgeAfterSerialDisconnectAsync()

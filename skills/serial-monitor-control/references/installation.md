@@ -31,6 +31,27 @@ or `copilot plugin update serial-monitor@serial-monitor-tools`, as appropriate.
 Check the installed version and reload the host after updating. App setup updates
 the GUI/CLI; Git-installed plugins use their own update route.
 
+Plugin 1.0.2 carries the current CLI/MCP input, cancellation under load, session
+binding, capture paging and multibyte sequence expectation guidance. GUI RX Check
+authoring remains a separate GUI import workflow; automation retains TX-only
+`captureMs`/literal `expect` definitions.
+Install application 1.6.2 or later to receive the corresponding runtime fixes;
+the minimum compatible CLI remains 1.6.0 (control API 1.x). Compatibility alone does
+not establish that fixes are installed. Check `data.cliVersion` in
+`serial_get_capabilities` or `serialctl describe --json`, then inspect the intended
+running GUI separately. Close old GUI/MCP processes and reconnect after the program
+update. Discovery and status checks need no device TX. Legacy standalone skills
+require rerunning their installer at the same destination; app setup does not
+refresh them. Preserve or deliberately repin their local CLI path and any manual
+MCP command, especially paths into old artifacts/build directories.
+
+During development, a rebuilt GUI/CLI pair can change while keeping the same
+1.6.2 version. Recreate and validate the complete app bundle from the final source;
+an earlier ZIP/installer or a plugin-only update cannot pick up subsequent runtime
+changes. Keep program installation deferred when the user is preserving live device
+work. Update skill content without closing the GUI, changing COM settings, replacing
+the running app or silently moving a pinned CLI path to an intermediate build.
+
 Copilot VS Code supports agent plugins and can discover Copilot CLI installations.
 Manage updates from the interface used to install the plugin. For Codex IDE, use
 its supported standalone skill or manual MCP configuration. Read the

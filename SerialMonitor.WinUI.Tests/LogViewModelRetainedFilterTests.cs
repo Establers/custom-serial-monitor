@@ -196,6 +196,42 @@ public sealed class LogViewModelRetainedFilterTests
         Assert.Equal(2, log.CurrentVisibleLineCount);
     }
 
+    [Fact]
+    public void SplitTerminalMatch_AfterAsyncPublish_KeepsItsHiddenSuffixAndIdentity()
+    {
+        using var ui = new FilterUiContext();
+        var log = new LogViewModel(20);
+        log.AddRange([LogLine.Rx("FA", sequenceNumber: 1, isPartialRxSegment: true)]);
+        var pending = log.SetViewFiltersAsync([Rule("FAULT")]);
+        log.AddRange([LogLine.Rx("U", sequenceNumber: 2, isPartialRxSegment: true)]);
+        Assert.True(ui.Complete(pending));
+        Assert.Empty(Payloads(log));
+        var final = LogLine.Rx("LT", sequenceNumber: 3, isPartialRxSegment: true);
+        log.AddRange([final, LogLine.RxPartialTerminator(4)]);
+        var matched = Assert.Single(log.GetVisibleSearchContentSnapshot());
+        Assert.Equal("FAULT", matched.PayloadText);
+        Assert.True(log.TryGetSearchLine(final, out var navigation));
+        Assert.Equal(matched, navigation);
+        Assert.True(ui.Complete(log.SetViewFiltersAsync([])));
+        Assert.Equal(new[] { "FAULT" }, Payloads(log));
+    }
+
+    [Fact]
+    public void SplitTerminalMatch_TrimAndAsyncCatchUp_NeverResurrectEvictedPrefix()
+    {
+        using var ui = new FilterUiContext();
+        var log = new LogViewModel(2);
+        log.AddRange([LogLine.Rx("FA", sequenceNumber: 1, isPartialRxSegment: true)]);
+        var pending = log.SetViewFiltersAsync([Rule("FAULT")]);
+        log.AddRange([LogLine.Rx("noise", sequenceNumber: 2, isPartialRxSegment: true),
+            LogLine.Rx("ULT", sequenceNumber: 3, isPartialRxSegment: true)]);
+        Assert.True(ui.Complete(pending));
+        Assert.Empty(Payloads(log));
+        log.AddRange([LogLine.Rx("FAULT", sequenceNumber: 4)]);
+        Assert.Equal(new[] { "FAULT" }, Payloads(log));
+        Assert.DoesNotContain("noise", log.GetVisibleTextSnapshot());
+    }
+
     private static string[] Payloads(LogViewModel log) =>
         log.GetVisibleSearchContentSnapshot().Select(line => line.PayloadText).ToArray();
 

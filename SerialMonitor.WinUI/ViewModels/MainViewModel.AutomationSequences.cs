@@ -10,6 +10,7 @@ namespace SerialMonitor.WinUI.ViewModels;
 public sealed partial class MainViewModel
 {
     private string? _automationSequenceRunId;
+    private string? _automationSequenceCompletedRunId;
     private const int MaxAutomationSequences = 1000;
 
     private CommandSequence FindAutomationSequence(JsonElement args)
@@ -62,6 +63,8 @@ public sealed partial class MainViewModel
                 var replacement = AutomationSequenceMapper.Create(definition);
                 var existing = CommandSequences.FirstOrDefault(sequence => string.Equals(sequence.Name, definition.Name, StringComparison.OrdinalIgnoreCase));
                 var overwrite = args.TryGetProperty("overwrite", out var flag) && flag.GetBoolean();
+                if (existing?.Steps.Any(step => (step.Kind == CommandSequenceStepKind.RxCheck || step.ResponseCheck is not null)) == true)
+                    throw new AutomationException("unsupported_sequence_feature", "The legacy CLI/MCP save contract cannot overwrite a sequence with RX Check / ResponseCheck steps. Edit/export it in the GUI.");
                 if (existing is not null && !overwrite)
                     throw new AutomationException("sequence_exists", "Sequence already exists. Review it and set overwrite=true to replace it.");
                 if (existing is null && CommandSequences.Count >= MaxAutomationSequences)
@@ -71,7 +74,7 @@ public sealed partial class MainViewModel
                 if (index < 0) profile.CommandSequences.Add(replacement);
                 else profile.CommandSequences[index] = replacement;
                 if (existing is not null) UpdateAutomationProfileReferences(profile, existing.Name, replacement.Name);
-                await PersistAutomationSequenceProfileAsync(profile, token);
+                await PersistAutomationSequenceProfileAsync(profile, replacement.Name, token);
                 // Persistence is the commit point. Do not report cancellation or
                 // leave the GUI stale after the atomic profile replacement.
                 if (index < 0) CommandSequences.Add(replacement);
@@ -89,7 +92,7 @@ public sealed partial class MainViewModel
                 var profile = CreateProfileFromCurrentState();
                 profile.CommandSequences.RemoveAt(index);
                 UpdateAutomationProfileReferences(profile, existing.Name, null);
-                await PersistAutomationSequenceProfileAsync(profile, token);
+                await PersistAutomationSequenceProfileAsync(profile, existing.Name, token);
                 CommandSequences.RemoveAt(index);
                 UpdateRuleSequenceReferences(existing.Name, null);
                 if (ReferenceEquals(SelectedCommandSequence, existing))
@@ -117,11 +120,11 @@ public sealed partial class MainViewModel
             rule.TriggerSequenceName = replacement;
     }
 
-    private async Task PersistAutomationSequenceProfileAsync(AppProfile profile, CancellationToken token)
+    private async Task PersistAutomationSequenceProfileAsync(AppProfile profile, string sequenceName, CancellationToken token)
     {
         try
         {
-            await Task.Run(() => _profileService.SaveAsync(CurrentProfilePath, profile, token), token);
+            await Task.Run(() => _profileService.SaveSequenceChangeAsync(CurrentProfilePath, profile, sequenceName, token), token);
             RefreshProfileProperties();
         }
         catch (OperationCanceledException) { throw; }
@@ -142,6 +145,9 @@ public sealed partial class MainViewModel
     private void ApplyAutomationSequenceProgress(JsonElement args)
     {
         var runId = args.String("runId")!;
+        // Final progress and the release fallback can carry the same snapshot.
+        // Replaying it must not start/count the completed run a second time.
+        if (_automationSequenceCompletedRunId == runId) return;
         var name = args.String("name") ?? "AI/CLI";
         var state = args.String("state") ?? "running";
         var completed = args.Integer("completedSteps", 0);
@@ -174,6 +180,7 @@ public sealed partial class MainViewModel
             CurrentSequenceStepText = "(none)";
             _runningSequenceTotalSteps = 0;
             _automationSequenceRunId = null;
+            _automationSequenceCompletedRunId = runId;
         }
         else SetAutomationStatus($"AI/CLI sequence: {name} ({completed}/{total})");
         NotifyCommandStates();

@@ -187,6 +187,19 @@
       return index >= 0 && rowAt(index) !== null ? index : -1;
     }
 
+    // Includes a soft-wrapped suffix whose original first row was evicted.
+    // Undefined means reflow is still rebuilding anchors; null means expired.
+    function rowsById(id) {
+      if (busy) return undefined;
+      const index = rawSource.findId(String(id));
+      if (index < 0) return null;
+      const start = rawSource.at(index).row - trimmedRows;
+      const end = index + 1 < rawSource.count() ? rawSource.at(index + 1).row - trimmedRows
+        : terminal.buffer.active.baseY + terminal.buffer.active.cursorY + 1;
+      return end > 0 && start < terminal.buffer.active.length
+        ? { start: Math.max(0, start), end: Math.min(end, terminal.buffer.active.length), trimmedRows, generation } : null;
+    }
+
     function dispose() {
       disposed = true;
       generation++;
@@ -207,7 +220,7 @@
       anchoredColumns = terminal.cols;
       rebuild();
     });
-    return { recordRow, reset, sourceStart, currentIndex, viewportRange, rowAt, indexById,
+    return { recordRow, reset, sourceStart, currentIndex, viewportRange, rowAt, indexById, rowsById,
       isBusy: () => busy, dispose };
   }
 

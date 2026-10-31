@@ -49,7 +49,35 @@ HEX ignores ending selection. Capture duration is 0..60000 ms (default 2000).
 Preview size is 4..65536 bytes, default 16384. It changes only the first returned page.
 `send`, `request` and `capture` accept `--format text|hex` for that page. HEX TX
 defaults to a hex preview; otherwise the default is text. `read --format` remains
-independent, so keep raw and decoded-text offsets separate.
+independent; omitting it retains the initial capture preview format. Keep raw and
+decoded-text offsets separate. When switching format, restart at offset 0 and
+specify that format for every subsequent page.
+
+Unknown/misplaced options, missing values and duplicate options are rejected before
+control. Use `--text=VALUE` for literal text beginning with `--`, or use a text file.
+`commands --offset 0 --limit 100` returns bounded pages. Follow `nextOffset` while
+`hasMore=true`; the serialized byte budget can return fewer entries than the limit.
+Command contents are never truncated. Errors after TX still preserve available
+`data.capture`, `sendStatus` and RX pages; never infer an unsent TX from exit code 1.
+Drain stdout while the CLI runs, or redirect it to a file: output has a 5-second
+deadline. A partial output failure exits 1 with stderr diagnostics and never appends
+another JSON response or replays TX. `gui_connect_timeout` specifically means the
+3-second GUI connection deadline expired before any request/TX was sent.
+The GUI bounds ordinary connections (64) separately from ordinary execution (8).
+Idle input/slow response connections expire after 5 seconds. Updated GUI discovery
+advertises an optional `controlPipeName`: updated CLI/MCP route only `cancel_capture`
+and `sequence_cancel` through this separate endpoint (4 connections, 1-second input
+and output deadlines). Both endpoints share one cancellation execution slot.
+Thus ordinary connection saturation does not block cancellation. Other operations
+are rejected on the control pipe. Execution overload returns `busy` without queuing TX.
+Each MCP stdio session also reserves one cancellation call independently of its
+eight ordinary calls, so the same session can stop a run while those calls wait.
+Calls exceeding either MCP budget retain the JSON-RPC `-32600` error and never reach the GUI.
+Older GUIs without that field and older clients use the ordinary pipe; cancellation
+protection under connection saturation requires both GUI and CLI updates. The bounded
+control endpoint can itself saturate; this is not an unlimited admission guarantee.
+Use that GUI's AI/sequence stop if remote cancellation cannot be admitted.
+Only pre-request connection probes are repeated; transmitted requests are never retried.
 
 ## Live baud rate and byte timeout
 
@@ -112,8 +140,24 @@ Use a GUI and CLI build that supports mode control.
 
 Use the same registered sequences as the GUI; `save`/`delete` persist its shared
 profile and do not send device commands. Save one UTF-8 JSON definition (not a GUI
-profile wrapper) in a task-local file. Syntax example only; replace command and
+profile wrapper or PascalCase GUI import file) in a task-local file. Syntax example only; replace command and
 expectation from the actual device specification:
+
+The lowercase `name`/`repeatCount`/`steps` schema below remains TX automation with
+fixed `captureMs` and optional literal `expect`; HEX `expect` does not accept `??`.
+An enabled GUI RX Check or legacy ResponseCheck makes get/run return
+`unsupported_sequence_feature` before TX. Save cannot overwrite a definition with
+either feature, even if its checks are disabled. Disabled rows are omitted from
+get/run projections. Do not strip conditions or send their patterns as commands.
+
+For GUI RX Check authoring, produce a separate GUI import object with
+`FormatVersion:3`, `Name`, `RepeatCount`, `Steps`, and `Kind:Tx|RxCheck` on each row.
+TX uses nonempty `CommandText`. RX requires `CommandText:""`, `RxPattern`,
+`LineEndingMode:"None"`, and `DelayAfterMs` (0..600000) as its whole check window,
+even if a match arrives early. RX `TxMode:null` inherits the preceding enabled TX
+mode in the same repeat, or the main mode. HEX RX patterns may use `??` for one
+byte and must contain a fixed byte. Never pass this GUI file to automation save;
+have the user import it through the GUI. TX-only GUI import files remain v1.
 
 Register repeated/frequently used commands even when the sequence has only one
 step. Choose an informative name such as a device/model plus the operation, inspect
@@ -196,9 +240,13 @@ ms. Default `txMode` is `text` and `lineEnding` is `crlf`; HEX sends exact bytes
 New automation registrations are limited to 1000. Full-run capture is bounded to 64
 MiB of raw RX. GUI mode does not change these explicit per-step TX modes.
 
-`expect` is optional. `{kind:"text",value:"abcd"}` encodes the literal with the
-GUI's RX encoding and searches for exact contiguous bytes; unrepresentable literals
-are rejected before TX. Matching is case-sensitive.
+`expect` is optional. `{kind:"text",value:"abcd"}` compares exact contiguous
+characters decoded with the GUI's RX encoding. Decoder state survives split reads;
+CP949 trail bytes cannot match standalone ASCII characters, including when a step
+starts partway through a character. Decoder context before the observation range
+only identifies that boundary; characters beginning before the range cannot match.
+Invalid encoding data breaks a text match. Unrepresentable literals are rejected
+before TX. Matching is case-sensitive.
 `{kind:"hex",value:"AA 01 FF"}` searches exact contiguous bytes directly.
 Value length is 1..4096 characters. It is never regex, fuzzy matching or subsequence
 reconstruction. Results are `matched`, `not_matched`, `not_requested` or
@@ -269,10 +317,26 @@ and read that file in bounded pieces. A lost/truncated result never justifies re
 | `instance_not_found` | Re-discover the target; its launch ID changed. |
 | `already_connected`, `connection_mismatch`, `port_mismatch` | Inspect actual target; do not send to a different device. |
 | `busy` | Inspect/wait for current work within task scope. |
+| `gui_connect_timeout` | The selected GUI pipe could not be reached before the connection deadline; this call did not submit a request. Re-discover the intended GUI and inspect its state; do not replay a different uncertain TX. |
 | `profile_conflict` | Another window changed the same sequence, or a safe comparison baseline is unavailable. Preserve the file, review/reload the latest profile and resolve the conflict. Do not blindly overwrite, retry or disconnect an active device to reload. |
+| `unsupported_sequence_feature` | GUI RX Check/legacy ResponseCheck cannot be represented by this API. Use GUI JSON import/export; do not strip checks or turn patterns into TX. |
 | `canceled`, `disconnected`, `rx_gap`, `size_limit`, `write_error` | Inspect partial data/sendStatus. Product judgement may be uncertain. |
 | `capture_not_found` | Retained capture expired or belongs to another instance; use a returned file path if available. |
 
 Collection is independent of GUI pause/filter/Terminal/HEX display. Limits are 64 MiB
 raw RX per capture, 1024 pending chunks/8 MiB queue. Retention normally keeps up to
 32 captures per launch with a 512 MiB cleanup threshold; pinned files are skipped.
+
+`status.sessionGeneration` identifies the current serial receive session. A same-name
+COM reconnect creates a new session. Capture and sequence TX remain bound to their
+original session through dispatch and native write; reconnects stop that work rather
+than redirecting it to the replacement connection. Inspect partial capture evidence
+and current status after `disconnected`, `send_error` or a session-change message.
+Session binding is internal: do not invent an `expectedSessionGeneration` public
+CLI option or MCP argument.
+
+Cancellation uses a separate bounded control path when the GUI advertises one.
+Both GUI and CLI must be updated for this protection under ordinary connection
+saturation. Older GUIs use their existing pipe. Cancellation is still bounded;
+it can return `busy` or a connection timeout. Inspect the accepted run/capture
+instead of opening another endpoint or automatically resending a device command.

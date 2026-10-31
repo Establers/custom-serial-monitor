@@ -63,8 +63,9 @@ lifetime during startup and detaches before the request ends, preserving an
 established session when the RPC host closes that request.
 
 `SerialService.CaptureBytesReceived` publishes the receive generation and original
-chunk in every receive mode, before parser/bridge routing. Its only subscriber
-offers the chunk to `RxCaptureService` without waiting on disk or UI. This is a
+chunk in every receive mode, before parser/bridge routing. The automation subscriber
+offers the chunk to `RxCaptureService` without waiting on disk or UI. GUI sequence
+recording uses a separate bounded observer only while that GUI run owns execution. This is a
 separate fan-out, not another reader of the serial/parser channels. Capture
 workers persist byte-exact RX and incrementally decoded text, independent of
 display mode, pause and filtering. Cancellation/session changes stop collection;
@@ -81,6 +82,35 @@ Opening a page and checking its metadata are synchronized with retention. If all
 old captures are pinned, retention limits are temporarily exceeded until a later
 capture can clean them up.
 
+GUI sequence steps distinguish TX from RX Check. RX Check never invokes the
+send delegate and waits its entire configured 0..600000ms, even after a match.
+The pattern inherits the preceding enabled TX mode (or captured main mode), with
+no separate response-format selector. Legacy Expect/CaptureMs retain their API
+semantics; v2 attached conditions migrate into explicit RX steps. v3 RX patterns
+are stored outside CommandText so older clients cannot transmit them.
+`ResponsePattern` uses incremental literal KMP or wildcard Shift-And over raw
+bytes, independent of receive chunk/packet boundaries. `SequenceRunSession`
+serializes RX and control markers through a bounded channel. A pre-TX marker
+anchors immediate replies; RX Check streams any intervening RX from disk in
+bounded pages, then observes through its fixed deadline. History never carries
+across repeats/connections. The worker writes segmented raw RX, fixed-width
+receive-time/offset indexes and JSONL step/attempt records. Host timestamps derive
+from monotonic receive timestamps anchored to wall time, independently of queue
+latency. The UI reads bounded pages and incrementally decodes Terminal chunks.
+Results show original row numbers, repetitions, TX/RX times, match highlighting
+and separate check/step states. Viewers pin runs against retention; orphaned
+running manifests are interrupted. Queue/storage faults stop further GUI TX.
+Closing the result window does not stop a run.
+
+`SequenceRunObserver` joins the existing GUI runner to live checking and result
+recording. GUI running state is acquired before async preparation and held through
+result finalization, excluding CLI/MCP/bridge reservations and manual TX. Existing
+GUI reconnect retry semantics remain explicit, with a distinct result per attempt.
+The legacy automation API rejects active live conditions and overwrites of live
+definitions (`unsupported_sequence_feature`) instead of silently losing conditions.
+CLI/MCP retains its fixed-capture engine, limits, evidence and result API; GUI runs
+do not take or cancel automation capture ownership.
+
 ## Component responsibilities
 
 - `SerialService` owns real and mock serial connections, RX byte reads, TX byte
@@ -90,7 +120,15 @@ capture can clean them up.
 - `FileLogWriter` owns buffered asynchronous writes, rotation, file naming,
   flush, and file-write counters behind a bounded queue.
 - `EventDetector` owns rule evaluation, before/after context capture, bounded
-  pending captures, and UI event notifications. It does not persist an event log.
+  pending captures, and UI event notifications. Context rows are archived on its
+  background worker; captures retain references instead of duplicate payloads.
+  `EventEvidenceStore` preserves full context asynchronously. Event history and
+  pending UI events each have a 16 MiB estimated-memory budget; context viewing
+  reads bounded pages and full export streams every original row. The runtime
+  archive is temporary; live serial logs and explicit exports remain permanent.
+  Parser stream offsets expose dropped input and reset framing/decoder state so
+  rules and sequence RX checks cannot join bytes across a missing range. Raw
+  capture, bridge forwarding, and original live logs retain their own paths.
 - `SerialBridgeService` owns the optional second COM port and forwards raw byte
   chunks in both directions through queues bounded by both chunk and byte count.
   Physical RX uses only a non-blocking offer; overflow faults and stops the
@@ -110,22 +148,25 @@ capture can clean them up.
   producer, flushes accepted log input, and waits for file/event fan-out before
   those consumers stop. Start/stop operations are serialized through this drain.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
+  Its screen projection has separate retained-data (64 MiB), rendered-text
+  (16 Mi characters), and dispatcher pending-data (32 MiB) budgets alongside
+  the record count. Continuous partial RX rows wrap at record boundaries without
+  resetting streaming rule state. Ordinary native completions remain complete;
+  only oversized individual records receive a defensive display preview.
+  Eviction uses a low-water mark to avoid rebuilding on every incoming chunk.
+  Full original records continue through event detection, sequence RX evidence,
+  and the asynchronous live file writer independently of screen retention.
 - The xterm navigation modules read the existing bounded OSC ID/timestamp ring.
   `log-navigation.js` resolves times/relative offsets/retained ordinals/percentages
   with binary searches for ordered timestamps.
   Clock regressions use bounded rolling block summaries. `log-navigation-terminal.js`
   tracks physical row anchors and trim offsets, rebuilding after column reflow in
   4 ms slices. Navigation refreshes never scan or decode the complete terminal buffer.
-  `time-rail.js` renders a narrow vertical time axis beside the terminal, preserving
-  its full available height. Hover resolves the actual destination timestamp and
-  click/keyboard navigation jumps to it; the rail also marks the visible time range.
-  Hidden timestamp prefixes never affect its metadata. Missing/invalid timestamps
-  or a shared timestamp across multiple logs switch the rail to retained ordinals;
-  stable hovered IDs prevent an eviction from silently moving a click to another log.
-  Its throttled refreshes read bounded metadata and never request histograms or
-  scan terminal history. No horizontal activity/peak graph is rendered. WinUI owns
-  the on-demand Ctrl+G ContentDialog, using native controls and application theme
-  resources; navigation has no inspector tab. `ILogNavigationBridge` transfers
+  The terminal uses its full available width and height without a time rail or
+  activity graph. Hidden timestamp prefixes never affect navigation metadata.
+  WinUI owns the on-demand ContentDialog opened by Ctrl+G or the fixed log toolbar's
+  Go to button, using native controls and application theme resources; navigation
+  has no inspector tab. `ILogNavigationBridge` transfers
   navigation metadata and results between the native view model and the terminal.
   WebView2 can encode integral timestamps with exponent notation, so the bridge
   validates their exact numeric value before converting to nullable Int64 fields.
@@ -190,6 +231,13 @@ capture can clean them up.
   queue; saturation is counted and may omit file/event/UI records while raw
   transport continues unchanged.
 - UI work is marshalled through the WinUI dispatcher and appended in batches.
+- Terminal event, highlight, and view-filter matching carries only the necessary
+  keyword suffix across consecutive partial RX records. A newline, RX sequence
+  gap, content-mode boundary, or rule replacement ends that matching state.
+  Filters restore only the unseen prefix needed to display a boundary match;
+  retained raw records remain unchanged. HEX matching stays record-local and
+  never joins byte patterns across records. Async filter rebuilds publish their
+  matcher state with the formatted view so subsequent live RX uses the same rules.
 - Visible logs and events are bounded; complete history belongs on disk.
 - View filters are a projection of the entire retained log history. Changing the
   selection rebuilds that projection; ALL restores hidden retained records in

@@ -10,7 +10,7 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
 try
 {
     var command = args.FirstOrDefault() ?? "help";
-    var flags = command == "sequence" ? new Dictionary<string, string>() : ParseFlags(args.Skip(1).ToArray());
+    var flags = command == "sequence" ? new Dictionary<string, string>() : CliOptions.Parse(command, args.Skip(1).ToArray());
     if (flags.ContainsKey("set") && command != "mode")
         throw new ArgumentException("--set is only supported by serialctl mode.");
     if (flags.ContainsKey("byte-timeout-ms") && command != "configure")
@@ -31,14 +31,21 @@ try
     {
         if (flags.Count != 0)
             throw new ArgumentException("describe takes no options except --json and does not select or control a GUI.");
-        Console.WriteLine(JsonSerializer.Serialize(AutomationResponse.Ok(ControlCapabilities.Describe()), AutomationJson.Options));
+        await CliOutput.WriteLineAsync(JsonSerializer.Serialize(AutomationResponse.Ok(ControlCapabilities.Describe()), AutomationJson.Options), stop.Token);
         return 0;
     }
     if (command == "mcp")
     {
         try
         {
-            await new StdioMcpServer(flags.GetValueOrDefault("instance")).RunAsync(Console.In, Console.Out, stop.Token);
+            // Console.Out's synchronized writer can block synchronously on a full
+            // redirected pipe. Use cancellable asynchronous stream I/O for MCP.
+            var output = new StreamWriter(StandardOutputTransport.Open(), new UTF8Encoding(false), 4096, true);
+            using var input = StandardInputTransport.Open();
+            var server = new StdioMcpServer(flags.GetValueOrDefault("instance"));
+            await server.RunAsync(input, output, stop.Token);
+            if (server.OutputFailed)
+                throw new IOException("MCP output failed or closed before all replies were delivered. Inspect GUI/capture state before retrying; TX is never replayed.");
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 1; }
@@ -46,7 +53,7 @@ try
     if (command is "help" or "--help" or "-h" ||
         (command == "sequence" && args.Length == 2 && args[1] is "help" or "--help" or "-h"))
     {
-        Console.WriteLine(CliUsage.Text);
+        await CliOutput.WriteLineAsync(CliUsage.Text, stop.Token);
         return 0;
     }
     var operation = command switch
@@ -71,26 +78,18 @@ try
         new AutomationRequest(operation, JsonSerializer.SerializeToElement(arguments, AutomationJson.Options));
     stop.CancelAfter(TimeSpan.FromSeconds(90));
     var response = await AutomationToolRouter.CallAsync(request.Operation, request.Arguments, null, stop.Token);
-    Console.WriteLine(JsonSerializer.Serialize(response, AutomationJson.Options));
+    await CliOutput.WriteLineAsync(JsonSerializer.Serialize(response, AutomationJson.Options), stop.Token);
     return !response.Success || (response.Data.ValueKind == JsonValueKind.Object && response.Data.TryGetProperty("capture", out var capture) &&
         capture.GetProperty("captureStatus").GetString() != "completed") ? 1 : 0;
 }
-catch (Exception ex)
+catch (CliOutputException ex)
 {
-    Console.WriteLine(JsonSerializer.Serialize(AutomationResponse.Fail(ex is AutomationException a ? a.Code : "cli_error", ex.Message), AutomationJson.Options));
+    CliOutput.ReportFailure(ex);
     return 1;
 }
-
-static Dictionary<string, string> ParseFlags(string[] flags)
+catch (Exception ex)
 {
-    var result = new Dictionary<string, string>(StringComparer.Ordinal);
-    var allowed = new HashSet<string>(["instance", "port", "baud", "byte-timeout-ms", "text", "text-file", "hex", "ending", "duration-ms", "preview-bytes", "capture", "offset", "limit", "format", "set"]);
-    for (var i = 0; i < flags.Length; i++)
-    {
-        if (flags[i] == "--json") continue;
-        if (!flags[i].StartsWith("--") || !allowed.Contains(flags[i][2..]) || i + 1 >= flags.Length)
-            throw new ArgumentException("Unknown or incomplete option: " + flags[i]);
-        if (!result.TryAdd(flags[i][2..], flags[++i])) throw new ArgumentException("Duplicate option.");
-    }
-    return result;
+    try { await CliOutput.WriteLineAsync(JsonSerializer.Serialize(AutomationResponse.Fail(ex is AutomationException a ? a.Code : "cli_error", ex.Message), AutomationJson.Options), stop.Token); }
+    catch (CliOutputException outputError) { CliOutput.ReportFailure(outputError); }
+    return 1;
 }

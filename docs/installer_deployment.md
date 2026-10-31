@@ -190,6 +190,8 @@ instead.
 - [ ] The program directory page is visible on fresh install and upgrade.
 - [ ] A custom program location, such as `D:\Apps\SerialMonitor`, launches correctly.
 - [ ] `agent-plugin\.claude-plugin\marketplace.json` and the complete `agent-plugin\plugins\serial-monitor` source are installed.
+- [ ] `agent-plugin\.agents\plugins\marketplace.json` is also present for native Codex discovery.
+- [ ] `check_release_payload.ps1` passes before packaging, including with `build_installer.ps1 -SkipPublish`; old CLI/GUI binaries or stale plugin files must be rejected.
 - [ ] Installation and upgrade leave AI client configuration/caches and separately installed legacy skills unchanged.
 - [ ] Upgrade closes an installed `serialctl mcp` process and replaces its EXE
       without a Windows restart; a CLI running from another folder stays running.

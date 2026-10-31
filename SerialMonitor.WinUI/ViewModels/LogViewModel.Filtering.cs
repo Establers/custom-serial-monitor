@@ -8,6 +8,7 @@ public sealed partial class LogViewModel
     private readonly SemaphoreSlim _filterRebuildGate = new(1, 1);
     private CancellationTokenSource? _filterRebuildCancellation;
     private Queue<RetainedLogLine>? _pendingFilterLines;
+    private long _pendingFilterBytes;
     private bool _filterRebuildOverflowed;
     private long _visibleRebuildVersion;
 
@@ -35,6 +36,7 @@ public sealed partial class LogViewModel
                     var version = _visibleRebuildVersion;
                     var rebuilt = CreateFilterSnapshot(compiled);
                     _pendingFilterLines = new Queue<RetainedLogLine>();
+                    _pendingFilterBytes = 0;
                     _filterRebuildOverflowed = false;
                     // Let the caller paint its applying status before starting
                     // the expensive formatting pass, even for a small history.
@@ -57,15 +59,12 @@ public sealed partial class LogViewModel
 
                         var pending = _pendingFilterLines.ToArray();
                         _pendingFilterLines.Clear();
+                        _pendingFilterBytes = 0;
                         await Task.Run(() =>
                         {
-                            foreach (var line in pending)
-                            {
-                                token.ThrowIfCancellationRequested();
-                                rebuilt._retainedLines.Enqueue(line);
-                            }
                             rebuilt.AppendRebuiltLines(pending, token);
                             rebuilt.TrimFilteredPrefix(firstRetainedId, token);
+                            rebuilt.TrimScreenMemoryAfterRebuild();
                         }, token);
                     }
                     // Clear, capacity/format changes or catch-up overflow require
@@ -75,6 +74,7 @@ public sealed partial class LogViewModel
             finally
             {
                 _pendingFilterLines = null;
+                _pendingFilterBytes = 0;
                 _filterRebuildGate.Release();
             }
         }
@@ -95,13 +95,14 @@ public sealed partial class LogViewModel
 
     private LogViewModel CreateFilterSnapshot(LogRuleMatcher.CompiledHighlightRule[] filters)
     {
-        var snapshot = new LogViewModel(_capacity)
+        var snapshot = new LogViewModel(_capacity, _memoryPolicy)
         {
             _viewFilters = filters,
             _showTimestampInLogView = _showTimestampInLogView,
             _showRxTxDirectionPrefixInLogView = _showRxTxDirectionPrefixInLogView,
             _timestampDisplayFormat = _timestampDisplayFormat,
-            _rxDisplayMode = _rxDisplayMode
+            _rxDisplayMode = _rxDisplayMode,
+            _retainedMemoryBytes = _retainedMemoryBytes
         };
         snapshot._retainedLines.EnsureCapacity(_retainedLines.Count);
         foreach (var line in _retainedLines) snapshot._retainedLines.Enqueue(line);
@@ -111,13 +112,16 @@ public sealed partial class LogViewModel
     private void TrackPendingFilterLine(RetainedLogLine line)
     {
         if (_pendingFilterLines is null || _filterRebuildOverflowed) return;
-        if (_pendingFilterLines.Count >= _capacity)
+        var bytes = line.EstimatedBytes;
+        if (_pendingFilterLines.Count >= _capacity || _pendingFilterBytes + bytes > _memoryPolicy.RetainedBytes)
         {
             _filterRebuildOverflowed = true;
             _pendingFilterLines.Clear();
+            _pendingFilterBytes = 0;
             return;
         }
         _pendingFilterLines.Enqueue(line);
+        _pendingFilterBytes += bytes;
     }
 
     private void TrimFilteredPrefix(long firstRetainedId, CancellationToken cancellationToken)
@@ -128,13 +132,14 @@ public sealed partial class LogViewModel
         {
             cancellationToken.ThrowIfCancellationRequested();
             _retainedLines.Dequeue();
+            _retainedMemoryBytes -= line.EstimatedBytes;
             var contribution = _retainedVisibleLineContributions.Dequeue();
-            visibleLinesToRemove += contribution;
+            visibleLinesToRemove += contribution > 0 ? 1 : 0;
             if (line.Line.IsPartialRxSegment) partialPrefix = true;
             else if (line.Line.IsPartialRxTerminator || contribution > 0) partialPrefix = false;
         }
 
-        if (partialPrefix && _retainedVisibleLineContributions.TryPeek(out var next) && next == 0)
+        if (partialPrefix && _retainedVisibleLineContributions.TryPeek(out var next) && next != 1)
         {
             RebuildVisibleLinesFromRetained(cancellationToken);
             return;
@@ -144,7 +149,21 @@ public sealed partial class LogViewModel
 
     private void PublishFilteredView(LogViewModel rebuilt, LogRuleMatcher.CompiledHighlightRule[] filters)
     {
+        // A newly visible projection can hit the character budget even when
+        // its formerly hidden records fit the byte budget. Retain the same
+        // bounded suffix as the worker before publishing its line identities.
+        var firstVisibleHistoryId = rebuilt._retainedLines.TryPeek(out var first) ? first.LineId : _nextLineId + 1;
+        while (_retainedLines.TryPeek(out var removed) && removed.LineId < firstVisibleHistoryId)
+        {
+            _retainedLines.Dequeue();
+            _retainedMemoryBytes -= removed.EstimatedBytes;
+            DroppedVisibleLineCount++;
+        }
         _viewFilters = filters;
+        // Highlight detection already consumed every live input, including
+        // screen-only rejected records which the worker never received.
+        _filterMatcher = rebuilt._filterMatcher.WithLatestContext(
+            _filterMatcher, _highlightMatcher, filters, ActiveRuleMode);
         _visibleLines = rebuilt._visibleLines;
         _retainedVisibleLineContributions = rebuilt._retainedVisibleLineContributions;
         _lastVisibleLine = rebuilt._lastVisibleLine;
@@ -155,6 +174,7 @@ public sealed partial class LogViewModel
         _partialRxSearchableBuilder = rebuilt._partialRxSearchableBuilder;
         _partialRxLine = rebuilt._partialRxLine;
         _partialRxLineDirty = rebuilt._partialRxLineDirty;
+        PublishTerminalHighlightState(rebuilt);
         XtermFormattingErrorCount += rebuilt.XtermFormattingErrorCount;
         ViewFilterMatchErrorCount += rebuilt.ViewFilterMatchErrorCount;
         _visibleRebuildVersion++;

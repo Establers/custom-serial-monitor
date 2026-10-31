@@ -76,8 +76,9 @@ public sealed class LogViewModelNewLogsOnlyTests
         var viewModel = new LogViewModel(capacity: 3);
         viewModel.AddRange(new[]
         {
-            LogLine.Rx("partial", isPartialRxSegment: true),
-            LogLine.Rx("OLD ERROR")
+            LogLine.Rx("partial", sequenceNumber: 1, isPartialRxSegment: true),
+            // A receive gap separates this complete line from the partial one.
+            LogLine.Rx("OLD ERROR", sequenceNumber: 3)
         });
         viewModel.SetHighlightRules(new[] { CreateErrorRule() });
         viewModel.AddRange(new[] { LogLine.Rx("NEW ERROR") });

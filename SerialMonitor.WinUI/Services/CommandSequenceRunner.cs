@@ -15,11 +15,15 @@ public sealed class CommandSequenceRunner : ICommandSequenceRunner
         Action<int> startingStep,
         Action<int> completedSteps,
         CancellationToken cancellationToken,
-        SequenceExecutionControl? control = null)
+        SequenceExecutionControl? control = null,
+        ICommandSequenceObserver? observer = null)
     {
         var steps = sequence.Steps.Where(step => step.IsEnabled).ToArray();
+        if (steps.Any(step => !Enum.IsDefined(step.Kind))) throw new InvalidOperationException("Invalid sequence step kind; nothing was sent.");
         if (steps.Length == 0)
             throw new InvalidOperationException("Sequence stopped: enable at least one step before running.");
+        if (observer is null && steps.Any(step => step.Kind == CommandSequenceStepKind.RxCheck))
+            throw new InvalidOperationException("RX Check requires a response observer; nothing was sent.");
         var total = checked(steps.Length * sequence.RepeatCount);
         var attemptsInSlice = 0;
         var sliceStarted = Stopwatch.GetTimestamp();
@@ -51,7 +55,15 @@ public sealed class CommandSequenceRunner : ICommandSequenceRunner
                         continue; // Readiness may have changed while paused.
                     cancellationToken.ThrowIfCancellationRequested();
                     startingStep(position);
-                    if (await send(step, cancellationToken))
+                    if (step.Kind == CommandSequenceStepKind.RxCheck)
+                    {
+                        await observer!.CheckReceiveAsync(position, step, cancellationToken);
+                        break;
+                    }
+                    if (observer is not null) await observer.BeforeSendAsync(position, step, cancellationToken);
+                    var sent = await send(step, cancellationToken);
+                    if (observer is not null) await observer.AfterSendAsync(sent, cancellationToken);
+                    if (sent)
                         break;
 
                     cancellationToken.ThrowIfCancellationRequested();
@@ -64,8 +76,9 @@ public sealed class CommandSequenceRunner : ICommandSequenceRunner
                 // Advance only on successful sends. An outage during this delay does
                 // not replay the command; the next iteration waits for reconnection.
                 completedSteps(position + 1);
-                if (step.DelayAfterMs > 0)
+                if (step.Kind == CommandSequenceStepKind.Tx && step.DelayAfterMs > 0)
                     await Task.Delay(step.DelayAfterMs, cancellationToken);
+                if (observer is not null) await observer.AfterStepAsync(cancellationToken);
             }
         }
         finally { control?.EndRun(); }

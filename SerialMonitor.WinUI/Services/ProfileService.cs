@@ -29,6 +29,7 @@ public sealed class ProfileService : IProfileService
     private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly Dictionary<string, Dictionary<string, InstanceInputHistory>> _historyBaselines = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _sequenceBaselines = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _sequenceBaselineOrder = [];
     private readonly Dictionary<string, string> _failedLoadDiskHashes = new(StringComparer.OrdinalIgnoreCase);
@@ -256,7 +257,9 @@ public sealed class ProfileService : IProfileService
                 await using var lease = await ProfileFileLease.AcquireAsync(path, cancellationToken);
                 _failedLoadDiskHashes.Remove(path);
                 var profile = await LoadCoreAsync(path, cancellationToken);
+                ProfileInputHistory.Apply(profile);
                 RememberSequenceBaseline(path, ProfileSequenceMerge.Snapshot(profile.CommandSequences));
+                _historyBaselines[path] = ProfileInputHistory.CapturePorts(profile);
                 return profile;
             }
             catch (OperationCanceledException) { throw; }
@@ -267,6 +270,7 @@ public sealed class ProfileService : IProfileService
                 Interlocked.Increment(ref _loadErrorCount);
                 RuntimeDiagnostics.RecordError("ProfileService.LoadAsync", ex);
                 var defaults = CreateDefaultProfile();
+                _historyBaselines.Remove(path);
                 RememberSequenceBaseline(path, ProfileSequenceMerge.Snapshot(defaults.CommandSequences));
                 return defaults;
             }
@@ -308,6 +312,14 @@ public sealed class ProfileService : IProfileService
         {
             var json = await File.ReadAllTextAsync(path, cancellationToken);
             var profile = JsonSerializer.Deserialize<AppProfile>(json, Options);
+            using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+            var rootPropertyNames = document.RootElement.ValueKind == JsonValueKind.Object
+                ? document.RootElement.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (profile is null && await TryReadProfileHashAsync(path, cancellationToken) is { } emptyHash)
                 _failedLoadDiskHashes[path] = emptyHash;
             var hasConfirmBeforeDisconnect =
@@ -319,11 +331,11 @@ public sealed class ProfileService : IProfileService
             var hasHexGroupTimeoutUserConfigured =
                 json.IndexOf(nameof(UiSettings.HexGroupTimeoutUserConfigured), StringComparison.OrdinalIgnoreCase) >= 0;
             var hasLogRules =
-                json.IndexOf(nameof(AppProfile.LogRules), StringComparison.OrdinalIgnoreCase) >= 0;
+                rootPropertyNames.Contains(nameof(AppProfile.LogRules));
             var hasEventRules =
-                json.IndexOf(nameof(AppProfile.EventRules), StringComparison.OrdinalIgnoreCase) >= 0;
+                rootPropertyNames.Contains(nameof(AppProfile.EventRules));
             var hasHighlightRules =
-                json.IndexOf(nameof(AppProfile.HighlightRules), StringComparison.OrdinalIgnoreCase) >= 0;
+                rootPropertyNames.Contains(nameof(AppProfile.HighlightRules));
             var hasSavedCommands =
                 json.IndexOf(nameof(AppProfile.SavedCommands), StringComparison.OrdinalIgnoreCase) >= 0;
 
@@ -418,7 +430,16 @@ public sealed class ProfileService : IProfileService
         }
     }
 
-    private async Task SaveCoreAsync(string path, AppProfile profile, CancellationToken cancellationToken, bool fileLeaseHeld = false)
+    public async Task SaveSequenceChangeAsync(string path, AppProfile profile, string sequenceName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sequenceName);
+        await _ioGate.WaitAsync(cancellationToken);
+        try { await SaveCoreAsync(path, profile, cancellationToken, requiredSequenceName: sequenceName); }
+        finally { _ioGate.Release(); }
+    }
+
+    private async Task SaveCoreAsync(string path, AppProfile profile, CancellationToken cancellationToken, bool fileLeaseHeld = false,
+        string? requiredSequenceName = null)
     {
         string? tempPath = null;
         string? backupPath = null;
@@ -427,9 +448,12 @@ public sealed class ProfileService : IProfileService
             path = Path.GetFullPath(path);
             await using var lease = fileLeaseHeld ? null : await ProfileFileLease.AcquireAsync(path, cancellationToken);
             var normalized = NormalizeProfile(profile, out _);
+            var localHistories = ProfileInputHistory.CapturePorts(normalized);
             var local = ProfileSequenceMerge.Clone(normalized.CommandSequences);
             var localBaseline = ProfileSequenceMerge.Snapshot(local);
-            var disk = await ReadCurrentSequencesAsync(path, cancellationToken);
+            var diskProfile = await ReadCurrentProfileAsync(path, cancellationToken);
+            var needsHistoryBackup = diskProfile is { PortHistoryMigrationVersion: < 1 };
+            var disk = diskProfile?.CommandSequences ?? [];
             var hasBaseline = _sequenceBaselines.TryGetValue(path, out var baseline);
             if (!hasBaseline && File.Exists(path))
             {
@@ -439,7 +463,23 @@ public sealed class ProfileService : IProfileService
             }
             baseline ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var merged = ProfileSequenceMerge.Merge(baseline, local, disk);
+            if (requiredSequenceName is not null)
+            {
+                localBaseline.TryGetValue(requiredSequenceName, out var intended);
+                ProfileSequenceMerge.Snapshot(merged).TryGetValue(requiredSequenceName, out var committed);
+                if (intended != committed)
+                    throw new ProfileConflictException("Sequence '" + requiredSequenceName + "' changed in another application instance. Reload the profile before explicitly saving it; no profile changes were written.");
+            }
             var persisted = ProfileForPersistence(normalized, merged);
+            if (diskProfile is not null) ProfileInputHistory.Prepare(diskProfile);
+            _historyBaselines.TryGetValue(path, out var historyBaseline);
+            persisted.PortHistories = ProfileInputHistory.Merge(historyBaseline, localHistories, diskProfile?.PortHistories);
+            persisted.PortHistoryMigrationVersion = 1;
+            persisted.LegacyInputHistory = diskProfile?.LegacyInputHistory ?? normalized.LegacyInputHistory;
+            persisted.InstanceHistories = diskProfile?.InstanceHistories ?? normalized.InstanceHistories;
+            persisted.ActiveHistoryPort = normalized.ActiveHistoryPort;
+            persisted.UiSettings = persisted.UiSettings.Clone();
+            ProfileInputHistory.Apply(persisted);
             NormalizeRuleSequenceTriggers(persisted.LogRules, merged, new List<string>());
             persisted.EventRules = CreateEventRulesFromLogRules(persisted.LogRules);
             var operationId = Guid.NewGuid().ToString("N");
@@ -459,19 +499,14 @@ public sealed class ProfileService : IProfileService
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            if (File.Exists(path))
-            {
-                File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(tempPath, path);
-            }
+            if (needsHistoryBackup) await BackupBeforePortHistoryMigrationAsync(path, cancellationToken);
+            await ProfileFileCommit.CommitAsync(tempPath, path, backupPath, cancellationToken);
 
             // The GUI still owns its submitted local list. Remembering the merged
             // disk list instead would turn the next stale save into a deletion of
             // remote additions (or a resurrection of remote deletions).
             RememberSequenceBaseline(path, localBaseline);
+            _historyBaselines[path] = localHistories;
             _failedLoadDiskHashes.Remove(path);
             LastError = null;
             LastStatus = $"Profile saved: {path}";
@@ -498,9 +533,9 @@ public sealed class ProfileService : IProfileService
         }
     }
 
-    private async Task<List<CommandSequence>> ReadCurrentSequencesAsync(string path, CancellationToken token)
+    private async Task<AppProfile?> ReadCurrentProfileAsync(string path, CancellationToken token)
     {
-        if (!File.Exists(path)) return [];
+        if (!File.Exists(path)) return null;
         try
         {
             await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
@@ -509,7 +544,8 @@ public sealed class ProfileService : IProfileService
                 ?? throw new InvalidDataException("The current profile cannot be read safely; no changes were written.");
             var sequences = current.CommandSequences ?? [];
             NormalizeCommandSequences(sequences, new List<string>());
-            return sequences;
+            current.CommandSequences = sequences;
+            return current;
         }
         catch (Exception ex) when (ex is JsonException or InvalidDataException)
         {
@@ -518,7 +554,7 @@ public sealed class ProfileService : IProfileService
             {
                 if (string.IsNullOrWhiteSpace(TryBackupBrokenProfile(path)))
                     throw new IOException("The unchanged broken profile could not be backed up; no changes were written.", ex);
-                return [];
+                return null;
             }
             throw new ProfileConflictException("The profile changed or became unreadable in another instance. Reload it before saving; no profile changes were written.");
         }
@@ -531,6 +567,7 @@ public sealed class ProfileService : IProfileService
         _sequenceBaselineOrder.Add(path);
         if (_sequenceBaselineOrder.Count <= 8) return;
         _sequenceBaselines.Remove(_sequenceBaselineOrder[0]);
+        _historyBaselines.Remove(_sequenceBaselineOrder[0]);
         _failedLoadDiskHashes.Remove(_sequenceBaselineOrder[0]);
         _sequenceBaselineOrder.RemoveAt(0);
     }
@@ -544,6 +581,22 @@ public sealed class ProfileService : IProfileService
             return Convert.ToHexString(await SHA256.HashDataAsync(file, token));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static async Task BackupBeforePortHistoryMigrationAsync(string path, CancellationToken token)
+    {
+        var original = await File.ReadAllBytesAsync(path, token);
+        var hash = Convert.ToHexString(SHA256.HashData(original));
+        var backup = path + ".before-port-history-" + hash[..16] + ".json";
+        if (File.Exists(backup)) return;
+        var temporary = backup + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(temporary, original, token);
+            token.ThrowIfCancellationRequested();
+            await ProfileFileCommit.MoveNewAsync(temporary, backup, token);
+        }
+        finally { TryDeleteFile(temporary); }
     }
 
     private static AppProfile ProfileForPersistence(AppProfile profile, List<CommandSequence> sequences) => new()
@@ -658,9 +711,10 @@ public sealed class ProfileService : IProfileService
             }
         }
 
+        var allRulesMissing = profile.LogRules is null && profile.EventRules is null && profile.HighlightRules is null;
         if (profile.EventRules is null)
         {
-            profile.EventRules = defaults.EventRules;
+            profile.EventRules = allRulesMissing ? defaults.EventRules : [];
             warnings.Add("Event rules were missing.");
         }
         else
@@ -671,7 +725,7 @@ public sealed class ProfileService : IProfileService
 
         if (profile.HighlightRules is null)
         {
-            profile.HighlightRules = defaults.HighlightRules;
+            profile.HighlightRules = allRulesMissing ? defaults.HighlightRules : [];
             warnings.Add("Highlight rules were missing.");
         }
         else
@@ -680,10 +734,10 @@ public sealed class ProfileService : IProfileService
             NormalizeHighlightRules(profile.HighlightRules, warnings);
         }
 
-        if (profile.LogRules is null || profile.LogRules.Count == 0)
+        if (profile.LogRules is null)
         {
             profile.LogRules = MergeLegacyRules(profile.EventRules, profile.HighlightRules);
-            if (profile.LogRules.Count == 0)
+            if (allRulesMissing)
             {
                 profile.LogRules = defaults.LogRules;
                 LastRuleMigrationResult = "Unified log rules were missing; default rules were applied.";
@@ -727,10 +781,10 @@ public sealed class ProfileService : IProfileService
             profile.SavedCommands.RemoveAll(command => command is null || string.IsNullOrWhiteSpace(command.CommandText));
             foreach (var command in profile.SavedCommands)
             {
-                command.CommandText = command.CommandText.Trim();
                 if (string.IsNullOrWhiteSpace(command.Name))
                 {
-                    command.Name = command.CommandText;
+                    // Normalize the display label without changing the wire payload.
+                    command.Name = command.CommandText.Trim();
                     warnings.Add("A saved command name was missing.");
                 }
                 else
@@ -1008,6 +1062,7 @@ public sealed class ProfileService : IProfileService
         }
 
         settings.LastSearchText ??= string.Empty;
+        settings.SearchHistory = ProfileInputHistory.NormalizeSearchHistory(settings.SearchHistory);
         settings.MarkerText = settings.MarkerText?.Trim() ?? string.Empty;
         settings.CuteBackgroundImagePath = NormalizeCuteBackgroundImagePath(
             settings.CuteBackgroundImagePath,
@@ -1153,7 +1208,6 @@ public sealed class ProfileService : IProfileService
                 continue;
             }
 
-            entry.CommandText = entry.CommandText.Trim();
             if (entry.LastSentTime == default)
             {
                 entry.LastSentTime = DateTimeOffset.Now;
@@ -1161,25 +1215,18 @@ public sealed class ProfileService : IProfileService
 
         }
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = history.Count - 1; i >= 0; i--)
-        {
-            if (!seen.Add(history[i].CommandText))
-            {
-                history.RemoveAt(i);
-                warnings.Add("Duplicate command history entries were removed.");
-            }
-        }
-
         var ordered = history
             .OrderByDescending(entry => entry.LastSentTime)
-            .Take(MaxCommandHistoryCount)
             .ToArray();
 
         history.Clear();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in ordered)
         {
-            history.Add(entry);
+            if (!seen.Add(entry.CommandText))
+                warnings.Add("Duplicate command history entries were removed.");
+            else if (history.Count < MaxCommandHistoryCount)
+                history.Add(entry);
         }
     }
 
@@ -1390,7 +1437,7 @@ public sealed class ProfileService : IProfileService
                 Name = string.IsNullOrWhiteSpace(eventRule.Name) ? eventRule.Keyword.Trim() : eventRule.Name.Trim(),
                 Keyword = eventRule.Keyword.Trim(),
                 Enabled = eventRule.Enabled,
-                UseForEvent = true,
+                UseForEvent = eventRule.ShowInEventList,
                 UseForHighlight = false,
                 UseAsViewFilter = false,
                 CaseSensitive = eventRule.CaseSensitive,
@@ -1452,8 +1499,12 @@ public sealed class ProfileService : IProfileService
 
     private static bool IsSameRuleIdentity(LogRule rule, HighlightRule highlightRule)
     {
-        return string.Equals(rule.Name?.Trim(), highlightRule.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(rule.Keyword?.Trim(), highlightRule.Keyword?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+        return !rule.UseForHighlight &&
+            string.Equals(rule.Name?.Trim(), highlightRule.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Keyword?.Trim(), highlightRule.Keyword?.Trim(),
+                rule.Mode == LogRuleMatchMode.Terminal && rule.CaseSensitive
+                    ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) &&
+            rule.MatchDirection == highlightRule.MatchDirection &&
             rule.CaseSensitive == highlightRule.CaseSensitive &&
             rule.Mode == highlightRule.Mode &&
             rule.Enabled == highlightRule.Enabled;
@@ -1463,7 +1514,7 @@ public sealed class ProfileService : IProfileService
     {
         return rules
             .Where(rule =>
-                (rule.UseForEvent || !string.IsNullOrWhiteSpace(rule.TriggerSequenceName)) &&
+                rule.RequiresEventDetection &&
                 !string.IsNullOrWhiteSpace(rule.Keyword))
             .Select(rule => new EventRule
             {
@@ -1560,15 +1611,19 @@ public sealed class ProfileService : IProfileService
             for (var stepIndex = sequence.Steps.Count - 1; stepIndex >= 0; stepIndex--)
             {
                 var step = sequence.Steps[stepIndex];
+                if (step is not null && (!Enum.IsDefined(step.Kind) || (step.Kind == CommandSequenceStepKind.RxCheck && string.IsNullOrEmpty(step.CommandText))))
+                    throw new InvalidDataException("Invalid RX Check or unsupported sequence step kind; the definition was not changed.");
                 if (step is null || string.IsNullOrEmpty(step.CommandText) ||
-                    (step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex) && string.IsNullOrWhiteSpace(step.CommandText)))
+                    (step.Kind == CommandSequenceStepKind.Tx && step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex) && string.IsNullOrWhiteSpace(step.CommandText)))
                 {
                     sequence.Steps.RemoveAt(stepIndex);
                     warnings.Add("A command sequence step was missing a command.");
                     continue;
                 }
 
-                if (step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex)) step.CommandText = step.CommandText.Trim();
+                if (!Enum.IsDefined(step.Kind)) throw new InvalidDataException("Invalid sequence step kind.");
+                if (step.Kind == CommandSequenceStepKind.RxCheck && step.CommandText.Length > 4096) throw new InvalidDataException("RX Check pattern exceeds 4096 characters.");
+                if (step.Kind == CommandSequenceStepKind.Tx && step.TxMode is not (TxSendMode.Terminal or TxSendMode.Hex)) step.CommandText = step.CommandText.Trim();
                 step.Name = string.IsNullOrWhiteSpace(step.Name) ? null : step.Name.Trim();
                 step.Comment = string.IsNullOrWhiteSpace(step.Comment) ? null : step.Comment.Trim();
                 if (step.DelayAfterMs is < 0 or > MaxSequenceDelayAfterMs)
@@ -1602,7 +1657,14 @@ public sealed class ProfileService : IProfileService
                         warnings.Add("An invalid command sequence response expectation was removed.");
                     }
                 }
+                // Never silently remove a live condition and send without checking.
+                if (step.ResponseCheck is { } responseCheck)
+                {
+                    try { responseCheck.Validate(); }
+                    catch (ArgumentException ex) { throw new InvalidDataException("Invalid sequence ResponseCheck: " + ex.Message, ex); }
+                }
             }
+            SerialMonitor.WinUI.Infrastructure.CommandSequenceMigration.ExpandResponseChecks(sequence);
         }
 
         NormalizeDuplicateCommandSequenceNames(sequences, warnings);

@@ -40,7 +40,19 @@ public sealed partial class LogViewModel : ViewModelBase
     private readonly record struct RetainedLogLine(
         long LineId,
         LogLine Line,
-        LogRuleMatcher.CompiledHighlightRule[] HighlightRules);
+        LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
+        string HighlightPrefix = "", string FilterPrefix = "", long PreviousRxPosition = 0,
+        LogRuleMatcher.CompiledHighlightRule? TerminalLineHighlight = null, long TerminalLineStart = 0)
+    {
+        // Immutable receipt-time suffixes survive screen eviction/reformatting.
+        // Their size is bounded by keyword lengths and the retained byte budget.
+        public long EstimatedBytes => LogViewMemoryPolicy.EstimateRetainedBytes(Line) +
+            2L * HighlightPrefix.Length +
+            (ReferenceEquals(HighlightPrefix, FilterPrefix) ? 0 : 2L * FilterPrefix.Length);
+    }
+
+    private readonly record struct PreparedRuleLine(RetainedLogLine Source, LogLine Line,
+        LogRuleMatcher.CompiledHighlightRule? Highlight, bool Visible, bool BreakBefore, string MatchPrefix);
 
     private const string AnsiReset = "\u001b[0m";
     private const int SnapshotPreallocationMaxChars = 64 * 1024 * 1024;
@@ -68,11 +80,15 @@ public sealed partial class LogViewModel : ViewModelBase
 
     private int _capacity;
     private readonly Queue<RetainedLogLine> _retainedLines = new();
+    // 1 starts a line; 2 starts one with a restored hidden prefix. -1 appends
+    // a visible RX fragment; 0 is hidden. Positive entries each count as ONE line.
     private Queue<int> _retainedVisibleLineContributions = new();
     private Queue<VisibleLine> _visibleLines = new();
     private VisibleLine? _lastVisibleLine;
     private LogRuleMatcher.CompiledHighlightRule[] _highlightRules = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
     private LogRuleMatcher.CompiledHighlightRule[] _viewFilters = Array.Empty<LogRuleMatcher.CompiledHighlightRule>();
+    private StreamingHighlightRuleMatcher _highlightMatcher = new();
+    private StreamingHighlightRuleMatcher _filterMatcher = new();
     private bool _showTimestampInLogView = true;
     private bool _showRxTxDirectionPrefixInLogView = true;
     private TimestampDisplayFormat _timestampDisplayFormat = TimestampDisplayFormat.DateTimeMilliseconds;
@@ -97,15 +113,7 @@ public sealed partial class LogViewModel : ViewModelBase
     private int _invalidCompiledRuleCount;
     private long _nextLineId;
 
-    public LogViewModel(int capacity)
-    {
-        if (capacity <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than zero.");
-        }
-
-        _capacity = capacity;
-    }
+    public LogViewModel(int capacity) : this(capacity, LogViewMemoryPolicy.Default) { }
 
     public event EventHandler<LogTextBatch>? TextBatchAppended;
 
@@ -312,12 +320,36 @@ public sealed partial class LogViewModel : ViewModelBase
         var highlightedLines = 0;
         var formattingErrors = 0;
         var appendedVisibleLineCount = 0;
+        var memoryDropped = 0;
         foreach (var line in lines)
         {
-            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules);
+            var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules,
+                PreviousRxPosition: _highlightMatcher.LastRxPosition);
+            var prepared = PrepareRuleLine(retainedLine, captureContext: true, appendedText: builder);
+            var terminalHighlight = CaptureTerminalHighlightContext();
+            retainedLine = prepared.Source;
+            var retainedBytes = retainedLine.EstimatedBytes;
+            if (retainedBytes > _memoryPolicy.RetainedBytes)
+            {
+                if (line.Direction == LogDirection.Rx && (prepared.BreakBefore || !line.IsPartialRxSegment))
+                    CompleteActivePartialRxVisualLine(builder);
+                memoryDropped++;
+                continue;
+            }
+            var evicted = ReserveScreenMemory(retainedLine);
+            if (evicted > 0)
+            {
+                memoryDropped += evicted;
+                builder.Clear();
+                prepared = RestoreEvictedMatchPrefix(prepared);
+                RestoreTerminalHighlightContext(terminalHighlight);
+            }
             _retainedLines.Enqueue(retainedLine);
+            _retainedMemoryBytes += retainedBytes;
             TrackPendingFilterLine(retainedLine);
             var visibleContribution = 0;
+            if (prepared.BreakBefore && CompleteActivePartialRxVisualLine(builder))
+                appendedVisibleLineCount++;
             if (line.IsPartialRxTerminator)
             {
                 if (CompleteActivePartialRxVisualLine(builder))
@@ -329,15 +361,24 @@ public sealed partial class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilters(line, _viewFilters))
+            if (!prepared.Visible)
             {
+                if (line.Direction == LogDirection.Rx && !line.IsPartialRxSegment &&
+                    CompleteActivePartialRxVisualLine(builder)) appendedVisibleLineCount++;
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
             }
 
-            if (ShouldMergePartialRxVisually(line))
+            if (ShouldMergePartialRxVisually(line) ||
+                (line.Direction == LogDirection.Rx && !prepared.BreakBefore && _partialRxVisualLineActive))
             {
-                var formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                var formattedPartial = FormatPartialRxVisibleSegment(prepared.Line, prepared.Highlight);
+                if (BreakLongScreenLine(formattedPartial.DisplayLine.Length, formattedPartial.SearchableLine.Length, builder))
+                {
+                    appendedVisibleLineCount++;
+                    formattedPartial = FormatPartialRxVisibleSegment(prepared.Line, prepared.Highlight);
+                }
+                if (formattedPartial.IsHighlighted) highlightedLines++;
                 if (formattedPartial.HasFormattingError)
                 {
                     formattingErrors++;
@@ -353,6 +394,7 @@ public sealed partial class LogViewModel : ViewModelBase
                         line.Direction);
                     builder.Append(appendedPartialDisplayText);
                     Interlocked.Increment(ref _partialRxAppendInPlaceCount);
+                    visibleContribution = -1;
                 }
                 else
                 {
@@ -366,10 +408,12 @@ public sealed partial class LogViewModel : ViewModelBase
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     builder.Append(taggedPartialDisplayLine);
                     _partialRxVisualLength = formattedPartial.RawTextLength;
-                    visibleContribution = 1;
+                    visibleContribution = ReferenceEquals(prepared.Line, line) ? 1 : 2;
                 }
 
                 appendedVisibleLineCount++;
+                if (!line.IsPartialRxSegment && CompleteActivePartialRxVisualLine(builder))
+                    appendedVisibleLineCount++;
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
             }
@@ -379,7 +423,7 @@ public sealed partial class LogViewModel : ViewModelBase
                 appendedVisibleLineCount++;
             }
 
-            var formatted = FormatVisibleLine(line, retainedLine.HighlightRules);
+            var formatted = FormatVisibleLine(prepared.Line, prepared.Highlight);
             if (formatted.HasFormattingError)
             {
                 formattingErrors++;
@@ -395,7 +439,7 @@ public sealed partial class LogViewModel : ViewModelBase
                 hasLineEnding: true);
             builder.Append(taggedDisplayLine);
             appendedVisibleLineCount++;
-            visibleContribution = 1;
+            visibleContribution = ReferenceEquals(prepared.Line, line) ? 1 : 2;
 
             if (formatted.IsHighlighted)
             {
@@ -411,17 +455,26 @@ public sealed partial class LogViewModel : ViewModelBase
             MaxRetainedLineCountSeen = retainedCount;
         }
 
+        var versionBeforeTrim = _visibleRebuildVersion;
         var droppedCount = TrimRetainedLinesToCapacity(out var trimCharacterCount);
 
         DisplayedLineCount += lines.Count;
-        DroppedVisibleLineCount += droppedCount;
+        DroppedVisibleLineCount += droppedCount + memoryDropped;
         HighlightedLineCount += highlightedLines;
         XtermFormattingErrorCount += formattingErrors;
         RaiseVisibleCountProperties();
 
-        if (appendedVisibleLineCount > 0)
+        if (memoryDropped > 0 || versionBeforeTrim != _visibleRebuildVersion)
         {
-            TextBatchAppended?.Invoke(this, new LogTextBatch(builder.ToString(), trimCharacterCount, appendedVisibleLineCount, DisplayedLineCount));
+            // A trim may include records appended earlier in this same batch.
+            // Resynchronize from bounded history instead of trimming text that
+            // has not reached the live terminal yet. Expiring a restored filter
+            // prefix can also change payload offsets within a retained line.
+            TextRebuilt?.Invoke(this, EventArgs.Empty);
+        }
+        else if (appendedVisibleLineCount > 0 || builder.Length > 0)
+        {
+            TextBatchAppended?.Invoke(this, new LogTextBatch(builder.ToString(), trimCharacterCount, Math.Max(1, appendedVisibleLineCount), DisplayedLineCount));
         }
     }
 
@@ -545,8 +598,7 @@ public sealed partial class LogViewModel : ViewModelBase
             {
                 targetLineId = retained.LineId;
             }
-            else if (activePartialLineId > 0 && ShouldMergePartialRxVisually(retained.Line) &&
-                     IsVisibleByFilters(retained.Line, _viewFilters, recordErrors: false))
+            else if (activePartialLineId > 0 && contribution < 0)
             {
                 targetLineId = activePartialLineId;
             }
@@ -583,6 +635,9 @@ public sealed partial class LogViewModel : ViewModelBase
     public void Clear()
     {
         _visibleRebuildVersion++;
+        _highlightMatcher.Reset();
+        _filterMatcher.Reset();
+        ResetTerminalLineHighlight();
         if (_retainedLines.Count == 0 &&
             _visibleLines.Count == 0)
         {
@@ -590,6 +645,7 @@ public sealed partial class LogViewModel : ViewModelBase
         }
 
         _retainedLines.Clear();
+        _retainedMemoryBytes = 0;
         _retainedVisibleLineContributions.Clear();
         _visibleLines.Clear();
         _retainedLines.TrimExcess();
@@ -606,7 +662,18 @@ public sealed partial class LogViewModel : ViewModelBase
 
     private void RebuildVisibleLinesFromRetained(CancellationToken cancellationToken = default)
     {
+        // Re-admit immutable references while formatting so a hidden history
+        // cannot allocate its entire expanded projection before being trimmed.
+        var retained = _retainedLines.ToArray();
+        var liveHighlight = _highlightMatcher;
+        var liveFilter = _filterMatcher;
+        var liveTerminalHighlight = CaptureTerminalHighlightContext();
+        _retainedLines.Clear();
+        _retainedMemoryBytes = 0;
         _visibleRebuildVersion++;
+        _highlightMatcher = new();
+        _filterMatcher = new();
+        ResetTerminalLineHighlight();
         _visibleLines.Clear();
         _lastVisibleLine = null;
         _retainedVisibleLineContributions.Clear();
@@ -615,7 +682,11 @@ public sealed partial class LogViewModel : ViewModelBase
         _partialRxVisualLength = 0;
         ClearActivePartialRxBuilders();
 
-        AppendRebuiltLines(_retainedLines, cancellationToken);
+        AppendRebuiltLines(retained, cancellationToken);
+        DroppedVisibleLineCount += TrimScreenMemoryAfterRebuild();
+        if (_highlightMatcher.LastRxPosition < liveHighlight.LastRxPosition) _highlightMatcher = liveHighlight;
+        RestoreTerminalHighlightContext(liveTerminalHighlight);
+        _filterMatcher = _filterMatcher.WithLatestContext(liveFilter, liveHighlight, _viewFilters, ActiveRuleMode);
         RaiseVisibleCountProperties();
     }
 
@@ -626,7 +697,14 @@ public sealed partial class LogViewModel : ViewModelBase
         {
             cancellationToken.ThrowIfCancellationRequested();
             var line = retainedLine.Line;
+            var evicted = ReserveScreenMemory(retainedLine);
+            DroppedVisibleLineCount += evicted;
+            _retainedLines.Enqueue(retainedLine);
+            _retainedMemoryBytes += retainedLine.EstimatedBytes;
             var visibleContribution = 0;
+            var prepared = PrepareRuleLine(retainedLine);
+            if (evicted > 0) prepared = RestoreEvictedMatchPrefix(prepared);
+            if (prepared.BreakBefore) CompleteActivePartialRxVisualLine();
             if (line.IsPartialRxTerminator)
             {
                 CompleteActivePartialRxVisualLine();
@@ -634,15 +712,20 @@ public sealed partial class LogViewModel : ViewModelBase
                 continue;
             }
 
-            if (!IsVisibleByFilters(line, _viewFilters))
+            if (!prepared.Visible)
             {
+                if (line.Direction == LogDirection.Rx && !line.IsPartialRxSegment)
+                    CompleteActivePartialRxVisualLine();
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
             }
 
-            if (ShouldMergePartialRxVisually(line))
+            if (ShouldMergePartialRxVisually(line) ||
+                (line.Direction == LogDirection.Rx && !prepared.BreakBefore && _partialRxVisualLineActive))
             {
-                var formattedPartial = FormatPartialRxVisibleSegment(line, retainedLine.HighlightRules);
+                var formattedPartial = FormatPartialRxVisibleSegment(prepared.Line, prepared.Highlight);
+                if (BreakLongScreenLine(formattedPartial.DisplayLine.Length, formattedPartial.SearchableLine.Length))
+                    formattedPartial = FormatPartialRxVisibleSegment(prepared.Line, prepared.Highlight);
                 if (formattedPartial.HasFormattingError)
                 {
                     formattingErrors++;
@@ -656,6 +739,7 @@ public sealed partial class LogViewModel : ViewModelBase
                         retainedLine.LineId,
                         line.Timestamp,
                         line.Direction);
+                    visibleContribution = -1;
                 }
                 else
                 {
@@ -669,15 +753,16 @@ public sealed partial class LogViewModel : ViewModelBase
                     BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
                     _partialRxVisualLineActive = true;
                     _partialRxVisualLength = formattedPartial.RawTextLength;
-                    visibleContribution = 1;
+                    visibleContribution = ReferenceEquals(prepared.Line, line) ? 1 : 2;
                 }
 
+                if (!line.IsPartialRxSegment) CompleteActivePartialRxVisualLine();
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
                 continue;
             }
 
             CompleteActivePartialRxVisualLine();
-            var formatted = FormatVisibleLine(line, retainedLine.HighlightRules);
+            var formatted = FormatVisibleLine(prepared.Line, prepared.Highlight);
             if (formatted.HasFormattingError)
             {
                 formattingErrors++;
@@ -691,7 +776,7 @@ public sealed partial class LogViewModel : ViewModelBase
                 line.Timestamp,
                 line.Direction,
                 hasLineEnding: true);
-            _retainedVisibleLineContributions.Enqueue(1);
+            _retainedVisibleLineContributions.Enqueue(ReferenceEquals(prepared.Line, line) ? 1 : 2);
         }
 
         XtermFormattingErrorCount += formattingErrors;
@@ -701,35 +786,42 @@ public sealed partial class LogViewModel : ViewModelBase
         }
     }
 
-    private int TrimRetainedLinesToCapacity(out int trimCharacterCount)
+    private int TrimRetainedLinesToCapacity(out int trimCharacterCount, bool preserveRuleState = false)
     {
         var droppedCount = 0;
         var removedVisibleLineCount = 0;
         var previousVisibleCharacterCount = VisibleCharacterCount;
+        var projectedVisibleCharacterCount = previousVisibleCharacterCount;
+        using var visibleLines = _visibleLines.GetEnumerator();
         var needsRebuild = _retainedVisibleLineContributions.Count != _retainedLines.Count;
         var trimMaySplitPartialLine = false;
         // Keep the retained prefix on a complete visual-line boundary. If the
         // capacity falls inside a partial RX group, discard the rest of that
         // oldest group instead of rebuilding every retained line.
-        while (_retainedLines.Count > _capacity ||
+        while (_retainedLines.Count > _capacity || NeedsMemoryTrim(projectedVisibleCharacterCount) ||
                (trimMaySplitPartialLine && _retainedLines.Count > 0))
         {
-            if (_retainedLines.Count <= _capacity &&
+            if (_retainedLines.Count <= _capacity && !NeedsMemoryTrim(projectedVisibleCharacterCount) &&
                 trimMaySplitPartialLine &&
                 _retainedVisibleLineContributions.Count > 0 &&
                 _retainedVisibleLineContributions.Peek() > 0)
             {
+                needsRebuild |= _retainedVisibleLineContributions.Peek() == 2;
                 trimMaySplitPartialLine = false;
                 break;
             }
 
-            var removedLine = _retainedLines.Dequeue().Line;
+            var removed = _retainedLines.Dequeue();
+            var removedLine = removed.Line;
+            _retainedMemoryBytes -= removed.EstimatedBytes;
             var visibleContribution = _retainedVisibleLineContributions.Count > 0
                 ? _retainedVisibleLineContributions.Dequeue()
                 : 0;
 
             droppedCount++;
-            removedVisibleLineCount += visibleContribution;
+            removedVisibleLineCount += visibleContribution > 0 ? 1 : 0;
+            if (visibleContribution > 0 && visibleLines.MoveNext())
+                projectedVisibleCharacterCount -= visibleLines.Current.Length;
             if (removedLine.IsPartialRxSegment)
             {
                 trimMaySplitPartialLine = true;
@@ -760,7 +852,19 @@ public sealed partial class LogViewModel : ViewModelBase
 
             if (needsRebuild)
             {
+                var highlightMatcher = _highlightMatcher;
+                var filterMatcher = _filterMatcher;
+                if (preserveRuleState)
+                {
+                    _highlightMatcher = new();
+                    _filterMatcher = new();
+                }
                 RebuildVisibleLinesFromRetained();
+                if (preserveRuleState)
+                {
+                    _highlightMatcher = highlightMatcher;
+                    _filterMatcher = filterMatcher;
+                }
             }
         }
 
@@ -778,6 +882,7 @@ public sealed partial class LogViewModel : ViewModelBase
         }
 
         _visibleCharacterCount = Math.Max(0, _visibleCharacterCount - removedLine.Length);
+        ForgetTerminalHighlightLine(removedLine.Id);
         if (ReferenceEquals(removedLine, _partialRxLine))
         {
             _partialRxVisualLineActive = false;
@@ -821,6 +926,7 @@ public sealed partial class LogViewModel : ViewModelBase
         _lastVisibleLine = new VisibleLine(displayLine, searchableLine, payloadStart, lineId, timestampUnixMilliseconds, direction, hasLineEnding);
         _visibleLines.Enqueue(_lastVisibleLine);
         _visibleCharacterCount += _lastVisibleLine.Length;
+        TrackTerminalHighlightLine(_lastVisibleLine);
         return taggedDisplayLine;
     }
 
@@ -965,9 +1071,9 @@ public sealed partial class LogViewModel : ViewModelBase
             line.Direction == LogDirection.Rx;
     }
 
-    private (string DisplayLine, string SearchableLine, int PayloadStart, int RawTextLength, bool HasFormattingError) FormatPartialRxVisibleSegment(
+    private (string DisplayLine, string SearchableLine, int PayloadStart, int RawTextLength, bool HasFormattingError, bool IsHighlighted) FormatPartialRxVisibleSegment(
         LogLine line,
-        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules)
+        LogRuleMatcher.CompiledHighlightRule? highlightRule)
     {
         try
         {
@@ -980,11 +1086,9 @@ public sealed partial class LogViewModel : ViewModelBase
                 }
 
                 var searchableText = text;
-                var displayText = _rxDisplayMode == RxDisplayMode.Terminal &&
-                    TryFormatTerminalBracketGroups(text, payloadStart: 0, baseColor: null, out var bracketText)
-                        ? bracketText
-                        : text;
-                return (displayText, searchableText, 0, searchableText.Length, false);
+                var formatted = FormatXtermDisplayLine(line, highlightRule, text, _rxDisplayMode, 0);
+                return (formatted.Text, searchableText, 0, searchableText.Length,
+                    formatted.HasFormattingError, formatted.IsHighlighted);
             }
 
             var searchableLine = FormatPlainSafeDisplayLine(
@@ -995,13 +1099,13 @@ public sealed partial class LogViewModel : ViewModelBase
                 _rxDisplayMode,
                 out var payloadStart,
                 formattedText: text);
-            (var displayLine, _, var hasFormattingError) = FormatXtermDisplayLine(
+            (var displayLine, var highlighted, var hasFormattingError) = FormatXtermDisplayLine(
                 line,
-                highlightRules,
+                highlightRule,
                 searchableLine,
                 _rxDisplayMode,
                 payloadStart);
-            return (displayLine, searchableLine, payloadStart, text.Length, hasFormattingError);
+            return (displayLine, searchableLine, payloadStart, text.Length, hasFormattingError, highlighted);
         }
         catch
         {
@@ -1015,13 +1119,13 @@ public sealed partial class LogViewModel : ViewModelBase
                     _timestampDisplayFormat,
                     _rxDisplayMode,
                     out payloadStart);
-            return (fallback, fallback, payloadStart, line.Text.Length, true);
+            return (fallback, fallback, payloadStart, line.Text.Length, true, false);
         }
     }
 
     private (string DisplayLine, string SearchableLine, int PayloadStart, bool IsHighlighted, bool HasFormattingError) FormatVisibleLine(
         LogLine line,
-        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules)
+        LogRuleMatcher.CompiledHighlightRule? highlightRule)
     {
         string displayLine;
         string searchableLine;
@@ -1039,7 +1143,7 @@ public sealed partial class LogViewModel : ViewModelBase
                 out payloadStart);
             (displayLine, isHighlighted, hasFormattingError) = FormatXtermDisplayLine(
                 line,
-                highlightRules,
+                highlightRule,
                 searchableLine,
                 _rxDisplayMode,
                 payloadStart);
@@ -1061,50 +1165,49 @@ public sealed partial class LogViewModel : ViewModelBase
         return (displayLine, searchableLine, payloadStart, isHighlighted, hasFormattingError);
     }
 
-    private bool IsVisibleByFilters(
-        LogLine line,
-        LogRuleMatcher.CompiledHighlightRule[] viewFilters,
-        bool recordErrors = true)
+    private LogRuleMatchMode ActiveRuleMode =>
+        _rxDisplayMode == RxDisplayMode.Hex ? LogRuleMatchMode.Hex : LogRuleMatchMode.Terminal;
+
+    private PreparedRuleLine PrepareRuleLine(RetainedLogLine retained, bool captureContext = false,
+        StringBuilder? appendedText = null)
     {
-        if (viewFilters.Length == 0)
-        {
-            return true;
-        }
-
-        foreach (var viewFilter in viewFilters)
-        {
-            try
+        var highlight = _highlightMatcher.Evaluate(retained.Line, retained.HighlightRules, ActiveRuleMode,
+            retained.HighlightPrefix, retained.LineId, retained.PreviousRxPosition);
+        if (ActiveRuleMode == LogRuleMatchMode.Terminal && retained.Line.Direction == LogDirection.Rx &&
+            _terminalLineRules is not null && !ReferenceEquals(_terminalLineRules, retained.HighlightRules))
+            highlight = highlight with { BreakBefore = true };
+        var filter = _filterMatcher.Evaluate(retained.Line, _viewFilters, ActiveRuleMode,
+            retained.FilterPrefix, retained.LineId, retained.PreviousRxPosition);
+        var lineHighlight = ResolveTerminalLineHighlight(retained, highlight, appendedText);
+        if (captureContext)
+            retained = retained with
             {
-                var matched = IsRuleMatch(line, viewFilter, _rxDisplayMode, out var matchError);
-                if (!string.IsNullOrWhiteSpace(matchError))
-                {
-                    if (recordErrors)
-                    {
-                        ViewFilterMatchErrorCount++;
-                    }
-                    continue;
-                }
-
-                if (matched)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-                if (recordErrors)
-                {
-                    ViewFilterMatchErrorCount++;
-                }
-            }
-        }
-
-        return false;
+                HighlightPrefix = highlight.ContextPrefix,
+                FilterPrefix = filter.ContextPrefix.Length > highlight.ContextPrefix.Length
+                    ? filter.ContextPrefix : highlight.ContextPrefix,
+                TerminalLineHighlight = ActiveRuleMode == LogRuleMatchMode.Terminal && retained.Line.Direction == LogDirection.Rx
+                    ? lineHighlight : null,
+                TerminalLineStart = ActiveRuleMode == LogRuleMatchMode.Terminal && retained.Line.Direction == LogDirection.Rx
+                    ? _terminalHighlightStart : 0
+            };
+        var visibleLine = string.IsNullOrEmpty(filter.HiddenPrefix)
+            ? retained.Line
+            : StreamingHighlightRuleMatcher.WithText(retained.Line, filter.HiddenPrefix + retained.Line.Text);
+        return new(retained, visibleLine, lineHighlight, _viewFilters.Length == 0 || filter.Rule is not null,
+            highlight.BreakBefore || (_viewFilters.Length > 0 && filter.BreakBefore), filter.MatchPrefix);
     }
+
+    private PreparedRuleLine RestoreEvictedMatchPrefix(PreparedRuleLine prepared) =>
+        _viewFilters.Length == 0 || prepared.MatchPrefix.Length == 0 ? prepared : prepared with
+        {
+            Line = StreamingHighlightRuleMatcher.WithText(prepared.Source.Line,
+                prepared.MatchPrefix + prepared.Source.Line.Text),
+            BreakBefore = true
+        };
 
     private static (string Text, bool IsHighlighted, bool HasFormattingError) FormatXtermDisplayLine(
         LogLine line,
-        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules,
+        LogRuleMatcher.CompiledHighlightRule? matchedRule,
         string plainLine,
         RxDisplayMode rxDisplayMode,
         int payloadStart)
@@ -1121,7 +1224,6 @@ public sealed partial class LogViewModel : ViewModelBase
             return ($"{AnsiGreen}{plainLine}{AnsiReset}", true, false);
         }
 
-        var matchedRule = ResolveHighlightRule(line, highlightRules, rxDisplayMode);
         if (matchedRule is not null)
         {
             if (TryBuildAnsiColor(matchedRule.Rule, out var ruleColor))
@@ -1153,7 +1255,7 @@ public sealed partial class LogViewModel : ViewModelBase
             : (plainLine, false, false);
     }
 
-    private static string FormatPlainSafeDisplayLine(
+    private string FormatPlainSafeDisplayLine(
         LogLine line,
         bool showTimestamp,
         bool showRxTxDirectionPrefix,
@@ -1234,17 +1336,17 @@ public sealed partial class LogViewModel : ViewModelBase
             ? timestampDisplayFormat
             : TimestampDisplayFormat.DateTimeMilliseconds;
 
-    private static string FormatDisplayText(LogLine line, RxDisplayMode rxDisplayMode)
+    private string FormatDisplayText(LogLine line, RxDisplayMode rxDisplayMode)
     {
         if (line.Direction != LogDirection.Rx)
         {
-            return SanitizeForXtermText(line.Text, preserveTabs: true);
+            return SanitizeForXtermText(_memoryPolicy.Preview(line.Text), preserveTabs: true);
         }
 
         return rxDisplayMode switch
         {
-            RxDisplayMode.Hex => HexFormatter.Format(line.RawBytes),
-            _ => SanitizeForXtermText(line.Text, preserveTabs: true)
+            RxDisplayMode.Hex => _memoryPolicy.HexPreview(line.RawBytes),
+            _ => SanitizeForXtermText(_memoryPolicy.Preview(line.Text), preserveTabs: true)
         };
     }
 
@@ -1253,40 +1355,6 @@ public sealed partial class LogViewModel : ViewModelBase
         return mode == RxDisplayMode.Hex
             ? RxDisplayMode.Hex
             : RxDisplayMode.Terminal;
-    }
-
-    private static LogRuleMatcher.CompiledHighlightRule? ResolveHighlightRule(
-        LogLine line,
-        IEnumerable<LogRuleMatcher.CompiledHighlightRule> highlightRules,
-        RxDisplayMode rxDisplayMode)
-    {
-        LogRuleMatcher.CompiledHighlightRule? bestMatch = null;
-        foreach (var rule in highlightRules)
-        {
-            if (!IsRuleMatch(line, rule, rxDisplayMode, out _))
-            {
-                continue;
-            }
-
-            if (bestMatch is null || rule.Rule.Priority > bestMatch.Rule.Priority)
-            {
-                bestMatch = rule;
-            }
-        }
-
-        return bestMatch;
-    }
-
-    private static bool IsRuleMatch(
-        LogLine line,
-        LogRuleMatcher.CompiledHighlightRule rule,
-        RxDisplayMode rxDisplayMode,
-        out string? error)
-    {
-        var activeMode = NormalizeRxDisplayMode(rxDisplayMode) == RxDisplayMode.Hex
-            ? LogRuleMatchMode.Hex
-            : LogRuleMatchMode.Terminal;
-        return LogRuleMatcher.IsMatch(line, rule, activeMode, out error);
     }
 
     private static HighlightRule CloneHighlightRule(HighlightRule rule)

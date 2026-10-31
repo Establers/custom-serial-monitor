@@ -12,6 +12,7 @@ $pluginRoot = Join-Path $repoRoot 'plugins\serial-monitor'
 $skillSource = Join-Path $repoRoot 'skills\serial-monitor-control'
 $skillTarget = Join-Path $pluginRoot 'skills\serial-monitor-control'
 $marketplaceSource = Join-Path $repoRoot '.claude-plugin\marketplace.json'
+$codexMarketplaceSource = Join-Path $repoRoot '.agents\plugins\marketplace.json'
 $excludedNames = @('serial-monitor.local.json', '.serial-monitor-skill.json')
 $binaryExtensions = @('.exe', '.dll', '.pdb', '.bin')
 $utf8 = [Text.UTF8Encoding]::new($false)
@@ -85,9 +86,16 @@ if (-not (Test-SameFile (Join-Path $repoRoot 'LICENSE') $licenseDestination)) {
 $manifest = [IO.File]::ReadAllText((Join-Path $pluginRoot 'plugin.json')) | ConvertFrom-Json
 $marketplace = [IO.File]::ReadAllText($marketplaceSource) | ConvertFrom-Json
 $compatibility = [IO.File]::ReadAllText((Join-Path $pluginRoot 'compatibility.json')) | ConvertFrom-Json
+$codexMarketplace = [IO.File]::ReadAllText($codexMarketplaceSource) | ConvertFrom-Json
 if ($manifest.name -ne 'serial-monitor' -or $marketplace.name -ne 'serial-monitor-tools') { throw 'Unexpected plugin or marketplace identity.' }
 if ($manifest.version -ne $compatibility.pluginVersion -or $manifest.version -ne $marketplace.plugins[0].version) {
     throw 'Plugin, marketplace and compatibility versions must match.'
+}
+if ($codexMarketplace.name -ne $marketplace.name -or @($codexMarketplace.plugins).Count -ne 1 -or
+    $codexMarketplace.plugins[0].name -ne $manifest.name -or
+    $codexMarketplace.plugins[0].source.source -ne 'local' -or
+    $codexMarketplace.plugins[0].source.path -ne './plugins/serial-monitor') {
+    throw 'The native Codex marketplace must reference the same local plugin as the portable marketplace.'
 }
 foreach ($relative in @('.codex-plugin\plugin.json', '.claude-plugin\plugin.json')) {
     $overlay = [IO.File]::ReadAllText((Join-Path $pluginRoot $relative)) | ConvertFrom-Json
@@ -122,6 +130,8 @@ if (Test-Path -LiteralPath $stageRoot) {
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $stageRoot '.claude-plugin') | Out-Null
 Copy-Item -LiteralPath $marketplaceSource -Destination (Join-Path $stageRoot '.claude-plugin\marketplace.json') -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $stageRoot '.agents\plugins') | Out-Null
+Copy-Item -LiteralPath $codexMarketplaceSource -Destination (Join-Path $stageRoot '.agents\plugins\marketplace.json') -Force
 foreach ($file in $pluginFiles) {
     $relative = $file.FullName.Substring($pluginRoot.TrimEnd('\', '/').Length + 1)
     $destination = Assert-ChildPath (Join-Path $stageRoot ('plugins\serial-monitor\' + $relative)) $stageRoot
@@ -155,7 +165,7 @@ custom executable paths, and migration from standalone skill/MCP registrations.
 
 Local marketplace name: serial-monitor-tools
 Plugin name: serial-monitor
-Marketplace root: this directory (the parent of .claude-plugin and plugins).
+Marketplace root: this directory (the parent of .agents, .claude-plugin and plugins).
 
 The application installer carries the same source under its agent-plugin folder.
 No plugin is automatically installed or registered in an AI client by app setup.

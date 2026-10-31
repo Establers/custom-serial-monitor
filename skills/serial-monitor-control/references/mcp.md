@@ -18,7 +18,7 @@ running GUI.
 | `mode` | `serial_get_status` | `instanceId`; read status `mode` |
 | `mode --set terminal\|hex` | `serial_set_mode` | `instanceId`, `mode`: `terminal` or `hex` |
 | `ports` | `serial_list_ports` | `instanceId` |
-| `commands` | `serial_list_commands` | `instanceId` |
+| `commands` | `serial_list_commands` | `instanceId`, `offset`, `limit` (1..100); follow `nextOffset` while `hasMore` |
 | `connect` | `serial_connect` | `instanceId`, `port`, `baudRate` |
 | `configure` | `serial_configure` | `instanceId`, optional expected `port`, `baudRate`, `byteTimeoutMs`; at least one setting |
 | `disconnect` | `serial_disconnect` | `instanceId` |
@@ -57,6 +57,50 @@ groups. Tuning cannot guarantee protocol boundaries. `durationMs`/step `captureM
 controls the whole response wait independently. Raw captures and exact expectations
 use ordered bytes across split/coalesced chunks. `format: "hex"` exposes binary RX
 without changing GUI mode; HEX TX defaults to a hex preview, other calls to text.
+`serial_read_capture` retains that initial format when `format` is omitted. When
+switching format, restart at offset 0 and pass the chosen format on later reads.
+Unknown/duplicate arguments and invalid types (including `instanceId:null`) are
+rejected before control; use exact schema names such as `txMode`.
+Errors after capture still include available TX/capture evidence in `data`.
+
+The stdio session admits up to eight ordinary tool calls and one separate explicit
+capture/sequence cancellation call. Excess valid calls return JSON-RPC `-32600`
+without reaching the GUI. Validation failures classified as `invalid_argument`
+remain a tool result with `isError:true`, `structuredContent.success:false` and
+`structuredContent.error.code:"invalid_argument"`. Invalid `params`/`arguments`
+containers or malformed tool-call parameters return JSON-RPC `-32602`. Both error
+forms are decided before admission or GUI access, including under load.
+GUI execution saturation returns a tool result with
+`busy`. Keep one control/capture at a time per target rather than using these limits
+as a device-command batch size. A cancellation acknowledgment does not prove the
+run and its RX persistence have finished; inspect status until they finish.
+Updated GUI/CLI pairs use an advertised dedicated cancellation pipe; older GUIs
+fall back to their existing endpoint. Do not choose pipe names or send a rejected
+operation through a different path. Idle stdin and slow peers do not reserve device
+execution, and the ordinary-call limit does not consume the explicit cancel slot.
+
+Recheck `serial_get_status` and `sessionGeneration` after a reconnect. Queued
+capture/sequence TX is bound internally to the original serial session and cannot
+move to a replacement session just because its COM name is the same. Do not add
+`expectedSessionGeneration` to tool arguments: it is not a public schema field.
+
+Oversized JSON lines (>128 Ki characters) are rejected and drained to the next
+newline with bounded recovery (5 seconds / 4 Mi characters). Output has a 5-second
+deadline; a stalled/broken stdout terminates the session, never replays TX.
+Input EOF cancels request work immediately while allowing up to 500 ms to finish
+already computed replies. No further reply is appended after an output failure.
+
+For custom MCP clients, put tool fields inside `params.arguments`, with exact names
+and types. Duplicate request/parameter fields and misspelled tool-call parameters
+are rejected. Invalid Unicode JSON returns a parse error without terminating MCP;
+corrupt UTF-8 bytes close that connection instead of becoming replacement characters.
+Use a fresh string or integer request ID for every request in the session, including
+after completion; equivalent escapes/numeric spellings count as the same ID.
+Fractional IDs are rejected without rounding. ID history is bounded to 262144
+requests and 16 Mi normalized ID characters per session. A history-full error
+requires a fresh connection, not replay of an uncertain command or sequence start.
+Malformed cancellation notifications are ignored and cannot select the last of
+several conflicting request IDs. Cancellation never rolls back TX.
 
 `serial_set_mode` changes the GUI's live RX display, manual/sequence TX interpretation
 and active rule mode. An actual switch clears visible logs/search, preserves saved
@@ -68,8 +112,16 @@ startup/activity or reconnect. See the CLI reference's GUI mode section for deta
 For sequence definitions, limits, result fields and exact-match semantics, read the
 CLI reference's sequence section. MCP `serial_sequence_save` takes the actual JSON
 object in `sequence`, not a file path/string. Its schema describes each step and
-optional `{kind:"text"|"hex",value:...}` expectation. Registration changes the GUI's
-shared profile/list without TX. `serial_sequence_start` accepts a background run
+optional `{kind:"text"|"hex",value:...}` expectation. It uses the existing
+lowercase TX schema and does not accept GUI
+PascalCase `FormatVersion` import files, RX Check fields, or `??` in HEX expectations.
+Get/start rejects enabled GUI RX Check/legacy ResponseCheck with
+`unsupported_sequence_feature`; save also rejects overwriting definitions containing
+them. Do not remove conditions or transmit their patterns. To author GUI RX checks,
+create a separate v3 import file with RX `CommandText:""` and `RxPattern`, using the
+CLI reference's GUI authoring rules, and have the user import it in the GUI.
+Registration changes the GUI's shared profile/list without TX.
+`serial_sequence_start` accepts a background run
 promptly, so the ordinary 90-second MCP call limit does not cap the whole run.
 The run continues after client disconnect or cancellation of an already completed
 start call. Inspect `serial_sequence_status`, then read the returned capture with
@@ -77,6 +129,9 @@ start call. Inspect `serial_sequence_status`, then read the returned capture wit
 stop it. Lost start results require inspecting latest status before another start.
 Optional contiguous match results do not gate steps, shorten collection or prove
 product success/failure; interleaved output may legitimately be `not_matched`.
+Text matching preserves decoder context at the observation range start: the tail
+of a CP949/multibyte character begun before that range cannot become an ASCII match.
+Only characters wholly within the step's raw RX range are candidates.
 When a documented HEX/Terminal command is repeated or clearly useful for reuse,
 save a descriptively named sequence (including a single-step one) with exact content,
 explicit `txMode`, correct ending and response window. Inspect existing definitions

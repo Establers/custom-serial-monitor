@@ -8,16 +8,30 @@ namespace SerialMonitor.Core.Automation;
 // stops an accepted background run; a polling/starting client may disconnect.
 public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCaptureService captures) : IAsyncDisposable
 {
+    private static readonly TimeSpan NotificationTimeout = TimeSpan.FromSeconds(2);
     private readonly object _gate = new();
     private readonly Dictionary<string, Job> _jobs = new(StringComparer.Ordinal);
     private readonly Queue<string> _order = new();
     private string? _latest;
     private Preparation? _preparing;
     private bool _disposed;
+    private Task? _disposeTask;
 
     public bool IsActive
     {
         get { lock (_gate) return _preparing is not null || _jobs.Values.Any(job => job.State == "running"); }
+    }
+
+    public bool CancelCaptureWhenIdle()
+    {
+        // StartAsync cannot acquire sequence ownership between this check and
+        // the standalone capture cancellation.
+        lock (_gate)
+        {
+            if (_preparing is not null || _jobs.Values.Any(job => job.State == "running"))
+                throw new AutomationException("busy", "A sequence run owns RX capture. Use sequence_cancel with its runId.");
+            return captures.Cancel();
+        }
     }
 
     public async Task<AutomationSequenceRun> StartAsync(JsonElement arguments, CancellationToken cancellationToken)
@@ -97,35 +111,51 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
 
     public object Cancel(string runId)
     {
-        Job job;
-        bool canceled;
         lock (_gate)
         {
-            job = Find(runId);
-            canceled = job.State == "running";
+            if (_disposed) throw new AutomationException("shutting_down", "Sequence control is shutting down.");
+            var job = Find(runId);
+            var canceled = job.State == "running";
+            if (canceled) RequestCancellation(job);
+            return new { canceled, run = Snapshot(job) };
         }
-        if (canceled) job.Stop.Cancel();
-        lock (_gate) return new { canceled, run = Snapshot(job) };
     }
 
     public bool CancelActive()
     {
         lock (_gate)
         {
+            if (_disposed) return false;
             var job = _latest is { } latest && _jobs.TryGetValue(latest, out var value) && value.State == "running" ? value : null;
-            var stop = _preparing?.Stop ?? job?.Stop;
+            if (job is not null) { RequestCancellation(job); return true; }
+            var stop = _preparing?.Stop;
             if (stop is null) return false;
             // CancelAsync marks the token before ownership can transfer under
             // this lock, but runs callback continuations outside this lock.
             var canceled = stop.CancelAsync();
             if (!canceled.IsCompletedSuccessfully)
                 _ = canceled.ContinueWith(task =>
-                {
-                    var error = task.Exception;
-                    if (error is not null && job is not null)
-                        lock (_gate) job.Error ??= BoundedError(error.GetBaseException().Message);
-                }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    System.Diagnostics.Trace.TraceError("Sequence preflight cancellation: {0}", task.Exception),
+                    CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             return true;
+        }
+    }
+
+    // Called under _gate: mark cancellation before a run can finish/retire, but
+    // never execute device callbacks synchronously in a CLI/MCP request handler.
+    private void RequestCancellation(Job job)
+    {
+        if (job.Cancellation is not null) return;
+        job.Cancellation = ObserveCancellationAsync(job, job.Stop.CancelAsync());
+    }
+
+    private async Task ObserveCancellationAsync(Job job, Task cancellation)
+    {
+        try { await cancellation.ConfigureAwait(false); }
+        catch (Exception ex)
+        {
+            lock (_gate)
+                job.Error = BoundedError("Cancellation: " + ex.GetBaseException().Message + (job.Error is null ? "" : ". " + job.Error));
         }
     }
 
@@ -137,19 +167,26 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
         {
             await ProgressAsync(job).ConfigureAwait(false);
             EnsureConnection(job.Connection);
-            var capture = await captures.CaptureAsync(new(0), job.Connection.Port, job.Encoding,
+            var modes = job.Definition.Steps.Select(step => step.TxMode).Distinct().ToArray();
+            var endings = job.Definition.Steps.Select(step => step.TxMode == "hex" ? "none" : step.LineEnding).Distinct().ToArray();
+            var previewFormat = modes.Contains("hex") ? "hex" : "text";
+            // Aggregate capture metadata must not label a HEX/mixed run as a
+            // single UTF-8/CRLF command. Exact settings remain on each step.
+            var capture = await captures.CaptureAsync(new(0, TxMode: modes.Length == 1 ? modes[0] : "mixed",
+                LineEnding: endings.Length == 1 ? endings[0] : "mixed", PreviewFormat: previewFormat), job.Connection.Port, job.Encoding,
                 () => device.Connection, token => SendStepsAsync(job, token), job.Stop.Token).ConfigureAwait(false);
             lock (_gate) job.Capture = capture;
             finalState = capture.CaptureStatus switch { "completed" => "completed", "canceled" => "canceled", _ => "failed" };
             if (finalState != "completed") error = capture.Error ?? "RX capture ended with status '" + capture.CaptureStatus + "'. Inspect each sendStatus; do not retry TX automatically.";
             var inconclusive = capture.CaptureStatus != "completed" || capture.RxGapDetected;
+            var textContext = new AutomationSequenceMatcher.TextRangeContext(job.Encoding);
             for (var index = 0; index < job.Results.Count; index++)
             {
                 AutomationSequenceStepResult step;
                 lock (_gate) step = job.Results[index];
                 var expectation = job.Definition.Steps[step.DefinitionStepIndex].Expect;
                 var evidence = await AutomationSequenceMatcher.EvaluateAsync(capture.RawFile, step.RxStartOffset,
-                    step.RxEndOffset, expectation, job.Encoding, inconclusive, job.Stop.Token).ConfigureAwait(false);
+                    step.RxEndOffset, expectation, job.Encoding, inconclusive, job.Stop.Token, textContext).ConfigureAwait(false);
                 lock (_gate) job.Results[index] = step with { MatchStatus = evidence };
             }
         }
@@ -159,19 +196,26 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
         {
             if (job.Capture is { } capture)
             {
-                try { await device.InvokeAsync("capture_result", JsonSerializer.SerializeToElement(capture, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false); }
+                try { await InvokeNotificationAsync("capture_result", JsonSerializer.SerializeToElement(capture, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false); }
                 catch (Exception ex) { error ??= ex.Message; }
             }
             lock (_gate)
             {
-                job.Error = BoundedError(error);
+                job.Error = BoundedError(job.Error is null ? error : error is null ? job.Error : job.Error + ". " + error);
                 if (finalState != "completed")
                     for (var index = 0; index < job.Results.Count; index++)
                         if (job.Definition.Steps[job.Results[index].DefinitionStepIndex].Expect is not null)
                             job.Results[index] = job.Results[index] with { MatchStatus = "inconclusive" };
             }
-            await ProgressAsync(job, finalState).ConfigureAwait(false);
-            try { await device.InvokeAsync("release", default, CancellationToken.None).ConfigureAwait(false); }
+            try { await ProgressAsync(job, finalState).ConfigureAwait(false); }
+            catch (Exception ex) { lock (_gate) job.Error ??= BoundedError(ex.Message); }
+            try
+            {
+                // If a progress callback timed out, eventual UI release must
+                // also clear that run's sequence state before releasing TX.
+                await InvokeNotificationAsync("release", JsonSerializer.SerializeToElement(new
+                { sequenceProgress = ProgressArguments(job, finalState) }, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false);
+            }
             catch (Exception ex)
             {
                 finalState = "failed";
@@ -196,7 +240,8 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
                     index = job.Results.Count;
                     job.StepIndex = index;
                     job.Results.Add(new(index, repeat, stepIndex, definition.Name, "not_sent", -1, -1,
-                        definition.Expect is null ? "not_requested" : "inconclusive"));
+                        definition.Expect is null ? "not_requested" : "inconclusive", TxMode: definition.TxMode,
+                        LineEnding: definition.TxMode == "hex" ? "none" : definition.LineEnding));
                 }
                 await ProgressAsync(job).ConfigureAwait(false);
                 var txProgress = Task.CompletedTask;
@@ -207,7 +252,7 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
                     var start = captures.SnapshotActiveAcceptedBytes();
                     if (start < 0) throw new AutomationException("capture_unavailable", "The run RX subscription is unavailable.");
                     lock (_gate) job.Results[index] = job.Results[index] with { SendStatus = "unknown", RxStartOffset = start, RxEndOffset = start };
-                    await device.InvokeAsync("send", StepArguments(definition), token).ConfigureAwait(false);
+                    await device.InvokeAsync("send", AutomationSendContext.Bind(StepArguments(definition), job.Connection.SessionGeneration), token).ConfigureAwait(false);
                     lock (_gate) job.Results[index] = job.Results[index] with { SendStatus = "sent" };
                     // Publish actual TX counts immediately, while the fixed RX
                     // observation timer proceeds independently of UI dispatch.
@@ -256,17 +301,35 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
             throw new AutomationException(reason, "RX capture was interrupted; no further TX will be sent.");
     }
 
-    private async Task ProgressAsync(Job job, string? state = null)
+    private JsonElement ProgressArguments(Job job, string? state = null)
     {
-        object progress;
-        lock (_gate) progress = new { job.RunId, name = job.Definition.Name, state = state ?? job.State, job.StepIndex,
+        lock (_gate) return JsonSerializer.SerializeToElement(new { job.RunId, name = job.Definition.Name, state = state ?? job.State, job.StepIndex,
             job.CompletedSteps, totalSteps = job.TotalSteps,
             sentCount = job.Results.Count(step => step.SendStatus == "sent"),
-            failedAttempts = job.Results.Count(step => step.SendStatus == "unknown" && step.Error is not null), job.Error };
-        try { await device.InvokeAsync("sequence_progress", JsonSerializer.SerializeToElement(progress, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false); }
-        catch (Exception ex)
+            failedAttempts = job.Results.Count(step => step.SendStatus == "unknown" && step.Error is not null), job.Error }, AutomationJson.Options);
+    }
+
+    private async Task ProgressAsync(Job job, string? state = null) =>
+        _ = await InvokeNotificationAsync("sequence_progress", ProgressArguments(job, state),
+            state is null ? job.Stop.Token : CancellationToken.None).ConfigureAwait(false);
+
+    private async Task<object> InvokeNotificationAsync(string operation, JsonElement args, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(NotificationTimeout);
+        // A late release still owns the real reservation. Let it execute, while
+        // bounding our wait; never pretend the GUI has already released TX.
+        var pending = device.InvokeAsync(operation, args, operation == "release" ? CancellationToken.None : deadline.Token);
+        try { return await pending.WaitAsync(deadline.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
         {
-            lock (_gate) job.Error ??= BoundedError("Progress: " + ex.Message);
+            throw new AutomationException("gui_timeout", "GUI " + operation + " notification timed out. Already started TX is not replayed.");
+        }
+        finally
+        {
+            if (!pending.IsCompletedSuccessfully)
+                _ = pending.ContinueWith(task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 
@@ -292,32 +355,44 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
             var id = _order.Dequeue();
             var job = _jobs[id];
             _jobs.Remove(id);
-            _ = job.Task.ContinueWith(_ => job.Stop.Dispose(), CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            _ = DisposeRetiredJobAsync(job);
         }
     }
 
     private static string? BoundedError(string? error) => error is { Length: > 2048 } ? error[..2048] : error;
 
-    public async ValueTask DisposeAsync()
+    private static async Task DisposeRetiredJobAsync(Job job)
+    {
+        try { await Task.WhenAll(job.Task, job.Cancellation ?? Task.CompletedTask).ConfigureAwait(false); }
+        catch (Exception ex) { System.Diagnostics.Trace.TraceError("Retired sequence cleanup: {0}", ex); }
+        finally { job.Stop.Dispose(); }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        lock (_gate) return new(_disposeTask ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
     {
         Job[] jobs;
         Preparation? preparation;
         lock (_gate)
         {
-            if (_disposed) return;
             _disposed = true;
             jobs = _jobs.Values.ToArray();
             preparation = _preparing;
+            foreach (var job in jobs) if (!job.Task.IsCompleted) RequestCancellation(job);
         }
         if (preparation is not null)
         {
-            try { preparation.Stop.Cancel(); } catch (ObjectDisposedException) { }
+            try { await preparation.Stop.CancelAsync().ConfigureAwait(false); }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceError("Sequence preflight cleanup: {0}", ex); }
             await preparation.Completed.Task.ConfigureAwait(false);
         }
-        foreach (var job in jobs) { if (!job.Task.IsCompleted) job.Stop.Cancel(); }
-        await Task.WhenAll(jobs.Select(job => job.Task)).ConfigureAwait(false);
-        foreach (var job in jobs) job.Stop.Dispose();
+        try { await Task.WhenAll(jobs.SelectMany(job => new[] { job.Task, job.Cancellation ?? Task.CompletedTask })).ConfigureAwait(false); }
+        finally { foreach (var job in jobs) job.Stop.Dispose(); }
     }
 
     private sealed class Preparation(CancellationToken token)
@@ -334,6 +409,7 @@ public sealed class AutomationSequenceRunner(IAutomationDevice device, RxCapture
         public Encoding Encoding { get; } = encoding;
         public CancellationTokenSource Stop { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
+        public Task? Cancellation { get; set; }
         public string State { get; set; } = "running";
         public int StepIndex { get; set; } = -1;
         public int CompletedSteps { get; set; }

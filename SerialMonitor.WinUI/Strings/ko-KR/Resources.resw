@@ -202,10 +202,12 @@
     <value>단계를 위로 이동</value>
     <comment>English: Move step up</comment>
   </data>
+  <data name="StaticUi045.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>단계를 위로 이동</value></data>
   <data name="StaticUi046.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>단계를 아래로 이동</value>
     <comment>English: Move step down</comment>
   </data>
+  <data name="StaticUi046.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>단계를 아래로 이동</value></data>
   <data name="StaticUi048.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>전역 = 기본 TX 종결 문자 사용, 없음 = 종결 문자 없음, CR = \r, LF = \n, CRLF = \r\n</value>
     <comment>English: Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n</comment>
@@ -840,7 +842,7 @@
   <data name="SequenceAddMenu.Text" xml:space="preserve"><value>시퀀스 추가…</value></data>
   <data name="SequenceTipsTitle" xml:space="preserve"><value>AI로 시퀀스를 만들 수 있어요</value></data>
   <data name="SequenceTipsBody" xml:space="preserve"><value>1. 아래 요청문을 복사해 AI에게 붙여 넣으세요.
-2. 장비 명령, 순서, 대기 시간, 반복 횟수를 알려 주세요.
+2. 장비 명령, 순서, 응답 패턴과 검사 시간, 전송 후 대기, 반복 횟수를 알려 주세요.
 3. 결과를 .json으로 저장한 뒤 시퀀스 관리 → JSON 불러오기에서 선택하세요.
 
 실행 전 명령과 Terminal/HEX 모드를 확인하세요.</value></data>
@@ -853,7 +855,7 @@
   <data name="SequenceStepCommentLabel" xml:space="preserve"><value>설명 메모 (선택)</value></data>
   <data name="SequenceStepCommentPlaceholder" xml:space="preserve"><value>예: 재부팅이 끝난 뒤 다음 명령 전송</value></data>
   <data name="SequenceStepCommentHelp" xml:space="preserve"><value>단계 툴팁에 표시되고 JSON에 저장되는 참고 메모입니다. 실행에는 영향을 주지 않습니다.</value></data>
-  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 JSON의 _manual 규격에 맞춰 Serial Monitor용 시퀀스 하나를 작성해 주세요. 먼저 장비의 실제 명령 규격, 메인 모드 또는 Step별 TxMode(null/Terminal/Hex), 실행 순서, 줄 끝(None/Cr/Lf/Crlf 또는 null), 전송 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 질문해 주세요. CLI/MCP 실행용이면 CaptureMs와 선택적 Expect {Kind:text|hex,Value:리터럴}도 확인해 주세요. GUI Run에서는 수집·매칭 메타데이터를 실행하지 않습니다. 명시적 TxMode는 명령 앞뒤 공백을 보존합니다. 명령·응답 리터럴·체크섬을 추측하지 마세요. 분기·변수·정규식·부분수열 매칭은 지원하지 않습니다. 섞인 printf 때문에 리터럴이 일치하지 않아도 제품 실패로 단정하지 마세요. 최상위 Name은 기존 시퀀스 이름과 겹치지 않게 하고 모든 필수 필드를 작성하세요. 선택적인 단계 Name은 진행 표시·오류·CLI/MCP 결과용 짧은 이름이며 중복되어도 됩니다. Comment는 참고 메모입니다. 두 필드는 전송되거나 실행 동작을 바꾸지 않습니다. _manual은 유지하고 JSON 주석이나 코드 블록 없이 UTF-8 파일로 저장 가능한 표준 JSON 하나만 최종 출력해 주세요. 아래 Steps는 빈 배열이므로 요청한 실제 명령을 채워 주세요.</value></data>
+  <data name="SequenceAiPrompt" xml:space="preserve"><value>아래 _manual에 맞춰 Serial Monitor의 GUI 불러오기용 시퀀스 JSON 하나를 작성해 주세요. 실제 장비 명령 규격, 실행 순서, 메인 모드 또는 단계별 TxMode(null/Terminal/Hex), 줄 끝(None/Cr/Lf/Crlf 또는 null), TX 후 대기(ms), 반복 횟수와 기존 시퀀스 이름을 확인해 주세요. GUI 응답 검사가 필요하면 기대 패턴과 RX Check 전체 검사 시간(ms)도 확인하세요. 제공된 정보는 다시 묻지 말고 모르는 명령·패턴·체크섬은 추측하지 마세요. TX만 있으면 FormatVersion:1, RX Check가 하나라도 있으면 FormatVersion:3으로 작성하세요. 빈 양식의 버전 1을 그대로 유지할 필요는 없습니다. 버전 3은 각 단계에 Kind:Tx 또는 RxCheck를 쓰고, TX는 CommandText에 실제 명령, RX Check는 CommandText를 빈 문자열로 두고 RxPattern에 기대 패턴을 씁니다. DelayAfterMs는 TX의 전송 후 대기, RX Check의 전체 검사 시간(0..600000)입니다. RX Check는 일찍 일치해도 시간을 모두 기다리고, 같은 회차 직전 TX부터 받은 RX도 검사합니다. RX의 TxMode:null은 직전 활성 TX 모드, 없으면 메인 모드를 따릅니다. Terminal 패턴은 대소문자·공백을 구분하는 리터럴이고 HEX 패턴의 ??는 한 바이트를 무시합니다. 부분 니블·전체 와일드카드·정규식·부분수열 매칭·분기·응답 미일치 재전송·변수는 지원하지 않습니다. 새 파일에 이전 ResponseCheck나 TimeoutMs를 넣지 마세요. 응답 검사가 없는 시퀀스는 결과용 RX 수집·저장을 하지 않습니다. CLI/MCP에서 실행할 정의는 TX만 있는 버전 1로 작성하고 필요한 CaptureMs와 선택적 Expect {Kind:text|hex,Value:리터럴}를 확인하세요. 이 필드는 기존 CLI/MCP 전용이며 GUI RX Check를 대신하지 않습니다. CLI/MCP는 새 RX Check와 HEX 기대값의 ??를 지원하지 않으며, GUI의 PascalCase JSON을 소문자 CLI/MCP 등록 API에 그대로 넣으면 안 됩니다. 명시적 TxMode는 명령 앞뒤 공백을 보존합니다. 섞인 printf에서 미일치만으로 제품 실패를 단정하지 마세요. 최상위 Name은 고유하게, 선택적 단계 Name과 Comment는 메타데이터로 작성하고 모든 필수 필드를 포함하세요. _manual을 유지하고 아래 빈 Steps를 요청한 실제 단계로 채워, 주석·코드 블록 없이 UTF-8로 저장할 표준 JSON 객체 하나만 최종 출력해 주세요.</value></data>
   <data name="SequenceAiGuideMenu.Text" xml:space="preserve"><value>AI로 시퀀스 만들기…</value></data>
   <data name="SequenceTipsClose" xml:space="preserve"><value>닫기</value></data>
   <data name="CommandHistorySearch.PlaceholderText" xml:space="preserve"><value>명령 히스토리 검색...</value></data>
@@ -941,7 +943,8 @@
   <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내</value></data>
   <data name="LogNavigationLanguage" xml:space="preserve"><value>ko</value></data>
   <data name="LogNavigateButton.Content" xml:space="preserve"><value>위치 이동</value></data>
-  <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시간·줄 번호·비율로 이동 (Ctrl+G)</value></data>
+  <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>시간으로 이동</value></data>
+  <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시간으로 이동 (Ctrl+G)</value></data>
   <data name="NativeLogNavigationInputLabel" xml:space="preserve"><value>시간·위치</value></data>
   <data name="NativeLogNavigationInputPlaceholder" xml:space="preserve"><value>14:32:10 · -5m · #500000 · 70%</value></data>
   <data name="NativeLogNavigationInputHint" xml:space="preserve"><value>HH:mm:ss · YYYY-MM-DD HH:mm:ss · ±5m · #줄 · %</value></data>
@@ -971,8 +974,6 @@
   <data name="NativeLogNavigationErrorHistory" xml:space="preserve"><value>돌아갈 이전 위치가 없습니다.</value></data>
   <data name="NativeLogNavigationBusy" xml:space="preserve"><value>로그 화면을 갱신하고 있습니다. 완료 후 다시 시도하세요.</value></data>
   <data name="NativeLogNavigationErrorUnavailable" xml:space="preserve"><value>로그 화면이 준비되지 않았습니다. 잠시 후 다시 시도하세요.</value></data>
-  <data name="NativeLogNavigationTab.Header" xml:space="preserve"><value>탐색</value></data>
-  <data name="NativeLogNavigationTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시간·위치 이동(Ctrl+G) 및 이전 위치 복귀. 로그 왼쪽의 얇은 타임라인으로도 이동할 수 있습니다.</value></data>
   <data name="NativeLogNavigationTitle" xml:space="preserve"><value>시간·위치 이동</value></data>
   <data name="NativeLogNavigationCancel" xml:space="preserve"><value>취소</value></data>
   <data name="NativeLogTimePickerTitle" xml:space="preserve"><value>시간 이동</value></data>
@@ -994,11 +995,19 @@
   <data name="SequencePausePendingAction" xml:space="preserve"><value>계속 실행 (일시정지 요청 취소)</value></data>
   <data name="SequenceEnabledHeader.Text" xml:space="preserve"><value>사용</value></data>
   <data name="SequenceEnabledHeader.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>선택을 해제한 단계는 실행 시 건너뜁니다</value></data>
-  <data name="SequenceCommandHeader.Text" xml:space="preserve"><value>명령</value></data>
+  <data name="SequenceCommandHeader.Text" xml:space="preserve"><value>내용</value></data>
   <data name="SequenceModeHeader.Text" xml:space="preserve"><value>모드</value></data>
   <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>이 시퀀스 단계 사용</value></data>
   <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>선택을 해제하면 단계는 보존되고 실행 시에만 건너뜁니다</value></data>
   <data name="SequenceStepTxModeLabel" xml:space="preserve"><value>TX 모드</value></data>
   <data name="SequenceStepTxModeHelp" xml:space="preserve"><value>Global은 실행 시작 시 메인 TX 모드를 사용합니다. Hex는 입력한 바이트를 보내며 줄 끝 설정을 무시합니다.</value></data>
   <data name="SequenceStepResponseMetadataHelp" xml:space="preserve"><value>RX 수집과 응답 확인 설정은 보존됩니다. 변경하려면 시퀀스 JSON 또는 CLI/MCP를 사용하세요.</value></data>
+  <data name="EventContextButton.Content" xml:space="preserve"><value>문맥</value></data>
+  <data name="EventContextTitle" xml:space="preserve"><value>이벤트 문맥</value></data>
+  <data name="EventContextPrevious" xml:space="preserve"><value>이전 페이지</value></data>
+  <data name="EventContextNext" xml:space="preserve"><value>다음 페이지</value></data>
+  <data name="EventContextCopy" xml:space="preserve"><value>페이지 복사</value></data>
+  <data name="EventContextExport" xml:space="preserve"><value>전체 문맥 저장</value></data>
+  <data name="EventContextClose" xml:space="preserve"><value>닫기</value></data>
+  <data name="EventContextRefresh" xml:space="preserve"><value>새로고침</value></data>
 </root>

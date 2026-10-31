@@ -99,6 +99,8 @@ public sealed class UiSettings
 
     public string LastSearchText { get; set; } = string.Empty;
 
+    public List<string> SearchHistory { get; set; } = new();
+
     public string MarkerText { get; set; } = string.Empty;
 
     public bool ShowMockTestPort { get; set; } = DefaultShowMockTestPort;
@@ -141,6 +143,7 @@ public sealed class UiSettings
             SearchWholeWord = SearchWholeWord,
             SearchUseRegularExpression = SearchUseRegularExpression,
             LastSearchText = LastSearchText,
+            SearchHistory = SearchHistory?.ToList() ?? [],
             MarkerText = MarkerText,
             ShowMockTestPort = ShowMockTestPort,
             MockStressLinesPerSecond = MockStressLinesPerSecond,

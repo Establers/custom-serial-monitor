@@ -21,6 +21,13 @@ schemas; they do not connect to a GUI or device. A schema's existence does not p
 that a separately running older GUI implements it. Inspect the selected GUI and its
 actual response too. Program and plugin version numbers need not be equal.
 
+Pass exact schema field names and JSON types. Omit unused optional fields instead
+of supplying null, and use integer milliseconds within the advertised limits.
+Keep command text and bytes exact; never repair invalid encoding by substituting
+characters or guessing another TX mode. Use the host's connected tool interface
+instead of handcrafting JSON-RPC. If a transport or input error occurs, inspect
+status and available TX/capture evidence before deciding whether any TX is justified.
+
 Use the running server's tool descriptions/schemas for current arguments, supported
 values and limits. The references are a baseline for this plugin release, not an
 exhaustive list of all later features. Do not guess undocumented commands. If a
@@ -50,6 +57,9 @@ the first instance simply because it is first. Inspect `ports` if a connection i
 needed. Connect only to the intended port/baud; an existing different connection
 requires the user's direction before disconnecting or replacing it. The GUI's current
 data bits, parity, stop bits and handshake apply; verify them in `status`.
+After a reconnect or session-change error, inspect the target and `sessionGeneration`
+again before any further control. A queued send belongs to its original connection;
+the same COM name after reconnect does not make an uncertain TX safe to repeat.
 When the device workflow requires a different BPS on the same port, use
 `configure --port <expected-port> --baud <bps>` instead of replacing the connection.
 This changes the host's live baud rate; it does not command the device to change its
@@ -118,6 +128,15 @@ when the protocol documents a reliable contiguous response. Save with `repeatCou
 unless repeated execution is required; registering a command does not require
 running it again. Never turn device RX into a new command or automatic trigger.
 Read the CLI reference's sequence section for registration and execution syntax.
+CLI/MCP uses its existing lowercase TX schema with `captureMs`/literal `expect`.
+It cannot get/run enabled GUI RX Check steps or overwrite definitions containing
+RX Check/legacy ResponseCheck (`unsupported_sequence_feature`). Do not remove
+checks or move RX patterns into TX commands to bypass this. For GUI RX Check
+authoring, create a separate v3 import file: `FormatVersion:3`, `Kind:Tx|RxCheck`,
+empty RX `CommandText`, separate `RxPattern`, and `DelayAfterMs` as the whole check
+window. HEX `??` wildcards are GUI RX Check only, not automation HEX expectations.
+Do not pass this PascalCase file to `sequence save`/`serial_sequence_save` or claim
+it was registered through those APIs; explain how to import it in the GUI.
 `sequence save` registers a validated definition in the GUI's shared profile without
 TX; replacing a name requires explicit overwrite. `sequence run` returns a background
 `runId` that continues after CLI/MCP disconnects. Inspect that run with `sequence
@@ -138,6 +157,9 @@ Use one command/capture at a time for a target. `busy` includes GUI TX, bridge s
 or activity, sequences, reconnect and another automation operation. Inspect status
 or let the current operation finish; do not kill the GUI or stop unrelated work.
 Cancel only the current task's capture. `cancel` / MCP cancellation cannot undo TX.
+For an accepted background sequence, use its explicit run cancellation tool instead
+of canceling the completed start call. Inspect status until execution and RX saving
+finish; a cancellation acknowledgment alone does not release the device immediately.
 
 Never automatically retry a transmitted or uncertain command (`sent` / `unknown`),
 including after timeout, lost shell output, client disconnection or capture failure.

@@ -23,7 +23,24 @@
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.Core\SerialMonitor.Core.csproj" />
     <ProjectReference Include="..\SerialMonitor.Cli\SerialMonitor.Cli.csproj" />
+    <ProjectReference Include="..\SerialMonitor.TestProcessProbe\SerialMonitor.TestProcessProbe.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="CopySchedulingProbe" AfterTargets="Build">
+    <MSBuild Projects="..\SerialMonitor.TestProcessProbe\SerialMonitor.TestProcessProbe.csproj" Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="SchedulingProbeAssembly" />
+    </MSBuild>
+    <PropertyGroup>
+      <SchedulingProbeOutputDirectory>@(SchedulingProbeAssembly->'%(RootDir)%(Directory)')</SchedulingProbeOutputDirectory>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(SchedulingProbeOutputDirectory)SerialMonitor.TestProcessProbe.dll') or !Exists('$(SchedulingProbeOutputDirectory)SerialMonitor.TestProcessProbe.runtimeconfig.json') or !Exists('$(SchedulingProbeOutputDirectory)SerialMonitor.TestProcessProbe.deps.json')"
+           Text="Scheduling probe payload is missing from $(SchedulingProbeOutputDirectory). Check the solution Configuration/Platform mapping." />
+    <ItemGroup>
+      <SchedulingProbeFiles Include="$(SchedulingProbeOutputDirectory)*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SchedulingProbeFiles)" DestinationFolder="$(OutDir)SchedulingProbe" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <Using Include="Xunit" />

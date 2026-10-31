@@ -5,7 +5,14 @@ using System.Text.Json;
 
 namespace SerialMonitor.Core.Automation;
 
-public sealed record AutomationInstance(string InstanceId, string PipeName, int ProcessId, DateTimeOffset StartedAt);
+public sealed record AutomationInstance(string InstanceId, string PipeName, int ProcessId, DateTimeOffset StartedAt)
+{
+    // Optional capability: older GUIs/clients keep using the ordinary endpoint.
+    public string? ControlPipeName { get; init; }
+
+    internal bool HasControlPipe => ControlPipeName == PipeName + "-control";
+    internal static bool IsCancellation(string operation) => operation is "cancel_capture" or "sequence_cancel";
+}
 
 public static class AutomationDiscovery
 {
@@ -25,7 +32,8 @@ public static class AutomationDiscovery
                 if (instance is null || string.IsNullOrEmpty(instance.InstanceId) || instance.PipeName is null ||
                     instance.PipeName.Length > 180 || !instance.PipeName.StartsWith("serialmonitor-instance-", StringComparison.Ordinal) ||
                     instance.PipeName != "serialmonitor-" + instance.InstanceId ||
-                    !instance.PipeName.All(c => char.IsLetterOrDigit(c) || c == '-')) continue;
+                    !instance.PipeName.All(c => char.IsLetterOrDigit(c) || c == '-') ||
+                    (instance.ControlPipeName is not null && !instance.HasControlPipe)) continue;
                 using var process = Process.GetProcessById(instance.ProcessId);
                 if (!process.HasExited && Math.Abs((new DateTimeOffset(process.StartTime.ToUniversalTime()) - instance.StartedAt).TotalSeconds) < 1)
                     result.Add(instance);
@@ -40,11 +48,24 @@ public sealed class AutomationPipeHost : IAsyncDisposable
 {
     private readonly Func<AutomationRequest, CancellationToken, Task<AutomationResponse>> _handle;
     private readonly CancellationTokenSource _stop = new();
-    private readonly SemaphoreSlim _slots = new(8);
+    // Connections include incomplete requests and clients draining replies. They
+    // must not consume the separate budget for executing GUI operations.
+    private const int MaximumConnections = 64;
+    // A headerless ordinary connection cannot be classified as a cancellation.
+    // Reserve transport admission on a different name, not just execution slots.
+    private const int MaximumControlConnections = 4;
+    private readonly SemaphoreSlim _connections = new(MaximumConnections);
+    private readonly SemaphoreSlim _controlConnections = new(MaximumControlConnections);
+    private readonly SemaphoreSlim _requests = new(8);
+    private readonly SemaphoreSlim _cancellations = new(1);
     private readonly List<Task> _clients = [];
     private readonly string _descriptorPath;
     private readonly Action<Exception> _onError;
     private Task? _loop;
+    private readonly object _disposeGate = new();
+    private readonly object _discoveryGate = new();
+    private bool _stopping;
+    private Task? _disposeTask;
 
     public AutomationPipeHost(string instanceId, Func<AutomationRequest, CancellationToken, Task<AutomationResponse>> handle,
         Action<Exception> onError, string? directory = null)
@@ -52,8 +73,9 @@ public sealed class AutomationPipeHost : IAsyncDisposable
         _handle = handle;
         _onError = onError;
         using var process = Process.GetCurrentProcess();
-        Instance = new(instanceId, "serialmonitor-" + instanceId, Environment.ProcessId,
-            new DateTimeOffset(process.StartTime.ToUniversalTime()));
+        var pipeName = "serialmonitor-" + instanceId;
+        Instance = new(instanceId, pipeName, Environment.ProcessId,
+            new DateTimeOffset(process.StartTime.ToUniversalTime())) { ControlPipeName = pipeName + "-control" };
         var root = directory ?? AutomationDiscovery.DirectoryPath;
         Directory.CreateDirectory(root);
         _descriptorPath = Path.Combine(root, instanceId + ".json");
@@ -63,97 +85,262 @@ public sealed class AutomationPipeHost : IAsyncDisposable
 
     public void Start()
     {
-        if (_loop is not null) throw new InvalidOperationException("Host already started.");
-        _loop = Task.Run(ListenAsync);
+        lock (_disposeGate)
+        {
+            if (_disposeTask is not null) throw new ObjectDisposedException(nameof(AutomationPipeHost));
+            if (_loop is not null) throw new InvalidOperationException("Host already started.");
+            _loop = Task.Run(ListenAsync);
+        }
     }
 
     private async Task ListenAsync()
     {
+        NamedPipeServerStream? ordinary = null, control = null;
+        Task[] listeners = [];
         try
         {
-            var published = false;
-            while (!_stop.IsCancellationRequested)
+            // Both endpoints exist before discovery advertises the capability.
+            ordinary = CreatePipe(Instance.PipeName, MaximumConnections);
+            control = CreatePipe(Instance.ControlPipeName!, MaximumControlConnections);
+            listeners = [ListenEndpointAsync(ordinary, _connections, MaximumConnections, false),
+                ListenEndpointAsync(control, _controlConnections, MaximumControlConnections, true)];
+            ordinary = control = null; // Listener tasks own both initial pipes.
+            await PublishDiscoveryAsync().ConfigureAwait(false);
+            await Task.WhenAll(listeners).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+        catch (Exception ex) { ReportError(ex); }
+        finally
+        {
+            ordinary?.Dispose();
+            control?.Dispose();
+            if (WithdrawDiscovery() is { } withdrawalError) ReportError(withdrawalError);
+            await _stop.CancelAsync().ConfigureAwait(false);
+            await Task.WhenAll(listeners).ConfigureAwait(false);
+        }
+    }
+
+    private async Task PublishDiscoveryAsync()
+    {
+        var temporary = _descriptorPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(Instance, AutomationJson.Options), _stop.Token).ConfigureAwait(false);
+            lock (_discoveryGate)
             {
-                await _slots.WaitAsync(_stop.Token).ConfigureAwait(false);
-                NamedPipeServerStream? pipe = null;
+                // A stop racing the asynchronous write must never republish a
+                // host whose handlers/listeners are still finishing cleanup.
+                if (!_stopping) File.Move(temporary, _descriptorPath, overwrite: true);
+            }
+        }
+        finally { File.Delete(temporary); }
+    }
+
+    private Exception? WithdrawDiscovery()
+    {
+        lock (_discoveryGate)
+        {
+            Volatile.Write(ref _stopping, true);
+            try { File.Delete(_descriptorPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return ex; }
+        }
+        return null;
+    }
+
+    private static NamedPipeServerStream CreatePipe(string name, int maximum) => new(name, PipeDirection.InOut, maximum,
+        PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+
+    private async Task ListenEndpointAsync(NamedPipeServerStream initial, SemaphoreSlim connections, int maximum, bool controlOnly)
+    {
+        NamedPipeServerStream? pipe = initial;
+        try
+        {
+            while (!_stop.IsCancellationRequested && !Volatile.Read(ref _stopping))
+            {
+                await connections.WaitAsync(_stop.Token).ConfigureAwait(false);
+                var transferred = false;
                 try
                 {
-                    pipe = new(Instance.PipeName, PipeDirection.InOut, 8, PipeTransmissionMode.Byte,
-                        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                    if (!published)
-                    {
-                        await File.WriteAllTextAsync(_descriptorPath, JsonSerializer.Serialize(Instance, AutomationJson.Options), _stop.Token).ConfigureAwait(false);
-                        published = true;
-                    }
+                    pipe ??= CreatePipe(controlOnly ? Instance.ControlPipeName! : Instance.PipeName, maximum);
                     await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
                     var connected = pipe;
                     pipe = null;
+                    transferred = true;
                     lock (_clients)
                     {
-                        _clients.RemoveAll(task => task.IsCompleted);
-                        _clients.Add(ServeAsync(connected));
+                        _clients.RemoveAll(task =>
+                        {
+                            if (!task.IsCompleted) return false;
+                            if (task.IsFaulted) ReportError(task.Exception!);
+                            return true;
+                        });
+                        _clients.Add(ServeAsync(connected, connections, controlOnly));
                     }
                 }
                 finally
                 {
-                    if (pipe is not null) { pipe.Dispose(); _slots.Release(); }
+                    if (!transferred) { pipe?.Dispose(); pipe = null; connections.Release(); }
                 }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
-        catch (Exception ex) { _onError(ex); }
-        finally
+        catch (Exception ex)
         {
-            try { File.Delete(_descriptorPath); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _onError(ex); }
+            ReportError(ex);
+            await _stop.CancelAsync().ConfigureAwait(false);
+        }
+        finally { pipe?.Dispose(); }
+    }
+
+    private async Task ServeAsync(NamedPipeServerStream pipe, SemaphoreSlim connections, bool controlOnly)
+    {
+        try
+        {
+            using (pipe)
+            using (var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
+            using (var reader = new Utf8ChunkReader(pipe))
+            {
+                if (Volatile.Read(ref _stopping)) return;
+                Task<string?>? disconnected = null;
+                try
+                {
+                    lifetime.CancelAfter(TimeSpan.FromSeconds(90));
+                    var ioTimeout = TimeSpan.FromSeconds(controlOnly ? 1 : 5);
+                    var lines = new BoundedLineReader(reader);
+                    AutomationRequest request;
+                    try
+                    {
+                        using var header = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                        header.CancelAfter(ioTimeout);
+                        var line = await lines.ReadAsync(header.Token).ConfigureAwait(false);
+                        if (line is null) return;
+                        request = AutomationJsonValidation.ParseRequest(line);
+                    }
+                    catch (Exception ex) when (ex is JsonException or DecoderFallbackException)
+                    {
+                        var invalid = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(AutomationResponse.Fail("invalid_argument",
+                            "Invalid automation request: " + ex.Message), AutomationJson.Options) + "\n");
+                        await WriteReplyAsync(pipe, invalid, ioTimeout, lifetime.Token).ConfigureAwait(false);
+                        return;
+                    }
+                    if (Volatile.Read(ref _stopping)) return;
+                    disconnected = lines.ReadAsync(lifetime.Token);
+                    if (disconnected.IsCompleted) return;
+                    AutomationResponse response;
+                    var isCancellation = AutomationInstance.IsCancellation(request.Operation);
+                    var budget = isCancellation ? _cancellations : _requests;
+                    if (controlOnly && !isCancellation)
+                    {
+                        response = AutomationResponse.Fail("invalid_argument", "The control pipe accepts only cancel_capture and sequence_cancel. This request was not executed.");
+                    }
+                    else if (!await budget.WaitAsync(0, lifetime.Token).ConfigureAwait(false))
+                    {
+                        // Do not queue TX for later, or replay it when capacity
+                        // becomes free. This request has not entered the handler.
+                        response = AutomationResponse.Fail("busy", "GUI request capacity is occupied. This request was not executed and did not send TX.");
+                    }
+                    else
+                    {
+                        try
+                        {
+                            if (Volatile.Read(ref _stopping)) return;
+                            var work = _handle(request, lifetime.Token);
+                            if (await Task.WhenAny(work, disconnected).ConfigureAwait(false) == disconnected)
+                            {
+                                await lifetime.CancelAsync().ConfigureAwait(false);
+                                try { await work.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                                return;
+                            }
+                            response = await work.ConfigureAwait(false);
+                        }
+                        finally { budget.Release(); }
+                    }
+                    // No buffered writer: a broken pipe cannot trigger a second
+                    // flush exception during disposal outside the request catch.
+                    var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response, AutomationJson.Options) + "\n");
+                    await WriteReplyAsync(pipe, bytes, ioTimeout, lifetime.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await lifetime.CancelAsync().ConfigureAwait(false);
+                    if (disconnected is not null)
+                        try { await disconnected.ConfigureAwait(false); }
+                        catch (Exception ex) when (ex is OperationCanceledException or IOException) { }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or JsonException) { }
+        catch (Exception ex) { ReportError(ex); }
+        finally { connections.Release(); }
+    }
+
+    private static async Task WriteReplyAsync(NamedPipeServerStream pipe, byte[] bytes, TimeSpan timeout, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(timeout);
+        await pipe.WriteAsync(bytes, deadline.Token).ConfigureAwait(false);
+    }
+
+    private void ReportError(Exception error)
+    {
+        try { _onError(error); }
+        catch (Exception reportingError)
+        {
+            Trace.TraceError("Automation error: {0}; error reporting failed: {1}", error, reportingError);
         }
     }
 
-    private async Task ServeAsync(NamedPipeServerStream pipe)
+    // A caller's deadline bounds its wait, not the lifetime of resources still
+    // used by a handler that ignores cancellation. Dispose those when it exits.
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        using (pipe)
-        using (var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
-        using (var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true))
-        using (var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true })
+        Task cleanup;
+        Exception? withdrawalError = null;
+        lock (_disposeGate)
         {
-            try
+            if (_disposeTask is null)
             {
-                lifetime.CancelAfter(TimeSpan.FromSeconds(90));
-                var lines = new BoundedLineReader(reader);
-                var line = await lines.ReadAsync(lifetime.Token).ConfigureAwait(false);
-                if (line is null) return;
-                var request = JsonSerializer.Deserialize<AutomationRequest>(line, AutomationJson.Options)
-                    ?? throw new JsonException("Missing request.");
-                // EOF while work is running means the calling CLI/MCP disappeared.
-                // Cancel its capture and release the GUI TX reservation promptly.
-                var disconnected = lines.ReadAsync(lifetime.Token);
-                var work = _handle(request, lifetime.Token);
-                if (await Task.WhenAny(work, disconnected).ConfigureAwait(false) == disconnected)
-                {
-                    lifetime.Cancel();
-                    try { await work.ConfigureAwait(false); } catch (OperationCanceledException) { }
-                    return;
-                }
-                var response = await work.ConfigureAwait(false);
-                await writer.WriteLineAsync(JsonSerializer.Serialize(response, AutomationJson.Options).AsMemory(), lifetime.Token).ConfigureAwait(false);
-                lifetime.Cancel();
-                try { await disconnected.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                // Withdrawal and admission shutdown cannot wait for listener
+                // token callbacks: a request callback may block indefinitely.
+                withdrawalError = WithdrawDiscovery();
+                _disposeTask = DisposeCoreAsync();
+                _ = _disposeTask.ContinueWith(task => ReportError(task.Exception!), CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
-            catch (Exception ex) when (ex is OperationCanceledException or IOException or JsonException) { }
-            catch (Exception ex) { _onError(ex); }
-            finally { lifetime.Cancel(); _slots.Release(); }
+            cleanup = _disposeTask;
         }
+        // Error callbacks may call StopAsync again. Publish the shared cleanup
+        // task first, and never invoke external code while holding these locks.
+        if (withdrawalError is not null) ReportError(withdrawalError);
+        return cleanup.WaitAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
     {
-        _stop.Cancel();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        await StopAsync(deadline.Token).ConfigureAwait(false);
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        // Cancellation callbacks belong to request handlers and can themselves
+        // block. Do not run them synchronously on the window's closing thread.
+        var canceled = _stop.CancelAsync();
         if (_loop is not null) await _loop.ConfigureAwait(false);
         Task[] pending;
         lock (_clients) pending = _clients.ToArray();
-        await Task.WhenAll(pending).ConfigureAwait(false);
-        _stop.Dispose();
-        _slots.Dispose();
+        try
+        {
+            await Task.WhenAll(pending.Append(canceled)).ConfigureAwait(false);
+        }
+        finally
+        {
+            _stop.Dispose();
+            _connections.Dispose();
+            _controlConnections.Dispose();
+            _requests.Dispose();
+            _cancellations.Dispose();
+        }
     }
 }
 
@@ -162,11 +349,36 @@ public static class AutomationPipeClient
     public static async Task<AutomationResponse> CallAsync(AutomationInstance instance, string operation, object arguments,
         CancellationToken cancellationToken)
     {
-        using var pipe = new NamedPipeClientStream(".", instance.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        var pipeName = AutomationInstance.IsCancellation(operation) && instance.HasControlPipe ? instance.ControlPipeName! : instance.PipeName;
+        using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         connect.CancelAfter(TimeSpan.FromSeconds(3));
-        await pipe.ConnectAsync(connect.Token).ConfigureAwait(false);
-        using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
+        var attempts = 0;
+        try
+        {
+            // ConnectAsync queues even a zero-timeout probe onto a worker. Under
+            // stdio/process load that queued work can outlive the deadline before
+            // reaching an available pipe. A 1ms local probe also avoids Windows'
+            // default wait for timeout=0. Back off asynchronously if unavailable.
+            // Only connection is retried; write the request exactly once below.
+            var delayMs = 4;
+            while (true)
+            {
+                connect.Token.ThrowIfCancellationRequested();
+                try { attempts++; pipe.Connect(1); connect.Token.ThrowIfCancellationRequested(); break; }
+                catch (TimeoutException)
+                {
+                    await Task.Delay(delayMs + Random.Shared.Next(delayMs), connect.Token).ConfigureAwait(false);
+                    delayMs = Math.Min(delayMs * 2, 32);
+                }
+            }
+        }
+        catch (Exception ex) when ((ex is OperationCanceledException or TimeoutException) && !cancellationToken.IsCancellationRequested)
+        {
+            throw new AutomationException("gui_connect_timeout",
+                $"Could not connect to the GUI within 3 seconds ({attempts} connection probes). Its pipe may be busy or restarting. No request was sent and this call did not transmit any bytes.");
+        }
+        using var reader = new Utf8ChunkReader(pipe);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
         var request = new AutomationRequest(operation, JsonSerializer.SerializeToElement(arguments, AutomationJson.Options));
         await writer.WriteLineAsync(JsonSerializer.Serialize(request, AutomationJson.Options).AsMemory(), cancellationToken).ConfigureAwait(false);

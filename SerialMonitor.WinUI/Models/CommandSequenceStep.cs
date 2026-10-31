@@ -6,6 +6,8 @@ using SerialMonitor.Core.Automation;
 
 namespace SerialMonitor.WinUI.Models;
 
+public enum CommandSequenceStepKind { Tx, RxCheck }
+
 public sealed class CommandSequenceStep : INotifyPropertyChanged
 {
     private int _stepNumber;
@@ -30,7 +32,30 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     // Optional label used in GUI progress/errors and CLI/MCP step results; never transmitted.
     public string? Name { get; set; }
 
-    public string CommandText { get; set; } = string.Empty;
+    private string _commandText = string.Empty;
+    private string? _rxPattern;
+    [JsonIgnore]
+    public string CommandText
+    {
+        get => Kind == CommandSequenceStepKind.RxCheck ? _rxPattern ?? _commandText : _commandText;
+        set { if (Kind == CommandSequenceStepKind.RxCheck) _rxPattern = value; else _commandText = value; }
+    }
+
+    // An older application that ignores Kind must never transmit an RX pattern.
+    [JsonPropertyName("CommandText")]
+    public string StoredCommandText { get => Kind == CommandSequenceStepKind.RxCheck ? "" : _commandText; set => _commandText = value; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RxPattern { get => Kind == CommandSequenceStepKind.RxCheck ? CommandText : null; set => _rxPattern = value; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public CommandSequenceStepKind Kind { get; set; }
+
+    [JsonIgnore]
+    public string ModeText => TxMode switch { TxSendMode.Hex => "HEX", TxSendMode.Terminal => "TERM", _ => "Global" };
+
+    [JsonIgnore]
+    public string KindText => Kind == CommandSequenceStepKind.RxCheck ? "RX Check" : "TX";
 
     public TxLineEndingMode? LineEndingMode { get; set; }
 
@@ -46,6 +71,10 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     public int CaptureMs { get; set; } = 2000;
 
     public AutomationResponseExpectation? Expect { get; set; }
+
+    // Explicit opt-in live checking. Legacy Expect/CaptureMs retain their API semantics.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SerialMonitor.Core.Sequences.ResponseCheck? ResponseCheck { get; set; }
 
     [JsonIgnore]
     public int StepNumber
@@ -74,7 +103,7 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
         ? CommandText
         : Name.Trim();
 
-    public string LineEndingText => LineEndingMode switch
+    public string LineEndingText => Kind == CommandSequenceStepKind.RxCheck ? "—" : LineEndingMode switch
     {
         TxLineEndingMode.None => "None",
         TxLineEndingMode.Cr => "CR",
@@ -102,8 +131,12 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
     {
         get
         {
-            var details = $"{StepNumberText} | {CommandText} | TX {TxMode?.ToString() ?? "Global"} | {LineEndingHelpText} | Delay {DelayText} | {AutomationHelpText}";
+            var details = $"{StepNumberText} | {KindText} | {CommandText} | {TxMode?.ToString() ?? "Global"} | {DelayText}";
+            details += Kind == CommandSequenceStepKind.RxCheck
+                ? "\nRX Check: waits the full duration, including after a match. Global inherits the preceding TX mode."
+                : $" | {LineEndingHelpText} | {AutomationHelpText}";
             if (!IsEnabled) details = $"Disabled: skipped during execution.{Environment.NewLine}{details}";
+            if (ResponseCheck is { } check) details += $"{Environment.NewLine}Response ({check.Kind}, {check.TimeoutMs} ms): {(check.Pattern.Length > 80 ? check.Pattern[..80] + "…" : check.Pattern)}";
             if (!string.IsNullOrWhiteSpace(Name)) details = $"Step name: {Name.Trim()}{Environment.NewLine}{details}";
             if (!string.IsNullOrWhiteSpace(Comment)) details += $"{Environment.NewLine}Comment: {CommentText}";
             return details;
@@ -112,8 +145,8 @@ public sealed class CommandSequenceStep : INotifyPropertyChanged
 
     [JsonIgnore]
     public string AutomationHelpText => $"CLI/MCP only: collect RX {CaptureMs} ms; " + (Expect is null
-        ? "no response match. GUI Run uses TX mode and delay only."
-        : $"literal {Expect.Kind} match '{(Expect.Value?.Length > 80 ? Expect.Value[..80] + "…" : Expect.Value)}'. GUI Run does not capture or match.");
+        ? "no legacy response match. Add an RX Check step for GUI checking."
+        : $"literal {Expect.Kind} match '{(Expect.Value?.Length > 80 ? Expect.Value[..80] + "…" : Expect.Value)}'. These legacy fields do not enable live GUI checks.");
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {

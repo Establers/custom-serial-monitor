@@ -1,0 +1,18 @@
+{
+  "name": "F103RB LAB - Binary CRC echo",
+  "repeatCount": 1,
+  "steps": [
+    {
+      "name": "Binary echo including control/high bytes",
+      "command": "A5 5A 02 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF B5 39",
+      "txMode": "hex",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "delayAfterMs": 0,
+      "expect": {
+        "kind": "hex",
+        "value": "A5 5A 82 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF BD C9"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RepoRoot>$(MSBuildThisFileDirectory)..\..\..\..\</RepoRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)SerialMonitor.Core\SerialMonitor.Core.csproj" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Models\CommandSequence.cs" Link="App\CommandSequence.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Models\CommandSequenceStep.cs" Link="App\CommandSequenceStep.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Models\SerialSettings.cs" Link="App\SerialSettings.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Models\DisplayModes.cs" Link="App\DisplayModes.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Services\CommandSequenceFileService.cs" Link="App\CommandSequenceFileService.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Services\ICommandSequenceFileService.cs" Link="App\ICommandSequenceFileService.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Services\ProfileSequenceMerge.cs" Link="App\ProfileSequenceMerge.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Services\ProfileConflictException.cs" Link="App\ProfileConflictException.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Infrastructure\CommandSequenceMigration.cs" Link="App\CommandSequenceMigration.cs" />
+    <Compile Include="$(RepoRoot)SerialMonitor.WinUI\Infrastructure\CommandSequenceExecutionPlan.cs" Link="App\CommandSequenceExecutionPlan.cs" />
+  </ItemGroup>
+</Project>

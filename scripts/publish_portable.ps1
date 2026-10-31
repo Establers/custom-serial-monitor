@@ -226,6 +226,7 @@ $requiredAssets = @(
     "docs\agent_skills.md",
     "docs\agent_plugins.md",
     "agent-plugin\.claude-plugin\marketplace.json",
+    "agent-plugin\.agents\plugins\marketplace.json",
     "agent-plugin\plugins\serial-monitor\plugin.json",
     "agent-plugin\plugins\serial-monitor\scripts\Start-SerialMonitorMcp.ps1",
     "agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md",
@@ -243,6 +244,7 @@ foreach ($relativeAsset in $requiredAssets) {
 if (Test-Path -LiteralPath (Join-Path $portableDirFull 'skills')) {
     throw 'Standalone skills must not be installed by app setup. Use the bundled agent-plugin marketplace or the legacy skill ZIP.'
 }
+$null = & (Join-Path $scriptRoot 'check_release_payload.ps1') -PortableDirectory $portableDirFull
 
 $readmePath = Join-Path $portableDirFull "README_PORTABLE.txt"
 $readmeText = @"
@@ -281,7 +283,8 @@ AI sequence authoring
 - docs\sequence_examples.json is one importable sequence. Each JSON file contains one sequence.
 - Use Sequence options > Load JSON files to select multiple files; Export shares the selected sequence with its _manual.
 - Invalid formats or duplicate names cancel the entire import. Limit: 100 files, 10000 total steps, 16 MiB total (2 MiB/file).
-- Response waits and branching are not supported. TX OK does not verify device receipt or execution.
+- GUI RX Check steps inspect literal text or HEX patterns for the whole configured window and save paged results with raw RX. TX OK does not verify device receipt or execution.
+- CLI/MCP keeps its existing TX-only CaptureMs/Expect contract and rejects GUI RX Check steps. Branching and response-driven retries are not supported.
 
 AI device control
 -----------------

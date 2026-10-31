@@ -26,6 +26,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
     private Task? _readerTask;
     private Task? _writerTask;
     private Task? _deviceWriterTask;
+    private Task? _shutdownTask;
     private string _virtualPortName = string.Empty;
     private string? _lastError;
     private string? _lastFaultReason;
@@ -161,18 +162,21 @@ public sealed class SerialBridgeService : ISerialBridgeService
         var maxBytes = Math.Clamp(settings.MaxQueuedBytes, 64 * 1024, 256 * 1024 * 1024);
         var idleGuardMs = Math.Clamp(settings.ManualTxIdleGuardMs, 0, 10_000);
 
-        await _lifecycleGate.WaitAsync(cancellationToken);
+        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await StopCurrentAsync(CancellationToken.None);
+            ThrowIfDisposed();
+            await StopCurrentAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var virtualPort = CreateVirtualPort(virtualPortName, deviceSettings);
+            lock (_stateGate) _virtualPort = virtualPort;
             try
             {
-                await Task.Run(virtualPort.Open, cancellationToken);
+                await Task.Run(virtualPort.Open, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
-                SafeCloseAndDispose(virtualPort);
+                await StopCurrentAsync(cancellationToken).ConfigureAwait(false);
                 throw;
             }
 
@@ -195,11 +199,12 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 _lastBridgeActivityTimestamp = _clock.GetTimestamp() - MillisecondsToTicks(idleGuardMs);
                 _lastBridgeActivityAt = null;
                 _isRunning = true;
+                // Publish every worker before any worker can fault and begin shutdown.
+                _readerTask = Task.Run(() => RunVirtualReaderAsync(virtualPort, bridgeCancellation.Token));
+                _writerTask = Task.Run(() => RunVirtualWriterAsync(virtualPort, bridgeCancellation.Token));
+                _deviceWriterTask = Task.Run(() => RunDeviceSchedulerAsync(writeToDeviceAsync, bridgeCancellation.Token));
             }
 
-            _readerTask = Task.Run(() => RunVirtualReaderAsync(virtualPort, bridgeCancellation.Token));
-            _writerTask = Task.Run(() => RunVirtualWriterAsync(virtualPort, bridgeCancellation.Token));
-            _deviceWriterTask = Task.Run(() => RunDeviceSchedulerAsync(writeToDeviceAsync, bridgeCancellation.Token));
             RaiseStatusChanged();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -215,10 +220,10 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _lifecycleGate.WaitAsync(cancellationToken);
+        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await StopCurrentAsync(cancellationToken);
+            await StopCurrentAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -632,17 +637,20 @@ public sealed class SerialBridgeService : ISerialBridgeService
                     }
                     finally
                     {
-                        ManualTxStateChangedEventArgs? completedStateChange;
+                        ManualTxStateChangedEventArgs? completedStateChange = null;
                         lock (_stateGate)
                         {
                             manual.Completion.TrySetResult(result);
-                            if (ReferenceEquals(_pendingManual, manual))
+                            if (_cancellation?.Token == cancellationToken)
                             {
-                                _pendingManual = null;
-                            }
+                                if (ReferenceEquals(_pendingManual, manual))
+                                {
+                                    _pendingManual = null;
+                                    completedStateChange = SetManualTxStateLocked(ManualTxState.Idle);
+                                }
 
-                            completedStateChange = SetManualTxStateLocked(ManualTxState.Idle);
-                            _virtualToDeviceWriteActive = false;
+                                _virtualToDeviceWriteActive = false;
+                            }
                         }
 
                         RaiseManualTxStateChanged(completedStateChange);
@@ -650,7 +658,7 @@ public sealed class SerialBridgeService : ISerialBridgeService
                         RaiseStatusChanged();
                     }
 
-                    if (manualError is not null)
+                    if (manualError is not null && !cancellationToken.IsCancellationRequested)
                     {
                         FaultBridge($"Bridge manual TX failed: {manualError.Message}");
                         return;
@@ -712,9 +720,6 @@ public sealed class SerialBridgeService : ISerialBridgeService
 
     private void FaultBridge(string message)
     {
-        CancellationTokenSource? cancellation;
-        SerialPortStream? virtualPort;
-        ManualRequest? manual;
         ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
@@ -723,71 +728,88 @@ public sealed class SerialBridgeService : ISerialBridgeService
                 return;
             }
 
-            _isRunning = false;
             _lastError = message;
             _lastFaultReason = message;
-            cancellation = _cancellation;
-            virtualPort = _virtualPort;
-            manual = _pendingManual;
-            _pendingManual = null;
-            stateChange = SetManualTxStateLocked(ManualTxState.Idle);
+            BeginShutdownLocked(out stateChange);
         }
 
         Interlocked.Increment(ref _errorCount);
-        try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
-        _deviceToVirtualQueue.TryComplete();
-        _virtualToDeviceQueue.TryComplete();
-        manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
         RaiseManualTxStateChanged(stateChange);
         Error?.Invoke(this, message);
         RaiseStatusChanged();
-        _ = Task.Run(() => SafeCloseAndDispose(virtualPort));
     }
 
     private async Task StopCurrentAsync(CancellationToken cancellationToken)
     {
-        CancellationTokenSource? cancellation;
-        SerialPortStream? virtualPort;
-        Task? readerTask;
-        Task? writerTask;
-        Task? deviceWriterTask;
-        ManualRequest? manual;
+        Task shutdown;
         ManualTxStateChangedEventArgs? stateChange;
         lock (_stateGate)
         {
-            cancellation = _cancellation;
-            virtualPort = _virtualPort;
-            readerTask = _readerTask;
-            writerTask = _writerTask;
-            deviceWriterTask = _deviceWriterTask;
-            manual = _pendingManual;
-            _cancellation = null;
-            _virtualPort = null;
-            _readerTask = null;
-            _writerTask = null;
-            _deviceWriterTask = null;
-            _pendingManual = null;
-            stateChange = SetManualTxStateLocked(ManualTxState.Idle);
-            _isRunning = false;
+            shutdown = BeginShutdownLocked(out stateChange);
         }
 
-        try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
-        _deviceToVirtualQueue.TryComplete();
-        _virtualToDeviceQueue.TryComplete();
-        manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
         RaiseManualTxStateChanged(stateChange);
-        SignalArbiter();
-        SafeCloseAndDispose(virtualPort);
+        RaiseStatusChanged();
+        // Cancel only this wait. The shutdown and its resources remain tracked
+        // until Close/Dispose AND all workers have actually finished.
+        await shutdown.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var task in new[] { readerTask, writerTask, deviceWriterTask })
+        lock (_stateGate)
         {
-            if (task is null) continue;
-            try { await task.WaitAsync(cancellationToken); }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+            if (ReferenceEquals(_shutdownTask, shutdown))
+            {
+                _cancellation = null;
+                _virtualPort = null;
+                _readerTask = null;
+                _writerTask = null;
+                _deviceWriterTask = null;
+                _shutdownTask = null;
+            }
         }
 
-        cancellation?.Dispose();
         RaiseStatusChanged();
+    }
+
+    // Called under _stateGate. Faults and explicit stops share exactly one cleanup.
+    private Task BeginShutdownLocked(out ManualTxStateChangedEventArgs? stateChange)
+    {
+        stateChange = null;
+        if (_shutdownTask is not null) return _shutdownTask;
+
+        _isRunning = false;
+        var manual = _pendingManual;
+        _pendingManual = null;
+        stateChange = SetManualTxStateLocked(ManualTxState.Idle);
+        manual?.Completion.TrySetResult(ManualTransmitResult.Canceled);
+
+        var cancellation = _cancellation;
+        var virtualPort = _virtualPort;
+        var workers = new[] { _readerTask, _writerTask, _deviceWriterTask }
+            .OfType<Task>().ToArray();
+        var deviceQueue = _deviceToVirtualQueue;
+        var virtualQueue = _virtualToDeviceQueue;
+        if (cancellation is null && virtualPort is null && workers.Length == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _shutdownTask = Task.Run(async () =>
+        {
+            try
+            {
+                try { cancellation?.Cancel(); }
+                catch (ObjectDisposedException) { }
+                catch (Exception ex) { ReportError($"Bridge cancellation failed: {ex.Message}"); }
+                deviceQueue.TryComplete();
+                virtualQueue.TryComplete();
+                SignalArbiter();
+                SafeCloseAndDispose(virtualPort);
+                await Task.WhenAll(workers).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { ReportError($"Bridge shutdown failed: {ex.Message}"); }
+            finally { cancellation?.Dispose(); }
+        });
     }
 
     private void MarkBridgeActivityLocked()

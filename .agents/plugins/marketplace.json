@@ -1,0 +1,20 @@
+{
+  "name": "serial-monitor-tools",
+  "interface": {
+    "displayName": "Serial Monitor Tools"
+  },
+  "plugins": [
+    {
+      "name": "serial-monitor",
+      "source": {
+        "source": "local",
+        "path": "./plugins/serial-monitor"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

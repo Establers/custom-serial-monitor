@@ -30,5 +30,17 @@ public sealed class AppProfile
 
     public List<CommandHistoryEntry> CommandHistory { get; set; } = new();
 
+    public Dictionary<int, InstanceInputHistory> InstanceHistories { get; set; } = new();
+
+    public Dictionary<string, InstanceInputHistory> PortHistories { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public int PortHistoryMigrationVersion { get; set; }
+
+    public InstanceInputHistory? LegacyInputHistory { get; set; }
+
+    // A connected port can differ from a selection pending the next reconnect.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ActiveHistoryPort { get; set; }
+
     public List<CommandSequence> CommandSequences { get; set; } = new();
 }

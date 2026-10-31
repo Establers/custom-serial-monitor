@@ -6,6 +6,18 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed partial class MainViewModel
 {
+    public TxSendMode GetSequenceStepInputMode(CommandSequenceStep? before = null)
+    {
+        var mode = SelectedTxSendMode;
+        if (SelectedCommandSequence is null) return mode;
+        foreach (var step in SelectedCommandSequence.Steps)
+        {
+            if (ReferenceEquals(step, before)) break;
+            if (step.IsEnabled && step.Kind == CommandSequenceStepKind.Tx) mode = step.TxMode ?? SelectedTxSendMode;
+        }
+        return mode;
+    }
+
     private SequenceExecutionControl? _sequenceExecutionControl;
 
     public AsyncRelayCommand ToggleCommandSequenceCommand { get; private set; } = null!;
@@ -63,6 +75,8 @@ public sealed partial class MainViewModel
             if (!CanControlGuiSequence) return;
             _sequenceTxActivity.SetPhase(_sequenceExecutionControl!.IsPaused ? "Paused" :
                 _sequenceExecutionControl.IsPauseRequested ? "Pause requested" : "Running");
+            _sequenceRunSession?.SetPhase(_sequenceExecutionControl.IsPaused ? "paused" :
+                _sequenceExecutionControl.IsPauseRequested ? "pausing" : "running");
             RefreshSequenceTxActivity();
             NotifySequenceDebugCommandStates();
         });
@@ -100,6 +114,22 @@ public sealed partial class MainViewModel
         sequence.Steps.Insert(index + 1, copy);
         SelectedCommandSequenceStep = copy;
         ApplyCommandSequenceChanges($"Duplicated sequence step: {copy.DisplayName}");
+        return true;
+    }
+
+    public bool CompleteCommandSequenceStepReorder(CommandSequence sequence, CommandSequenceStep step, int originalIndex)
+    {
+        // ListView's built-in reordering has already moved the item in Steps.
+        // Commit once after the drop so numbering and editor state stay in sync.
+        if (!ReferenceEquals(SelectedCommandSequence, sequence) || originalIndex < 0 ||
+            originalIndex >= sequence.Steps.Count)
+            return false;
+        var index = sequence.Steps.IndexOf(step);
+        if (index < 0 || index == originalIndex || !EnsureCanEditCommandSequences("Move sequence step"))
+            return false;
+
+        SelectedCommandSequenceStep = step;
+        ApplyCommandSequenceChanges($"Moved sequence step: {step.DisplayName}");
         return true;
     }
 

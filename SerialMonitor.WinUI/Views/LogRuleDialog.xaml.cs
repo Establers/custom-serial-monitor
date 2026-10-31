@@ -21,10 +21,9 @@ public sealed partial class LogRuleDialog : ContentDialog
         ModeBox.SelectedIndex = source.Mode == LogRuleMatchMode.Hex ? 1 : 0;
         DirectionBox.ItemsSource = Enum.GetValues<HighlightMatchDirection>();
         DirectionBox.SelectedItem = source.MatchDirection;
-        SetOptions(ForegroundBox, colors, source.ForegroundColor);
-        SetOptions(BackgroundBox,
-            ["(none)", "Default", "Red", "Yellow", "Magenta", "Cyan", "Green", "Blue", "White", "Gray"],
-            source.BackgroundColor);
+        var palette = colors.ToArray();
+        SetOptions(ForegroundBox, palette, source.ForegroundColor);
+        SetOptions(BackgroundBox, new[] { "(none)" }.Concat(palette), source.BackgroundColor);
         PriorityBox.Text = source.Priority.ToString(CultureInfo.InvariantCulture);
         CooldownBox.Text = RuleNotificationLimits.ClampCooldown(source.NotificationCooldownSeconds)
             .ToString(CultureInfo.InvariantCulture);

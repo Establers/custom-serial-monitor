@@ -63,7 +63,11 @@ public sealed class BatchedObservableCollection<T> : ObservableCollection<T>
 
 public sealed class BoundedLogBuffer<T>
 {
-    public BoundedLogBuffer(int capacity)
+    private readonly long _maximumBytes;
+    private readonly Func<T, long>? _estimate;
+    public long RetainedBytes { get; private set; }
+
+    public BoundedLogBuffer(int capacity, long maximumBytes = 0, Func<T, long>? estimate = null)
     {
         if (capacity <= 0)
         {
@@ -71,6 +75,8 @@ public sealed class BoundedLogBuffer<T>
         }
 
         Capacity = capacity;
+        _maximumBytes = maximumBytes;
+        _estimate = estimate;
     }
 
     public int Capacity { get; private set; }
@@ -79,6 +85,7 @@ public sealed class BoundedLogBuffer<T>
 
     public BoundedLogBufferResult AddRange(IReadOnlyList<T> items)
     {
+        if (_maximumBytes > 0 && _estimate is not null) return AddWithinByteLimit(items);
         if (items.Count == 0)
         {
             return new BoundedLogBufferResult(0, 0, Items.Count);
@@ -100,6 +107,30 @@ public sealed class BoundedLogBuffer<T>
     public void Clear()
     {
         Items.ClearBatch();
+        RetainedBytes = 0;
+    }
+
+    private BoundedLogBufferResult AddWithinByteLimit(IReadOnlyList<T> items)
+    {
+        var accepted = 0;
+        var first = Math.Max(0, items.Count - Capacity);
+        var dropped = first;
+        for (var index = first; index < items.Count; index++)
+        {
+            var item = items[index];
+            var bytes = _estimate!(item);
+            if (bytes > _maximumBytes) { dropped++; continue; }
+            while (Items.Count > 0 && (Items.Count >= Capacity || RetainedBytes + bytes > _maximumBytes))
+            {
+                RetainedBytes -= _estimate(Items[0]);
+                Items.RemoveAt(0);
+                dropped++;
+            }
+            Items.Add(item);
+            RetainedBytes += bytes;
+            accepted++;
+        }
+        return new(accepted, dropped, Items.Count);
     }
 
     public int SetCapacity(int capacity)
@@ -118,6 +149,8 @@ public sealed class BoundedLogBuffer<T>
         var overflow = Math.Max(0, Items.Count - Capacity);
         if (overflow > 0)
         {
+            if (_estimate is not null)
+                for (var index = 0; index < overflow; index++) RetainedBytes -= _estimate(Items[index]);
             Items.RemoveFromStartAndAddRange(overflow, Array.Empty<T>());
         }
 

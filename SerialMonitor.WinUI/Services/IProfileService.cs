@@ -41,4 +41,9 @@ public interface IProfileService
     Task<AppProfile> LoadAsync(string path, CancellationToken cancellationToken);
 
     Task SaveAsync(string path, AppProfile profile, CancellationToken cancellationToken);
+
+    // Explicit automation writes must commit this name exactly or report a
+    // conflict. A generic stale profile save may legitimately preserve disk data.
+    Task SaveSequenceChangeAsync(string path, AppProfile profile, string sequenceName, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Explicit sequence persistence is not supported by this profile provider.");
 }

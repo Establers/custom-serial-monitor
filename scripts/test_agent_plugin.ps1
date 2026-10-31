@@ -64,6 +64,10 @@ $null = & $packager -Check
 $manifest = Read-Json (Join-Path $pluginRoot 'plugin.json')
 $compatibility = Read-Json (Join-Path $pluginRoot 'compatibility.json')
 $marketplace = Read-Json (Join-Path $repoRoot '.claude-plugin\marketplace.json')
+$codexMarketplace = Read-Json (Join-Path $repoRoot '.agents\plugins\marketplace.json')
+Assert-True ($codexMarketplace.name -eq $marketplace.name -and
+    $codexMarketplace.plugins[0].source.source -eq 'local' -and
+    $codexMarketplace.plugins[0].source.path -eq './plugins/serial-monitor') 'Native Codex marketplace cannot resolve the plugin.'
 Assert-True ($manifest.'$schema' -eq 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json') 'Portable plugin schema is missing.'
 Assert-True ($marketplace.plugins[0].source -eq './plugins/serial-monitor') 'Marketplace does not reference the packaged plugin.'
 foreach ($relative in @('mcp.json', 'mcp.codex.json', '.mcp.json')) {
@@ -81,7 +85,7 @@ Assert-True (Test-Path -LiteralPath $package.ChecksumPath -PathType Leaf) 'Plugi
 $archive = [IO.Compression.ZipFile]::OpenRead($package.ZipPath)
 try {
     $entries = @($archive.Entries | ForEach-Object FullName)
-    foreach ($required in @('.claude-plugin/marketplace.json', 'README.md', 'LICENSE', 'docs/agent_plugins.md', 'docs/ai_control.md',
+    foreach ($required in @('.agents/plugins/marketplace.json', '.claude-plugin/marketplace.json', 'README.md', 'LICENSE', 'docs/agent_plugins.md', 'docs/ai_control.md',
         'plugins/serial-monitor/plugin.json', 'plugins/serial-monitor/mcp.json', 'plugins/serial-monitor/.mcp.json',
         'plugins/serial-monitor/.claude-plugin/plugin.json', 'plugins/serial-monitor/.codex-plugin/plugin.json',
         'plugins/serial-monitor/scripts/Start-SerialMonitorMcp.ps1',
@@ -166,7 +170,11 @@ $passed++
 $timeoutPlugin = Join-Path $scratch 'timeout-plugin'
 Copy-Item -LiteralPath $pluginRoot -Destination $timeoutPlugin -Recurse -Force
 $shortCompatibility = Read-Json (Join-Path $timeoutPlugin 'compatibility.json')
-$shortCompatibility.probeTimeoutMs = 200
+# Leave time for cold CLR/process startup on a busy build machine. The fixture
+# deliberately sleeps for ten seconds after writing its PID, so a two-second
+# deadline still proves probe timeout and child cleanup without testing startup
+# scheduling against an unrealistically narrow 200 ms window.
+$shortCompatibility.probeTimeoutMs = 2000
 [IO.File]::WriteAllText((Join-Path $timeoutPlugin 'compatibility.json'), ($shortCompatibility | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 $pidMarker = Join-Path $scratch 'probe-pid.txt'
 $result = Run-Launcher $timeoutPlugin $mockCli 'mcp' '' @{ SERIAL_MONITOR_TEST_HANG = 'true'; SERIAL_MONITOR_TEST_PID = $pidMarker }
@@ -319,4 +327,39 @@ finally {
 }
 $passed++
 
-Write-Output "Plugin packaging, compatibility and stdio tests passed: $passed"
+# Installer preflight must reject stale binaries and skills, even when all paths
+# exist and the plugin manifest still has the expected version.
+$payload = Join-Path $scratch 'release payload'
+New-Item -ItemType Directory -Force -Path $payload | Out-Null
+Copy-Item -LiteralPath $package.StageDirectory -Destination (Join-Path $payload 'agent-plugin') -Recurse
+New-Item -ItemType Directory -Force -Path (Join-Path $payload 'docs') | Out-Null
+foreach ($guide in @('agent_plugins.md', 'ai_control.md')) {
+    Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\' + $guide)) -Destination (Join-Path $payload ('docs\' + $guide))
+}
+Copy-Item -LiteralPath (Split-Path -Parent $CliPath) -Destination (Join-Path $payload 'tools') -Recurse
+$project = [xml][IO.File]::ReadAllText((Join-Path $repoRoot 'SerialMonitor.WinUI\SerialMonitor.WinUI.csproj'))
+$appVersion = [string]$project.Project.PropertyGroup.Version
+$fixtureSource = 'using System.Reflection; [assembly: AssemblyInformationalVersion("' + $appVersion + '")] public static class PayloadGui { public static void Main() {} }'
+$fixtureGui = Join-Path $payload 'SerialMonitor.WinUI.exe'
+Add-Type -TypeDefinition $fixtureSource -OutputAssembly $fixtureGui -OutputType ConsoleApplication
+$checker = Join-Path $PSScriptRoot 'check_release_payload.ps1'
+$checked = & $checker -PortableDirectory $payload
+Assert-True ($checked.Checked -and $checked.Version -eq $appVersion) 'Valid release payload was rejected.'
+$passed++
+foreach ($relative in @('tools\serialctl.exe', 'agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md',
+    'agent-plugin\.agents\plugins\marketplace.json')) {
+    $path = Join-Path $payload $relative
+    $backup = $path + '.original'
+    Copy-Item -LiteralPath $path -Destination $backup
+    try {
+        if ($relative -eq 'tools\serialctl.exe') { Copy-Item -LiteralPath $mockCli -Destination $path -Force }
+        else { [IO.File]::AppendAllText($path, "`nstale payload") }
+        $failed = $false
+        try { $null = & $checker -PortableDirectory $payload } catch { $failed = $true }
+        Assert-True $failed "Stale release payload was accepted: $relative"
+    }
+    finally { Move-Item -LiteralPath $backup -Destination $path -Force }
+    $passed++
+}
+
+Write-Output "Plugin packaging, compatibility, stdio and release payload tests passed: $passed"

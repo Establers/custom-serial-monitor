@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.UpdateTestWor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.Cli", "..\SerialMonitor.Cli\SerialMonitor.Cli.csproj", "{04D70B92-F898-4CD2-8F10-D268AF7D1EEF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialMonitor.TestProcessProbe", "..\SerialMonitor.TestProcessProbe\SerialMonitor.TestProcessProbe.csproj", "{8DC64CF0-0218-458B-8C69-49A746F7DBBE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -51,6 +53,10 @@ Global
 		{04D70B92-F898-4CD2-8F10-D268AF7D1EEF}.Debug|x64.Build.0 = Debug|Any CPU
 		{04D70B92-F898-4CD2-8F10-D268AF7D1EEF}.Release|x64.ActiveCfg = Release|Any CPU
 		{04D70B92-F898-4CD2-8F10-D268AF7D1EEF}.Release|x64.Build.0 = Release|Any CPU
+		{8DC64CF0-0218-458B-8C69-49A746F7DBBE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8DC64CF0-0218-458B-8C69-49A746F7DBBE}.Debug|x64.Build.0 = Debug|Any CPU
+		{8DC64CF0-0218-458B-8C69-49A746F7DBBE}.Release|x64.ActiveCfg = Release|Any CPU
+		{8DC64CF0-0218-458B-8C69-49A746F7DBBE}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

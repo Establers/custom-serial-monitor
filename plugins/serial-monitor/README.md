@@ -4,6 +4,12 @@ This plugin contains the shared `serial-monitor-control` skill and a local Windo
 MCP launcher. Install the Serial Monitor application separately (1.6.0 or later).
 Keep the GUI running while using its serial tools.
 
+Plugin 1.0.2 includes validation, cancellation under load, serial session binding,
+capture paging and multibyte sequence expectation guidance. Automation remains
+TX-only (`captureMs`/literal `expect`); GUI RX Check uses its separate import format.
+Application 1.6.2 or later is recommended for the corresponding runtime fixes.
+Update both the program and plugin, then reconnect MCP in a new host session.
+
 Plugin identity: `serial-monitor@serial-monitor-tools`.
 Git marketplace: `Establers/custom-serial-monitor`.
 
@@ -24,6 +30,8 @@ commands during discovery.
 The root portable manifest and `mcp.json` serve Codex and Copilot; the
 `.claude-plugin` manifest and `.mcp.json` serve Claude Code. No install hook changes
 global instructions, permissions, environment variables or client configuration.
+The marketplace root supplies the native `.agents/plugins/marketplace.json` for
+Codex alongside `.claude-plugin/marketplace.json` for Claude Code and Copilot.
 
 `mcp.codex.json` is only for the legacy Codex manifest fallback. Its 90-second
 timeout does not configure modern portable-plugin clients. Keep collection windows

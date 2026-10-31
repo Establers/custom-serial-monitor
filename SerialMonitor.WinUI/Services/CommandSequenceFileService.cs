@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text;
 using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Models;
+using SerialMonitor.WinUI.Infrastructure;
 
 namespace SerialMonitor.WinUI.Services;
 
@@ -15,22 +16,17 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
 
     private static readonly string[] Manual =
     [
-        "Serial Monitor sequence format v1. One UTF-8 JSON file contains one sequence. Select multiple files with Load.",
-        "Required root fields (case-sensitive): FormatVersion (integer 1), Name (nonblank string), RepeatCount (integer 1..9999), Steps (array, 0..10000 steps). Empty sequences can be edited but cannot run.",
-        "Optional root _manual is an array of strings for documentation only. JSON // and /* */ comments and trailing commas are forbidden.",
-        "Each step requires CommandText (nonblank string), DelayAfterMs (integer 0..600000), LineEndingMode (null or exactly None, Cr, Lf, Crlf). Optional Name and Comment are strings or null.",
-        "Optional step IsEnabled is a boolean (default true). Disabled steps remain saved but are skipped, including their delay, in GUI and CLI/MCP runs. A sequence needs at least one enabled step to run.",
-        "Step Name is an optional short label for GUI progress/errors and CLI/MCP step results; blank names use CommandText in the GUI. Step names need not be unique. Comment is a reference note shown in the GUI step tooltip and saved in JSON. Neither field is transmitted or changes execution.",
-        "Unknown fields, duplicate keys, wrong types, missing required fields and out-of-range values fail the entire import. Sequence names must be unique ignoring case, including existing sequences.",
-        "Steps execute in array order. DelayAfterMs is the wait AFTER sending, including the last step. RepeatCount repeats the entire sequence. Comment and _manual never execute.",
-        "LineEndingMode: None adds nothing; Cr adds CR; Lf adds LF; Crlf adds CR+LF; null uses the main TX ending at run start. JSON Global is invalid.",
-        "Optional step TxMode is null (use main mode at run start), Terminal or Hex. Legacy files without TxMode use the main mode. Terminal sends UTF-8 plus ending; HEX sends exact bytes such as AA 55 01 and ignores endings. All HEX steps are validated before any TX.",
-        "Optional CaptureMs is an integer 0..60000 (default 2000). Optional Expect is null or {Kind: text|hex, Value: literal nonempty string, maximum 4096 characters}. Kind and Value are case-sensitive. HEX expectations contain complete bytes with optional whitespace. No regex or subsequence matching.",
-        "CaptureMs and Expect are automation metadata for CLI/MCP sequence execution only. Ordinary GUI Run sends steps using TxMode and DelayAfterMs, without RX capture or matching. A missing literal does not establish product failure when printf output interleaves; automation retains all RX for inspection.",
-        "Command leading/trailing whitespace is preserved when TxMode is explicitly Terminal or Hex. Legacy steps with null/missing TxMode keep the GUI's trimming behavior. Escape quotes and backslashes using JSON string escaping.",
-        "No conditions, variables, retry fields, checksum calculation or sequence calls. Never invent command bytes or unsupported fields; ask for the device protocol when unclear.",
-        "Import never runs a sequence. Review commands and select the correct connection and mode before Run. Export includes only this sequence, not connection settings or RX rules.",
-        "Limits: 2 MiB per file, 100 files per Load, at most 10000 total steps and 16 MiB total input per Load. Any invalid file or name collision cancels the whole batch. Rename Name explicitly to import another copy."
+        "Serial Monitor sequence format v1 (TX only), v3 (TX / RX Check). v2 attached ResponseCheck files are read and expanded into separate TX and RX Check steps.",
+        "One UTF-8 JSON object: FormatVersion, nonblank Name, RepeatCount 1..9999, Steps array. Unknown/duplicate fields, comments and trailing commas are rejected. Import never executes a sequence.",
+        "v3 steps have Kind: Tx or RxCheck. TX uses nonempty CommandText. RX Check uses RxPattern (1..4096 characters), with CommandText empty to prevent older clients from transmitting a pattern.",
+        "Each step requires DelayAfterMs (0..600000) and LineEndingMode (null, None, Cr, Lf, Crlf). TX waits DelayAfterMs after sending. RX Check waits its whole DelayAfterMs window even if a pattern matches early. A missing pattern never branches or retries.",
+        "Optional TxMode: null, Terminal, Hex. Null TX uses the main mode captured at run start. Null RX Check inherits the preceding enabled TX mode, or the main mode when no TX precedes it in that repeat. There is no separate response-format selector.",
+        "Terminal TX uses UTF-8 plus ending; Terminal RX Check uses literal case-sensitive text in the connection RX encoding. HEX TX uses exact bytes; HEX RX Check accepts byte patterns such as AA 55 ?? 00. ?? ignores one byte; partial nibbles and all-wildcard patterns are invalid. Patterns span arbitrary receive chunks.",
+        "RX Check also inspects RX already received since the preceding TX in the same repeat and connection. This prevents a fast response during the TX delay from being missed. RX-only checks start at their own activation. TX/RX timestamps refer to host write-start / receive-chunk times, not device-internal times.",
+        "Optional IsEnabled defaults true; disabled rows and their waits are skipped. Optional Name and Comment are metadata only; leading/trailing pattern whitespace is significant. Line endings are ignored for HEX TX and RX Check.",
+        "CaptureMs (0..60000, default 2000) and Expect {Kind:text|hex,Value:literal} retain their existing CLI/MCP fixed-capture semantics. They do not enable GUI checking. Legacy CLI/MCP rejects enabled RX Check or ResponseCheck steps, and cannot overwrite definitions containing them. It never sends an RX pattern as a command.",
+        "GUI sequences containing enabled RX checks save bounded and paged results with raw RX and timestamps asynchronously. Without enabled RX checks, no sequence-result RX capture or storage is started and TX does not wait for result storage. Normal file logging is separate. No variables, conditions, checksum fields, sequence calls or automatic branching.",
+        "Limits: 2 MiB per file, 100 files per Load, 10000 total steps and 16 MiB total input. All file/step limits are checked after v2 expansion. A bad file or duplicate sequence name rejects the whole import."
     ];
 
     public async Task<IReadOnlyList<CommandSequence>> LoadAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken)
@@ -91,20 +87,31 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
 
     internal static string Serialize(CommandSequence sequence)
     {
+        sequence = ProfileSequenceMerge.Clone([sequence])[0];
+        try { CommandSequenceMigration.ExpandResponseChecks(sequence); }
+        catch (ArgumentException ex) { throw new InvalidDataException(ex.Message, ex); }
+        var version = sequence.Steps.Any(step => step.Kind == CommandSequenceStepKind.RxCheck) ? 3 : 1;
         var json = JsonSerializer.Serialize(new
         {
             _manual = Manual,
-            FormatVersion = 1,
+            FormatVersion = version,
             sequence.Name,
             sequence.RepeatCount,
-            Steps = sequence.Steps.Select(step => new
+            Steps = sequence.Steps.Select(step =>
             {
-                step.Name, step.IsEnabled, step.CommandText,
-                LineEndingMode = step.LineEndingMode?.ToString(),
-                step.DelayAfterMs, step.Comment,
-                TxMode = step.TxMode?.ToString(), step.CaptureMs, step.Expect
+                var fields = new Dictionary<string, object?>
+                {
+                    ["Name"] = step.Name, ["IsEnabled"] = step.IsEnabled, ["CommandText"] = step.StoredCommandText,
+                    ["LineEndingMode"] = step.LineEndingMode?.ToString(), ["DelayAfterMs"] = step.DelayAfterMs,
+                    ["Comment"] = step.Comment, ["TxMode"] = step.TxMode?.ToString(),
+                    ["CaptureMs"] = step.CaptureMs, ["Expect"] = step.Expect
+                };
+                if (version == 3) fields["Kind"] = step.Kind.ToString();
+                if (step.Kind == CommandSequenceStepKind.RxCheck) fields["RxPattern"] = step.CommandText;
+                return fields;
             })
-        }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        }, new JsonSerializerOptions { WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         if (System.Text.Encoding.UTF8.GetByteCount(json) > MaxFileBytes) throw new InvalidDataException("Export exceeds 2 MiB.");
         using var document = JsonDocument.Parse(json);
         Parse(document.RootElement); // Never export a file that our loader would reject.
@@ -115,7 +122,7 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
     {
         cancellationToken.ThrowIfCancellationRequested();
         CheckObject(root, "$", ["_manual", "FormatVersion", "Name", "RepeatCount", "Steps"]);
-        if (Integer(root, "FormatVersion", "$", 1, 1) != 1) throw new InvalidDataException("Unsupported format.");
+        var format = Integer(root, "FormatVersion", "$", 1, 3);
         if (root.TryGetProperty("_manual", out var manual) &&
             (manual.ValueKind != JsonValueKind.Array || manual.EnumerateArray().Any(line => line.ValueKind != JsonValueKind.String)))
             throw new InvalidDataException("$._manual must be an array of strings.");
@@ -133,7 +140,17 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var path = $"$.Steps[{sequence.Steps.Count}]";
-            CheckObject(step, path, ["Name", "IsEnabled", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment", "TxMode", "CaptureMs", "Expect"]);
+            CheckObject(step, path, format == 1
+                ? ["Name", "IsEnabled", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment", "TxMode", "CaptureMs", "Expect"]
+                : format == 2 ? ["Name", "IsEnabled", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment", "TxMode", "CaptureMs", "Expect", "ResponseCheck"]
+                : ["Name", "IsEnabled", "Kind", "RxPattern", "CommandText", "LineEndingMode", "DelayAfterMs", "Comment", "TxMode", "CaptureMs", "Expect"]);
+            var kind = CommandSequenceStepKind.Tx;
+            if (step.TryGetProperty("Kind", out var kindValue))
+            {
+                if (kindValue.ValueKind != JsonValueKind.String || kindValue.GetString() is not ("Tx" or "RxCheck"))
+                    throw new InvalidDataException(path + ".Kind must be Tx or RxCheck.");
+                kind = kindValue.GetString() == "RxCheck" ? CommandSequenceStepKind.RxCheck : CommandSequenceStepKind.Tx;
+            }
             var ending = Required(step, "LineEndingMode", path);
             TxLineEndingMode? mode = ending.ValueKind switch
             {
@@ -145,25 +162,54 @@ public sealed class CommandSequenceFileService : ICommandSequenceFileService
                 _ => throw new InvalidDataException($"{path}.LineEndingMode must be null, None, Cr, Lf or Crlf.")
             };
             var txMode = ParseTxMode(step, path);
-            var command = Required(step, "CommandText", path);
+            var command = Required(step, kind == CommandSequenceStepKind.RxCheck ? "RxPattern" : "CommandText", path);
+            var transmit = Required(step, "CommandText", path);
+            if (kind == CommandSequenceStepKind.Tx && step.TryGetProperty("RxPattern", out _))
+                throw new InvalidDataException(path + ".RxPattern is valid only for RX Check.");
+            if (kind == CommandSequenceStepKind.RxCheck && (transmit.ValueKind != JsonValueKind.String || transmit.GetString() != ""))
+                throw new InvalidDataException(path + ".CommandText must be empty for RX Check; use RxPattern.");
+            if (kind == CommandSequenceStepKind.RxCheck && command.ValueKind == JsonValueKind.String && command.GetString()!.Length > 4096)
+                throw new InvalidDataException(path + ".RxPattern exceeds 4096 characters.");
             if (command.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(command.GetString()) ||
-                (txMode is null && string.IsNullOrWhiteSpace(command.GetString())))
+                (kind == CommandSequenceStepKind.Tx && txMode is null && string.IsNullOrWhiteSpace(command.GetString())))
                 throw new InvalidDataException($"{path}.CommandText must be a nonempty string (legacy Global steps require nonblank text).");
+            if (kind == CommandSequenceStepKind.RxCheck && txMode.HasValue)
+            {
+                try { new SerialMonitor.Core.Sequences.ResponseCheck(txMode == TxSendMode.Hex ? "hex" : "text", command.GetString()!).Validate(); }
+                catch (ArgumentException ex) { throw new InvalidDataException(path + ": " + ex.Message, ex); }
+            }
             sequence.Steps.Add(new CommandSequenceStep
             {
+                Kind = kind,
                 Name = NormalizeOptionalText(OptionalText(step, "Name", path)),
                 IsEnabled = OptionalBoolean(step, "IsEnabled", path, defaultValue: true),
-                CommandText = txMode is null ? command.GetString()!.Trim() : command.GetString()!,
+                CommandText = kind == CommandSequenceStepKind.Tx && txMode is null ? command.GetString()!.Trim() : command.GetString()!,
                 LineEndingMode = mode,
                 DelayAfterMs = Integer(step, "DelayAfterMs", path, 0, 600_000),
                 Comment = NormalizeOptionalText(OptionalText(step, "Comment", path)),
                 TxMode = txMode,
                 CaptureMs = step.TryGetProperty("CaptureMs", out _) ? Integer(step, "CaptureMs", path, 0, 60000) : 2000,
                 Expect = ParseExpectation(step, path),
+                ResponseCheck = ParseResponseCheck(step, path),
                 StepNumber = sequence.Steps.Count + 1
             });
         }
+        CommandSequenceMigration.ExpandResponseChecks(sequence);
+        if (sequence.Steps.Count > Math.Min(MaxSteps, remainingSteps)) throw new InvalidDataException("Expanded sequence exceeds the step limit.");
         return sequence;
+    }
+
+    private static SerialMonitor.Core.Sequences.ResponseCheck? ParseResponseCheck(JsonElement step, string path)
+    {
+        if (!step.TryGetProperty("ResponseCheck", out var check) || check.ValueKind == JsonValueKind.Null) return null;
+        CheckObject(check, path + ".ResponseCheck", ["Kind", "Pattern", "TimeoutMs"]);
+        var pattern = Required(check, "Pattern", path);
+        if (pattern.ValueKind != JsonValueKind.String) throw new InvalidDataException(path + ".ResponseCheck.Pattern must be a string.");
+        var result = new SerialMonitor.Core.Sequences.ResponseCheck(RequiredText(check, "Kind", path),
+            pattern.GetString()!, Integer(check, "TimeoutMs", path, 1, 60000));
+        try { result.Validate(); }
+        catch (ArgumentException ex) { throw new InvalidDataException(path + ".ResponseCheck: " + ex.Message, ex); }
+        return result;
     }
 
     private static TxSendMode? ParseTxMode(JsonElement step, string path)

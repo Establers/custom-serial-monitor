@@ -118,7 +118,7 @@ if (Test-Path -LiteralPath (Join-Path $portableDir 'skills')) {
 if (-not (Test-Path -LiteralPath (Join-Path $portableDir 'tools\serialctl.exe') -PathType Leaf)) {
     throw 'Portable output is missing tools\serialctl.exe. Run build_installer.ps1 without -SkipPublish to refresh it.'
 }
-foreach ($relative in @('agent-plugin\.claude-plugin\marketplace.json',
+foreach ($relative in @('agent-plugin\.agents\plugins\marketplace.json', 'agent-plugin\.claude-plugin\marketplace.json',
     'agent-plugin\plugins\serial-monitor\plugin.json',
     'agent-plugin\plugins\serial-monitor\scripts\Start-SerialMonitorMcp.ps1',
     'agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md',
@@ -127,6 +127,8 @@ foreach ($relative in @('agent-plugin\.claude-plugin\marketplace.json',
         throw "Portable output is missing the plugin distribution asset '$relative'. Run build_installer.ps1 without -SkipPublish."
     }
 }
+
+$null = & (Join-Path $scriptRoot 'check_release_payload.ps1') -PortableDirectory $portableDir
 
 New-Item -ItemType Directory -Force -Path $installerOutputDir | Out-Null
 

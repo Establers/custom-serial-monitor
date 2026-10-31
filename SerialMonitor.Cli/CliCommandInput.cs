@@ -14,12 +14,17 @@ public static class CliCommandInput
         { arguments["command"] = ReadTextFile(path); arguments["txMode"] = "text"; }
         if (flags.TryGetValue("hex", out var hex))
         { arguments["command"] = hex; arguments["txMode"] = "hex"; }
+        if (arguments.TryGetValue("command", out var command))
+            _ = new UTF8Encoding(false, true).GetByteCount((string)command!);
     }
 
     public static string ReadTextFile(string path)
     {
         // Bound the read itself, even if another process grows/replaces the file.
-        using var reader = new StreamReader(path, new UTF8Encoding(false, true), true);
+        using var reader = new StreamReader(path, new UTF8Encoding(false, true), false);
+        // Accept an optional UTF-8 BOM, without auto-detecting UTF-16/32 or
+        // switching to a decoder that silently replaces malformed characters.
+        if (reader.Peek() == '\uFEFF') reader.Read();
         var buffer = new char[16385];
         var count = 0;
         while (count < buffer.Length)

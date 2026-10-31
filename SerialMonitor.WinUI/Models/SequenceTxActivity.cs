@@ -17,6 +17,7 @@ internal sealed class SequenceTxActivity(TimeProvider? clock = null)
     private long _failedAttempts;
     private DateTimeOffset? _lastSent;
     private long _lastSentTimestamp;
+    private long _delayStartedTimestamp;
     private int _delayMs;
 
     public void Begin(string name, int total)
@@ -44,6 +45,7 @@ internal sealed class SequenceTxActivity(TimeProvider? clock = null)
         _lastCommand = Preview(command, MaxCommandPreviewLength);
         _lastSent = _clock.GetLocalNow();
         _lastSentTimestamp = _clock.GetTimestamp();
+        _delayStartedTimestamp = _lastSentTimestamp;
         _delayMs = delayMs;
         _phase = "Delay";
     }
@@ -55,6 +57,12 @@ internal sealed class SequenceTxActivity(TimeProvider? clock = null)
     }
 
     public void SetPhase(string phase) => _phase = Preview(phase, MaxPhasePreviewLength);
+
+    public void BeginDelay()
+    {
+        _delayStartedTimestamp = _clock.GetTimestamp();
+        _phase = "Delay";
+    }
 
     public void UpdateAutomationProgress(int sent, int failedAttempts, string phase)
     {
@@ -93,7 +101,7 @@ internal sealed class SequenceTxActivity(TimeProvider? clock = null)
             var age = _lastSent.HasValue ? _clock.GetElapsedTime(_lastSentTimestamp).TotalSeconds : 0;
             var last = _lastSent.HasValue ? $"{_lastSent:MM-dd HH:mm:ss} ({Math.Floor(age):N0}s ago)" : "none";
             var phase = _phase == "Delay"
-                ? $"Delay {Math.Max(0, Math.Ceiling(_delayMs / 1000d - age)):N0}s remaining"
+                ? $"Delay {Math.Max(0, Math.Ceiling(_delayMs / 1000d - _clock.GetElapsedTime(_delayStartedTimestamp).TotalSeconds)):N0}s remaining"
                 : _phase;
             return $"{_name} | TX OK {_sent:N0}/{_total:N0} · Failed {_failedAttempts:N0} | Last TX {last} | {_position} · {phase}";
         }

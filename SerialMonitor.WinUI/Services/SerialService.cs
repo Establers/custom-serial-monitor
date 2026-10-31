@@ -221,7 +221,7 @@ public sealed class SerialService : ISerialService
                 return;
             }
 
-            await StopCurrentConnectionAsync(CancellationToken.None, publishDisconnected: false);
+            await StopCurrentConnectionAsync(cancellationToken, publishDisconnected: false);
             cancellationToken.ThrowIfCancellationRequested();
 
             Volatile.Write(ref _rawBridgePriorityEnabled, 0);
@@ -246,7 +246,7 @@ public sealed class SerialService : ISerialService
                     () => RunMockReceiverAsync(session, settings.Clone()),
                     CancellationToken.None);
                 SetConnectedIfCurrentSession(session);
-                await EnsureConnectedAfterStartupAsync(session);
+                await EnsureConnectedAfterStartupAsync(session, cancellationToken);
                 return;
             }
 
@@ -266,7 +266,7 @@ public sealed class SerialService : ISerialService
             {
                 ClearCurrentReceiveSession(session);
                 session.RequestStop();
-                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask);
+                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask, cancellationToken);
                 SetConnectionState(SerialConnectionState.Disconnected);
                 throw;
             }
@@ -274,7 +274,7 @@ public sealed class SerialService : ISerialService
             {
                 ClearCurrentReceiveSession(session);
                 session.RequestStop();
-                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask);
+                await CleanupFailedReceiveSessionAsync(session, serialPort, openTask, cancellationToken);
 
                 var message = $"Failed to open {settings.PortName}: {ex.Message}";
                 ReportError(message, countConnectionError: true, state: SerialConnectionState.Faulted);
@@ -294,7 +294,7 @@ public sealed class SerialService : ISerialService
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
             SetConnectedIfCurrentSession(session);
-            await EnsureConnectedAfterStartupAsync(session);
+            await EnsureConnectedAfterStartupAsync(session, cancellationToken);
         }
         finally
         {
@@ -395,7 +395,8 @@ public sealed class SerialService : ISerialService
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(command);
 
-        var payload = Encoding.UTF8.GetBytes(command.CommandText + ToLineEnding(command.LineEndingMode ?? TxLineEndingMode.None));
+        var payload = Infrastructure.TxPayloadEncoder.Encode(command.CommandText, TxSendMode.Terminal,
+            command.LineEndingMode ?? TxLineEndingMode.None);
         await SendPayloadAsync(payload, $"{command.CommandText}{Environment.NewLine}", cancellationToken);
     }
 
@@ -409,13 +410,15 @@ public sealed class SerialService : ISerialService
 
     private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken)
     {
+        // Bind before waiting: a disconnect barrier can finish while a later
+        // queued writer's continuation is still waiting on the UI dispatcher.
+        var session = Volatile.Read(ref _currentReceiveSession);
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            var session = Volatile.Read(ref _currentReceiveSession);
-            if (!IsConnected || session is null)
+            if (!IsConnected || session is null || !IsCurrentReceiveSession(session))
             {
-                const string message = "Write failed: serial service is disconnected.";
+                const string message = "Write failed: the original serial session is disconnected or has been replaced.";
                 ReportError(message, countConnectionError: false);
                 throw new InvalidOperationException(message);
             }
@@ -544,7 +547,8 @@ public sealed class SerialService : ISerialService
     private async Task StopCurrentConnectionAsync(CancellationToken cancellationToken, bool publishDisconnected)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await EnsureNoPendingReceiveTeardownAsync();
+        await EnsureNoPendingReceiveTeardownAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var session = TakeCurrentReceiveSession();
         if (session is null)
@@ -571,11 +575,19 @@ public sealed class SerialService : ISerialService
             portCloseTask,
             session.Worker ?? Task.CompletedTask);
 
-        if (!await WaitForTeardownAsync(teardownTask))
+        bool completed;
+        try { completed = await WaitForTeardownAsync(teardownTask, cancellationToken); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Volatile.Write(ref _pendingReceiveTeardown, teardownTask);
+            // Native Close/Dispose may ignore cancellation. Keep ownership and
+            // prevent reconnect until it really exits, but release this caller.
+            DeferReceiveTeardown(session, teardownTask);
+            throw;
+        }
+        if (!completed)
+        {
             SetFaultedConnection("Serial disconnect timed out; the previous session is still shutting down.");
-            _ = FinishTimedOutReceiveTeardownAsync(session, teardownTask);
+            DeferReceiveTeardown(session, teardownTask);
             return;
         }
 
@@ -607,15 +619,36 @@ public sealed class SerialService : ISerialService
     private async Task CleanupFailedReceiveSessionAsync(
         ReceiveSession session,
         BoundaryPreservingSerialPortStream? serialPort,
-        Task? openTask)
+        Task? openTask,
+        CancellationToken cancellationToken)
     {
         var teardownTask = StartPortCloseAfterOpen(session, serialPort, openTask);
-        if (await WaitForTeardownAsync(teardownTask))
+        // An open that outlived its deadline must not add another ten-second
+        // cleanup wait. Closing concurrently with Open is unsafe for drivers.
+        if (!teardownTask.IsCompleted && (cancellationToken.IsCancellationRequested || openTask is { IsCompleted: false }))
         {
-            CompleteReceiveSession(session);
+            DeferReceiveTeardown(session, teardownTask);
+            return;
+        }
+        try
+        {
+            if (await WaitForTeardownAsync(teardownTask, cancellationToken))
+            {
+                CompleteReceiveSession(session);
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            DeferReceiveTeardown(session, teardownTask);
             return;
         }
 
+        DeferReceiveTeardown(session, teardownTask);
+    }
+
+    private void DeferReceiveTeardown(ReceiveSession session, Task teardownTask)
+    {
         Volatile.Write(ref _pendingReceiveTeardown, teardownTask);
         _ = FinishTimedOutReceiveTeardownAsync(session, teardownTask);
     }
@@ -692,7 +725,7 @@ public sealed class SerialService : ISerialService
         await StartPortClose(serialPort).ConfigureAwait(false);
     }
 
-    private async Task EnsureConnectedAfterStartupAsync(ReceiveSession session)
+    private async Task EnsureConnectedAfterStartupAsync(ReceiveSession session, CancellationToken cancellationToken)
     {
         if (IsCurrentReceiveSession(session) &&
             ConnectionState == SerialConnectionState.Connected)
@@ -702,7 +735,7 @@ public sealed class SerialService : ISerialService
 
         var message = LastError ?? "Serial receive worker faulted during connection startup.";
         session.RequestStop();
-        await StopCurrentConnectionAsync(CancellationToken.None, publishDisconnected: false);
+        await StopCurrentConnectionAsync(cancellationToken, publishDisconnected: false);
         throw new InvalidOperationException(message);
     }
 
@@ -1119,12 +1152,22 @@ public sealed class SerialService : ISerialService
                 cancellationToken);
             cancellationToken = linkedCancellation.Token;
         }
+        else
+        {
+            cancellationToken = sessionCancellation;
+        }
 
+        var entered = false;
         try
         {
+            await session.PublishGate.WaitAsync(cancellationToken);
+            entered = true;
             cancellationToken.ThrowIfCancellationRequested();
 
             var bytes = receivedChunk.Bytes;
+            var parserChunk = new ReceivedByteChunk(bytes, receivedChunk.ReceivedTimestamp,
+                receivedChunk.EndsAtNativeIdleBoundary, session.PublishedBytes);
+            session.PublishedBytes += bytes.LongLength;
             // Publish in every receive mode, before parser/bridge routing. An
             // observer must only offer to its own bounded queue.
             var captureObservers = CaptureBytesReceived;
@@ -1143,7 +1186,7 @@ public sealed class SerialService : ISerialService
                     receivedChunk.ReceivedTimestamp,
                     receivedChunk.EndsAtNativeIdleBoundary,
                     AppliedReceiveIdleTimeoutMs));
-                if (!session.Channel.Writer.TryWrite(receivedChunk))
+                if (!session.Channel.Writer.TryWrite(parserChunk))
                 {
                     Interlocked.Add(ref _bridgePriorityDroppedPipelineByteCount, bytes.Length);
                     Interlocked.Increment(ref _bridgePriorityDroppedPipelineChunkCount);
@@ -1152,7 +1195,7 @@ public sealed class SerialService : ISerialService
             }
             else
             {
-                await session.Channel.Writer.WriteAsync(receivedChunk, cancellationToken);
+                await session.Channel.Writer.WriteAsync(parserChunk, cancellationToken);
             }
 
             if (countReceived)
@@ -1162,6 +1205,7 @@ public sealed class SerialService : ISerialService
         }
         finally
         {
+            if (entered) session.PublishGate.Release();
             linkedCancellation?.Dispose();
         }
     }
@@ -1317,17 +1361,6 @@ public sealed class SerialService : ISerialService
         return $"{sequence:D6} {level} {message}";
     }
 
-    private static string ToLineEnding(TxLineEndingMode mode)
-    {
-        return mode switch
-        {
-            TxLineEndingMode.Cr => "\r",
-            TxLineEndingMode.Lf => "\n",
-            TxLineEndingMode.Crlf => "\r\n",
-            _ => string.Empty
-        };
-    }
-
     private static bool IsMockPort(string portName)
     {
         return string.Equals(portName, "MOCK", StringComparison.OrdinalIgnoreCase);
@@ -1396,6 +1429,10 @@ public sealed class SerialService : ISerialService
 
     private sealed class ReceiveSession : IDisposable
     {
+        // Serial RX and mock TX echo can publish concurrently. Serialize parser
+        // offsets with admission, without holding a monitor across channel waits.
+        public SemaphoreSlim PublishGate { get; } = new(1, 1);
+        public long PublishedBytes { get; set; }
         private readonly CancellationTokenSource _cancellation;
         private readonly object _portLifecycleGate = new();
         private Task? _portRetirementTask;

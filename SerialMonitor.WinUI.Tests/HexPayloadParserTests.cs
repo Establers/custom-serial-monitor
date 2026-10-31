@@ -22,6 +22,13 @@ public sealed class HexPayloadParserTests
     [InlineData("0x")]
     [InlineData("123")]
     [InlineData("GG")]
+    [InlineData("A\v")]
+    [InlineData("\vA")]
+    [InlineData("F\f")]
+    [InlineData("\fF")]
+    [InlineData("A\vB0")]
+    [InlineData("0A\vB")]
+    [InlineData("A\fB0")]
     public void TryParse_InvalidInput_ReturnsError(string input)
     {
         var parsed = HexPayloadParser.TryParse(input, out var bytes, out var error);

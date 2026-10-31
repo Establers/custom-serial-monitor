@@ -54,6 +54,11 @@ public sealed class LogRule
 
     public string? TriggerSequenceName { get; set; }
 
+    [JsonIgnore]
+    public bool RequiresEventDetection => UseForEvent ||
+        TrayNotificationEnabled || SoundNotificationEnabled || PopupNotificationEnabled ||
+        !string.IsNullOrWhiteSpace(TriggerSequenceName);
+
     public LogRule Clone()
     {
         return new LogRule

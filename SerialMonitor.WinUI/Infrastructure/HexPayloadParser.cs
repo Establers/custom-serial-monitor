@@ -33,7 +33,7 @@ public static class HexPayloadParser
             {
                 if (!byte.TryParse(
                         token.AsSpan(index, 2),
-                        System.Globalization.NumberStyles.HexNumber,
+                        System.Globalization.NumberStyles.AllowHexSpecifier,
                         System.Globalization.CultureInfo.InvariantCulture,
                         out var value))
                 {

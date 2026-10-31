@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 using SerialMonitor.WinUI.ViewModels;
@@ -8,6 +9,12 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class LogHistoryRetentionTests(ITestOutputHelper output)
 {
+    // Exercise the row limit independently of the production screen memory
+    // limits, which are covered by LogViewMemoryTests.
+    private static readonly LogViewMemoryPolicy MillionLineBudget = new(
+        RetainedBytes: 1024L * 1024 * 1024,
+        VisibleCharacters: 256L * 1024 * 1024);
+
     [Theory]
     [InlineData(200_000)]
     [InlineData(1_000_000)]
@@ -32,7 +39,7 @@ public sealed class LogHistoryRetentionTests(ITestOutputHelper output)
     public async Task MillionLineHistory_CanFilterAndRestoreWithoutChangingRetention()
     {
         const int capacity = 1_000_000;
-        var log = new LogViewModel(capacity);
+        var log = new LogViewModel(capacity, MillionLineBudget);
         var batch = new LogLine[1000];
         for (var start = 0; start < capacity; start += batch.Length)
         {
@@ -67,7 +74,7 @@ public sealed class LogHistoryRetentionTests(ITestOutputHelper output)
     public void MillionLineHistory_RollsOverWithoutRebuildOrGrowingLiveMemory()
     {
         const int capacity = 1_000_000;
-        var log = new LogViewModel(capacity);
+        var log = new LogViewModel(capacity, MillionLineBudget);
         var rebuilds = 0;
         log.TextRebuilt += (_, _) => rebuilds++;
         var batch = new LogLine[1000];

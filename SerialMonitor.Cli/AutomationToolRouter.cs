@@ -8,6 +8,7 @@ public static class AutomationToolRouter
     public static async Task<AutomationResponse> CallAsync(string operation, JsonElement args, string? defaultInstance,
         CancellationToken cancellationToken)
     {
+        AutomationArguments.Validate(operation, args);
         if (operation == "capabilities")
         {
             if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Any())

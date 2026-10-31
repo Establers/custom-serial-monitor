@@ -1,11 +1,10 @@
-using System.Collections.Concurrent;
 using Microsoft.UI.Dispatching;
 
 namespace SerialMonitor.WinUI.Infrastructure;
 
 public sealed class UiBatchDispatcher<T> : IDisposable
 {
-    private readonly ConcurrentQueue<T> _queue = new();
+    private readonly MemoryBoundedQueue<T> _queue;
     private readonly DispatcherQueueTimer _timer;
     private readonly Action<IReadOnlyList<T>> _onBatch;
     private readonly int _maxPendingItems;
@@ -17,7 +16,6 @@ public sealed class UiBatchDispatcher<T> : IDisposable
     private readonly Func<T, long>? _getItemCost;
     private readonly SemaphoreSlim? _pendingSlots;
     private readonly List<T> _batch = new();
-    private int _pendingItemCount;
     private int _isPaused;
     private long _flushCount;
     private int _maxBatchSize;
@@ -33,12 +31,15 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         int catchUpMaxItemsPerTick = 0,
         int catchUpPendingThreshold = 0,
         long maxBatchCost = 0,
-        Func<T, long>? getItemCost = null)
+        Func<T, long>? getItemCost = null,
+        long maxPendingBytes = 0,
+        Func<T, long>? getRetainedBytes = null)
     {
         _onBatch = onBatch;
         _maxBatchCost = maxBatchCost;
         _getItemCost = getItemCost;
         _maxPendingItems = maxPendingItems <= 0 ? 1 : maxPendingItems;
+        _queue = new MemoryBoundedQueue<T>(_maxPendingItems, maxPendingBytes, getRetainedBytes ?? (_ => 0));
         _maxItemsPerTick = maxItemsPerTick <= 0 ? int.MaxValue : maxItemsPerTick;
         _catchUpMaxItemsPerTick = catchUpMaxItemsPerTick <= 0
             ? _maxItemsPerTick
@@ -63,7 +64,7 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         set => Volatile.Write(ref _isPaused, value ? 1 : 0);
     }
 
-    public int PendingItemCount => Volatile.Read(ref _pendingItemCount);
+    public int PendingItemCount => _queue.Count;
 
     public int MaxItemsPerTick => _maxItemsPerTick == int.MaxValue ? 0 : _maxItemsPerTick;
 
@@ -83,16 +84,7 @@ public sealed class UiBatchDispatcher<T> : IDisposable
             throw new InvalidOperationException("Use PostAsync for a lossless UI dispatcher.");
         }
 
-        var dropped = 0;
-        while (Volatile.Read(ref _pendingItemCount) >= _maxPendingItems && _queue.TryDequeue(out _))
-        {
-            Interlocked.Decrement(ref _pendingItemCount);
-            dropped++;
-        }
-
-        _queue.Enqueue(item);
-        Interlocked.Increment(ref _pendingItemCount);
-        return dropped;
+        return _queue.EnqueueDroppingOldest(item);
     }
 
     public async ValueTask PostAsync(T item, CancellationToken cancellationToken = default)
@@ -113,7 +105,6 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         }
 
         _queue.Enqueue(item);
-        Interlocked.Increment(ref _pendingItemCount);
     }
 
     public int ClearPending()
@@ -121,7 +112,6 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         var cleared = 0;
         while (_queue.TryDequeue(out _))
         {
-            Interlocked.Decrement(ref _pendingItemCount);
             _pendingSlots?.Release();
             cleared++;
         }
@@ -157,7 +147,6 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         var budget = new UiBatchCostBudget(_maxBatchCost);
         while (_batch.Count < batchLimit && budget.HasRoom && _queue.TryDequeue(out var item))
         {
-            Interlocked.Decrement(ref _pendingItemCount);
             _pendingSlots?.Release();
             _batch.Add(item);
             budget.Add(_getItemCost?.Invoke(item) ?? 1);
@@ -167,7 +156,8 @@ public sealed class UiBatchDispatcher<T> : IDisposable
         {
             Interlocked.Increment(ref _flushCount);
             UpdateMaxBatchSize(_batch.Count);
-            _onBatch(_batch);
+            try { _onBatch(_batch); }
+            finally { _batch.Clear(); }
         }
     }
 

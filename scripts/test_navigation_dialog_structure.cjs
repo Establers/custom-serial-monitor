@@ -25,6 +25,8 @@ test('navigation is opened on demand and has no inspector tab', () => {
   assert.doesNotMatch(host, /NavigationTabContent|NavigationTabViewItem|IsNavigationTabVisible/);
   assert.match(host, /new LogNavigationDialog\b/);
   assert.match(host, /PrepareForOpenAsync\s*\(/);
+  assert.match(main, /<Button\b[^>]*x:Name="LogNavigateButton"[^>]*Click="LogNavigateButton_Click"/);
+  assert.match(host, /async void LogNavigateButton_Click\b[\s\S]*?await OpenLogNavigationAsync\(\)/);
 });
 
 test('native date/time selectors replace the freeform input', () => {

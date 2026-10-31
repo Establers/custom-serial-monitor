@@ -1,15 +1,17 @@
 using System.Reflection;
+using System.Diagnostics;
 using Microsoft.Win32;
 using RJCP.IO.Ports;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
+using Xunit.Abstractions;
 
 namespace SerialMonitor.WinUI.Tests;
 
 // Explicit opt-in prevents CI and ordinary test runs from opening any ports.
 // This fixture only permits the registry-verified com0com emulator pair 0;
 // environment variables cannot redirect it to a physical device.
-public sealed class SerialServiceVirtualDriverTests
+public sealed class SerialServiceVirtualDriverTests(ITestOutputHelper output)
 {
     [Com0comPair0Fact]
     public async Task SerialSettingsReachTheWindowsDriverForEveryFrameAndHandshakeOption()
@@ -196,6 +198,124 @@ public sealed class SerialServiceVirtualDriverTests
         // Leave both emulator settings at their original speed before closing.
         Assert.Equal(115200, await first.ChangeBaudRateAsync(115200, cancellation.Token));
         Assert.Equal(115200, await second.ChangeBaudRateAsync(115200, cancellation.Token));
+    }
+
+    [Com0comPair0Fact]
+    public async Task LostNativeHandleReachesTheFaultIndicatorAndARealReopenClearsIt()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var serial = new SerialService();
+        await using var bridge = new SerialBridgeService();
+        var model = ConnectionFaultIndicatorTests.ObserveSerialStatus(serial, bridge);
+        await serial.ConnectAsync(new() { PortName = "CNCA0" }, new(), timeout.Token);
+        await Task.Delay(600, timeout.Token); // Quiet native RX must remain healthy.
+        Assert.True(serial.IsConnected);
+        Assert.False(model.IsSerialConnectionFaulted);
+
+        // Close only this test's registry-verified virtual handle. No physical
+        // device, device-manager setting, or another application's port is touched.
+        await Task.Run(GetOpenPort(serial).Close, timeout.Token);
+        while (serial.ConnectionState != SerialConnectionState.Faulted || !model.IsSerialConnectionFaulted)
+            await Task.Delay(20, timeout.Token);
+        Assert.Contains("Serial receive failed", serial.LastError);
+        Assert.Equal(1, serial.ConnectionErrorCount);
+
+        await serial.DisconnectAsync(timeout.Token);
+        Assert.True(model.IsSerialConnectionFaulted);
+        await serial.ConnectAsync(new() { PortName = "CNCA0" }, new(), timeout.Token);
+        Assert.True(serial.IsConnected);
+        Assert.False(model.IsSerialConnectionFaulted);
+        await serial.DisconnectAsync(timeout.Token);
+        Assert.False(model.IsSerialConnectionFaulted);
+    }
+
+    [Com0comPair0Fact]
+    public async Task RepeatedNativeMonitorLossDuringBinaryRxDisconnectsAndReopensPromptly()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        VerifyEmulatorEndpoint("CNCB0");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+        await using var receiver = new SerialService();
+        await using var peer = new SerialService();
+        await peer.ConnectAsync(new() { PortName = "CNCB0" }, new(), deadline.Token);
+        var payload = Enumerable.Range(0, 4096).Select(i => (byte)i).ToArray();
+        var maxDisconnectMs = 0d;
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            await receiver.ConnectAsync(new() { PortName = "CNCA0" },
+                new() { UseNativeIdleTimeout = attempt % 2 == 0, IdleTimeoutMs = 15 }, deadline.Token);
+            var generation = receiver.ReceiveSessionGeneration;
+            var before = receiver.ReceivedByteCount;
+            using var producing = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+            var writes = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    producing.Token.ThrowIfCancellationRequested();
+                    await peer.SendBytesAsync(payload, "", producing.Token);
+                    await Task.Delay(1, producing.Token);
+                }
+            });
+            try
+            {
+                await WaitUntilAsync(() => receiver.ReceivedByteCount > before, deadline.Token);
+                await Task.Run(GetOpenPort(receiver).Close, deadline.Token).WaitAsync(TimeSpan.FromSeconds(3));
+                await WaitUntilAsync(() => receiver.ConnectionState == SerialConnectionState.Faulted, deadline.Token);
+                var timer = Stopwatch.StartNew();
+                using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await receiver.DisconnectAsync(stop.Token).WaitAsync(TimeSpan.FromSeconds(3));
+                maxDisconnectMs = Math.Max(maxDisconnectMs, timer.Elapsed.TotalMilliseconds);
+                Assert.Equal(SerialConnectionState.Disconnected, receiver.ConnectionState);
+                Assert.Equal(generation, receiver.ReceiveSessionGeneration);
+            }
+            finally
+            {
+                producing.Cancel();
+                var error = await Record.ExceptionAsync(() => writes.WaitAsync(TimeSpan.FromSeconds(3)));
+                Assert.True(error is OperationCanceledException or InvalidOperationException, error?.ToString());
+            }
+        }
+        output.WriteLine($"20 native RX fault/reopen cycles; maximum disconnect {maxDisconnectMs:F2} ms.");
+    }
+
+    [Com0comPair0Fact]
+    public async Task NativeMonitorLossDuringBlockedHardwareTxStopsTheWriteAndDisposesPromptly()
+    {
+        VerifyEmulatorEndpoint("CNCA0");
+        VerifyEmulatorEndpoint("CNCB0");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await using var peer = new SerialService();
+        await peer.ConnectAsync(new() { PortName = "CNCB0", RtsEnable = false }, new(), deadline.Token);
+        var maxDisposeMs = 0d;
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var sender = new SerialService();
+            Task? writing = null;
+            try
+            {
+                await sender.ConnectAsync(new() { PortName = "CNCA0", Handshake = SerialHandshakeMode.Rts }, new(), deadline.Token);
+                var port = GetOpenPort(sender);
+                await WaitUntilAsync(() => !port.CtsHolding, deadline.Token);
+                var payload = new byte[128 * 1024];
+                await sender.SendBytesAsync(payload, "", deadline.Token);
+                await WaitUntilAsync(() => port.BytesToWrite > 0, deadline.Token);
+                writing = sender.SendBytesAsync(payload, "", deadline.Token);
+                Assert.False(writing.IsCompleted);
+                await Task.Run(port.Close, deadline.Token).WaitAsync(TimeSpan.FromSeconds(3));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => writing.WaitAsync(TimeSpan.FromSeconds(2)));
+                Assert.Equal(SerialConnectionState.Faulted, sender.ConnectionState);
+                var timer = Stopwatch.StartNew();
+                await sender.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+                maxDisposeMs = Math.Max(maxDisposeMs, timer.Elapsed.TotalMilliseconds);
+            }
+            finally
+            {
+                if (writing is not null) await Record.ExceptionAsync(() => writing);
+                await sender.DisposeAsync();
+            }
+        }
+        output.WriteLine($"10 native faults during CTS-blocked TX; maximum dispose {maxDisposeMs:F2} ms.");
     }
 
     private static void VerifyEmulatorEndpoint(string name)

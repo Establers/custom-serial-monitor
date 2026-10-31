@@ -12,7 +12,7 @@ public sealed class EventViewModel : ViewModelBase
 
     public EventViewModel(int capacity)
     {
-        _buffer = new BoundedLogBuffer<DetectedEvent>(capacity);
+        _buffer = new BoundedLogBuffer<DetectedEvent>(capacity, EventViewMemoryPolicy.VisibleBytes, EventViewMemoryPolicy.Estimate);
     }
 
     public ObservableCollection<DetectedEvent> Events => _buffer.Items;
@@ -21,6 +21,7 @@ public sealed class EventViewModel : ViewModelBase
     public event EventHandler? BatchApplied;
 
     public int Capacity => _buffer.Capacity;
+    public long RetainedMemoryBytes => _buffer.RetainedBytes;
 
     public long DisplayedEventCount
     {

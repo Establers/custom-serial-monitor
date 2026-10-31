@@ -39,6 +39,46 @@ public sealed class ProfileServiceConcurrencyTests : IDisposable
         Assert.Empty(stale.CommandSequences); // Saving does not mutate the other GUI's list.
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExplicitNoOpSequenceSaveCannotReportSuccessWhenTheDiskChanged(bool remoteDelete)
+    {
+        await Seed(Sequence("shared", "original"));
+        var cliWindow = new ProfileService();
+        var otherWindow = new ProfileService();
+        var submitted = await cliWindow.LoadAsync(ProfilePath, default);
+        var remote = await otherWindow.LoadAsync(ProfilePath, default);
+        if (remoteDelete) remote.CommandSequences.Clear();
+        else remote.CommandSequences[0].Steps[0].CommandText = "newer remote command";
+        await otherWindow.SaveAsync(ProfilePath, remote, default);
+        var committed = await File.ReadAllBytesAsync(ProfilePath);
+
+        var error = await Assert.ThrowsAsync<ProfileConflictException>(() =>
+            cliWindow.SaveSequenceChangeAsync(ProfilePath, submitted, "shared", default));
+        Assert.Contains("Reload", error.Message);
+        Assert.Equal(committed, await File.ReadAllBytesAsync(ProfilePath));
+        Assert.Equal("original", submitted.CommandSequences[0].Steps[0].CommandText);
+        Assert.Equal(0, cliWindow.SaveCount);
+    }
+
+    [Fact]
+    public async Task ExplicitNoOpSequenceSaveCommitsWhenTheRequestedNameIsUnchangedAndPreservesRemoteAdditions()
+    {
+        await Seed(Sequence("shared", "original"));
+        var cliWindow = new ProfileService();
+        var otherWindow = new ProfileService();
+        var submitted = await cliWindow.LoadAsync(ProfilePath, default);
+        var remote = await otherWindow.LoadAsync(ProfilePath, default);
+        remote.CommandSequences.Add(Sequence("remote", "added"));
+        await otherWindow.SaveAsync(ProfilePath, remote, default);
+        await cliWindow.SaveSequenceChangeAsync(ProfilePath, submitted, "shared", default);
+        var persisted = await new ProfileService().LoadAsync(ProfilePath, default);
+        Assert.Equal(new[] { "shared", "remote" }, persisted.CommandSequences.Select(sequence => sequence.Name));
+        Assert.Equal("original", persisted.CommandSequences[0].Steps[0].CommandText);
+        Assert.Equal(1, cliWindow.SaveCount);
+    }
+
     [Fact]
     public async Task RemoteDeletionSurvivesRepeatedUnchangedSavesWithoutResurrectionOrDanglingRuleReferences()
     {

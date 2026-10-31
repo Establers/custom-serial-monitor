@@ -10,7 +10,8 @@ public sealed record AutomationSequenceStep(string? Name, string Command, string
 public sealed record AutomationSequenceDefinition(string Name, int RepeatCount,
     IReadOnlyList<AutomationSequenceStep> Steps);
 public sealed record AutomationSequenceStepResult(int StepIndex, int RepeatIndex, int DefinitionStepIndex,
-    string? Name, string SendStatus, long RxStartOffset, long RxEndOffset, string MatchStatus, string? Error = null);
+    string? Name, string SendStatus, long RxStartOffset, long RxEndOffset, string MatchStatus, string? Error = null,
+    string? TxMode = null, string? LineEnding = null);
 public sealed record AutomationSequenceRun(string RunId, string Name, string State, int StepIndex,
     int CompletedSteps, int TotalSteps, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, string? Error,
     string Port, long SessionGeneration, IReadOnlyList<AutomationSequenceStepResult> Steps, CaptureResult? Capture);

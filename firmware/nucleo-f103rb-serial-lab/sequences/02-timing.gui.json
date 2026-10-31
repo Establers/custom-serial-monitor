@@ -1,0 +1,109 @@
+{
+  "FormatVersion": 3,
+  "Name": "F103RB LAB - Timing and line boundaries",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "Stop",
+      "CommandText": "STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Stop / RX",
+      "CommandText": "",
+      "RxPattern": "OK STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "800ms delay",
+      "CommandText": "DELAY 800 DELAYED-OK",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "800ms delay / RX",
+      "CommandText": "",
+      "RxPattern": "DELAYED-OK",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1400
+    },
+    {
+      "Kind": "Tx",
+      "Name": "20ms per byte",
+      "CommandText": "SPLIT 20 SPLIT-OK",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "20ms per byte / RX",
+      "CommandText": "",
+      "RxPattern": "SPLIT-OK",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1000
+    },
+    {
+      "Kind": "Tx",
+      "Name": "2048-byte line",
+      "CommandText": "LONG 2048",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "2048-byte line / RX",
+      "CommandText": "",
+      "RxPattern": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1200
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Ten periodic records",
+      "CommandText": "STREAM START 30 10",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Ten periodic records / RX",
+      "CommandText": "",
+      "RxPattern": "DATA seq=10 ",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 1500
+    },
+    {
+      "Kind": "Tx",
+      "Name": "Stop",
+      "CommandText": "STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "Stop / RX",
+      "CommandText": "",
+      "RxPattern": "OK STOP",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    }
+  ]
+}

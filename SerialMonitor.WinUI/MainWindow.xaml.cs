@@ -48,6 +48,7 @@ public sealed partial class MainWindow : Window
         Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon", "SerialMonitor.ico");
 
     private readonly MainViewModel _viewModel;
+    private (CommandSequence Sequence, CommandSequenceStep Step, int OriginalIndex)? _sequenceStepDrag;
     private readonly Task _xtermInitializationTask;
     private CoreWebView2Environment? _xtermEnvironment;
     private readonly TaskCompletionSource _xtermBrowserExited = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -257,10 +258,19 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        DisableShutdownInput(Root);
         UpdateLogNavigationActivity();
         _portAlias.Dispose();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
+    }
+
+    private static void DisableShutdownInput(DependencyObject element)
+    {
+        if (element is Control control) control.IsEnabled = false;
+        else
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+                DisableShutdownInput(VisualTreeHelper.GetChild(element, i));
     }
 
     private async Task ShutdownAndCloseAsync()
@@ -348,6 +358,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _sequenceResultsWindow?.Close();
         DisposeLogNavigationUi();
         _portAlias.PropertyChanged -= OnPortAliasPropertyChanged;
         _portAlias.Dispose();
@@ -527,6 +538,7 @@ public sealed partial class MainWindow : Window
     private void OnRootActualThemeChanged(FrameworkElement sender, object args)
     {
         ApplyTitleBarTheme();
+        UpdateConnectionStateColor();
         ApplyXtermDefaultBackgroundColor();
         _ = SyncXtermColorSchemeAsync();
         UpdateSequenceStateVisuals();
@@ -2462,8 +2474,7 @@ public sealed partial class MainWindow : Window
                     CoreWebView2HostResourceAccessKind.Allow);
             }
             XtermLogWebView.NavigationCompleted += OnXtermNavigationCompleted;
-            var timeRailLanguage = Uri.EscapeDataString(UiText.Get("LogNavigationLanguage", "en"));
-            XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}&language={timeRailLanguage}");
+            XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}");
         }
         catch (Exception ex)
         {
@@ -2541,6 +2552,10 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.ConnectionStateText))
+        {
+            UpdateConnectionStateColor();
+        }
         if (args.PropertyName == nameof(MainViewModel.SelectedActualPortName) && !IsClosingOrClosed)
             UpdatePortAliasSelection();
         if (args.PropertyName == nameof(MainViewModel.SelectedAppTheme))
@@ -2651,6 +2666,26 @@ public sealed partial class MainWindow : Window
             args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
         {
             UpdateCuteBackgroundImage();
+        }
+    }
+
+    private void UpdateConnectionStateColor()
+    {
+        if (!_viewModel.IsSerialConnectionFaulted)
+        {
+            ConnectionStateTextBlock.ClearValue(TextBlock.ForegroundProperty);
+            return;
+        }
+
+        var resources = Application.Current.Resources;
+        var themeKey = _themeSettings.HighContrast ? "HighContrast" : Root.ActualTheme.ToString();
+        if (resources.ThemeDictionaries.TryGetValue(themeKey, out var theme) && theme is ResourceDictionary themeResources)
+        {
+            resources = themeResources;
+        }
+        if (resources.TryGetValue("ErrorTextBrush", out var resource) && resource is Brush brush)
+        {
+            ConnectionStateTextBlock.Foreground = brush;
         }
     }
 
@@ -3079,10 +3114,6 @@ public sealed partial class MainWindow : Window
 
                 case "searchSelected":
                     await _viewModel.SearchSelectedTextFromXtermAsync(selectedText);
-                    break;
-
-                case "navigate":
-                    await OpenLogNavigationAsync();
                     break;
 
                 default:
@@ -4559,6 +4590,7 @@ public sealed partial class MainWindow : Window
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (IsClosingOrClosed) { args.Handled = true; return; }
         if (IsWebViewSource(args.OriginalSource))
         {
             return;
@@ -5141,7 +5173,7 @@ public sealed partial class MainWindow : Window
         var content = new StackPanel { Spacing = 12, MaxWidth = 420 };
         content.Children.Add(new TextBlock
         {
-            Text = UiText.Get("SequenceTipsBody", "Copy the prompt and JSON template into your AI chat. Describe your device commands, delays and repeats. Save the result as UTF-8 JSON and load it from Sequence options."),
+            Text = UiText.Get("SequenceTipsBody", "Copy the prompt and JSON template into your AI chat. Describe device commands, response patterns, check windows, post-send delays and repeats. Save the result as UTF-8 JSON and load it from Sequence options."),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12
         });
@@ -5169,7 +5201,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var prompt = UiText.Get("SequenceAiPrompt", "Create one sequence JSON using the attached _manual. Ask for the device commands, line ending, delays and repeat count. Do not invent commands or unsupported fields. Return only valid JSON.");
+            var prompt = UiText.Get("SequenceAiPrompt", "Create one GUI import JSON using _manual. Confirm actual commands, modes, endings, post-TX delays, response patterns, check windows and repeats. Use FormatVersion 1 for TX only; change to 3 for RX Check. In v3 use Kind Tx/RxCheck; RX requires empty CommandText and a separate RxPattern. RX DelayAfterMs is the whole check window even after a match; HEX ?? matches one byte. Do not invent commands or legacy ResponseCheck fields. CLI/MCP supports only TX steps with its existing CaptureMs/Expect semantics, without HEX expectation wildcards; GUI import JSON is not its save API schema. Return only valid JSON.");
             var template = CommandSequenceFileService.Serialize(new CommandSequence
             {
                 Name = "My sequence",
@@ -5318,15 +5350,19 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void AddCommandSequenceStep_Click(object sender, RoutedEventArgs args)
+    private async void AddCommandSequenceStep_Click(object sender, RoutedEventArgs args) =>
+        await AddCommandSequenceStepAsync(CommandSequenceStepKind.Tx);
+
+    private async void AddCommandSequenceRxStep_Click(object sender, RoutedEventArgs args) =>
+        await AddCommandSequenceStepAsync(CommandSequenceStepKind.RxCheck);
+
+    private async Task AddCommandSequenceStepAsync(CommandSequenceStepKind kind)
     {
-        var step = await ShowCommandSequenceStepDialogAsync(
-            "Add sequence step",
-            new CommandSequenceStep { DelayAfterMs = 300 });
-        if (step is not null)
-        {
+        var source = new CommandSequenceStep { Kind = kind, DelayAfterMs = kind == CommandSequenceStepKind.RxCheck ? 1000 : 300 };
+        var dialog = new SerialMonitor.WinUI.Views.SequenceStepDialog(source,
+            _viewModel.GetSequenceStepInputMode(), _viewModel.SelectedTxSendMode) { XamlRoot = Root.XamlRoot };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && dialog.Result is { } step)
             _viewModel.AddCommandSequenceStep(step);
-        }
     }
 
     private async Task EditSelectedCommandSequenceStepAsync()
@@ -5352,6 +5388,32 @@ public sealed partial class MainWindow : Window
         }
 
         await EditSelectedCommandSequenceStepAsync();
+    }
+
+    private void CommandSequenceStepListView_DragItemsStarting(object sender, DragItemsStartingEventArgs args)
+    {
+        _sequenceStepDrag = null;
+        if (!_viewModel.CanEditSelectedCommandSequence ||
+            _viewModel.SelectedCommandSequence is not { } sequence ||
+            args.Items.Count != 1 || args.Items[0] is not CommandSequenceStep step ||
+            !sequence.Steps.Contains(step))
+        {
+            args.Cancel = true;
+            return;
+        }
+
+        _sequenceStepDrag = (sequence, step, sequence.Steps.IndexOf(step));
+    }
+
+    private void CommandSequenceStepListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        var drag = _sequenceStepDrag;
+        _sequenceStepDrag = null;
+        if (drag is { } state &&
+            _viewModel.CompleteCommandSequenceStepReorder(state.Sequence, state.Step, state.OriginalIndex))
+        {
+            CommandSequenceStepListView.SelectedItem = state.Step;
+        }
     }
 
     private async void CommandSequenceStepListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
@@ -5702,117 +5764,9 @@ public sealed partial class MainWindow : Window
 
     private async Task<CommandSequenceStep?> ShowCommandSequenceStepDialogAsync(string title, CommandSequenceStep source)
     {
-        var nameBox = CreateDialogTextBox(source.Name ?? string.Empty,
-            UiText.Get("SequenceStepNamePlaceholder", "e.g. Read firmware version"));
-        var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
-        var modeBox = CreateStringComboBox(new[] { "Global", "Terminal", "Hex" }, source.TxMode?.ToString() ?? "Global");
-        var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
-        var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
-        endingBox.IsEnabled = source.TxMode != TxSendMode.Hex;
-        modeBox.SelectionChanged += (_, _) => endingBox.IsEnabled = GetSelectedString(modeBox, "Global") != "Hex";
-        ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
-        var delayBox = CreateDialogTextBox(source.DelayAfterMs.ToString(CultureInfo.InvariantCulture), "Delay after ms");
-        var commentBox = CreateDialogTextBox(source.Comment ?? string.Empty,
-            UiText.Get("SequenceStepCommentPlaceholder", "e.g. Wait for reboot before the next command"));
-        var errorText = new TextBlock
-        {
-            FontSize = 12,
-            TextWrapping = TextWrapping.WrapWholeWords,
-            Visibility = Visibility.Collapsed
-        };
-
-        var panel = CreateDialogPanel();
-        panel.Children.Add(CreateDialogField("Command", commandBox));
-        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepNameLabel", "Step name (optional)"), nameBox));
-        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepNameHelp",
-            "Short label for progress, errors and CLI/MCP results. If blank, the GUI shows the command.")));
-        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepTxModeLabel", "TX mode"), modeBox));
-        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepTxModeHelp",
-            "Global uses the main TX mode captured at run start. Hex sends bytes as entered and ignores line ending.")));
-        panel.Children.Add(CreateDialogField("Line ending", endingBox));
-        panel.Children.Add(CreateDialogHint(LineEndingHelpText));
-        panel.Children.Add(CreateDialogField("Delay after ms", delayBox));
-        panel.Children.Add(CreateDialogField(UiText.Get("SequenceStepCommentLabel", "Comment (optional)"), commentBox));
-        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepCommentHelp",
-            "Extra context shown in the step tooltip and saved in JSON. Does not affect execution.")));
-        panel.Children.Add(CreateDialogHint(source.AutomationHelpText));
-        panel.Children.Add(CreateDialogHint(UiText.Get("SequenceStepResponseMetadataHelp",
-            "RX collection and response checks are preserved here. Change them in sequence JSON or through CLI/MCP.")));
-        panel.Children.Add(errorText);
-
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Root.XamlRoot,
-            Title = title,
-            Content = new ScrollViewer
-            {
-                Content = panel,
-                MaxHeight = 520,
-                VerticalScrollMode = ScrollMode.Enabled,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollMode = ScrollMode.Disabled,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
-            },
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary
-        };
-        dialog.PrimaryButtonClick += (dialogSender, clickArgs) =>
-        {
-            var selectedMode = GetSelectedString(modeBox, "Global");
-            if (string.IsNullOrEmpty(commandBox.Text) || (selectedMode == "Global" && string.IsNullOrWhiteSpace(commandBox.Text)))
-            {
-                errorText.Text = UiText.Get("ValidationCommandRequired", "Command text is required.");
-                errorText.Visibility = Visibility.Visible;
-                clickArgs.Cancel = true;
-                return;
-            }
-
-            if (selectedMode == "Hex" && !HexPayloadParser.TryParse(commandBox.Text, out var parsedHexBytes, out var hexError))
-            {
-                errorText.Text = hexError;
-                errorText.Visibility = Visibility.Visible;
-                clickArgs.Cancel = true;
-                return;
-            }
-
-            if (!int.TryParse(delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delay) ||
-                delay is < 0 or > 600_000)
-            {
-                errorText.Text = UiText.Get(
-                    "ValidationDelayRange",
-                    "Delay must be between 0 and 600,000 ms.");
-                errorText.Visibility = Visibility.Visible;
-                clickArgs.Cancel = true;
-            }
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
-        {
-            return null;
-        }
-
-        var parsedDelay = int.TryParse(delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delayAfterMs)
-            ? delayAfterMs
-            : source.DelayAfterMs;
-        return new CommandSequenceStep
-        {
-            Name = string.IsNullOrWhiteSpace(nameBox.Text) ? null : nameBox.Text,
-            CommandText = commandBox.Text,
-            LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
-            DelayAfterMs = parsedDelay,
-            Comment = string.IsNullOrWhiteSpace(commentBox.Text) ? null : commentBox.Text,
-            IsEnabled = source.IsEnabled,
-            TxMode = GetSelectedString(modeBox, "Global") switch
-            {
-                "Terminal" => TxSendMode.Terminal,
-                "Hex" => TxSendMode.Hex,
-                _ => null
-            },
-            CaptureMs = source.CaptureMs,
-            Expect = source.Expect is null ? null : source.Expect with { }
-        };
+        var dialog = new SerialMonitor.WinUI.Views.SequenceStepDialog(source,
+            _viewModel.GetSequenceStepInputMode(_viewModel.SelectedCommandSequenceStep), _viewModel.SelectedTxSendMode) { XamlRoot = Root.XamlRoot };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary ? dialog.Result : null;
     }
 
     private async Task<ContentDialogResult> ShowEditorDialogAsync(string title, object content)
@@ -6237,6 +6191,7 @@ public sealed partial class MainWindow : Window
         return new CommandSequenceStep
         {
             Name = step.Name,
+            Kind = step.Kind,
             CommandText = step.CommandText,
             LineEndingMode = step.LineEndingMode,
             DelayAfterMs = step.DelayAfterMs,
@@ -6244,12 +6199,14 @@ public sealed partial class MainWindow : Window
             IsEnabled = step.IsEnabled,
             TxMode = step.TxMode,
             CaptureMs = step.CaptureMs,
-            Expect = step.Expect is null ? null : step.Expect with { }
+            Expect = step.Expect is null ? null : step.Expect with { },
+            ResponseCheck = step.ResponseCheck is null ? null : step.ResponseCheck with { }
         };
     }
 
     private void CommandTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (IsClosingOrClosed) { args.Handled = true; return; }
         if (IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
         {
             return;

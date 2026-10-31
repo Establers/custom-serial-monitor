@@ -9,11 +9,15 @@ namespace SerialMonitor.WinUI.Infrastructure;
 // change the bytes in a running sequence.
 internal static class AutomationSequenceMapper
 {
-    public static AutomationSequenceDefinition Snapshot(CommandSequence sequence, TxSendMode mode, TxLineEndingMode ending) =>
-        new(sequence.Name, sequence.RepeatCount, sequence.Steps.Where(step => step.IsEnabled).Select(step => new AutomationSequenceStep(
+    public static AutomationSequenceDefinition Snapshot(CommandSequence sequence, TxSendMode mode, TxLineEndingMode ending)
+    {
+        if (sequence.Steps.Any(step => step.IsEnabled && (step.Kind == CommandSequenceStepKind.RxCheck || step.ResponseCheck is not null)))
+            throw new AutomationException("unsupported_sequence_feature", "This sequence contains GUI RX Check / ResponseCheck steps. Run it in the GUI; the legacy CLI/MCP contract cannot execute it safely.");
+        return new(sequence.Name, sequence.RepeatCount, sequence.Steps.Where(step => step.IsEnabled).Select(step => new AutomationSequenceStep(
             step.Name, step.CommandText, (step.TxMode ?? mode) == TxSendMode.Hex ? "hex" : "text",
             (step.LineEndingMode ?? ending).ToString().ToLowerInvariant(), step.CaptureMs, step.DelayAfterMs,
             step.Expect)).ToArray());
+    }
 
     public static CommandSequence Create(AutomationSequenceDefinition definition) => new()
     {

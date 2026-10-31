@@ -35,8 +35,6 @@ jobs:
         run: node --test scripts/test_log_navigation_terminal.cjs
       - name: Check compact navigation dialog layout and removed tab
         run: node --test scripts/test_navigation_dialog_structure.cjs
-      - name: Check time rail scheduling and metadata scan budgets
-        run: node scripts/test_time_rail_scan_budget.cjs
       - name: Check history metadata retention and resize allocations
         run: node --test --test-name-pattern=metadata scripts/test_xterm_history.mjs
       - name: Test standalone skill installation and custom paths

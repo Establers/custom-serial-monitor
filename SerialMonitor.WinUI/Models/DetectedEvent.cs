@@ -23,15 +23,22 @@ public sealed class DetectedEvent
         string? matchForegroundColor = null,
         string? matchBackgroundColor = null,
         Guid? id = null,
-        bool buildMessageSegments = true)
+        bool buildMessageSegments = true,
+        EventEvidenceReference? evidence = null,
+        IReadOnlyList<EventTextSegment>? messageSegments = null,
+        IArchivedLogLine? archivedSource = null,
+        string? contextError = null)
     {
         Id = id ?? Guid.NewGuid();
+        Evidence = evidence;
+        ContextError = contextError;
         Timestamp = timestamp;
         RuleName = ruleName;
         Keyword = keyword;
         Direction = direction;
-        Message = message;
-        SourceLogLine = sourceLogLine;
+        _message = message;
+        _sourceLogLine = sourceLogLine;
+        ArchivedSource = archivedSource;
         BeforeContextLines = beforeContextLines ?? Array.Empty<LogLine>();
         AfterContextLines = afterContextLines ?? Array.Empty<LogLine>();
         TrayNotificationEnabled = trayNotificationEnabled;
@@ -42,16 +49,18 @@ public sealed class DetectedEvent
         TriggerSequenceName = string.IsNullOrWhiteSpace(triggerSequenceName)
             ? null
             : triggerSequenceName.Trim();
-        MessageSegments = buildMessageSegments
+        MessageSegments = messageSegments ?? (buildMessageSegments
             ? CreateMessageSegments(
                 Message,
                 matchRanges,
                 matchForegroundColor,
                 matchBackgroundColor)
-            : Array.Empty<EventTextSegment>();
+            : Array.Empty<EventTextSegment>());
     }
 
     public Guid Id { get; }
+    public EventEvidenceReference? Evidence { get; }
+    public string? ContextError { get; }
 
     public DateTimeOffset Timestamp { get; }
 
@@ -67,11 +76,14 @@ public sealed class DetectedEvent
 
     public LogDirection Direction { get; }
 
-    public string Message { get; }
+    private readonly string _message;
+    private readonly LogLine? _sourceLogLine;
+    internal IArchivedLogLine? ArchivedSource { get; }
+    public string Message => ArchivedSource is null ? _message : ArchivedSource.Read().DisplayText;
 
     public string MessagePreview => Message;
 
-    public LogLine? SourceLogLine { get; }
+    public LogLine? SourceLogLine => _sourceLogLine ?? ArchivedSource?.Read();
 
     public LogLine? SourceLine => SourceLogLine;
 

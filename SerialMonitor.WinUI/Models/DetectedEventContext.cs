@@ -8,7 +8,8 @@ public sealed class DetectedEventContext
         IReadOnlyList<LogLine> afterContextLines,
         int beforeContextLineLimit,
         int afterContextLineLimit,
-        DateTimeOffset completedAt)
+        DateTimeOffset completedAt,
+        string? error = null)
     {
         Event = detectedEvent;
         EventId = detectedEvent.Id;
@@ -17,6 +18,7 @@ public sealed class DetectedEventContext
         BeforeContextLineLimit = Math.Max(0, beforeContextLineLimit);
         AfterContextLineLimit = Math.Max(0, afterContextLineLimit);
         CompletedAt = completedAt;
+        Error = error;
     }
 
     public Guid EventId { get; }
@@ -32,4 +34,5 @@ public sealed class DetectedEventContext
     public int AfterContextLineLimit { get; }
 
     public DateTimeOffset CompletedAt { get; }
+    public string? Error { get; }
 }

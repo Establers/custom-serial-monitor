@@ -1,0 +1,22 @@
+{
+  "FormatVersion": 3,
+  "Name": "F103RB LAB - GUI RX Check hardware validation",
+  "RepeatCount": 1,
+  "Steps": [
+    { "Kind": "Tx", "Name": "Fast PING; allow reply during TX delay", "CommandText": "PING RXC_FAST_20261031", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 250 },
+    { "Kind": "RxCheck", "Name": "Fast reply retained from TX delay", "CommandText": "", "RxPattern": "PONG RXC_FAST_20261031", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 500 },
+    { "Kind": "Tx", "Name": "UTF-8 response split one byte at a time", "CommandText": "SPLIT 10 준비 완료 RXC_SPLIT_20261031", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "UTF-8 match across receive chunks", "CommandText": "", "RxPattern": "준비 완료 RXC_SPLIT_20261031", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 1200 },
+    { "Kind": "Tx", "Name": "Response delayed by 350 ms", "CommandText": "DELAY 350 RXC_DELAY_20261031", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "Delayed response within full check window", "CommandText": "", "RxPattern": "RXC_DELAY_20261031", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 900 },
+    { "Kind": "Tx", "Name": "Binary echo with protocol CRC", "CommandText": "A5 5A 02 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF B5 39", "TxMode": "Hex", "LineEndingMode": "None", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "Exact binary response including CRC", "CommandText": "", "RxPattern": "A5 5A 82 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF BD C9", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 400 },
+    { "Kind": "RxCheck", "Name": "HEX wildcard and inherited mode", "CommandText": "", "RxPattern": "A5 5A 82 ?? 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF BD C9", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 300 },
+    { "Kind": "Tx", "Name": "Intentional silent command", "CommandText": "SILENT", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "EXPECTED MISS: no reply during 400 ms", "CommandText": "", "RxPattern": "RXC_EXPECTED_MISSING_20261031", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 400, "Comment": "Expected not_matched. Confirms timeout without retry and continuation to the next TX." },
+    { "Kind": "Tx", "Name": "Continue after expected timeout", "CommandText": "PING RXC_AFTER_TIMEOUT_20261031", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "Normal reply after expected timeout", "CommandText": "", "RxPattern": "PONG RXC_AFTER_TIMEOUT_20261031", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 500 },
+    { "Kind": "Tx", "Name": "Read final device error counters", "CommandText": "STATUS?", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "No device RX drops or UART errors", "CommandText": "", "RxPattern": "rx_drops=0 uart_errors=0", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 500 }
+  ]
+}

@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.WinUI\SerialMonitor.WinUI.csproj" />
+    <ProjectReference Include="..\SerialMonitor.Cli\SerialMonitor.Cli.csproj" />
     <ProjectReference Include="..\SerialMonitor.UpdateTestWorker\SerialMonitor.UpdateTestWorker.csproj"
                       ReferenceOutputAssembly="false" SetPlatform="Platform=AnyCPU" />
   </ItemGroup>

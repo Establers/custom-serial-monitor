@@ -15,7 +15,6 @@
   <link rel="preload" href="./fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/JetBrainsMono-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./xterm.css">
-  <link rel="stylesheet" href="./time-rail.css">
   <style>
     @font-face {
       font-family: "JetBrains Mono Bundled";
@@ -338,7 +337,6 @@
     <button type="button" data-action="clear">Clear screen</button>
     <button type="button" data-action="quickMarker">Quick marker</button>
     <button type="button" data-action="searchSelected" data-requires-selection="true">Search selected text</button>
-    <button type="button" data-action="navigate">Go to time or position (Ctrl+G)</button>
   </div>
   <div id="hexSelectionHint" aria-hidden="true"></div>
   <script src="./xterm.js"></script>
@@ -347,7 +345,7 @@
   <script src="./compact-scrollback.js"></script>
   <script src="./log-navigation.js"></script>
   <script src="./log-navigation-terminal.js"></script>
-  <script src="./time-rail.js"></script>
+  <script src="./line-highlighting.js"></script>
   <script>
     const darkTerminalTheme = {
       background: '#0c0d0e',
@@ -602,8 +600,8 @@
     let navigationTimeOrder = 'ascending';
     let navigationLastTimestamp = null;
     let navigationRows = null;
+    let lineHighlighting = null;
     let navigationEngine = null;
-    let timeRail = null;
     let navigationReplacing = false;
     const navigationBackStack = [];
     let navigationHighlight = null;
@@ -636,6 +634,7 @@
     const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
 
     function resetParsedLogLineIds(resetNavigation = true) {
+      lineHighlighting?.reset();
       parsedLogLineIds.length = 0;
       parsedLogLineTimestamps.length = 0;
       parsedLogLineRows = new Float64Array(0);
@@ -647,7 +646,6 @@
       navigationRevision++;
       if (resetNavigation) navigationBackStack.length = 0;
       clearNavigationHighlight();
-      if (resetNavigation) timeRail?.reset();
     }
 
     function trimParsedLogLineIds() {
@@ -804,7 +802,6 @@
       // row cache after the write was queued but before its OSC metadata and
       // buffer rows are committed, so invalidate again at the parse boundary.
       invalidateLogicalLineStartRows();
-      timeRail?.refresh();
       if (pointerSelectionGesture) {
         queueHexSelectionHintUpdate();
       }
@@ -857,7 +854,6 @@
       }
 
       navigationReplacing = false;
-      timeRail?.refresh();
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
@@ -875,7 +871,6 @@
 
     function failReplace(error, requestId) {
       navigationReplacing = false;
-      timeRail?.refresh();
       replaceWriting = false;
       replaceQueue.length = 0;
       replaceQueueHead = 0;
@@ -1555,9 +1550,6 @@
 
       terminal.options.fontFamily = resolvedFontFamily;
       terminal.options.fontSize = parsedFontSize;
-      document.documentElement.style.setProperty('--time-rail-font-family', resolvedFontFamily);
-      document.documentElement.style.setProperty('--time-rail-font-size', `${parsedFontSize}px`);
-      timeRail?.refresh();
       terminal.clearTextureAtlas();
       fitAddon.fit();
       terminal.refresh(0, Math.max(0, terminal.rows - 1));
@@ -2178,9 +2170,14 @@
 
     navigationRows = SerialMonitorLogNavigationTerminal.create(terminal, navigationRawSource, {
       isLastLineOpen: () => lastParsedLogLineIsOpen,
-      onChange() { navigationRevision++; timeRail?.refresh(); },
+      onChange() { navigationRevision++; },
       onError(error) { window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) }); }
     });
+    lineHighlighting = SerialMonitorLineHighlighting.install(terminal, id => navigationRows.rowsById(id), error => {
+      console.error('Rule line highlighting failed', error);
+      window.chrome?.webview?.postMessage({ type: 'navigationError', error: `Rule line highlighting failed: ${error}` });
+    });
+    window.addEventListener('unload', () => lineHighlighting.dispose());
     navigationEngine = SerialMonitorLogNavigation.create({
       count: () => parsedLogLineIdCount - navigationRows.sourceStart(),
       at: index => navigationRawSource.at(index + navigationRows.sourceStart()),
@@ -2267,25 +2264,8 @@
         histogramStartTime: histogram.startTime, histogramEndTime: histogram.endTime
       };
     };
-    try {
-      timeRail = SerialMonitorTimeRail.install({
-        getState: () => window.serialMonitorGetNavigationSnapshot({ binCount: 0 }),
-        resolveTime: window.serialMonitorResolveTime,
-        navigateTime: window.serialMonitorNavigateToTime,
-        resolveIndex: window.serialMonitorResolveIndex,
-        navigateIndex: window.serialMonitorNavigateToIndex,
-        language: new URLSearchParams(window.location.search).get('language') || navigator.language,
-        onLayoutChanged(width) {
-          terminalElement.style.left = `${Math.max(0, Math.min(24, Number(width) || 0))}px`;
-          queueFit();
-        },
-        onError(error) { window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) }); }
-      });
-    } catch (error) {
-      window.chrome?.webview?.postMessage({ type: 'navigationError', error: String(error) });
-    }
-    terminal.onScroll(() => { clearNavigationHighlight(); timeRail?.refresh(); });
-    window.addEventListener('unload', () => { navigationRows.dispose(); timeRail?.dispose(); });
+    terminal.onScroll(clearNavigationHighlight);
+    window.addEventListener('unload', () => navigationRows.dispose());
 
     window.addEventListener('resize', queueFit);
     requestAnimationFrame(queueFit);
