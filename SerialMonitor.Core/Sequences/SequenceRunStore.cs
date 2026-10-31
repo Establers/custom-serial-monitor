@@ -73,6 +73,7 @@ public sealed class SequenceRunStore(string root) : ISequenceRunReader
         await using var data = new FileStream(Path.Combine(path, "steps.jsonl"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
             4096, FileOptions.Asynchronous | FileOptions.RandomAccess);
         var rows = new List<SequenceStepResult>(PageSize);
+        SequenceStepStorage? storage = null;
         var count = index.Length / 24;
         cursor = Math.Clamp(cursor, 0, count);
         index.Position = cursor * 24;
@@ -93,7 +94,21 @@ public sealed class SequenceRunStore(string root) : ISequenceRunReader
             var json = new byte[length];
             data.Position = position;
             await data.ReadExactlyAsync(json, token).ConfigureAwait(false);
-            rows.Add(JsonSerializer.Deserialize<SequenceStepResult>(json) ?? throw new InvalidDataException("Invalid sequence result."));
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                if (storage is null)
+                {
+                    await using var definitionFile = new FileStream(Path.Combine(path, "definition.json"), FileMode.Open,
+                        FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+                    var definition = await JsonSerializer.DeserializeAsync<SequenceRunDefinition>(definitionFile, cancellationToken: token).ConfigureAwait(false)
+                        ?? throw new InvalidDataException("Sequence definition is missing.");
+                    var summary = ReadSummaryFile(path) ?? throw new InvalidDataException("Sequence summary is missing.");
+                    storage = new(definition, summary.StartedAt);
+                }
+                rows.Add(storage.Deserialize(document.RootElement, cursor, number, BinaryPrimitives.ReadInt32LittleEndian(entry.AsSpan(20))));
+            }
+            else rows.Add(document.RootElement.Deserialize<SequenceStepResult>() ?? throw new InvalidDataException("Invalid sequence result."));
         }
         return new(rows, cursor, cursor < count);
     }
@@ -125,6 +140,14 @@ public sealed class SequenceRunStore(string root) : ISequenceRunReader
     {
         var bytes = await ReadRxAsync(id, start, end, token).ConfigureAwait(false);
         if (bytes.Length == 0) return [];
+        var compactPath = Path.Combine(RunPath(id), SequenceRxTimeIndex.FileName);
+        if (File.Exists(compactPath))
+        {
+            using var compactLease = Pin(id);
+            await using var compact = new FileStream(compactPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+                4096, FileOptions.Asynchronous | FileOptions.RandomAccess);
+            return await SequenceRxTimeIndex.ReadAsync(compact, start, bytes, token).ConfigureAwait(false);
+        }
         var path = Path.Combine(RunPath(id), "rx-times.idx");
         if (!File.Exists(path)) return [new(start, bytes, null)]; // Older recordings have no RX clock.
         using var lease = Pin(id);

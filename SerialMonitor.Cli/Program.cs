@@ -42,7 +42,12 @@ try
             // redirected pipe. Use cancellable asynchronous stream I/O for MCP.
             var output = new StreamWriter(StandardOutputTransport.Open(), new UTF8Encoding(false), 4096, true);
             using var input = StandardInputTransport.Open();
-            var server = new StdioMcpServer(flags.GetValueOrDefault("instance"));
+            var fullToolContent = flags.GetValueOrDefault("tool-content", "json") switch
+            {
+                "summary" => false, "json" => true,
+                _ => throw new ArgumentException("--tool-content must be summary or json.")
+            };
+            var server = new StdioMcpServer(flags.GetValueOrDefault("instance"), fullToolContent);
             await server.RunAsync(input, output, stop.Token);
             if (server.OutputFailed)
                 throw new IOException("MCP output failed or closed before all replies were delivered. Inspect GUI/capture state before retrying; TX is never replayed.");

@@ -97,6 +97,12 @@ across repeats/connections. The worker writes segmented raw RX, fixed-width
 receive-time/offset indexes and JSONL step/attempt records. Host timestamps derive
 from monotonic receive timestamps anchored to wall time, independently of queue
 latency. The UI reads bounded pages and incrementally decodes Terminal chunks.
+V2 storage references the immutable definition instead of repeating commands and
+patterns in every row, reconstructs presentation strings on read, and stores
+relative tick timestamps without losing precision. RX index entries retain
+explicit chunk lengths, timestamps and generations in 24 bytes. Disk capture
+metadata also uses a sparse v2 format; CLI fields are reconstructed in full.
+Readers continue to support v1 files. See [result storage](result_storage.md).
 Results show original row numbers, repetitions, TX/RX times, match highlighting
 and separate check/step states. Viewers pin runs against retention; orphaned
 running manifests are interrupted. Queue/storage faults stop further GUI TX.

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace SerialMonitor.Core.Sequences;
 
@@ -13,7 +14,7 @@ public sealed record SequenceRunSummary(string RunId, string Name, DateTimeOffse
     int TotalRepeats = 0, int CompletedRepeats = 0, int MatchedRepeats = 0, int MissedRepeats = 0,
     int UncertainRepeats = 0, int UncheckedRepeats = 0)
 {
-    public string DisplayText => $"{StartedAt:yyyy-MM-dd HH:mm:ss} · {Name} · {State}";
+    [JsonIgnore] public string DisplayText => $"{StartedAt:yyyy-MM-dd HH:mm:ss} · {Name} · {State}";
 }
 public sealed record SequenceStepResult(long Id, int Repeat, int Step, int Attempt, string Command,
     string TxHex, string SendStatus, string CheckStatus, string? Pattern, string? Kind,
@@ -23,10 +24,10 @@ public sealed record SequenceStepResult(long Id, int Repeat, int Step, int Attem
     int? RelatedTxStep = null, DateTimeOffset? RelatedTxAt = null, string? RelatedTxHex = null,
     string? RelatedTxCommand = null, string? TxMode = null, byte[]? RxDecoderPrefix = null)
 {
-    public string KindText => StepKind == "RxCheck" ? "RX Check" : "TX";
-    public string TimeText => StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
-    public string ResultStatus => StepKind == "RxCheck" || Pattern is not null ? CheckStatus : SendStatus;
-    public string DisplayText => $"{Repeat,5}  #{Step,-4} {SendStatus,-8} {CheckStatus,-14} {Command.Replace('\r', ' ').Replace('\n', ' ')}";
+    [JsonIgnore] public string KindText => StepKind == "RxCheck" ? "RX Check" : "TX";
+    [JsonIgnore] public string TimeText => StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+    [JsonIgnore] public string ResultStatus => StepKind == "RxCheck" || Pattern is not null ? CheckStatus : SendStatus;
+    [JsonIgnore] public string DisplayText => $"{Repeat,5}  #{Step,-4} {SendStatus,-8} {CheckStatus,-14} {Command.Replace('\r', ' ').Replace('\n', ' ')}";
 }
 public sealed record SequenceResultPage(IReadOnlyList<SequenceStepResult> Rows, long NextCursor, bool HasMore);
 public sealed record SequenceRxSlice(long Offset, byte[] Bytes, DateTimeOffset? ReceivedAt, long Timestamp = 0, long Generation = 0);

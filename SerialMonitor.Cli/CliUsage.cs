@@ -24,9 +24,10 @@ internal static class CliUsage
     serialctl sequence run --name NAME [--port COM7] [--instance INSTANCE_ID]
     serialctl sequence status [--run RUN_ID] [--instance INSTANCE_ID]
     serialctl sequence cancel --run RUN_ID [--instance INSTANCE_ID]
-    serialctl mcp [--instance INSTANCE_ID]
+    serialctl mcp [--instance INSTANCE_ID] [--tool-content summary|json]
 
     All data commands print JSON. describe needs no GUI; other control commands use the running GUI, which owns the COM port.
+    MCP preserves full JSON text and structuredContent by default. Structured clients can use --tool-content summary to avoid duplicating data.
     Read stdout while the CLI runs or redirect it to a file. Output has a 5-second deadline; failures never replay TX.
     Captures include ALL new RX, without matching, from before TX until duration-ms after TX.
     Large results have page.hasMore=true; keep reading with page.nextOffset.

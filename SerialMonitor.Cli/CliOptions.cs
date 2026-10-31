@@ -7,7 +7,8 @@ public static class CliOptions
         var fields = command switch
         {
             "help" or "--help" or "-h" or "describe" or "instances" => "",
-            "mcp" or "status" or "ports" or "disconnect" or "cancel" => "instance",
+            "mcp" => "instance tool-content",
+            "status" or "ports" or "disconnect" or "cancel" => "instance",
             "commands" => "instance offset limit",
             "connect" => "instance port baud",
             "configure" => "instance port baud byte-timeout-ms",

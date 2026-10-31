@@ -451,6 +451,14 @@ tool_timeout_sec = 90
 
 서버는 stdio를 사용하고 stdout에는 MCP JSON-RPC만 출력합니다. 도구는 다음과 같습니다.
 
+MCP 기본 응답은 텍스트 전용 클라이언트와의 호환을 위해 전체 JSON `content`와
+`structuredContent`를 유지합니다. `structuredContent.data`를 읽는 `2025-06-18` 클라이언트는
+`serialctl mcp --tool-content summary`로 실행하면 `content`에는 성공·오류 요약만 받아
+큰 RX 페이지와 메타데이터의 이중 전송을 피할 수 있습니다. 이전 프로토콜은 이 옵션을
+지정해도 자동으로 전체 JSON 텍스트를 유지합니다. CLI JSON 필드와 캡처 페이지·검사 결과는 변경하지 않습니다.
+CLI/MCP의 디스크 캡처 메타데이터는 ID·경로·기본값을 복원하는 작은 v2 형식으로 저장하고,
+기존 캡처 파일도 계속 읽습니다.
+
 | 도구 | 역할 |
 | --- | --- |
 | `serial_get_capabilities` | CLI/server 지원 기능·제어 API·최소 플러그인 버전과 도구 스키마 조회 (GUI·COM 접근 없음) |

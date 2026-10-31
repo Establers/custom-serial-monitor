@@ -8,7 +8,7 @@ namespace SerialMonitor.Cli;
 
 // A small stdio-only MCP surface. stdout is exclusively JSON-RPC, including
 // during cancellations/errors. It never opens COM ports or launches a GUI.
-public sealed class StdioMcpServer(string? defaultInstance = null)
+public sealed class StdioMcpServer(string? defaultInstance = null, bool fullToolContent = true)
 {
     // JSON-RPC requires id:null when a malformed request has no usable ID.
     // Keep this separate from payload serialization, which omits optional nulls.
@@ -31,6 +31,7 @@ public sealed class StdioMcpServer(string? defaultInstance = null)
     private int _usedRequestIdCharacters;
     private bool _initialized;
     private bool _ready;
+    private bool _textOnlyProtocol;
     private static readonly Dictionary<string, string> Operations = new()
     {
         ["serial_get_capabilities"] = "capabilities",
@@ -107,6 +108,7 @@ public sealed class StdioMcpServer(string? defaultInstance = null)
                     { await WriteErrorAsync(output, id, -32602, "protocolVersion is required.", lifetime); continue; }
                     var requested = protocol.GetString();
                     var negotiated = requested is "2024-11-05" or "2025-03-26" or "2025-06-18" ? requested : "2025-06-18";
+                    _textOnlyProtocol = negotiated != "2025-06-18";
                     _initialized = true;
                     await WriteAsync(output, new { jsonrpc = "2.0", id, result = new
                     {
@@ -264,9 +266,13 @@ public sealed class StdioMcpServer(string? defaultInstance = null)
         CancellationToken token, CancellationTokenSource lifetime)
     {
         var data = JsonSerializer.SerializeToElement(response, AutomationJson.Options);
+        // Keep every result field in structuredContent exactly as on the CLI.
+        // Keep text-only clients working by default. Structured clients can opt
+        // out of a second escaped copy of large RX pages at server startup.
+        var text = fullToolContent || _textOnlyProtocol ? data.GetRawText() : JsonSerializer.Serialize(new { response.Success, response.Error }, AutomationJson.Options);
         return WriteAsync(output, new { jsonrpc = "2.0", id, result = new
         {
-            content = new[] { new { type = "text", text = data.GetRawText() } }, structuredContent = data, isError = !response.Success
+            content = new[] { new { type = "text", text } }, structuredContent = data, isError = !response.Success
         } }, token, lifetime);
     }
 

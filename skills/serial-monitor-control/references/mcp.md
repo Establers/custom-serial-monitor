@@ -1,5 +1,10 @@
 # Local MCP supplied by the plugin
 
+Tool data is complete in `structuredContent.data`. Default MCP text content also
+retains the full JSON for text-only clients. A modern structured client can use
+`serialctl mcp --tool-content summary` to avoid duplicating RX pages. Older
+protocols retain full JSON text automatically. CLI JSON and paging are unchanged.
+
 The plugin supplies local MCP tools together with this skill. Prefer connected
 MCP tools, or use CLI when requested or no local MCP connection exists. The target
 selection, evidence and no-blind-TX-

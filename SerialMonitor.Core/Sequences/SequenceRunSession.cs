@@ -21,6 +21,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
     private readonly FileStream _results;
     private readonly FileStream _index;
     private readonly FileStream _rxTimes;
+    private readonly SequenceStepStorage _stepStorage;
     private readonly long _clockTimestamp = Stopwatch.GetTimestamp();
     private readonly DateTimeOffset _clockTime = DateTimeOffset.UtcNow;
     private SequenceRunStep? _lastTx;
@@ -66,6 +67,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
         _textContext = new(encoding);
         _summary = new(RunId, definition.Name, DateTimeOffset.Now, null, "running", 0, 0, 0, 0, 0, 0, 0,
             Encoding: definition.Encoding, TotalRepeats: definition.RepeatCount);
+        _stepStorage = new(definition, _summary.StartedAt);
         _lastStepNumber = definition.Steps.Last().Number;
         _lease = new(Path.Combine(path, "run.lock"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
         try
@@ -74,7 +76,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
             try
             {
                 _index = Create("steps.idx");
-                try { _rxTimes = Create("rx-times.idx"); }
+                try { _rxTimes = Create(SequenceRxTimeIndex.FileName); }
                 catch { _index.Dispose(); throw; }
             }
             catch { _results.Dispose(); throw; }
@@ -103,7 +105,13 @@ public sealed class SequenceRunSession : IAsyncDisposable
             await File.WriteAllTextAsync(Path.Combine(path, "definition.json"), JsonSerializer.Serialize(definition), token).ConfigureAwait(false);
             session = new SequenceRunSession(path, definition, encoding);
             beforeInitialSummary?.Invoke(session);
-            await session.EnqueueAsync(session.SaveSummaryAsync, token).ConfigureAwait(false);
+            await session.EnqueueAsync(async () =>
+            {
+                await session._rxTimes.WriteAsync(SequenceRxTimeIndex.Header(session._clockTimestamp,
+                    session._clockTime, Stopwatch.Frequency), token).ConfigureAwait(false);
+                await session._rxTimes.FlushAsync(token).ConfigureAwait(false);
+                await session.SaveSummaryAsync().ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
             return session;
         }
         catch
@@ -410,7 +418,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
         item = item with { EndedAt = DateTimeOffset.Now, RxEnd = item.StepKind == "RxCheck" ? _checkEnd : _bytes, Error = error ?? item.Error,
             CheckStatus = item.Pattern is null ? "not_requested" : (!_checkClosed ? overrideStatus ?? item.CheckStatus : item.CheckStatus),
             StepState = overrideStatus ?? "completed" };
-        var json = JsonSerializer.SerializeToUtf8Bytes(item);
+        var json = _stepStorage.Serialize(item);
         if (_results.Position + json.Length > 256L * 1024 * 1024)
             throw new IOException("Sequence metadata storage limit reached (256 MiB per run).");
         var entry = new byte[24];
@@ -481,12 +489,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
                             consumed += count; _bytes += count;
                         }
                         await _raw!.FlushAsync(_ioStop.Token).ConfigureAwait(false);
-                        var timing = new byte[SequenceRunStore.RxTimeEntryBytes];
-                        BinaryPrimitives.WriteInt64LittleEndian(timing, chunkStart);
-                        BinaryPrimitives.WriteInt32LittleEndian(timing.AsSpan(8), bytes.Length);
-                        BinaryPrimitives.WriteInt64LittleEndian(timing.AsSpan(16), WallTime(work.Timestamp).UtcTicks);
-                        BinaryPrimitives.WriteInt64LittleEndian(timing.AsSpan(24), work.Timestamp);
-                        BinaryPrimitives.WriteInt64LittleEndian(timing.AsSpan(32), work.Generation);
+                        var timing = SequenceRxTimeIndex.Entry(chunkStart, bytes.Length, work.Timestamp, work.Generation);
                         await _rxTimes.WriteAsync(timing, _ioStop.Token).ConfigureAwait(false);
                         await _rxTimes.FlushAsync(_ioStop.Token).ConfigureAwait(false);
                     }

@@ -176,7 +176,7 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             options.TxMode, options.LineEnding, options.PreviewFormat);
         try
         {
-            await File.WriteAllTextAsync(MetadataPath(id), JsonSerializer.Serialize(result, AutomationJson.Options), CancellationToken.None).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(MetadataPath(id), CaptureResultStorage.Serialize(result, DirectoryPath), CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -194,8 +194,8 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
         {
             try
             {
-                return JsonSerializer.Deserialize<CaptureResult>(File.ReadAllText(MetadataPath(id)), AutomationJson.Options)
-                    ?? throw new AutomationException("capture_not_found", "Capture metadata is unavailable.");
+                using var document = JsonDocument.Parse(File.ReadAllText(MetadataPath(id)));
+                return CaptureResultStorage.Deserialize(document.RootElement, DirectoryPath, id);
             }
             catch (FileNotFoundException) { throw new AutomationException("capture_not_found", "Capture not found or expired."); }
         }

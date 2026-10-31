@@ -9,6 +9,47 @@ namespace SerialMonitor.Core.Tests;
 
 public sealed partial class AutomationCliMcpTests
 {
+    [Theory]
+    [InlineData("2024-11-05")]
+    [InlineData("2025-03-26")]
+    public async Task McpOlderProtocolsAutomaticallyRetainCompleteTextContent(string protocolVersion)
+    {
+        await using var mcp = await McpSession.StartAsync("not-a-running-gui", fullToolContent: false, protocolVersion: protocolVersion);
+        var result = await mcp.CallAsync("serial_get_capabilities", new { });
+        Assert.Equal(result.GetProperty("structuredContent").GetRawText(), result.GetProperty("content")[0].GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task McpKeepsFullStructuredDataAndSupportsTextOnlyClients(bool fullToolContent)
+    {
+        await using var mcp = await McpSession.StartAsync("not-a-running-gui", fullToolContent);
+        var result = await mcp.CallAsync("serial_get_capabilities", new { });
+        var structured = result.GetProperty("structuredContent");
+        var text = result.GetProperty("content")[0].GetProperty("text").GetString()!;
+        using var textJson = JsonDocument.Parse(text);
+        Assert.True(textJson.RootElement.GetProperty("success").GetBoolean());
+        Assert.NotEmpty(structured.GetProperty("data").GetProperty("tools").EnumerateArray());
+        if (fullToolContent) Assert.Equal(structured.GetRawText(), text);
+        else
+        {
+            Assert.False(textJson.RootElement.TryGetProperty("data", out _));
+            Assert.True(text.Length < 40);
+            var oldSize = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                content = new[] { new { type = "text", text = structured.GetRawText() } },
+                structuredContent = structured, isError = false
+            }, AutomationJson.Options).Length;
+            Assert.True(Encoding.UTF8.GetByteCount(result.GetRawText()) < oldSize * 0.55);
+        }
+        var error = await mcp.CallAsync("serial_get_capabilities", new { instanceId = "invalid" });
+        using var errorText = JsonDocument.Parse(error.GetProperty("content")[0].GetProperty("text").GetString()!);
+        Assert.False(errorText.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("invalid_argument", errorText.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.True(error.GetProperty("isError").GetBoolean());
+    }
+
     [Fact]
     public async Task CapabilitiesExposeCurrentToolSchemasWithoutSelectingAGui()
     {
@@ -423,12 +464,12 @@ public sealed partial class AutomationCliMcpTests
         private readonly Task _run;
         private int _requestId = 1;
 
-        private McpSession(string instanceId) => _run = new StdioMcpServer(instanceId).RunAsync(_input, _output, default);
+        private McpSession(string instanceId, bool fullToolContent) => _run = new StdioMcpServer(instanceId, fullToolContent).RunAsync(_input, _output, default);
 
-        public static async Task<McpSession> StartAsync(string instanceId)
+        public static async Task<McpSession> StartAsync(string instanceId, bool fullToolContent = true, string protocolVersion = "2025-06-18")
         {
-            var session = new McpSession(instanceId);
-            session._input.Send(new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { protocolVersion = "2025-06-18" } });
+            var session = new McpSession(instanceId, fullToolContent);
+            session._input.Send(new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { protocolVersion } });
             await session._output.NextAsync();
             session._input.Send(new { jsonrpc = "2.0", method = "notifications/initialized" });
             return session;

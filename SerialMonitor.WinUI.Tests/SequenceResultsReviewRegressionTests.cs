@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
 using SerialMonitor.Core.Sequences;
 using SerialMonitor.WinUI.ViewModels;
 
@@ -6,6 +8,55 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class SequenceResultsReviewRegressionTests
 {
+    [Theory]
+    [InlineData("steps.jsonl")]
+    [InlineData("definition.json")]
+    [InlineData("rx-times-v2.idx")]
+    public async Task DamagedCompactFilesReportAnErrorAndRecoverWithoutClosingTheResults(string damagedFile)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "CompactResultsUiTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new SequenceRunStore(root);
+            var step = new SequenceRunStep(1, "AA", "Hex", "None", 0, new("hex", "AA"), "", "RxCheck");
+            string id;
+            await using (var session = await SequenceRunSession.StartAsync(store,
+                new("Compact UI regression", 1, "MOCK", "Utf8", [step]), Encoding.UTF8, default))
+            {
+                id = session.RunId;
+                await session.BeginAsync(step, 1, 1, 1, default);
+                session.Offer(1, [0xAA], Stopwatch.GetTimestamp());
+                await session.CheckFullWindowAsync(default);
+                await session.EndStepAsync(default);
+                await session.FinishAsync("completed");
+            }
+            using (var model = new SequenceResultsViewModel(store))
+            {
+                await model.RefreshRunsAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                await model.LoadDetailAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal("matched", Assert.Single(model.Rows).CheckStatus);
+                Assert.Equal(new byte[] { 0xAA }, model.RxBytes);
+                var file = Path.Combine(store.RunPath(id), damagedFile);
+                var original = await File.ReadAllBytesAsync(file);
+                await File.WriteAllBytesAsync(file, [0xFF]);
+                if (damagedFile == "rx-times-v2.idx")
+                    await model.LoadDetailAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                else
+                    await model.RefreshAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.NotEmpty(model.Error);
+                Assert.Equal(id, model.SelectedRun?.RunId);
+                await File.WriteAllBytesAsync(file, original);
+                await model.RefreshAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                await model.LoadDetailAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Empty(model.Error);
+                Assert.Equal(new byte[] { 0xAA }, model.RxBytes);
+            }
+            using var exclusive = new FileStream(Path.Combine(store.RunPath(id), "run.lock"),
+                FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
