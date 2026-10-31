@@ -58,6 +58,9 @@ public sealed class LogDirectoryValidatorTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
+        // Cancellation is a separate completion path. A busy test scheduler
+        // may resume this test after a short timeout has already completed.
+        // The timeout case below still verifies the 200 ms deadline.
         var validator = new LogDirectoryValidator(path =>
         {
             Interlocked.Increment(ref calls);
@@ -68,7 +71,7 @@ public sealed class LogDirectoryValidatorTests
                 return path;
             }
             finally { finished.TrySetResult(); }
-        }, timeout: TimeSpan.FromMilliseconds(200));
+        }, timeout: cancel ? Timeout.InfiniteTimeSpan : TimeSpan.FromMilliseconds(200));
 
         try
         {
@@ -78,7 +81,7 @@ public sealed class LogDirectoryValidatorTests
             if (cancel)
             {
                 cancellation.Cancel();
-                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check);
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check.WaitAsync(TimeSpan.FromSeconds(3)));
             }
             else
             {
