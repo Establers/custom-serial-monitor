@@ -7,7 +7,7 @@
 static uint8_t out[65536];
 static size_t used;
 static uint32_t clock_ms, switched;
-static bool blocked, data_blocked, baud_blocked, was_reset, led_state;
+static bool blocked, data_blocked, baud_blocked, was_reset, led_state, button_state;
 static unsigned checks;
 static bool write_bytes(const uint8_t *bytes, size_t length) {
     if (blocked) return false;
@@ -19,7 +19,7 @@ static void set_led(bool on) { led_state = on; }
 static bool write_data(const uint8_t *bytes, size_t length) {
     return !data_blocked && write_bytes(bytes, length);
 }
-static bool get_button(void) { return true; }
+static bool get_button(void) { return button_state; }
 static bool set_baud(uint32_t rate) { if (baud_blocked) return false; switched = rate; return true; }
 static bool set_reset(void) { if (baud_blocked) return false; was_reset = true; return true; }
 static void stats(uint32_t *drops, uint32_t *errors) { *drops = 7; *errors = 3; }
@@ -27,7 +27,11 @@ static const lab_platform platform = {write_bytes,write_data,set_led,get_button,
 static void clear(void) { used = 0; out[0] = 0; }
 static void init(uint32_t now) {
     blocked = data_blocked = baud_blocked = was_reset = led_state = false;
-    switched = 0; clock_ms = now; clear(); lab_init(&platform, now); clear();
+    switched = 0; clock_ms = now; button_state = true; clear(); lab_init(&platform, now);
+    /* Legacy exact-response cases explicitly disable the new boot-on background output. */
+    const char quiet[] = "MONITOR OFF\n";
+    for (size_t i = 0; i < sizeof(quiet) - 1; ++i) lab_receive((uint8_t)quiet[i], now);
+    clear();
 }
 static void feed_bytes(const void *data, size_t length) {
     const uint8_t *bytes = data;
@@ -45,6 +49,38 @@ static size_t packet(uint8_t *p, uint8_t type, uint32_t seq, const uint8_t *payl
     uint16_t crc = lab_crc16(p + 2, len + 7);
     p[9 + len] = (uint8_t)crc; p[10 + len] = (uint8_t)(crc >> 8);
     return len + 11;
+}
+
+static void monitor_tests(void) {
+    init(0); button_state = false; lab_init(&platform, 0); clear();
+    poll(999, 1); equals(""); poll(1000, 1);
+    contains("HEARTBEAT seq=1 uptime_ms=1000 user=RELEASED");
+    clear(); poll(1000, 5); poll(1999, 1); equals("");
+    poll(2000, 1); contains("HEARTBEAT seq=2 uptime_ms=2000");
+    clear(); button_state = true; poll(2010, 1); poll(2029, 1); equals("");
+    button_state = false; poll(2030, 1); button_state = true; poll(2035, 1);
+    poll(2054, 1); equals(""); poll(2055, 1);
+    equals("INFO USER PRESS count=1 uptime_ms=2055\r\n");
+    clear(); poll(2500, 10); equals("");
+    button_state = false; poll(2600, 1); poll(2620, 1);
+    equals("INFO USER RELEASE count=1 held_ms=565 uptime_ms=2620\r\n");
+    clear(); send("MONITOR OFF\n"); equals("OK MONITOR OFF\r\n");
+    clear(); poll(5000, 2); equals("");
+    send("MONITOR ON\n"); clear(); poll(5999, 1); equals("");
+    poll(6000, 1); contains("HEARTBEAT seq=3");
+    send("STOP\n"); clear(); poll(8000, 2); equals("");
+    send("MONITOR?\n"); contains("MONITOR enabled=0");
+    clear(); send("HELP\n"); contains("MONITOR ON|OFF");
+    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); clear();
+    poll(983, 1); equals(""); poll(984, 1); contains("HEARTBEAT seq=1");
+    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); clear();
+    button_state = true; poll(0xfffffff8u, 1); poll(11, 1); equals("");
+    poll(12, 1); contains("USER PRESS count=1");
+    init(0); send("MONITOR ON\n"); clear(); data_blocked = true; poll(1000, 1); equals("");
+    send("PING reserved\n"); equals("PONG reserved\r\n");
+    data_blocked = false; clear(); poll(2000, 1); contains("missed=1");
+    clear(); poll(9000, 10); contains("HEARTBEAT seq=3");
+    assert(!strstr((char *)out, "HEARTBEAT seq=4")); ++checks;
 }
 
 static void text_tests(void) {
@@ -242,6 +278,7 @@ static void export_contract(const char *directory) {
 int main(int argc, char **argv) {
     assert(lab_crc16((const uint8_t *)"123456789",9) == 0x29b1); ++checks;
     text_tests(); scheduling_tests(); generator_tests(); binary_tests(); malformed_tests();
+    monitor_tests();
     fixture_tests();
     large_binary_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);

@@ -1,0 +1,53 @@
+<Project>
+  <UsingTask TaskName="ValidateShortcutSources" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <Adapters ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Method" Language="cs"><![CDATA[
+        public override bool Execute()
+        {
+            var adapters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in Adapters) adapters.Add(Path.GetFullPath(item.ItemSpec));
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in Files)
+            {
+                var path = Path.GetFullPath(item.ItemSpec);
+                if (!seen.Add(path) || adapters.Contains(path) || !File.Exists(path)) continue;
+                var extension = Path.GetExtension(path).ToLowerInvariant();
+                var pattern = extension == ".cs"
+                    ? @"\bVirtualKey\s*\.|\(\s*VirtualKey\s*\)\s*(?:\d|0x)|\b(?:GetKeyState|GetAsyncKeyState|RegisterHotKey)\s*\(|\b(?:args|e|ev|eventArgs|keyArgs)\s*\.\s*Key\s*(?:==|!=|is\b)|switch\s*\([^)]*\b(?:args|e|ev|eventArgs|keyArgs)\s*\.\s*Key\s*\)|\b(?:KeyboardAccelerators?|AccessKey|AcceleratorKeyPressed|WM_KEYDOWN|WM_SYSKEYDOWN|WM_HOTKEY)\b|\b(?:Parse|TryParse)\s*<\s*VirtualKey\s*>"
+                    : extension == ".xaml"
+                        ? @"\b(?:KeyboardAccelerator|AccessKey)\b"
+                        : string.Empty;
+                // Keep bracket access covered too; the two input adapters are the
+                // only production files allowed to read raw keyboard properties.
+                if (extension != ".cs" && extension != ".xaml")
+                    pattern = @"\.\s*(?:key|code|keyCode|which|ctrlKey|altKey|shiftKey|metaKey)\b|\[\s*['""](?:key|code|keyCode|which|ctrlKey|altKey|shiftKey|metaKey)['""]\s*\]";
+                var lines = File.ReadAllLines(path);
+                for (var index = 0; index < lines.Length; index++)
+                {
+                    if (!Regex.IsMatch(lines[index], pattern)) continue;
+                    Log.LogError("{0}({1}): error KEYMAP001: Raw keyboard binding bypasses the shared shortcut catalog. Add the gesture to Assets/xterm/app-shortcuts.json.js and use AppShortcuts.Matches / serialMonitorShortcuts.matches.", path, index + 1);
+                }
+            }
+            return !Log.HasLoggedErrors;
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="ValidateShortcutArchitecture" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_ShortcutSource Include="@(Compile);@(Page);@(ApplicationDefinition);Assets\**\*.html;Assets\**\*.js"
+                       Exclude="Assets\xterm\xterm.js;Assets\xterm\xterm-addon-*.js" />
+      <_ShortcutInputAdapter Include="$(MSBuildProjectDirectory)\Infrastructure\SavedCommandShortcut.cs;$(MSBuildProjectDirectory)\Assets\xterm\shortcut-keys.js" />
+    </ItemGroup>
+    <ValidateShortcutSources Files="@(_ShortcutSource)" Adapters="@(_ShortcutInputAdapter)" />
+  </Target>
+</Project>

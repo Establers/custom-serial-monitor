@@ -23,13 +23,21 @@ public sealed partial class SequenceResultsWindow : Window
         _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += Tick;
         Root.Loaded += async (_, _) => { _loaded = true; await _model.RefreshRunsAsync(); if (_loaded) _timer.Start(); };
+        Activated += async (_, args) =>
+        {
+            if (_loaded && args.WindowActivationState != WindowActivationState.Deactivated)
+                await _model.RefreshRunsAsync();
+        };
         Closed += (_, _) => { _loaded = false; _timer.Stop(); _timer.Tick -= Tick; _model.PropertyChanged -= ModelChanged; _model.Dispose(); };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 800));
     }
     private async void Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
-        if (_model.SelectedRun is null) await _model.RefreshRunsAsync();
-        else await _model.RefreshAsync();
+        // New runs must appear even while an older result remains selected.
+        // Schedule the next poll after this one finishes, including slow disks.
+        _timer.Stop();
+        try { await _model.RefreshRunsAsync(); }
+        finally { if (_loaded) _timer.Start(); }
     }
     private async void Refresh_Click(object sender, RoutedEventArgs args) => await _model.RefreshRunsAsync();
     private async void Run_Changed(object sender, SelectionChangedEventArgs args) { if (_loaded) await _model.RefreshAsync(); }

@@ -23,6 +23,6 @@ public sealed class SequenceTimelineModeTests
         Assert.Equal(hex ? "70 69 6E 67 0D 0A" : "ping", Assert.Single(lines[0].Parts).Text);
         Assert.Equal(hex ? "52 45 41 44 59" : "READY", string.Concat(lines[1].Parts.Select(part => part.Text)).TrimEnd());
         Assert.All(lines[1].Parts, part => Assert.True(part.Matched));
-        Assert.Equal(time.AddMilliseconds(10).ToLocalTime().ToString("HH:mm:ss.fff"), lines[1].Time);
+        Assert.Equal(time.AddMilliseconds(10).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture), lines[1].Time);
     }
 }

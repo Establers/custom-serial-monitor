@@ -4,7 +4,15 @@ NUCLEO-F103RB 한 장과 현재 연결한 USB 케이블로 Serial Monitor를 시
 기본 통신, 시퀀스 응답 검사, Terminal/HEX, UTF-8, 이벤트, 대량 수신, 지연·분할 응답,
 CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다.
 
-## 신뢰성 검증용 1.2.0 후보 빌드
+## 현재 1.3.0: USER 버튼 + 1초 로그
+
+부팅하면 1초마다 HEARTBEAT가 출력되고 파란 USER 버튼의 누름·뗌·누른 시간을 출력합니다.
+보드 업로드와 COM3 검증을 완료했습니다. 연결 설정과 빌드·재업로드 방법은
+[1.3.0 온보딩](ONBOARDING-1.3.0.md)을 참고하세요.
+기존의 정밀 응답 검사는 먼저 `STOP` 또는 `MONITOR OFF`로 배경 출력을 멈추고,
+끝나면 `MONITOR ON`으로 다시 켭니다.
+
+## 신뢰성 검증용 빌드와 이전 1.2.0 결과
 
 다른 개발에서도 재사용할 설계·테스트 절차는
 [장치 테스트 개발 가이드](../../docs/device-test-development-guide.md)를 참고하세요.
@@ -15,7 +23,7 @@ CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-build.ps1
 ```
 
-`build-candidate/`에 버전 1.2.0과 빌드 ID·입력 해시를 포함한 후보 이미지가 생성됩니다.
+`build-candidate/`에 현재 소스 버전과 빌드 ID·입력 해시를 포함한 후보 이미지가 생성됩니다.
 [이번 후보 빌드 검증 결과](CANDIDATE-VALIDATION.md)에서 빌드 ID·해시·실행 범위를 확인할 수 있습니다.
 1.2.0은 실제 보드 기록·읽기 검증과 플러그인 MCP 실기 36개까지 통과했습니다.
 [온보딩 결과](ONBOARDING-1.2.0.md)에 이미지·백업·전체 UART 증거·종료 상태를 연결했습니다.
@@ -154,6 +162,7 @@ CLI smoke 시퀀스 또는 수동 명령으로 먼저 확인합니다.
 | `03-burst.gui.json` | 1,000줄 대량 로그, 마지막 순번과 장치 오류 카운터 |
 | `04-binary.gui.json` | 정확한 HEX echo/CRC, 번호 있는 바이너리 프레임 |
 | `05-expected-timeout.gui.json` | **첫 RX가 미일치하는 것이 정상**, 다음 PING으로 계속 진행 |
+| `manual-rxcheck/01-normal.gui.json`, `manual-rxcheck/02-expected-timeout.gui.json` | 직접 Run으로 실행하는 한국어 실물 시험. LED·분할·지연·HEX 정상 검사 10개와 별도의 의도한 타임아웃. [사용법](sequences/manual-rxcheck/README.md) |
 | `hardware-validation/06-rxcheck-hardware.gui.json` | 즉시·분할 UTF-8·지연·HEX/와일드카드·의도한 타임아웃과 복구. COM3 GUI 실기 완료, [결과](HARDWARE-RESULTS.md#gui-rx-check-추가-실기--2026-10-31-0943-한국-시간) |
 
 GUI 패턴의 일치만으로 전체 무결성을 보장하지 않습니다. 예를 들어 1,000번째 로그를

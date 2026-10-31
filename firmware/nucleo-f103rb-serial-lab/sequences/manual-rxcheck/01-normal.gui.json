@@ -1,0 +1,31 @@
+{
+  "FormatVersion": 3,
+  "Name": "COM3 STM32 - RX Check 정상 시험",
+  "RepeatCount": 1,
+  "_manual": [
+    "COM3 / 115200 / 8N1 / UTF-8. Run을 직접 눌러 실행합니다. 약 11초, RX Check 10개가 모두 일치해야 합니다.",
+    "초록 LD2가 약 1.5초 켜졌다 꺼집니다. 기존 출력 job은 첫 STOP에서 종료합니다.",
+    "각 RX Check는 전체 시간 동안 기다립니다. HEX 검사도 GUI Terminal 모드를 유지한 채 실행할 수 있습니다."
+  ],
+  "Steps": [
+    { "Kind": "Tx", "Name": "01 기존 주기·예약 출력 정지", "CommandText": "STOP", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "01 정지 응답 확인", "CommandText": "", "RxPattern": "OK STOP", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 700 },
+    { "Kind": "Tx", "Name": "02 STM32 펌웨어 식별", "CommandText": "ID?", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "02 NUCLEO-F103RB 식별 응답", "CommandText": "", "RxPattern": "ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 700 },
+    { "Kind": "Tx", "Name": "03 빠른 응답 시험 (TX 후 250ms 대기)", "CommandText": "PING MANUAL_RX_FAST", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 250 },
+    { "Kind": "RxCheck", "Name": "03 TX 대기 중 도착한 PONG 확인", "CommandText": "", "RxPattern": "PONG MANUAL_RX_FAST", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 700, "Comment": "RX Check 시작 전이라도 직전 TX 이후 수신한 응답은 검사합니다." },
+    { "Kind": "Tx", "Name": "04 보드 초록 LED 켜기", "CommandText": "LED ON", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "04 LED ON 응답 / 실물 LD2 확인", "CommandText": "", "RxPattern": "OK LED ON", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 1500, "Comment": "이 단계 동안 보드의 초록 LD2가 켜져 있어야 합니다. 일치 후에도 1500ms 전체를 기다립니다." },
+    { "Kind": "Tx", "Name": "05 보드 초록 LED 끄기", "CommandText": "LED OFF", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "05 LED OFF 응답 / 실물 LD2 확인", "CommandText": "", "RxPattern": "OK LED OFF", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 700 },
+    { "Kind": "Tx", "Name": "06 한글 UTF-8 바이트 분할 수신", "CommandText": "SPLIT 15 준비 완료 MANUAL_RX_SPLIT", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "06 나누어 수신한 한글 문장 일치", "CommandText": "", "RxPattern": "준비 완료 MANUAL_RX_SPLIT", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 1800, "Comment": "펌웨어가 UTF-8 바이트를 15ms 간격으로 보내므로 여러 RX 조각에 걸쳐 검사합니다." },
+    { "Kind": "Tx", "Name": "07 800ms 지연 응답 예약", "CommandText": "DELAY 800 MANUAL_RX_DELAY", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "07 제한 시간 안의 지연 응답 확인", "CommandText": "", "RxPattern": "MANUAL_RX_DELAY", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 1600 },
+    { "Kind": "Tx", "Name": "08 CRC 포함 바이너리 ECHO 전송", "CommandText": "A5 5A 02 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF B5 39", "TxMode": "Hex", "LineEndingMode": "None", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "08 HEX 전체 응답과 CRC 일치", "CommandText": "", "RxPattern": "A5 5A 82 2A 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF BD C9", "TxMode": "Hex", "LineEndingMode": "None", "DelayAfterMs": 800 },
+    { "Kind": "RxCheck", "Name": "09 같은 응답을 HEX ?? 와일드카드로 확인", "CommandText": "", "RxPattern": "A5 5A 82 ?? 00 00 00 0A 00 00 01 02 0A 0D 7F 80 A5 5A FF BD C9", "TxMode": "Hex", "LineEndingMode": "None", "DelayAfterMs": 500, "Comment": "??는 정확히 한 바이트만 무시합니다. 직전 HEX TX의 응답을 다시 검사하며 추가 송신은 없습니다." },
+    { "Kind": "Tx", "Name": "10 장치 누적 UART 오류 조회", "CommandText": "STATUS?", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "10 수신 누락·UART 오류 0 확인", "CommandText": "", "RxPattern": "rx_drops=0 uart_errors=0", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 800, "Comment": "부팅 이후 누적 카운터입니다. 이전 시험의 오류가 남아 있으면 이 항목만 미일치할 수 있으니 실제 STATUS 값을 확인하세요." }
+  ]
+}

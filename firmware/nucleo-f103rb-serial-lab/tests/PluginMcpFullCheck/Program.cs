@@ -6,7 +6,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
-if (args.Length != 3) throw new ArgumentException("PluginMcpFullCheck <plugin-root> <new-evidence-directory> discover|safe|state|cancel|remaining|quick");
+if (args.Length != 3) throw new ArgumentException("PluginMcpFullCheck <plugin-root> <new-evidence-directory> discover|safe|state|cancel|remaining|quick|user-setup|user-monitor|user-observe|user-status");
 await using var suite = await Suite.CreateAsync(args[0], args[1], args[2]);
 await suite.RunAsync();
 
@@ -33,7 +33,7 @@ sealed class Suite : IAsyncDisposable
     public static async Task<Suite> CreateAsync(string root, string directory, string phase)
     {
         root=Path.GetFullPath(root); directory=Path.GetFullPath(directory);
-        if (phase is not ("discover" or "safe" or "state" or "cancel" or "remaining" or "quick")) throw new ArgumentException("Invalid phase");
+        if (phase is not ("discover" or "safe" or "state" or "cancel" or "remaining" or "quick" or "user-setup" or "user-monitor" or "user-observe" or "user-status")) throw new ArgumentException("Invalid phase");
         if (Directory.Exists(directory) && Directory.EnumerateFileSystemEntries(directory).Any()) throw new Exception("Use a new evidence directory");
         Directory.CreateDirectory(directory);
         using var manifest=JsonDocument.Parse(File.ReadAllText(Path.Combine(root,"mcp.json")));
@@ -199,10 +199,15 @@ sealed class Suite : IAsyncDisposable
                 string id=entry.GetProperty("instanceId").GetString()!;
                 var reply=await Call("serial_get_status",new(){["instanceId"]=id},true);if(!Ok(reply))continue;
                 var state=Data(reply);
-                if(state.GetProperty("connected").GetBoolean()&&state.GetProperty("port").GetString()=="COM3")found.Add((id,state));
+                if((state.GetProperty("connected").GetBoolean()||phase=="user-setup")&&state.GetProperty("port").GetString()=="COM3")found.Add((id,state));
             }
             Need(found.Count==1,"Require exactly one GUI already connected to COM3");instance=found[0].Id;initialState=found[0].State;
             if(phase!="discover")Need(!initialState.GetProperty("busy").GetBoolean(),"COM3 GUI is busy with unrelated work");
+            if(phase=="user-setup"&&!initialState.GetProperty("connected").GetBoolean())
+            {
+                await Call("serial_connect",Target(("port","COM3"),("baudRate",115200)));
+                initialState=await State();
+            }
             Need(initialState.GetProperty("baudRate").GetInt32()==115200&&initialState.GetProperty("dataBits").GetInt32()==8&&
                 initialState.GetProperty("parity").GetString()=="None"&&initialState.GetProperty("stopBits").GetString()=="One"&&initialState.GetProperty("handshake").GetString()=="None","Require 115200/8N1/no handshake");
             originalMode=initialState.GetProperty("mode").GetString()!;originalTimeout=initialState.GetProperty("byteTimeoutMs").GetInt32();Save("initial-status.json",initialState);
@@ -214,6 +219,26 @@ sealed class Suite : IAsyncDisposable
             if(phase=="cancel")await CaptureCancellationAndBusy("F103RB LAB - CLI smoke");
             if(phase=="remaining")await RemainingAsync();
             if(phase=="quick")await QuickCommandFixturesAsync();
+            if(phase=="user-setup")
+            {
+                await WaitIdle();
+                Save("previous-firmware-build.json",new{response=Encoding.UTF8.GetString(await Request("BUILD?"))});
+                await WaitIdle();Pass("onboarding COM3 connection and previous firmware BUILD response");
+            }
+            if(phase=="user-monitor")await UserMonitorAsync();
+            if(phase=="user-observe")await UserObserveAsync();
+            if(phase=="user-status")
+            {
+                await WaitIdle();
+                string reply=Encoding.UTF8.GetString(await Request("MONITOR?",duration:500));
+                await WaitIdle();
+                var state=Regex.Match(reply,@"MONITOR enabled=1 heartbeat_ms=1000 debounce_ms=20 user=(PRESSED|RELEASED) presses=(\d+) releases=(\d+) missed=0\r\n");
+                Need(state.Success,"Monitor is not running cleanly");
+                uint presses=uint.Parse(state.Groups[2].Value),releases=uint.Parse(state.Groups[3].Value);
+                Save("physical-button-counters.json",new{presses,releases,user=state.Groups[1].Value,reply,physicalPressReleaseObserved=presses>0&&releases>0});
+                Need(presses>0&&releases>0,"No physical button press/release counters after user confirmation");
+                Pass($"live PC13 counters confirm {presses} physical presses and {releases} releases; monitor remains ON");
+            }
         }
         catch(Exception error){failure=error.ToString();Console.Error.WriteLine(failure);}
         finally
@@ -227,7 +252,7 @@ sealed class Suite : IAsyncDisposable
                     if(disconnected) { await Call("serial_connect",Target(("port","COM3"),("baudRate",115200)));disconnected=false; }
                     foreach(string name in ownedSequences.ToArray())
                     { await Call("serial_sequence_delete",Target(("name",name)));ownedSequences.Remove(name); }
-                    if(phase!="quick")await Call("serial_configure",Target(("port","COM3"),("byteTimeoutMs",originalTimeout)));
+                    if(phase!="quick"&&!phase.StartsWith("user-",StringComparison.Ordinal))await Call("serial_configure",Target(("port","COM3"),("byteTimeoutMs",originalTimeout)));
                     if((await State()).GetProperty("mode").GetString()!=originalMode)
                         await Call("serial_set_mode",Target(("mode",originalMode)));
                     Save("final-status.json",await State());
@@ -240,6 +265,90 @@ sealed class Suite : IAsyncDisposable
             Console.WriteLine("Evidence: "+directory);
         }
         if(failure is not null)Environment.ExitCode=1;else Console.WriteLine($"PASS {cases.Count} {phase} checks; {calls} plugin MCP calls");
+    }
+
+    private async Task<byte[]> ObserveUser(int duration)
+    {
+        await WaitIdle();
+        var response=Data(await Call("serial_capture_rx",Target(("port","COM3"),("durationMs",duration),("previewBytes",64),("format","hex"))));
+        byte[] bytes=await Read(response);
+        await WaitIdle();return bytes;
+    }
+    private void CheckHeartbeat(byte[] bytes,int minimum)
+    {
+        var rows=Regex.Matches(Encoding.UTF8.GetString(bytes),@"INFO HEARTBEAT seq=(\d+) uptime_ms=(\d+) user=(PRESSED|RELEASED) presses=\d+ releases=\d+ rx_drops=0 uart_errors=0 missed=0\r\n");
+        Need(rows.Count>=minimum,"Missing clean heartbeat records");
+        for(int i=1;i<rows.Count;i++)
+        {
+            uint previous=uint.Parse(rows[i-1].Groups[1].Value),current=uint.Parse(rows[i].Groups[1].Value);
+            uint delta=unchecked(uint.Parse(rows[i].Groups[2].Value)-uint.Parse(rows[i-1].Groups[2].Value));
+            Need(unchecked(current-previous)==1&&delta>=990&&delta<=1010,"Heartbeat sequence/timing mismatch");
+        }
+        Pass($"{rows.Count} consecutive clean heartbeat records, 1000ms firmware timestamp spacing");
+    }
+    private async Task UserMonitorAsync()
+    {
+        CheckHeartbeat(await ObserveUser(3500),3); // Boot-on behavior, before MONITOR ON.
+        Need(Encoding.UTF8.GetString(await Request("STOP",duration:200)).Contains("OK STOP\r\n"),"STOP ACK missing");
+        await WaitIdle();
+        string manifest=Path.GetFullPath(Path.Combine(root,"..","..","firmware","nucleo-f103rb-serial-lab","build-user-monitor","manifest.json"));
+        using var identity=JsonDocument.Parse(File.ReadAllText(manifest));Save("firmware-manifest.json",identity.RootElement);
+        string build=Encoding.UTF8.GetString(await Request("BUILD?",duration:200));await WaitIdle();
+        Need(build.Contains("version="+identity.RootElement.GetProperty("firmwareVersion").GetString())&&
+            build.Contains("id="+identity.RootElement.GetProperty("buildId").GetString()),"Running firmware differs from flashed image");
+        Pass("running firmware version/build ID matches new image manifest");
+        Need(Encoding.UTF8.GetString(await Request("MONITOR?",duration:200)).Contains("MONITOR enabled=0"),"STOP did not disable monitor");await WaitIdle();
+        Text(await Request("MONITOR OFF",duration:200),"OK MONITOR OFF\r\n");await WaitIdle();
+        Need((await ObserveUser(1300)).Length==0,"MONITOR OFF did not suppress background output");
+        Pass("STOP/MONITOR OFF keep precision serial tests quiet");
+        Text(await Request("MONITOR ON extra",duration:200),"ERR ARGS MONITOR ON|OFF\r\n");await WaitIdle();
+        string button=Encoding.UTF8.GetString(await Request("BUTTON?",duration:200));await WaitIdle();
+        Need(Regex.IsMatch(button,@"^BUTTON [01]\r\n$"),"PC13 state query failed");Pass("physical PC13 button state query");
+        byte[] payload=Enumerable.Range(0,256).Select(i=>(byte)i).ToArray();
+        SerialLabWire.AssertBytes(await Request(SerialLabWire.Hex(SerialLabWire.Encode(2,1300,payload)),"hex",duration:300,ending:"none"),SerialLabWire.Encode(0x82,1300,payload));
+        await WaitIdle();Pass("existing 00..FF binary CRC echo remains byte-exact with monitor off");
+        Text(await Request("MONITOR ON",duration:200),"OK MONITOR ON\r\n");await WaitIdle();
+        CheckHeartbeat(await ObserveUser(3500),3);
+        Pass("monitor left ON for user; GUI display mode and byte timeout preserved");
+    }
+    private async Task UserObserveAsync()
+    {
+        var existing=await ListAll("serial_sequence_list","sequences");
+        var presets=new[]{
+            (Name:"F103RB USER - Monitor ON",Command:"MONITOR ON"),
+            (Name:"F103RB USER - Monitor OFF",Command:"MONITOR OFF"),
+            (Name:"F103RB USER - Button status",Command:"MONITOR?")
+        };
+        foreach(var preset in presets)
+        {
+            if(existing.Any(item=>item.GetProperty("name").GetString()==preset.Name))
+            {
+                var current=Data(await Call("serial_sequence_get",Target(("name",preset.Name))));
+                var steps=current.GetProperty("steps");
+                Need(current.GetProperty("repeatCount").GetInt32()==1&&steps.GetArrayLength()==1&&
+                    steps[0].GetProperty("command").GetString()==preset.Command&&steps[0].GetProperty("txMode").GetString()=="text"&&
+                    steps[0].GetProperty("lineEnding").GetString()=="crlf","Existing USER preset differs; no automatic overwrite");
+            }
+            else
+            {
+                await Call("serial_sequence_save",Target(("sequence",new{
+                    name=preset.Name,repeatCount=1,steps=new[]{new{
+                        name=preset.Command,command=preset.Command,txMode="text",lineEnding="crlf",captureMs=500,delayAfterMs=0,
+                        expect=new{kind="text",value=preset.Command=="MONITOR?"?"MONITOR enabled=":"OK "+preset.Command}
+                    }}
+                })));
+                // User-facing reusable presets are intentionally retained, not test-owned cleanup data.
+            }
+        }
+        Save("retained-user-presets.json",presets.Select(p=>new{p.Name,p.Command}));
+        Pass("three reusable USER monitor sequences saved/reused without executing or overwriting user definitions");
+        byte[] bytes=await ObserveUser(25000);CheckHeartbeat(bytes,23);
+        string text=Encoding.UTF8.GetString(bytes);
+        int presses=Regex.Matches(text,@"INFO USER PRESS count=\d+ uptime_ms=\d+\r\n").Count;
+        int releases=Regex.Matches(text,@"INFO USER RELEASE count=\d+ held_ms=\d+ uptime_ms=\d+\r\n").Count;
+        Save("physical-button-observation.json",new{windowMs=25000,presses,releases,physicalPressReleaseObserved=presses>0&&releases>0});
+        observations.Add($"Physical button observation: {presses} presses, {releases} releases. No synthetic GPIO changes or simulated physical presses.");
+        Console.WriteLine($"USER OBSERVATION: {presses} presses, {releases} releases in 25 seconds");
     }
 
     private async Task QuickCommandFixturesAsync()

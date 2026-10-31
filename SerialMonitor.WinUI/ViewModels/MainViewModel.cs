@@ -3829,6 +3829,15 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public int SavedCommandEditorCount => Commands.SavedCommands.Count;
 
+    public IReadOnlyList<string> SavedCommandShortcuts => Commands.SavedCommands
+        .Select(command => TryNormalizeSavedCommandShortcut(command.OptionalShortcut, out var shortcut, out _) ? shortcut : null)
+        .Where(shortcut => !string.IsNullOrWhiteSpace(shortcut))
+        .Select(shortcut => shortcut!)
+        .GroupBy(shortcut => shortcut, StringComparer.OrdinalIgnoreCase)
+        .Where(group => group.Count() == 1)
+        .Select(group => group.Key)
+        .ToArray();
+
     public long RuleEditErrorCount => Interlocked.Read(ref _ruleEditErrorCount);
 
     public long CommandEditErrorCount => Interlocked.Read(ref _commandEditErrorCount);
@@ -7949,8 +7958,30 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             : $"[MARK TIME] {timestamp} | {trimmedText}";
     }
 
+    public bool HasSavedCommandShortcut(string shortcutText) => Commands.SavedCommands.Count(command =>
+        TryNormalizeSavedCommandShortcut(command.OptionalShortcut, out var shortcut, out _) &&
+        string.Equals(shortcut, shortcutText, StringComparison.OrdinalIgnoreCase)) == 1;
+
+    public TxCommand? GetSavedCommandShortcutConflict(string shortcutText, TxCommand? editingCommand) =>
+        Commands.SavedCommands.FirstOrDefault(command => !ReferenceEquals(command, editingCommand) &&
+            TryNormalizeSavedCommandShortcut(command.OptionalShortcut, out var shortcut, out _) &&
+            string.Equals(shortcut, shortcutText, StringComparison.OrdinalIgnoreCase));
+
+    public bool TryValidateSavedCommandShortcut(string? shortcutText, TxCommand? editingCommand, out string? normalized, out string error)
+    {
+        if (!TryNormalizeSavedCommandShortcut(shortcutText, out normalized, out error)) return false;
+        if (normalized is not null && GetSavedCommandShortcutConflict(normalized, editingCommand) is { } conflict)
+        {
+            error = $"Shortcut {normalized} is already assigned to {conflict.Name}. Choose another key.";
+            return false;
+        }
+        return true;
+    }
+
     public async Task<bool> SendSavedCommandShortcutAsync(string shortcutText)
     {
+        // Stale profiles or WebView messages must never steal a built-in action.
+        if (ShortcutReservations.Find(shortcutText) is not null) return false;
         if (IsManualTxBusy)
         {
             SetStatus("TX waiting for bridge idle; saved command shortcut ignored.");
@@ -8756,6 +8787,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        if (!TryValidateSavedCommandShortcut(normalized.OptionalShortcut, null, out _, out error))
+        {
+            RecordCommandEditError(error);
+            return false;
+        }
         Commands.SavedCommands.Add(normalized);
         SelectedSavedCommand = normalized;
         ApplySavedCommandChanges($"Added saved command: {normalized.Name}");
@@ -8788,6 +8824,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
 
+        if (!TryValidateSavedCommandShortcut(normalized.OptionalShortcut, source, out _, out error))
+        {
+            RecordCommandEditError(error);
+            return false;
+        }
         Commands.SavedCommands[index] = normalized;
         SelectedSavedCommand = normalized;
         ApplySavedCommandChanges($"Updated saved command: {normalized.Name}");
@@ -9808,6 +9849,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private void NotifyCommandEditorStateChanged()
     {
         OnPropertyChanged(nameof(SavedCommandEditorCount));
+        OnPropertyChanged(nameof(SavedCommandShortcuts));
         OnPropertyChanged(nameof(HasSelectedSavedCommand));
         RefreshStatusBar();
     }
@@ -10172,17 +10214,30 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return true;
         }
 
+        if (ShortcutReservations.Find(shortcutText) is { } reservation)
+        {
+            error = $"Shortcut {shortcutText.Trim()} is reserved for {reservation.Action}. Choose another key.";
+            return false;
+        }
+
+        if (!shortcutText.Contains('+'))
+        {
+            if (SavedCommandShortcut.TryNormalizeSingleKey(shortcutText.Trim(), out normalizedShortcut)) return true;
+            error = "Use a single key (for example F1, A or 1), Ctrl+digit or Alt+letter/digit. Esc is reserved for cancel.";
+            return false;
+        }
+
         var parts = shortcutText
-            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split('+', StringSplitOptions.TrimEntries);
         if (parts.Length != 2)
         {
-            error = "Shortcut must use Ctrl+digit or Alt+letter, for example Ctrl+1 or Alt+S.";
+            error = "Use a single key (for example F1), Ctrl+digit or Alt+letter/digit.";
             return false;
         }
 
         var modifier = parts[0];
         var key = parts[1];
-        if (key.Length != 1 || !char.IsLetterOrDigit(key[0]))
+        if (key.Length != 1 || !char.IsAsciiLetterOrDigit(key[0]))
         {
             error = "Shortcut key must be a single letter or digit.";
             return false;
@@ -10191,7 +10246,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         if (string.Equals(modifier, "Ctrl", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(modifier, "Control", StringComparison.OrdinalIgnoreCase))
         {
-            if (!char.IsDigit(key[0]))
+            if (!char.IsAsciiDigit(key[0]))
             {
                 error = "Ctrl shortcuts currently support digits only. Use Alt+letter for letter shortcuts.";
                 return false;

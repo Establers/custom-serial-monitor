@@ -19,7 +19,6 @@ using SerialMonitor.WinUI.ViewModels;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
-using Windows.System;
 
 namespace SerialMonitor.WinUI;
 
@@ -141,9 +140,6 @@ public sealed partial class MainWindow : Window
     private readonly record struct XtermAppendChunk(string Text, int LineCount);
     private sealed record XtermScrollState(bool Ok, int ViewportY, int BaseY, int Rows, bool AtBottom);
 
-    [DllImport("user32.dll")]
-    private static extern short GetKeyState(int virtualKey);
-
     [DllImport("dwmapi.dll", PreserveSig = true)]
     private static extern int DwmSetWindowAttribute(
         nint windowHandle,
@@ -165,6 +161,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Root.PreviewKeyDown += Root_PreviewSavedCommandKeyDown;
         UpdateAboutPanel.DataContext = _updates;
         UpdateStatusButton.DataContext = _updates;
 #if DEBUG
@@ -2539,6 +2536,7 @@ public sealed partial class MainWindow : Window
         await SyncXtermFontAsync();
         await SyncXtermHexSelectionHintModeAsync();
         await SyncXtermAutoScrollContextMenuAsync();
+        await SyncXtermCommandShortcutsAsync();
         QueueXtermFit();
         if (_xtermNeedsFullRerenderAfterRestore)
         {
@@ -2552,6 +2550,10 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.SavedCommandShortcuts))
+        {
+            _ = SyncXtermCommandShortcutsAsync();
+        }
         if (args.PropertyName == nameof(MainViewModel.ConnectionStateText))
         {
             UpdateConnectionStateColor();
@@ -4321,7 +4323,7 @@ public sealed partial class MainWindow : Window
 
     private void HexGroupTimeoutTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key != VirtualKey.Enter)
+        if (!AppShortcuts.Matches(AppShortcutAction.EditorConfirm, args.Key))
         {
             return;
         }
@@ -4460,8 +4462,7 @@ public sealed partial class MainWindow : Window
 
     private async void SearchResultsListView_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key != VirtualKey.Enter ||
-            IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        if (!AppShortcuts.Matches(AppShortcutAction.ListActivate, args.Key))
         {
             return;
         }
@@ -4596,15 +4597,14 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.Key == VirtualKey.G && IsModifierDown(VirtualKey.Control) &&
-            !IsModifierDown(VirtualKey.Menu) && !IsModifierDown(VirtualKey.Shift))
+        if (AppShortcuts.Matches(AppShortcutAction.GoTo, args.Key))
         {
             args.Handled = true;
             await OpenLogNavigationAsync();
             return;
         }
 
-        if (IsSearchFocusShortcut(args.Key))
+        if (AppShortcuts.Matches(AppShortcutAction.SearchFocus, args.Key))
         {
             args.Handled = true;
             FocusSearchBox("window");
@@ -4626,15 +4626,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (IsMarkerShortcut(args.Key))
+        if (AppShortcuts.Matches(AppShortcutAction.Marker, args.Key))
         {
             args.Handled = true;
             await _viewModel.AddDefaultMarkerAsync();
             return;
         }
 
-        var shortcutText = CreateShortcutText(args.Key);
-        if (string.IsNullOrWhiteSpace(shortcutText))
+        var shortcutText = SavedCommandShortcut.CreateText(args.Key);
+        if (string.IsNullOrWhiteSpace(shortcutText) || !shortcutText.Contains('+'))
         {
             return;
         }
@@ -4645,40 +4645,33 @@ public sealed partial class MainWindow : Window
 
     private async void SearchTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (IsModifierDown(VirtualKey.Menu) && !IsModifierDown(VirtualKey.Control))
+        if (AppShortcuts.Matches(AppShortcutAction.SearchCase, args.Key))
         {
-            var optionHandled = true;
-            switch (args.Key)
-            {
-                case VirtualKey.C:
-                    _viewModel.IsSearchCaseSensitive = !_viewModel.IsSearchCaseSensitive;
-                    break;
-                case VirtualKey.W:
-                    _viewModel.IsSearchWholeWord = !_viewModel.IsSearchWholeWord;
-                    break;
-                case VirtualKey.R:
-                    _viewModel.IsSearchRegularExpression = !_viewModel.IsSearchRegularExpression;
-                    break;
-                default:
-                    optionHandled = false;
-                    break;
-            }
-
-            if (optionHandled)
-            {
-                args.Handled = true;
-                return;
-            }
+            _viewModel.IsSearchCaseSensitive = !_viewModel.IsSearchCaseSensitive;
+            args.Handled = true;
+            return;
+        }
+        if (AppShortcuts.Matches(AppShortcutAction.SearchWord, args.Key))
+        {
+            _viewModel.IsSearchWholeWord = !_viewModel.IsSearchWholeWord;
+            args.Handled = true;
+            return;
+        }
+        if (AppShortcuts.Matches(AppShortcutAction.SearchRegex, args.Key))
+        {
+            _viewModel.IsSearchRegularExpression = !_viewModel.IsSearchRegularExpression;
+            args.Handled = true;
+            return;
         }
 
-        if (IsSearchFocusShortcut(args.Key))
+        if (AppShortcuts.Matches(AppShortcutAction.SearchFocus, args.Key))
         {
             args.Handled = true;
             FocusSearchBox("search box");
             return;
         }
 
-        if (args.Key == VirtualKey.Escape && !IsModifierDown(VirtualKey.Control) && !IsModifierDown(VirtualKey.Menu))
+        if (AppShortcuts.Matches(AppShortcutAction.SearchCancel, args.Key))
         {
             args.Handled = true;
             _viewModel.RecordSearchEscapeShortcut("search box");
@@ -4686,12 +4679,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if ((args.Key == VirtualKey.Up || args.Key == VirtualKey.Down) &&
-            !IsModifierDown(VirtualKey.Control) &&
-            !IsModifierDown(VirtualKey.Menu))
+        var previousHistory = AppShortcuts.Matches(AppShortcutAction.HistoryPrevious, args.Key);
+        if (previousHistory || AppShortcuts.Matches(AppShortcutAction.HistoryNext, args.Key))
         {
             args.Handled = true;
-            if (_viewModel.RecallSearchHistory(args.Key == VirtualKey.Up ? -1 : 1))
+            if (_viewModel.RecallSearchHistory(previousHistory ? -1 : 1))
             {
                 SearchTextBox.Select(SearchTextBox.Text.Length, 0);
             }
@@ -4704,14 +4696,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.Key != VirtualKey.Enter || IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        var previousSearch = AppShortcuts.Matches(AppShortcutAction.SearchSubmitPrevious, args.Key);
+        if (!previousSearch && !AppShortcuts.Matches(AppShortcutAction.SearchSubmitNext, args.Key))
         {
             return;
         }
 
         args.Handled = true;
         await _viewModel.SearchFromInputAsync(
-            previous: IsModifierDown(VirtualKey.Shift),
+            previous: previousSearch,
             source: "search box");
     }
 
@@ -4741,14 +4734,14 @@ public sealed partial class MainWindow : Window
 
     private bool TryHandleSearchNavigationShortcut(KeyRoutedEventArgs args, string source)
     {
-        if ((args.Key != VirtualKey.F3 && args.Key != VirtualKey.F4) ||
-            IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
+        var previous = AppShortcuts.Matches(AppShortcutAction.SearchPrevious, args.Key);
+        if (!previous && !AppShortcuts.Matches(AppShortcutAction.SearchNext, args.Key))
         {
             return false;
         }
 
         args.Handled = true;
-        if (args.Key == VirtualKey.F4 || IsModifierDown(VirtualKey.Shift))
+        if (previous)
         {
             _ = _viewModel.FindPreviousFromShortcutAsync(source);
             return true;
@@ -4845,7 +4838,7 @@ public sealed partial class MainWindow : Window
 
     private async void CommandHistoryListView_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key == VirtualKey.Enter)
+        if (AppShortcuts.Matches(AppShortcutAction.EditorConfirm, args.Key))
         {
             args.Handled = true;
             await SendSelectedHistoryCommandAsync();
@@ -5140,7 +5133,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var command = await ShowSavedCommandDialogAsync(UiText.Get("QuickCommandEditTitle", "Edit quick command"), CloneTxCommand(source));
+        var command = await ShowSavedCommandDialogAsync(UiText.Get("QuickCommandEditTitle", "Edit quick command"), source);
         if (command is not null)
         {
             _viewModel.ReplaceSavedCommand(source, command);
@@ -5652,7 +5645,13 @@ public sealed partial class MainWindow : Window
         var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
         var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
         ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
-        var shortcutBox = CreateDialogTextBox(source.OptionalShortcut ?? string.Empty, "Ctrl+1 or Alt+S");
+        string? ValidateShortcut(string shortcut)
+        {
+            var conflict = _viewModel.GetSavedCommandShortcutConflict(shortcut, source);
+            return conflict is null ? null : UiText.Format("ShortcutCaptureDuplicate",
+                "{0} is already assigned to {1}. Choose another key.", shortcut, conflict.Name);
+        }
+        var shortcutRecorder = new Views.ShortcutRecorder(source.OptionalShortcut, ValidateShortcut);
         var errorText = new TextBlock
         {
             FontSize = 12,
@@ -5665,7 +5664,7 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(CreateDialogField("Command", commandBox));
         panel.Children.Add(CreateDialogField("Line ending", endingBox));
         panel.Children.Add(CreateDialogHint(LineEndingHelpText));
-        panel.Children.Add(CreateDialogField("Shortcut (Ctrl+digit or Alt+key)", shortcutBox));
+        panel.Children.Add(CreateDialogField(UiText.Get("QuickCommandShortcutLabel", "Shortcut"), shortcutRecorder));
         panel.Children.Add(errorText);
 
         var dialog = new ContentDialog
@@ -5695,9 +5694,17 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            if (!MainViewModel.TryNormalizeSavedCommandShortcut(shortcutBox.Text, out var ignoredShortcut, out var shortcutError))
+            if (!MainViewModel.TryNormalizeSavedCommandShortcut(shortcutRecorder.Shortcut, out var ignoredShortcut, out var shortcutError))
             {
-                errorText.Text = shortcutError;
+                errorText.Text = ShortcutReservations.Find(shortcutRecorder.Shortcut) is { } reservation
+                    ? reservation.FormatUiError(shortcutRecorder.Shortcut!) : shortcutError;
+                errorText.Visibility = Visibility.Visible;
+                clickArgs.Cancel = true;
+                return;
+            }
+            if (ignoredShortcut is not null && ValidateShortcut(ignoredShortcut) is { } conflict)
+            {
+                errorText.Text = conflict;
                 errorText.Visibility = Visibility.Visible;
                 clickArgs.Cancel = true;
             }
@@ -5709,7 +5716,7 @@ public sealed partial class MainWindow : Window
             return null;
         }
 
-        MainViewModel.TryNormalizeSavedCommandShortcut(shortcutBox.Text, out var normalizedShortcut, out _);
+        MainViewModel.TryNormalizeSavedCommandShortcut(shortcutRecorder.Shortcut, out var normalizedShortcut, out _);
         return new TxCommand(nameBox.Text, commandBox.Text)
         {
             LineEndingMode = ParseOptionalTxLineEnding(GetSelectedString(endingBox, "Global")),
@@ -5975,86 +5982,6 @@ public sealed partial class MainWindow : Window
             : null;
     }
 
-    private static string? CreateShortcutText(VirtualKey key)
-    {
-        var isCtrlDown = IsModifierDown(VirtualKey.Control);
-        var isAltDown = IsModifierDown(VirtualKey.Menu);
-        var isShiftDown = IsModifierDown(VirtualKey.Shift);
-
-        if (isShiftDown)
-        {
-            return null;
-        }
-
-        if (isCtrlDown && !isAltDown && TryGetDigitKeyText(key, out var digitKey))
-        {
-            return $"Ctrl+{digitKey}";
-        }
-
-        if (isAltDown && !isCtrlDown && TryGetLetterOrDigitKeyText(key, out var altKey))
-        {
-            return $"Alt+{altKey}";
-        }
-
-        return null;
-    }
-
-    private static bool IsMarkerShortcut(VirtualKey key)
-    {
-        return key == VirtualKey.M &&
-            IsModifierDown(VirtualKey.Control) &&
-            !IsModifierDown(VirtualKey.Menu) &&
-            !IsModifierDown(VirtualKey.Shift);
-    }
-
-    private static bool IsSearchFocusShortcut(VirtualKey key)
-    {
-        return key == VirtualKey.F &&
-            IsModifierDown(VirtualKey.Control) &&
-            !IsModifierDown(VirtualKey.Menu) &&
-            !IsModifierDown(VirtualKey.Shift);
-    }
-
-    private static bool IsModifierDown(VirtualKey key)
-    {
-        return (GetKeyState((int)key) & 0x8000) != 0;
-    }
-
-    private static bool TryGetDigitKeyText(VirtualKey key, out char digit)
-    {
-        if (key is >= VirtualKey.Number0 and <= VirtualKey.Number9)
-        {
-            digit = (char)('0' + (key - VirtualKey.Number0));
-            return true;
-        }
-
-        if (key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
-        {
-            digit = (char)('0' + (key - VirtualKey.NumberPad0));
-            return true;
-        }
-
-        digit = '\0';
-        return false;
-    }
-
-    private static bool TryGetLetterOrDigitKeyText(VirtualKey key, out char keyText)
-    {
-        if (TryGetDigitKeyText(key, out keyText))
-        {
-            return true;
-        }
-
-        if (key is >= VirtualKey.A and <= VirtualKey.Z)
-        {
-            keyText = (char)('A' + (key - VirtualKey.A));
-            return true;
-        }
-
-        keyText = '\0';
-        return false;
-    }
-
     private static bool IsTextInputSource(object? source)
     {
         return HasAncestor<TextBox>(source) ||
@@ -6207,12 +6134,7 @@ public sealed partial class MainWindow : Window
     private void CommandTextBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
         if (IsClosingOrClosed) { args.Handled = true; return; }
-        if (IsModifierDown(VirtualKey.Control) || IsModifierDown(VirtualKey.Menu))
-        {
-            return;
-        }
-
-        if (args.Key == VirtualKey.Up)
+        if (AppShortcuts.Matches(AppShortcutAction.HistoryPrevious, args.Key))
         {
             args.Handled = _viewModel.NavigateCommandHistory(direction: -1);
             if (args.Handled)
@@ -6223,7 +6145,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.Key == VirtualKey.Down)
+        if (AppShortcuts.Matches(AppShortcutAction.HistoryNext, args.Key))
         {
             args.Handled = _viewModel.NavigateCommandHistory(direction: 1);
             if (args.Handled)
@@ -6234,7 +6156,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.Key == VirtualKey.Enter && _viewModel.SendCommand.CanExecute(null))
+        if (AppShortcuts.Matches(AppShortcutAction.CommandSubmit, args.Key) && _viewModel.SendCommand.CanExecute(null))
         {
             args.Handled = true;
             _viewModel.SendCommand.Execute(null);

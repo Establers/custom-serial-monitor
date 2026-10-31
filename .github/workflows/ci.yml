@@ -31,6 +31,10 @@ jobs:
       # Keep process-heavy Core stress tests from starving WinUI timing checks
       # on the hosted worker. Individual tests retain their concurrency coverage.
       - run: dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln --configuration ${{ matrix.configuration }} --no-build --no-restore -m:1
+        env:
+          SERIAL_MONITOR_SHORTCUT_AUDIT: ${{ github.workspace }}\artifacts\shortcut-audit\native.json
+      - name: Compare every native and browser shortcut and future registration
+        run: node scripts/test_shortcut_catalog.cjs artifacts/shortcut-audit/native.json
       - name: Test retained log navigation and activity histogram
         run: node scripts/test_log_navigation.cjs
       - name: Test terminal navigation anchors and resize during RX

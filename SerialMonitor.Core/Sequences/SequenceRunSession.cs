@@ -536,7 +536,7 @@ public sealed class SequenceRunSession : IAsyncDisposable
     {
         var temporary = Path.Combine(DirectoryPath, "summary.tmp");
         await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(Summary), _ioStop.Token).ConfigureAwait(false);
-        File.Move(temporary, Path.Combine(DirectoryPath, "summary.json"), true);
+        await SequenceSummaryFileCommit.CommitAsync(temporary, Path.Combine(DirectoryPath, "summary.json"), _ioStop.Token).ConfigureAwait(false);
     }
     private void Fail(string error)
     {

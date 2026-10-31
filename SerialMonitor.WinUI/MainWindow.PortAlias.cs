@@ -2,7 +2,7 @@ using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using SerialMonitor.WinUI.ViewModels;
-using Windows.System;
+using SerialMonitor.WinUI.Infrastructure;
 
 namespace SerialMonitor.WinUI;
 
@@ -55,12 +55,12 @@ public sealed partial class MainWindow
 
     private async void PortAliasEditor_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key == VirtualKey.Escape)
+        if (AppShortcuts.Matches(AppShortcutAction.EditorCancel, args.Key))
         {
             args.Handled = true;
             PortAliasFlyout.Hide();
         }
-        else if (args.Key == VirtualKey.Enter)
+        else if (AppShortcuts.Matches(AppShortcutAction.EditorConfirm, args.Key))
         {
             args.Handled = true;
             await ApplyPortAliasAsync();

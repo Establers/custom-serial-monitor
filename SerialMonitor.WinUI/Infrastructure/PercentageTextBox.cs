@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Windows.System;
 
 namespace SerialMonitor.WinUI.Infrastructure;
 
@@ -65,7 +64,7 @@ public sealed class PercentageTextBox : TextBox
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key == VirtualKey.Enter)
+        if (AppShortcuts.Matches(AppShortcutAction.EditorConfirm, args.Key))
         {
             RestoreValueText();
             args.Handled = true;

@@ -130,11 +130,215 @@ public sealed class SequenceResultsReviewRegressionTests
         Assert.Equal(new byte[] { 0xAA }, model.RxBytes);
     }
 
+    [Fact]
+    public async Task ReloadingUnchangedRunsDoesNotClearTheDropdownOrSelectedDetail()
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        await model.LoadDetailAsync();
+        var selected = model.SelectedStep;
+        var bytes = model.RxBytes;
+        var changes = 0;
+        // ComboBox two-way binding clears selection when its items are removed.
+        model.Runs.CollectionChanged += (_, _) => { changes++; model.SelectedRun = null; };
+
+        await model.RefreshRunsAsync();
+
+        Assert.Equal(0, changes);
+        Assert.Same(selected, model.SelectedStep);
+        Assert.Same(bytes, model.RxBytes);
+        Assert.Equal(1, reader.PinCalls);
+    }
+
+    [Fact]
+    public async Task NewRunsAndUpdatedSummariesPreserveTheRunBeingReviewed()
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        await model.LoadDetailAsync();
+        var selected = model.SelectedStep;
+        var bytes = model.RxBytes;
+        var newest = reader.Summary with { RunId = Guid.NewGuid().ToString("N"), Name = "New run" };
+        var updated = reader.Summary with { Sent = 7, State = "canceled" };
+        reader.ListedRuns = [newest, updated];
+        var cleared = false;
+        model.Runs.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) cleared = true;
+            model.SelectedRun = null; // Selection feedback while ComboBox items change.
+        };
+
+        await model.RefreshRunsAsync();
+
+        Assert.False(cleared);
+        Assert.Equal(newest, model.Runs[0]);
+        Assert.Same(updated, model.SelectedRun);
+        Assert.Same(selected, model.SelectedStep);
+        Assert.Same(bytes, model.RxBytes);
+        Assert.Equal(1, reader.PinCalls);
+        Assert.Equal(1, reader.OpenLeases);
+    }
+
+    [Fact]
+    public async Task EmptyResultsExplainWhyThereIsNothingToSelectAndRecoverOnReload()
+    {
+        var reader = new GatedReader { ListedRuns = [] };
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+
+        Assert.Empty(model.Runs);
+        Assert.Null(model.SelectedRun);
+        Assert.Contains("RX Check", model.Summary);
+        Assert.Empty(model.Error);
+
+        reader.ListedRuns = [reader.Summary];
+        await model.RefreshRunsAsync();
+
+        Assert.Same(reader.Summary, model.SelectedRun);
+        Assert.NotEmpty(model.Rows);
+        Assert.Empty(model.Error);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(100)]
+    public async Task PollingKeepsThePinnedRunWhenItIsTemporarilyUnreadableOrOutsideTheNewestHundred(int newerCount)
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        await model.LoadDetailAsync();
+        var selected = model.SelectedStep;
+        var bytes = model.RxBytes;
+        reader.ListedRuns = Enumerable.Range(0, newerCount)
+            .Select(i => reader.Summary with { RunId = Guid.NewGuid().ToString("N"), Name = $"New run {i}" }).ToArray();
+
+        for (var i = 0; i < 3; i++) await model.RefreshRunsAsync();
+
+        Assert.Equal(newerCount + 1, model.Runs.Count);
+        Assert.Same(reader.Summary, model.SelectedRun);
+        Assert.Same(reader.Summary, model.Runs.Last());
+        Assert.Same(selected, model.SelectedStep);
+        Assert.Same(bytes, model.RxBytes);
+        Assert.Equal(1, reader.PinCalls);
+        Assert.Equal(1, reader.OpenLeases);
+        Assert.Empty(model.Error);
+    }
+
+    [Fact]
+    public async Task ASlowListReadCoalescesRefreshRequestsAndKeepsTheUsersLatestSelection()
+    {
+        var reader = new GatedReader();
+        var other = reader.Summary with { RunId = Guid.NewGuid().ToString("N"), Name = "Other run" };
+        reader.ListedRuns = [reader.Summary, other];
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listReads = 0;
+        reader.ReadList = async token =>
+        {
+            if (++listReads == 1) { entered.TrySetResult(); await release.Task.WaitAsync(token); }
+            return reader.ListedRuns;
+        };
+        var first = model.RefreshRunsAsync();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var requests = Enumerable.Range(0, 20).Select(_ => model.RefreshRunsAsync()).ToArray();
+            Assert.All(requests, request => Assert.Same(first, request));
+            model.SelectedRun = other;
+            Assert.Equal(1, listReads);
+            release.TrySetResult();
+            await first.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(2, listReads);
+            Assert.Same(other, model.SelectedRun);
+            Assert.Equal(2, reader.PinCalls);
+            Assert.Equal(1, reader.OpenLeases);
+            Assert.Empty(model.Error);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task ChangingSelectionReleasesTheExtraOldRunAndRestoresTheHundredItemLimit()
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        reader.ListedRuns = Enumerable.Range(0, 100)
+            .Select(i => reader.Summary with { RunId = Guid.NewGuid().ToString("N"), Name = $"New run {i}" }).ToArray();
+        await model.RefreshRunsAsync();
+        Assert.Equal(101, model.Runs.Count);
+
+        model.SelectedRun = model.Runs[0];
+        await model.RefreshRunsAsync();
+
+        Assert.Equal(100, model.Runs.Count);
+        Assert.DoesNotContain(model.Runs, run => run.RunId == reader.Summary.RunId);
+        Assert.Equal(2, reader.PinCalls);
+        Assert.Equal(1, reader.OpenLeases);
+    }
+
+    [Fact]
+    public async Task ListReadFailureIsVisibleAndRecoversWithoutDiscardingTheSelectedRx()
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        await model.LoadDetailAsync();
+        var selected = model.SelectedStep;
+        var bytes = model.RxBytes;
+        reader.ReadList = _ => Task.FromException<IReadOnlyList<SequenceRunSummary>>(new IOException("temporary list failure"));
+
+        await model.RefreshRunsAsync();
+
+        Assert.Contains("temporary list failure", model.Error);
+        Assert.Same(reader.Summary, Assert.Single(model.Runs));
+        Assert.Same(selected, model.SelectedStep);
+        Assert.Same(bytes, model.RxBytes);
+        reader.ReadList = null;
+        await model.RefreshRunsAsync();
+        Assert.Empty(model.Error);
+        Assert.Same(selected, model.SelectedStep);
+        Assert.Same(bytes, model.RxBytes);
+        Assert.Equal(1, reader.PinCalls);
+    }
+
+    [Fact]
+    public async Task ClosingDuringASlowListReadCancelsItAndReleasesTheSelectedRun()
+    {
+        var reader = new GatedReader();
+        using var model = new SequenceResultsViewModel(reader);
+        await model.RefreshRunsAsync();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.ReadList = async token =>
+        {
+            entered.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            throw new InvalidOperationException("Canceled read continued.");
+        };
+
+        var refresh = model.RefreshRunsAsync();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        model.Dispose();
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, reader.OpenLeases);
+        Assert.Equal(1, reader.PinCalls);
+        Assert.Empty(model.Error);
+    }
+
     private sealed class GatedReader : ISequenceRunReader
     {
         private bool _block;
         private readonly List<Lease> _leases = [];
         public bool DelayList { get; init; }
+        public IReadOnlyList<SequenceRunSummary>? ListedRuns { get; set; }
+        public Func<CancellationToken, Task<IReadOnlyList<SequenceRunSummary>>>? ReadList { get; set; }
         public Func<string, IDisposable>? PinFactory { get; init; }
         public TaskCompletionSource<IReadOnlyList<SequenceRunSummary>> ListResult { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int PinCalls { get; private set; }
@@ -158,7 +362,7 @@ public sealed class SequenceResultsReviewRegressionTests
                 status == "matched" ? offset : null, 1, null, StepKind: "RxCheck", TxMode: "Hex");
         public string RunPath(string id) => Path.Combine(Path.GetTempPath(), id);
         public IDisposable Pin(string id) { PinCalls++; var lease = new Lease(PinFactory?.Invoke(id)); _leases.Add(lease); return lease; }
-        public Task<IReadOnlyList<SequenceRunSummary>> ListAsync(CancellationToken token = default) => DelayList ? ListResult.Task : Task.FromResult<IReadOnlyList<SequenceRunSummary>>([Summary]);
+        public Task<IReadOnlyList<SequenceRunSummary>> ListAsync(CancellationToken token = default) => ReadList?.Invoke(token) ?? (DelayList ? ListResult.Task : Task.FromResult<IReadOnlyList<SequenceRunSummary>>(ListedRuns ?? [Summary]));
         public Task<SequenceRunSummary?> ReadSummaryAsync(string id, CancellationToken token = default) => Task.FromResult<SequenceRunSummary?>(Summary);
         public async Task<SequenceResultPage> ReadPageAsync(string id, long cursor = 0, string? filter = null, int? repeat = null, CancellationToken token = default)
         {

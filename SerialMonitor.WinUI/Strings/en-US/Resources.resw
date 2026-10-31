@@ -1010,4 +1010,27 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="EventContextExport" xml:space="preserve"><value>Export full context</value></data>
   <data name="EventContextClose" xml:space="preserve"><value>Close</value></data>
   <data name="EventContextRefresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="QuickCommandShortcutLabel" xml:space="preserve"><value>Shortcut</value></data>
+  <data name="ShortcutCaptureIdle" xml:space="preserve"><value>Click to set shortcut</value></data>
+  <data name="ShortcutCaptureListening" xml:space="preserve"><value>Press a shortcut… (Esc to cancel)</value></data>
+  <data name="ShortcutCaptureHint" xml:space="preserve"><value>Press an unused key (e.g. F1). Existing app shortcuts are reserved. Esc cancels.</value></data>
+  <data name="ShortcutCaptureUnsupported" xml:space="preserve"><value>Use an unused single key, Ctrl+digit or Alt+letter/digit. Existing app shortcuts are reserved. Esc cancels.</value></data>
+  <data name="ShortcutCaptureClear" xml:space="preserve"><value>Clear</value></data>
+  <data name="ShortcutCaptureClearName" xml:space="preserve"><value>Clear shortcut</value></data>
+  <data name="ShortcutCaptureReserved" xml:space="preserve"><value>{0} is already used for {1}. Choose another key.</value></data>
+  <data name="ShortcutCaptureDuplicate" xml:space="preserve"><value>{0} is already assigned to quick command '{1}'. Choose another key.</value></data>
+  <data name="ShortcutActionCancel" xml:space="preserve"><value>cancel</value></data>
+  <data name="ShortcutActionConfirm" xml:space="preserve"><value>TX, search, Auto Scroll and confirmation</value></data>
+  <data name="ShortcutActionFocus" xml:space="preserve"><value>focus navigation and control activation</value></data>
+  <data name="ShortcutActionNavigation" xml:space="preserve"><value>text, list, history and log navigation</value></data>
+  <data name="ShortcutActionEditing" xml:space="preserve"><value>text editing</value></data>
+  <data name="ShortcutActionCopy" xml:space="preserve"><value>copy</value></data>
+  <data name="ShortcutActionSearch" xml:space="preserve"><value>search and search result navigation</value></data>
+  <data name="ShortcutActionGoTo" xml:space="preserve"><value>go to time or line</value></data>
+  <data name="ShortcutActionMarker" xml:space="preserve"><value>quick marker</value></data>
+  <data name="ShortcutActionCase" xml:space="preserve"><value>case-sensitive search</value></data>
+  <data name="ShortcutActionWord" xml:space="preserve"><value>whole-word search</value></data>
+  <data name="ShortcutActionRegex" xml:space="preserve"><value>regular-expression search</value></data>
+  <data name="ShortcutActionBrowser" xml:space="preserve"><value>built-in log browser controls</value></data>
+  <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
 </root>

@@ -1010,4 +1010,27 @@
   <data name="EventContextExport" xml:space="preserve"><value>전체 문맥 저장</value></data>
   <data name="EventContextClose" xml:space="preserve"><value>닫기</value></data>
   <data name="EventContextRefresh" xml:space="preserve"><value>새로고침</value></data>
+  <data name="QuickCommandShortcutLabel" xml:space="preserve"><value>단축키</value></data>
+  <data name="ShortcutCaptureIdle" xml:space="preserve"><value>클릭하여 단축키 설정</value></data>
+  <data name="ShortcutCaptureListening" xml:space="preserve"><value>단축키를 누르세요… (Esc 취소)</value></data>
+  <data name="ShortcutCaptureHint" xml:space="preserve"><value>F1 같은 사용하지 않는 키를 누르세요. 기존 기능의 단축키는 지정할 수 없습니다. Esc로 취소합니다.</value></data>
+  <data name="ShortcutCaptureUnsupported" xml:space="preserve"><value>기존 기능에서 사용하지 않는 단독 키, Ctrl+숫자 또는 Alt+문자·숫자를 사용하세요. Esc로 취소합니다.</value></data>
+  <data name="ShortcutCaptureClear" xml:space="preserve"><value>해제</value></data>
+  <data name="ShortcutCaptureClearName" xml:space="preserve"><value>단축키 해제</value></data>
+  <data name="ShortcutCaptureReserved" xml:space="preserve"><value>{0} 키는 {1}에서 사용 중입니다. 다른 키를 선택하세요.</value></data>
+  <data name="ShortcutCaptureDuplicate" xml:space="preserve"><value>{0} 키는 빠른 명령 '{1}'에서 사용 중입니다. 다른 키를 선택하세요.</value></data>
+  <data name="ShortcutActionCancel" xml:space="preserve"><value>취소</value></data>
+  <data name="ShortcutActionConfirm" xml:space="preserve"><value>TX 전송·검색·자동 스크롤·확인</value></data>
+  <data name="ShortcutActionFocus" xml:space="preserve"><value>포커스 이동·컨트롤 조작</value></data>
+  <data name="ShortcutActionNavigation" xml:space="preserve"><value>텍스트·목록·기록·로그 이동</value></data>
+  <data name="ShortcutActionEditing" xml:space="preserve"><value>텍스트 편집</value></data>
+  <data name="ShortcutActionCopy" xml:space="preserve"><value>복사</value></data>
+  <data name="ShortcutActionSearch" xml:space="preserve"><value>검색·검색 결과 이동</value></data>
+  <data name="ShortcutActionGoTo" xml:space="preserve"><value>시간·줄 번호로 이동</value></data>
+  <data name="ShortcutActionMarker" xml:space="preserve"><value>빠른 마커 추가</value></data>
+  <data name="ShortcutActionCase" xml:space="preserve"><value>검색 대소문자 구분</value></data>
+  <data name="ShortcutActionWord" xml:space="preserve"><value>검색 단어 전체 일치</value></data>
+  <data name="ShortcutActionRegex" xml:space="preserve"><value>검색 정규식 옵션</value></data>
+  <data name="ShortcutActionBrowser" xml:space="preserve"><value>로그 브라우저 기본 기능</value></data>
+  <data name="ShortcutActionWindow" xml:space="preserve"><value>창 제어</value></data>
 </root>

@@ -24,10 +24,11 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
     private bool _busy;
     private bool _disposed;
     private bool _reloadRuns;
+    private bool _updatingRuns;
     private long _queryVersion;
     private TaskCompletionSource? _refreshCompletion;
     private long _cursor, _next;
-    private string _summary = "", _error = "", _detail = "";
+    private string _summary = "실행 결과를 불러오는 중...", _error = "", _detail = "";
     private byte[] _rx = [];
     private long _rxStart;
     private IDisposable? _runLease;
@@ -51,7 +52,14 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
         get => _selectedRun;
         set
         {
-            if (_disposed || Equals(_selectedRun, value)) return;
+            if (_disposed || _updatingRuns || Equals(_selectedRun, value)) return;
+            // A refreshed summary belongs to the same recording. Keep its page,
+            // selected step, RX details and retention lease intact.
+            if (value is not null && _selectedRun?.RunId == value.RunId)
+            {
+                SetProperty(ref _selectedRun, value);
+                return;
+            }
             _queryVersion++;
             _cursor = 0; _previous.Clear(); SelectedStep = null; Rows.Clear();
             Summary = ""; CanNext = false;
@@ -121,12 +129,15 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
                         _reloadRuns = false;
                         var runs = await store.ListAsync(_stop.Token);
                         if (_disposed || _stop.IsCancellationRequested) break;
-                        var id = SelectedRun?.RunId;
-                        Runs.Clear(); foreach (var item in runs) Runs.Add(item);
-                        SelectedRun = Runs.FirstOrDefault(item => item.RunId == id) ?? Runs.FirstOrDefault();
+                        PublishRuns(runs);
                     }
                     if (_reloadRuns) continue;
-                    if (SelectedRun is not { } run) break;
+                    if (SelectedRun is not { } run)
+                    {
+                        Summary = "저장된 실행 결과가 없습니다. 활성 RX Check가 포함된 시퀀스를 실행하면 여기에 표시됩니다.";
+                        Error = "";
+                        break;
+                    }
                     version = _queryVersion;
                     var cursor = _cursor; var filter = _filter; var repeat = _repeat;
                     var current = await store.ReadSummaryAsync(run.RunId, _stop.Token);
@@ -153,6 +164,41 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
             _busy = false; _refreshCompletion = null;
             if (failure is null) completion.TrySetResult(); else completion.TrySetException(failure);
         }
+    }
+
+    private void PublishRuns(IReadOnlyList<SequenceRunSummary> runs)
+    {
+        var id = SelectedRun?.RunId;
+        // ListAsync may skip an unreadable summary or omit a pinned run older
+        // than the newest 100. Its lease still protects the recording; keep
+        // that one selected item visible instead of switching the user's run.
+        if (SelectedRun is { } pinned && pinned.RunId == _pinnedRunId && !runs.Any(item => item.RunId == id))
+            runs = [.. runs, pinned];
+        // Clearing ItemsSource also clears ComboBox.SelectedItem through its
+        // two-way binding. Reconcile the bounded list without a Reset, and ignore
+        // selection feedback until every item is in place.
+        _updatingRuns = true;
+        try
+        {
+            for (var i = 0; i < runs.Count && !_disposed; i++)
+            {
+                var existing = -1;
+                for (var j = i; j < Runs.Count; j++)
+                    if (Runs[j].RunId == runs[i].RunId) { existing = j; break; }
+                if (existing < 0) Runs.Insert(i, runs[i]);
+                else
+                {
+                    if (existing != i) Runs.Move(existing, i);
+                    if (!_disposed && !Equals(Runs[i], runs[i])) Runs[i] = runs[i];
+                }
+            }
+            while (!_disposed && Runs.Count > runs.Count) Runs.RemoveAt(Runs.Count - 1);
+        }
+        finally { _updatingRuns = false; }
+        if (_disposed) return;
+        var selected = Runs.FirstOrDefault(item => item.RunId == id) ?? Runs.FirstOrDefault();
+        if (ReferenceEquals(SelectedRun, selected)) OnPropertyChanged(nameof(SelectedRun));
+        else SelectedRun = selected;
     }
 
     private void Publish(SequenceRunSummary? current, SequenceResultPage page)
@@ -227,10 +273,10 @@ public sealed class SequenceResultsViewModel(ISequenceRunReader store) : ViewMod
             var result = rx ? SequenceResultStatusConverter.Text(step.CheckStatus) : SequenceResultStatusConverter.Text(step.SendStatus);
             Detail = $"회차 {step.Repeat} · 단계 #{step.Step} · {step.KindText} · {result}" +
                 (rx ? "\n" : $" · 송신 시도 {step.Attempt}\n") +
-                $"{step.StartedAt.ToLocalTime():HH:mm:ss.fff} 시작 → {step.EndedAt.ToLocalTime():HH:mm:ss.fff} 종료" +
+                $"{step.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)} 시작 → {step.EndedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)} 종료" +
                 (rx ? $" · 확인 시간 {step.TimeoutMs} ms\n기대 패턴: {step.Pattern}" : $"\n전송: {step.Command}") +
-                (step.RelatedTxAt is { } tx ? $"\n연관 TX #{step.RelatedTxStep} · {tx.ToLocalTime():HH:mm:ss.fff}" : "") +
-                (step.MatchedAt is { } match ? $" · 최초 일치 {match.ToLocalTime():HH:mm:ss.fff}" : "") +
+                (step.RelatedTxAt is { } tx ? $"\n연관 TX #{step.RelatedTxStep} · {tx.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}" : "") +
+                (step.MatchedAt is { } match ? $" · 최초 일치 {match.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}" : "") +
                 (step.ResponseMs is { } response ? $" · 응답 {response.ToString("F1", CultureInfo.InvariantCulture)} ms" : "") +
                 (step.StepState == "completed" ? "" : $"\n단계 상태: {SequenceResultStatusConverter.Text(step.StepState)}") +
                 (step.Error is null ? "" : "\n" + step.Error);

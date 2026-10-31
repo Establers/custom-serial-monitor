@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define LAB_FIRMWARE_VERSION "1.2.0"
+#define LAB_FIRMWARE_VERSION "1.3.0"
 #define LAB_FIXTURE_NAMES "TEXT,UTF8,CP949,BYTES,NEWLINES,EVENTS,JSON,ANSI,CONTROL"
 #define LAB_FIXTURE_COUNT 9u
 /* No allocation. Returns zero for an unknown case or insufficient destination. */

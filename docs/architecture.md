@@ -290,6 +290,34 @@ clipboard is global. Automatic serial log names are allocated with CreateNew and
 collision suffixes; explicitly choosing an existing filename is rejected without
 overwriting the other capture. See [instance validation](instance-isolation-validation.md).
 
+## Keyboard shortcuts
+
+`SerialMonitor.WinUI/Assets/xterm/app-shortcuts.json.js` is the single data-only
+definition of built-in gestures, modifier variants and their action IDs. It is
+embedded in the .NET assembly and loaded directly by the terminal and legacy
+context page. Native handlers use `AppShortcuts.Matches`; browser handlers use
+`serialMonitorShortcuts.matches`. Do not put key literals in handlers.
+
+The same definitions generate reservation lookup tables once at startup. Adding
+a gesture to an existing action therefore changes matching, capture validation,
+profile validation and native/browser TX guards together. A new action also needs
+an `AppShortcutAction` member and its handler; missing or duplicate definitions
+fail catalog validation. Context-specific shortcuts remain reserved globally.
+Existing profile bindings that conflict after an upgrade remain visible for
+repair but cannot execute. Duplicate quick-command bindings are also inactive.
+
+`build/ShortcutArchitecture.targets` runs before C# compilation in both build
+configurations. `KEYMAP001` rejects raw native key literals, direct accelerators
+and browser keyboard-property reads outside the two input adapters. Those adapters
+translate input only; they must not implement application actions. The catalog
+must remain a JSON assignment, without executable matching logic.
+
+Regression tests enumerate every actual binding and modifier variant, the entire
+recordable virtual-key space, and future registration of an extra gesture. Build
+fixtures verify that bypasses fail compilation checks. CI also compares the
+compiled native reservation set with the browser asset using
+`scripts/test_shortcut_catalog.cjs`; this check needs no npm packages.
+
 ## Verification
 
 The minimum verification for every change is:

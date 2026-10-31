@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SerialMonitor.Core.Automation;
@@ -102,15 +103,19 @@ public sealed class SequenceRxAuthoringTests
     [Fact]
     public void TimelineKeepsRxTimestampsAndSplitUtf8Characters()
     {
-        var tx = DateTimeOffset.Now; var rx = tx.AddMilliseconds(50);
+        var tx = new DateTimeOffset(new DateTime(2026, 10, 31, 23, 59, 59, 975, DateTimeKind.Local));
+        var rx = tx.AddMilliseconds(50);
         var row = new SequenceStepResult(1, 1, 2, 1, "준비", "", "not_requested", "matched", "준비", "text", 100,
             tx.AddMilliseconds(10), tx.AddMilliseconds(110), 50, 0, 6, 6, 0, 6, null, StepKind: "RxCheck",
             RelatedTxAt: tx, RelatedTxCommand: "status", RelatedTxHex: "737461747573");
         var bytes = Encoding.UTF8.GetBytes("준비");
         var lines = SequenceTimelineFormatter.Format(row,
             [new(0, bytes[..2], rx), new(2, bytes[2..], rx.AddMilliseconds(5))], Encoding.UTF8);
-        Assert.Equal("TX", lines[0].Direction); Assert.Equal("RX", lines[1].Direction);
-        Assert.Equal(rx.ToLocalTime().ToString("HH:mm:ss.fff"), lines[1].Time);
+        Assert.Equal(new[] { "TX", "RX", "RX" }, lines.Select(line => line.Direction));
+        Assert.Equal("2026-10-31 23:59:59.975", lines[0].Time);
+        Assert.Equal("2026-11-01 00:00:00.025", lines[1].Time);
+        Assert.Equal(rx.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), lines[1].Time);
+        Assert.Equal(rx.AddMilliseconds(5).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), lines[2].Time);
         Assert.Equal("준비", string.Concat(lines.Skip(1).SelectMany(l => l.Parts).Select(p => p.Text)));
         Assert.DoesNotContain("�", string.Concat(lines.SelectMany(l => l.Parts).Select(p => p.Text)));
     }

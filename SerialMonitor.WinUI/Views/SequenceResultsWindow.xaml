@@ -82,7 +82,7 @@
         </Grid.Resources>
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
             <ComboBox x:Name="RunBox" ItemsSource="{Binding Runs}" SelectedItem="{Binding SelectedRun, Mode=TwoWay}"
-                      DisplayMemberPath="DisplayText" HorizontalAlignment="Stretch" SelectionChanged="Run_Changed"
+                      DisplayMemberPath="DisplayText" PlaceholderText="실행 결과 선택" HorizontalAlignment="Stretch" SelectionChanged="Run_Changed"
                       AutomationProperties.Name="저장된 시퀀스 실행 선택" />
             <Button Grid.Column="1" Content="새로고침" Click="Refresh_Click" />
             <Button Grid.Column="2" Content="결과 폴더" Click="Folder_Click" />
@@ -112,7 +112,7 @@
                 <Border Padding="4,3" MinHeight="24" CornerRadius="3,3,0,0"
                         Background="{ThemeResource LayerFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="32,32,64,86,88,*">
+                    <Grid ColumnDefinitions="32,32,64,154,88,*">
                         <TextBlock Text="회차" Style="{StaticResource ResultHeaderStyle}" />
                         <TextBlock Grid.Column="1" Text="단계" Style="{StaticResource ResultHeaderStyle}" />
                         <TextBlock Grid.Column="2" Text="유형" Style="{StaticResource ResultHeaderStyle}" />
@@ -126,7 +126,7 @@
                           AutomationProperties.Name="회차별 단계 실행 결과">
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Grid ColumnDefinitions="32,32,64,86,88,*" MinHeight="22" VerticalAlignment="Stretch">
+                            <Grid ColumnDefinitions="32,32,64,154,88,*" MinHeight="22" VerticalAlignment="Stretch">
                                 <Border Grid.ColumnSpan="6" VerticalAlignment="Bottom" BorderThickness="0,0,0,1" Opacity="0.5"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" IsHitTestVisible="False" />
                                 <TextBlock Text="{Binding Repeat}" Style="{StaticResource ResultCellStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

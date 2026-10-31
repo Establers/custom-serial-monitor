@@ -1,0 +1,18 @@
+{
+  "FormatVersion": 3,
+  "Name": "COM3 STM32 - RX Check 타임아웃 시험 (미일치 1개 정상)",
+  "RepeatCount": 1,
+  "_manual": [
+    "COM3 / 115200 / 8N1 / UTF-8. 약 3초, RX Check 3개 중 일치 2개와 의도한 미일치 1개가 정상입니다.",
+    "SILENT는 응답을 보내지 않습니다. 1000ms 동안 패턴이 없으면 미일치로 기록되고 다음 PING이 실행되어야 합니다.",
+    "시퀀스 전체는 미일치가 포함된 결과로 표시될 수 있습니다. 자동 재전송이나 실패 분기는 없습니다."
+  ],
+  "Steps": [
+    { "Kind": "Tx", "Name": "01 기존 주기·예약 출력 정지", "CommandText": "STOP", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "01 정지 응답 (일치가 정상)", "CommandText": "", "RxPattern": "OK STOP", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 700 },
+    { "Kind": "Tx", "Name": "02 의도적으로 응답하지 않는 명령", "CommandText": "SILENT", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "02 의도한 타임아웃 (미일치가 정상)", "CommandText": "", "RxPattern": "MANUAL_RX_INTENTIONAL_MISSING", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 1000, "Comment": "이 한 항목은 미일치가 정상입니다. 응답 없는 장치에 대한 RX Check 만료를 확인합니다." },
+    { "Kind": "Tx", "Name": "03 타임아웃 후 다음 명령 진행", "CommandText": "PING MANUAL_RX_RECOVER", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 0 },
+    { "Kind": "RxCheck", "Name": "03 후속 PONG 확인 (일치가 정상)", "CommandText": "", "RxPattern": "PONG MANUAL_RX_RECOVER", "TxMode": "Terminal", "LineEndingMode": "None", "DelayAfterMs": 800 }
+  ]
+}

@@ -31,6 +31,11 @@ static uint32_t records, injected_drops, injected_duplicates, injected_crc;
 static uint8_t pending[2200];
 static size_t pending_len, pending_pos, pending_chunk;
 static uint32_t pending_due, pending_gap;
+static bool monitor_enabled, button_raw, button_stable;
+static uint32_t heartbeat_due, heartbeat_seq, button_changed_at, button_pressed_at;
+static uint32_t button_presses, button_releases, monitor_missed;
+#define HEARTBEAT_MS 1000u
+#define BUTTON_DEBOUNCE_MS 20u
 
 static bool due(uint32_t now, uint32_t deadline) {
     return (int32_t)(now - deadline) >= 0;
@@ -67,7 +72,51 @@ static bool say(const char *format, ...) {
 
 static void error(const char *reason) { (void)say("ERR %s\r\n", reason); }
 
+/* Background diagnostics must not consume the reserved command-reply capacity. */
+static void monitor_say(const char *format, ...) {
+    char text[256];
+    va_list args;
+    va_start(args, format);
+    int count = vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    if (count < 0 || (size_t)count >= sizeof(text) ||
+        !io.write_data((const uint8_t *)text, (size_t)count)) ++monitor_missed;
+}
+
+static void poll_monitor(uint32_t now) {
+    bool pressed = io.button();
+    if (pressed != button_raw) {
+        button_raw = pressed;
+        button_changed_at = now;
+    }
+    if (button_stable != button_raw && due(now, button_changed_at + BUTTON_DEBOUNCE_MS)) {
+        button_stable = button_raw;
+        if (button_stable) {
+            button_pressed_at = now;
+            ++button_presses;
+            if (monitor_enabled) monitor_say("INFO USER PRESS count=%lu uptime_ms=%lu\r\n",
+                (unsigned long)button_presses, (unsigned long)now);
+        } else {
+            ++button_releases;
+            if (monitor_enabled) monitor_say("INFO USER RELEASE count=%lu held_ms=%lu uptime_ms=%lu\r\n",
+                (unsigned long)button_releases, (unsigned long)(now - button_pressed_at), (unsigned long)now);
+        }
+    }
+    if (monitor_enabled && due(now, heartbeat_due)) {
+        uint32_t drops = 0, errors = 0;
+        io.stats(&drops, &errors);
+        ++heartbeat_seq;
+        monitor_say("INFO HEARTBEAT seq=%lu uptime_ms=%lu user=%s presses=%lu releases=%lu rx_drops=%lu uart_errors=%lu missed=%lu\r\n",
+            (unsigned long)heartbeat_seq, (unsigned long)now, button_stable ? "PRESSED" : "RELEASED",
+            (unsigned long)button_presses, (unsigned long)button_releases,
+            (unsigned long)drops, (unsigned long)errors, (unsigned long)monitor_missed);
+        /* No catch-up burst after a pause or a full TX queue. */
+        heartbeat_due = now + HEARTBEAT_MS;
+    }
+}
+
 static void stop_jobs(void) {
+    monitor_enabled = false;
     stream_interval = stream_remaining = burst_remaining = hex_remaining = 0;
     pending_len = pending_pos = 0;
 }
@@ -207,6 +256,7 @@ static void command(uint32_t now) {
     if (!strcmp(cmd, "HELP") && !*cursor) {
         (void)say("SERIAL-LAB/1 commands (uppercase; CR/LF/CRLF)\r\n"
                   "PING [token] | ECHO text | ID? | STATUS? | STOP\r\n"
+                  "MONITOR ON|OFF | MONITOR? (USER events + 1Hz heartbeat)\r\n"
                   "BUILD? | CAPS? | SELFTEST | RUN case run_id\r\n"
                   "STREAM START interval_ms [count] | STREAM STOP\r\n"
                   "BURST count [padding_0..128] | HEX count\r\n"
@@ -236,6 +286,17 @@ static void command(uint32_t now) {
             (unsigned long)injected_duplicates, (unsigned long)injected_crc);
     } else if (!strcmp(cmd, "STOP") && !*cursor) {
         stop_jobs(); (void)say("OK STOP\r\n");
+    } else if (!strcmp(cmd, "MONITOR?" ) && !*cursor) {
+        (void)say("MONITOR enabled=%u heartbeat_ms=1000 debounce_ms=20 user=%s presses=%lu releases=%lu missed=%lu\r\n",
+            monitor_enabled ? 1u : 0u, button_stable ? "PRESSED" : "RELEASED",
+            (unsigned long)button_presses, (unsigned long)button_releases, (unsigned long)monitor_missed);
+    } else if (!strcmp(cmd, "MONITOR")) {
+        char *state = token(&cursor);
+        if (state && !*cursor && (!strcmp(state, "ON") || !strcmp(state, "OFF"))) {
+            monitor_enabled = !strcmp(state, "ON");
+            heartbeat_due = now + HEARTBEAT_MS;
+            (void)say("OK MONITOR %s\r\n", state);
+        } else error("ARGS MONITOR ON|OFF");
     } else if (!strcmp(cmd, "STREAM")) {
         char *action = token(&cursor);
         uint32_t interval, count = 0;
@@ -343,7 +404,13 @@ void lab_init(const lab_platform *platform, uint32_t now) {
     baud_rate = 115200; baud_pending = 0; reset_pending = false;
     drop_every = dup_every = crc_every = 0;
     stop_jobs(); last_byte = now;
+    monitor_enabled = true;
+    heartbeat_due = now + HEARTBEAT_MS;
+    heartbeat_seq = button_presses = button_releases = monitor_missed = 0;
+    button_raw = button_stable = io.button();
+    button_changed_at = button_pressed_at = now;
     (void)say("BOOT NUCLEO-F103RB SERIAL-LAB/1 baud=115200 8N1\r\n");
+    (void)say("READY USER=B1/PC13 heartbeat_ms=1000 debounce_ms=20; MONITOR OFF or STOP pauses output\r\n");
 }
 
 void lab_receive(uint8_t byte, uint32_t now) {
@@ -403,6 +470,7 @@ static bool numbered(const uint8_t *data, size_t length, uint32_t seq) {
 }
 
 void lab_poll(uint32_t now) {
+    poll_monitor(now);
     if (baud_pending) {
         if (due(now, baud_due) && io.baud(baud_pending)) {
             baud_rate = baud_pending; baud_pending = 0;

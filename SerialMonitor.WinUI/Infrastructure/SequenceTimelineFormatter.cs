@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using SerialMonitor.Core.Sequences;
 
@@ -20,7 +21,7 @@ internal static class SequenceTimelineFormatter
             _ => string.Equals(step.Kind, "hex", StringComparison.OrdinalIgnoreCase)
         };
         var rows = new List<SequenceTimelineLine>();
-        string Time(DateTimeOffset? at) => at?.ToLocalTime().ToString("HH:mm:ss.fff") ?? "시간 기록 없음";
+        string Time(DateTimeOffset? at) => at?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) ?? "시간 기록 없음";
         string Tx(string? bytes, string? text) => hex ? SpaceHex(bytes ?? "") : (text ?? "");
         if (step.StepKind == "Tx")
             rows.Add(new(Time(step.StartedAt), step.SendStatus == "sent" ? "TX" : "TX?", [new(Tx(step.TxHex, step.Command), false)]));

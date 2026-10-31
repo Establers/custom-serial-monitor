@@ -339,6 +339,8 @@
     <button type="button" data-action="searchSelected" data-requires-selection="true">Search selected text</button>
   </div>
   <div id="hexSelectionHint" aria-hidden="true"></div>
+  <script src="./app-shortcuts.json.js"></script>
+  <script src="./shortcut-keys.js"></script>
   <script src="./xterm.js"></script>
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
@@ -979,38 +981,36 @@
       return false;
     }
 
-    function buildCommandShortcut(event) {
-      if (event.shiftKey) {
-        return null;
-      }
-
-      const key = String(event.key || '').toUpperCase();
-      if (event.ctrlKey && !event.altKey && /^[0-9]$/.test(key)) {
-        return `Ctrl+${key}`;
-      }
-
-      if (event.altKey && !event.ctrlKey && /^[A-Z0-9]$/.test(key)) {
-        return `Alt+${key}`;
-      }
-
-      return null;
-    }
+    let commandShortcuts = new Set();
+    window.serialMonitorSetCommandShortcuts = (shortcuts, reservedShortcuts) => {
+      // Until the native reservation policy arrives, no user binding is active.
+      commandShortcuts = new Set();
+      if (!Array.isArray(reservedShortcuts)) return false;
+      const reserved = new Set([...window.serialMonitorShortcuts.reservedKeys, ...reservedShortcuts]
+        .map(value => String(value).toUpperCase()));
+      const candidates = (Array.isArray(shortcuts) ? shortcuts : [])
+        .filter(value => typeof value === 'string').map(value => value.toUpperCase());
+      const counts = new Map();
+      for (const key of candidates) counts.set(key, (counts.get(key) || 0) + 1);
+      commandShortcuts = new Set(candidates.filter(key => !reserved.has(key) && counts.get(key) === 1));
+      return true;
+    };
 
     function postCommandShortcut(event, source) {
-      const shortcut = buildCommandShortcut(event);
-      if (!shortcut || !window.chrome || !window.chrome.webview) {
+      const shortcut = window.serialMonitorShortcuts.userShortcut(event);
+      if (!shortcut || !commandShortcuts.has(shortcut.toUpperCase()) ||
+          !window.chrome || !window.chrome.webview) {
         return false;
       }
 
-      window.chrome.webview.postMessage({ type: 'shortcut', shortcut, source });
+      if (!event.repeat) window.chrome.webview.postMessage({ type: 'shortcut', shortcut, source });
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       return true;
     }
 
     function postMarkerShortcut(event, source) {
-      const key = String(event.key || '').toLowerCase();
-      if (!event.ctrlKey || event.altKey || event.shiftKey || key !== 'm' ||
+      if (!window.serialMonitorShortcuts.matches('Marker', event) ||
           !window.chrome || !window.chrome.webview) {
         return false;
       }
@@ -1026,16 +1026,14 @@
         return false;
       }
 
-      const key = String(event.key || '');
-      const lowerKey = key.toLowerCase();
       let action = null;
 
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && lowerKey === 'f') {
+      if (window.serialMonitorShortcuts.matches('SearchFocus', event)) {
         action = 'focus';
-      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === 'F3') {
-        action = event.shiftKey ? 'previous' : 'next';
-      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === 'F4') {
+      } else if (window.serialMonitorShortcuts.matches('SearchPrevious', event)) {
         action = 'previous';
+      } else if (window.serialMonitorShortcuts.matches('SearchNext', event)) {
+        action = 'next';
       }
 
       if (!action) {
@@ -1049,7 +1047,7 @@
     }
 
     function postNavigationShortcut(event) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || String(event.key).toLowerCase() !== 'g') return false;
+      if (!window.serialMonitorShortcuts.matches('GoTo', event)) return false;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!event.repeat) window.serialMonitorOpenNavigation();
@@ -1057,7 +1055,7 @@
     }
 
     function postAutoScrollToggleShortcut(event, source) {
-      if (event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+      if (!window.serialMonitorShortcuts.matches('AutoScroll', event) ||
           !window.chrome || !window.chrome.webview) {
         return false;
       }
@@ -1902,9 +1900,9 @@
       }
 
       const logicalLineCacheKey = `${targetLineId}\u0000${lineStarts[logicalLineIndex]}`;
-      if (!renderedLogicalLineCache || renderedLogicalLineCache.key !== logicalLineCacheKey) {
+      if (!renderedLogicalLineCache || renderedLogicalLineCache.cacheKey !== logicalLineCacheKey) {
         renderedLogicalLineCache = {
-          key: logicalLineCacheKey,
+          cacheKey: logicalLineCacheKey,
           value: readLogicalLine(lineStarts[logicalLineIndex])
         };
         renderedTabExpansionCache = null;
@@ -1916,9 +1914,9 @@
       }
 
       const tabCacheKey = `${logicalLineCacheKey}\u0000${payloadStart}`;
-      if (!renderedTabExpansionCache || renderedTabExpansionCache.key !== tabCacheKey) {
+      if (!renderedTabExpansionCache || renderedTabExpansionCache.cacheKey !== tabCacheKey) {
         renderedTabExpansionCache = {
-          key: tabCacheKey,
+          cacheKey: tabCacheKey,
           value: collectTabExpansionLengths(logicalLine, payloadStart)
         };
       }
@@ -2277,9 +2275,7 @@
 
       if (postNavigationShortcut(event)) return false;
 
-      const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        event.key.toLowerCase() === 'c';
+      const isCopyShortcut = window.serialMonitorShortcuts.matches('Copy', event);
       if (isCopyShortcut) {
         if (!copySelectedText('xterm-key-handler')) {
           return true;
@@ -2298,9 +2294,7 @@
         return false;
       }
 
-      if (postCommandShortcut(event, 'xterm-key-handler')) {
-          return false;
-      }
+      if (postCommandShortcut(event, 'xterm-key-handler')) return false;
 
       return true;
     });
@@ -2311,9 +2305,7 @@
         return;
       }
 
-      const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        event.key.toLowerCase() === 'c';
+      const isCopyShortcut = window.serialMonitorShortcuts.matches('Copy', event);
       if (isCopyShortcut) {
         if (!copySelectedText('document-keydown')) {
           return;
@@ -2332,9 +2324,8 @@
         return;
       }
 
-      if (postCommandShortcut(event, 'document-keydown')) {
-        return;
-      }
+      if (postCommandShortcut(event, 'document-keydown')) return;
+
     }, true);
 
     document.addEventListener('contextmenu', showContextMenu, true);

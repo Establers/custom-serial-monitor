@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SerialMonitor.Core.Sequences;
 
 public sealed record SequenceRunStep(int Number, string Command, string TxMode, string LineEnding,
@@ -22,7 +24,7 @@ public sealed record SequenceStepResult(long Id, int Repeat, int Step, int Attem
     string? RelatedTxCommand = null, string? TxMode = null, byte[]? RxDecoderPrefix = null)
 {
     public string KindText => StepKind == "RxCheck" ? "RX Check" : "TX";
-    public string TimeText => StartedAt.ToLocalTime().ToString("HH:mm:ss.fff");
+    public string TimeText => StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
     public string ResultStatus => StepKind == "RxCheck" || Pattern is not null ? CheckStatus : SendStatus;
     public string DisplayText => $"{Repeat,5}  #{Step,-4} {SendStatus,-8} {CheckStatus,-14} {Command.Replace('\r', ' ').Replace('\n', ' ')}";
 }

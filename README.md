@@ -11,7 +11,7 @@
   <p>
     <a href="#다운로드">다운로드</a> ·
     <a href="#ai-plugin-install">AI 플러그인</a> ·
-    <a href="docs/release_notes_v1.6.2.md">v1.6.2 변경 사항</a> ·
+    <a href="docs/release_notes_v1.6.3.md">v1.6.3 변경 사항</a> ·
     <a href="#문서">문서</a>
   </p>
 </div>

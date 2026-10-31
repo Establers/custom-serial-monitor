@@ -124,6 +124,8 @@
   <div id="contextScroll" tabindex="0">
     <pre id="contextText">Select an event.</pre>
   </div>
+  <script src="../xterm/app-shortcuts.json.js"></script>
+  <script src="../xterm/shortcut-keys.js"></script>
   <script>
     const scrollHost = document.getElementById('contextScroll');
     const contextText = document.getElementById('contextText');
@@ -149,9 +151,7 @@
     };
 
     document.addEventListener('keydown', event => {
-      const isCopyShortcut = (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        event.key.toLowerCase() === 'c';
+      const isCopyShortcut = window.serialMonitorShortcuts.matches('Copy', event);
       if (!isCopyShortcut) {
         return;
       }

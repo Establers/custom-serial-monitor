@@ -210,7 +210,7 @@
       const start = Math.max(0, Math.min(size - 1, Number.isInteger(startIndex) ? startIndex : 0));
       const end = Math.max(start, Math.min(size - 1, Number.isInteger(endIndex) ? endIndex : size - 1));
       const cacheKey = `${key(size)}:${binSize}:${start}:${end}:${ordered()}`;
-      if (histogramCache && histogramCache.key === cacheKey) return histogramCache.value;
+      if (histogramCache && histogramCache.cacheKey === cacheKey) return histogramCache.value;
       const bins = new Array(binSize).fill(0);
       let startTime = null;
       let endTime = null;
@@ -263,7 +263,7 @@
         }
       }
       const result = { bins, startTime, endTime, peak: Math.max(...bins), count: validCount, binMilliseconds: span / binSize, ordered: ordered(), startIndex: start, endIndex: end };
-      histogramCache = { key: cacheKey, value: result };
+      histogramCache = { cacheKey, value: result };
       return result;
     }
 
@@ -278,7 +278,7 @@
       const size = available.count;
       const binSize = Math.max(1, Math.min(MAX_BINS, Math.floor(Number(binCount) || 1)));
       const cacheKey = `time:${key(size)}:${binSize}:${startTime}:${endTime}:${ordered()}`;
-      if (histogramCache && histogramCache.key === cacheKey) return histogramCache.value;
+      if (histogramCache && histogramCache.cacheKey === cacheKey) return histogramCache.value;
       const bins = new Array(binSize).fill(0);
       const span = Math.max(1, endTime - startTime + 1);
       const bucket = timestamp => Math.min(binSize - 1, Math.max(0, Math.floor((timestamp - startTime) / span * binSize)));
@@ -337,7 +337,7 @@
       }
       const result = { bins, startTime, endTime, peak: Math.max(...bins), count: validCount,
         binMilliseconds: span / binSize, ordered: ordered(), startIndex, endIndex };
-      histogramCache = { key: cacheKey, value: result };
+      histogramCache = { cacheKey, value: result };
       return result;
     }
 
