@@ -958,7 +958,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
   <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI plugin installation, updates, usage examples and troubleshooting.</value></data>
   <data name="LogNavigationLanguage" xml:space="preserve"><value>en</value></data>
-  <data name="LogNavigateButton.Content" xml:space="preserve"><value>Go to...</value></data>
   <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to time</value></data>
   <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Go to time (Ctrl+G)</value></data>
   <data name="NativeLogNavigationInputLabel" xml:space="preserve"><value>Time or position</value></data>

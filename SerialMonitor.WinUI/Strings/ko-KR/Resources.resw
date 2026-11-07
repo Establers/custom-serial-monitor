@@ -958,7 +958,6 @@
   <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
   <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내</value></data>
   <data name="LogNavigationLanguage" xml:space="preserve"><value>ko</value></data>
-  <data name="LogNavigateButton.Content" xml:space="preserve"><value>위치 이동</value></data>
   <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>시간으로 이동</value></data>
   <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>시간으로 이동 (Ctrl+G)</value></data>
   <data name="NativeLogNavigationInputLabel" xml:space="preserve"><value>시간·위치</value></data>

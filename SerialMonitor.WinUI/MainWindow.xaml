@@ -1422,11 +1422,15 @@
                                       Glyph="&#xE74D;" />
                         </Button>
                         <Button x:Uid="LogNavigateButton" x:Name="LogNavigateButton"
-                                Style="{StaticResource ToolbarIconButtonStyle}"
-                                Content="Go to..."
+                                Style="{StaticResource NavigationIconButtonStyle}"
                                 AutomationProperties.Name="Go to time"
                                 ToolTipService.ToolTip="Go to time (Ctrl+G)"
-                                Click="LogNavigateButton_Click" />
+                                Click="LogNavigateButton_Click">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="14"
+                                      UseLayoutRounding="False"
+                                      Glyph="&#xE917;" />
+                        </Button>
                     </StackPanel>
                     <Button x:Uid="StaticUi006" x:Name="LogToolbarScrollBackButton"
                             Grid.Column="1"
