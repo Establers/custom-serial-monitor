@@ -57,7 +57,7 @@ public sealed class ProtocolBrowsingTests
         Assert.Empty(model.Frames);
         Assert.Equal(1, model.PendingDisplayFrames);
         model.IsDisplayPaused = false;
-        Assert.Equal((byte)3, Assert.Single(model.Frames).Frame.UnitId);
+        Assert.Equal((byte)3, Assert.Single(model.Frames).Frame.Address);
         Assert.Equal(2, analyzer.Snapshot(includeFrames: false).Statistics.Tx);
     }
 
@@ -79,10 +79,10 @@ public sealed class ProtocolBrowsingTests
         model.FilterFunctionText = "0x03";
         Assert.True(model.TryApplyFilters());
         Assert.Equal(3, model.Frames.Count); // Request, exception 83, bad CRC request.
-        Assert.All(model.Frames, row => Assert.Equal((byte)1, row.Frame.UnitId));
+        Assert.All(model.Frames, row => Assert.Equal((byte)1, row.Frame.Address));
         model.FilterDirectionIndex = 1;
         Assert.True(model.TryApplyFilters());
-        Assert.Equal(ModbusFrameStatus.Exception, Assert.Single(model.Frames).Frame.Status);
+        Assert.Equal(ProtocolFrameStatus.Exception, Assert.Single(model.Frames).Frame.Status);
         model.FilterDirectionIndex = 0;
         model.FilterStatusIndex = 1;
         Assert.True(model.TryApplyFilters());
@@ -90,7 +90,7 @@ public sealed class ProtocolBrowsingTests
         Assert.All(model.Frames, row => Assert.True(row.IsError));
         model.FilterFunctionText = "83";
         Assert.True(model.TryApplyFilters());
-        Assert.Equal((byte)0x83, Assert.Single(model.Frames).Frame.FunctionCode);
+        Assert.Equal((byte)0x83, Assert.Single(model.Frames).Frame.Code);
         Assert.Equal(before, analyzer.Snapshot(includeFrames: false).Statistics);
         model.ResetFilters();
         Assert.False(model.HasActiveFilters);
@@ -108,20 +108,20 @@ public sealed class ProtocolBrowsingTests
         model.FilterUnitText = "256";
         Assert.False(model.TryApplyFilters());
         Assert.Equal(Visibility.Visible, model.FilterValidationVisibility);
-        Assert.Equal((byte)1, Assert.Single(model.Frames).Frame.UnitId);
+        Assert.Equal((byte)1, Assert.Single(model.Frames).Frame.Address);
         model.BeginFilterEdit();
         Assert.Equal("1", model.FilterUnitText);
         Assert.Empty(model.FilterValidationError);
         model.FilterUnitText = "2";
         model.FilterFunctionText = "GG";
         Assert.False(model.TryApplyFilters());
-        Assert.Equal((byte)1, Assert.Single(model.Frames).Frame.UnitId);
+        Assert.Equal((byte)1, Assert.Single(model.Frames).Frame.Address);
         model.BeginFilterEdit();
         Assert.Equal("1", model.FilterUnitText);
         Assert.Empty(model.FilterFunctionText);
         model.FilterUnitText = "2"; model.FilterFunctionText = "03";
         Assert.True(model.TryApplyFilters());
-        Assert.Equal((byte)2, Assert.Single(model.Frames).Frame.UnitId);
+        Assert.Equal((byte)2, Assert.Single(model.Frames).Frame.Address);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class ProtocolBrowsingTests
         model.IsVisible = false; model.IsVisible = true;
         Assert.Empty(model.Frames);
         model.IsDisplayPaused = false;
-        Assert.Equal((byte)3, Assert.Single(model.Frames).Frame.UnitId);
+        Assert.Equal((byte)3, Assert.Single(model.Frames).Frame.Address);
         model.ResetFilters();
         Assert.Equal(3, model.Frames.Count);
     }
@@ -185,12 +185,12 @@ public sealed class ProtocolBrowsingTests
         await Push(analyzer, Frame(1, 0x83, 2), ProtocolDirection.Rx);
         model.Refresh();
         Assert.Equal(4, model.Frames.Count);
-        var crcError = Assert.Single(model.Frames.Where(row => row.Frame.Status == ModbusFrameStatus.CrcError));
-        var exception = Assert.Single(model.Frames.Where(row => row.Frame.Status == ModbusFrameStatus.Exception));
+        var crcError = Assert.Single(model.Frames.Where(row => row.Frame.Status == ProtocolFrameStatus.CrcError));
+        var exception = Assert.Single(model.Frames.Where(row => row.Frame.Status == ProtocolFrameStatus.Exception));
         Assert.Equal(Visibility.Visible, crcError.ErrorVisibility);
         Assert.Equal(Visibility.Visible, exception.ErrorVisibility);
         Assert.Contains("02", exception.StatusText);
-        Assert.NotEqual(crcError.StatusText, model.Frames.Single(row => row.Frame.Status == ModbusFrameStatus.Incomplete).StatusText);
+        Assert.NotEqual(crcError.StatusText, model.Frames.Single(row => row.Frame.Status == ProtocolFrameStatus.Incomplete).StatusText);
         for (var index = 2; index <= 5; index++)
         {
             model.FilterStatusIndex = index;

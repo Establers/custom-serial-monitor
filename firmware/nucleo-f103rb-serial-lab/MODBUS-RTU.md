@@ -1,5 +1,7 @@
 # STM32 HEX 요청 → Modbus RTU 응답 — 펌웨어 1.5.0
 
+1.6.0에서도 아래 Modbus 요청·응답과 기존 시퀀스를 유지한다. 추가된 [BACnet MS/TP 시험](BACNET-MSTP.md)은 별도 분석 프로토콜로 선택한다.
+
 보드는 부팅 직후 **조용한 RTU 슬레이브(장치 ID 1)** 로 기다린다. HEX 요청에 바이너리 RTU 응답을 보낸다.
 문자 `MODBUS NORMAL`을 보낼 필요가 없다. 부팅 메시지·HEARTBEAT·버튼 로그도 RTU 응답에 섞이지 않는다.
 NUCLEO-F103RB의 USART2와 ST-LINK 가상 COM을 사용하며, 추가 배선은 필요 없다.

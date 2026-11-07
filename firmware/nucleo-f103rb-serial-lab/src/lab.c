@@ -1,6 +1,7 @@
 #include "lab.h"
 #include "lab_fixtures.h"
 #include "lab_modbus.h"
+#include "lab_mstp.h"
 #ifdef LAB_TARGET_BUILD
 #include "lab_build_info.h"
 #else
@@ -36,7 +37,7 @@ static uint8_t modbus_bytes[LAB_MODBUS_MAX_BYTES];
 static size_t modbus_length, modbus_position;
 static uint32_t modbus_remaining, modbus_sent, modbus_due, modbus_interval;
 static bool modbus_gap;
-static uint8_t rtu_request[LAB_MODBUS_MAX_BYTES], rtu_response[LAB_MODBUS_MAX_BYTES];
+static uint8_t rtu_request[LAB_MSTP_MAX_BYTES], rtu_response[LAB_MSTP_MAX_BYTES];
 static size_t rtu_length, rtu_response_length;
 static uint32_t rtu_last_byte;
 static bool rtu_mode, rtu_overflow;
@@ -458,8 +459,13 @@ void lab_init(const lab_platform *platform, uint32_t now) {
 
 static void poll_rtu(uint32_t now) {
     if ((rtu_length || rtu_overflow) && (uint32_t)(now - rtu_last_byte) >= RTU_ASSEMBLY_IDLE_MS) {
-        if (!rtu_overflow && !rtu_response_length)
-            rtu_response_length = lab_modbus_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+        if (!rtu_overflow && !rtu_response_length) {
+            /* The configured Modbus unit starts 01, MS/TP starts 55 FF.
+             * These bench endpoints are disjoint; no CRC-guessing auto mode. */
+            if (rtu_length >= 2 && rtu_request[0] == 0x55 && rtu_request[1] == 0xff)
+                rtu_response_length = lab_mstp_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+            else rtu_response_length = lab_modbus_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+        }
         rtu_length = 0; rtu_overflow = false;
     }
     if (rtu_response_length && io.write_data(rtu_response,rtu_response_length)) rtu_response_length = 0;

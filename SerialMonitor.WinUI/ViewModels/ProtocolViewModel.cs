@@ -18,7 +18,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     private long _displayedThroughFrameId;
     private long _pauseBaselineId;
     private long _pendingDisplayFrames;
-    private IReadOnlyList<ModbusRtuFrame> _displaySource = Array.Empty<ModbusRtuFrame>();
+    private IReadOnlyList<IProtocolFrame> _displaySource = Array.Empty<IProtocolFrame>();
     private string _status = string.Empty;
     private string _statistics = string.Empty;
     private string _statisticsPeriod = string.Empty;
@@ -36,12 +36,15 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     private static string SelectionPrompt => UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
     public string TabTitle => UiText.Get("ProtocolTitle", "Protocol");
     public string DisabledLabel => UiText.Get("ProtocolDisabled", "Not in use");
-    public IReadOnlyList<string> ProtocolOptions { get; } = [UiText.Get("ProtocolDisabled", "Not in use"), "Modbus RTU"];
+    public IReadOnlyList<string> ProtocolOptions { get; } = [UiText.Get("ProtocolDisabled", "Not in use"), "Modbus RTU", "BACnet MS/TP"];
+    public bool IsMstp => Analyzer is ISelectableProtocolAnalyzer { Protocol: ProtocolKind.BacnetMstp };
+    public string AddressLabel => IsMstp ? "Src" : "ID";
+    public string CodeLabel => IsMstp ? "Type" : "FC";
     public string ClearLabel => UiText.Get("ProtocolClear", "Clear results");
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");
     public string TimeLabel => UiText.Get("ProtocolTime", "Time");
-    public string FunctionLabel => UiText.Get("ProtocolFunction", "Function");
+    public string FunctionLabel => IsMstp ? UiText.Get("ProtocolMstpFrameType", "Frame type") : UiText.Get("ProtocolFunction", "Function");
     public string StateLabel => UiText.Get("ProtocolState", "State");
     public string StateToolTip => UiText.Get("ProtocolStateHelp", "CRC errors, incomplete data and exception responses are shown separately. CRC OK does not imply request success.");
     public string RetentionLabel => UiText.Format("ProtocolRetention", "Recent {0:N0} · memory only · analysis across tabs", ModbusRtuAnalyzer.DefaultHistoryCapacity);
@@ -57,13 +60,13 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public string EmptyTitle => HasActiveFilters && _displaySource.Count > 0
         ? UiText.Get("ProtocolNoMatches", "No matching packets")
         : IsDisplayPaused ? UiText.Get("ProtocolDisplayPaused", "Packet list paused")
-        : SelectedProtocolIndex == 1 ? UiText.Get("ProtocolWaitingTitle", "Waiting for packets")
+        : SelectedProtocolIndex > 0 ? UiText.Get("ProtocolWaitingTitle", "Waiting for packets")
         : UiText.Get("ProtocolEmptyTitle", "Choose a protocol to start");
     public string EmptyLabel => HasActiveFilters && _displaySource.Count > 0
         ? UiText.Get("ProtocolNoMatchesHelp", "Change or reset the filters. Analysis continues in the background.")
         : IsDisplayPaused ? UiText.Get("ProtocolPausedEmptyHelp", "New results remain in recent history. Resume the list to see them.")
-        : SelectedProtocolIndex == 1 ? UiText.Get("ProtocolWaitingHint", "New RX/TX packets appear here. Analysis continues across tabs.")
-        : UiText.Get("ProtocolEmpty", "Select Modbus RTU above to start analyzing new RX/TX.");
+        : SelectedProtocolIndex > 0 ? UiText.Get("ProtocolWaitingHint", "New RX/TX packets appear here. Analysis continues across tabs.")
+        : UiText.Get("ProtocolChoose", "Select a protocol above to start analyzing new RX/TX.");
 
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string Statistics
@@ -122,7 +125,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             if (value && !_hasDisplaySnapshot)
             {
                 var snapshot = Analyzer.Snapshot();
-                _displaySource = snapshot.Frames ?? Array.Empty<ModbusRtuFrame>();
+                _displaySource = snapshot.Results ?? Array.Empty<IProtocolFrame>();
                 _displayedThroughFrameId = snapshot.LastFrameId;
                 _hasDisplaySnapshot = true;
             }
@@ -139,9 +142,30 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         get => _selectedProtocolIndex;
         set
         {
-            var normalized = value == 1 ? 1 : 0;
+            var normalized = value is 1 or 2 ? value : 0;
             if (_selectedProtocolIndex == normalized) return;
-            try { Analyzer.SetEnabled(normalized == 1); SetProperty(ref _selectedProtocolIndex, normalized); }
+            try
+            {
+                bool changed = false;
+                if (normalized > 0)
+                {
+                    var protocol = normalized == 2 ? ProtocolKind.BacnetMstp : ProtocolKind.ModbusRtu;
+                    if (Analyzer is ISelectableProtocolAnalyzer selectable)
+                    { changed = selectable.Protocol != protocol; selectable.SelectProtocol(protocol); }
+                    else if (normalized == 2) throw new InvalidOperationException("This analyzer does not support BACnet MS/TP.");
+                }
+                Analyzer.SetEnabled(normalized > 0); SetProperty(ref _selectedProtocolIndex, normalized);
+                if (changed)
+                {
+                    _displaySource = Array.Empty<IProtocolFrame>(); Frames.Clear();
+                    _selectedId = null; _selectedFrame = null; Details = SelectionPrompt;
+                    _isDisplayPaused = false; _hasDisplaySnapshot = false; _pauseBaselineId = _displayedThroughFrameId = 0;
+                    OnPropertyChanged(nameof(IsDisplayPaused)); OnPropertyChanged(nameof(PauseLabel)); OnPropertyChanged(nameof(PauseToolTip));
+                    ResetFilters();
+                }
+                foreach (var name in new[] { nameof(IsMstp), nameof(AddressLabel), nameof(CodeLabel), nameof(FunctionLabel),
+                    nameof(FilterUnitLabel), nameof(FilterFunctionLabel), nameof(FilterFunctionHelp), nameof(FilterSummary) }) OnPropertyChanged(name);
+            }
             catch (Exception ex) { Status = ex.Message; return; }
             Refresh(force: true);
         }
@@ -162,7 +186,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
                 Frames.Clear();
                 if (!IsDisplayPaused)
                 {
-                    _displaySource = Array.Empty<ModbusRtuFrame>();
+                    _displaySource = Array.Empty<IProtocolFrame>();
                     _hasDisplaySnapshot = false;
                     _version = -1;
                 }
@@ -201,6 +225,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         TrafficSummary = string.Format(CultureInfo.CurrentCulture, "RX {0:N0}   TX {1:N0}", stats.Rx, stats.Tx);
         CrcSummary = UiText.Format("ProtocolCrcValidFormat", "CRC OK {0:N0}", stats.CrcValid);
         ErrorSummary = UiText.Format("ProtocolCrcErrorFormat", "CRC errors {0:N0}", stats.CrcErrors);
+        if (IsMstp) ErrorSummary += UiText.Format("ProtocolMstpCrcDetails", " · header {0:N0} / data {1:N0}", stats.HeaderCrcErrors, stats.DataCrcErrors);
         OtherSummary = UiText.Format("ProtocolOtherStatisticsFormat", "Incomplete {0:N0} · undecoded {1:N0} · exceptions {2:N0}",
             stats.Incomplete, stats.Undecoded, stats.Exceptions);
         Statistics = UiText.Format("ProtocolStatisticsFormat", "RX {0:N0} · TX {1:N0} · CRC OK {2:N0} / error {3:N0} · incomplete {4:N0} · undecoded {5:N0} · exceptions {6:N0}",
@@ -211,7 +236,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
         if (_isVisible)
         {
-            if (!IsDisplayPaused && snapshot.Frames is { } packets)
+            if (!IsDisplayPaused && snapshot.Results is { } packets)
             {
                 _version = snapshot.Version;
                 _displaySource = packets;
@@ -277,7 +302,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     {
         Analyzer.Clear();
         var snapshot = Analyzer.Snapshot(includeFrames: false);
-        _displaySource = Array.Empty<ModbusRtuFrame>();
+        _displaySource = Array.Empty<IProtocolFrame>();
         _displayedThroughFrameId = _pauseBaselineId = snapshot.LastFrameId;
         _hasDisplaySnapshot = true;
         _selectedId = null;

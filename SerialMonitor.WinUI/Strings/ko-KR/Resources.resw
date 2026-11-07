@@ -1053,6 +1053,11 @@
   <data name="ProtocolClear" xml:space="preserve"><value>목록 비우기</value></data>
   <data name="ProtocolDetails" xml:space="preserve"><value>패킷 상세</value></data>
   <data name="ProtocolRetention" xml:space="preserve"><value>최근 {0:N0}개 · 메모리 보관 · 백그라운드 분석</value></data>
+  <data name="ProtocolMstpFrameType" xml:space="preserve"><value>프레임 종류</value></data>
+  <data name="ProtocolMstpSource" xml:space="preserve"><value>출발지 MAC</value></data>
+  <data name="ProtocolMstpFilterHelp" xml:space="preserve"><value>프레임 종류 HEX 완전 일치: 03 시험 요청, 04 시험 응답, 00 토큰.</value></data>
+  <data name="ProtocolMstpCrcDetails" xml:space="preserve"><value> · 헤더 {0:N0} / 데이터 {1:N0}</value></data>
+  <data name="ProtocolChoose" xml:space="preserve"><value>위에서 프로토콜을 선택하면 새 RX/TX 분석을 시작합니다.</value></data>
   <data name="ProtocolSelectHint" xml:space="preserve"><value>목록에서 패킷을 선택하면 원본 HEX, 필드와 CRC를 확인할 수 있습니다.</value></data>
   <data name="ProtocolSelectionExpired" xml:space="preserve"><value>선택한 패킷이 최근 보관 범위에서 만료되었습니다.</value></data>
   <data name="ProtocolRunning" xml:space="preserve"><value>분석 중</value></data>

@@ -9,11 +9,17 @@ public readonly record struct ProtocolInputTiming(long ReceivedTimestamp = 0, bo
 }
 
 public sealed record ProtocolAnalysisStatistics(long Rx, long Tx, long CrcValid, long CrcErrors,
-    long Incomplete, long Undecoded, long Exceptions, DateTimeOffset StartedAt, DateTimeOffset? LastCrcValidAt);
+    long Incomplete, long Undecoded, long Exceptions, DateTimeOffset StartedAt, DateTimeOffset? LastCrcValidAt,
+    long HeaderCrcErrors = 0, long DataCrcErrors = 0);
 
 public sealed record ProtocolAnalysisSnapshot(long Version, bool Enabled, int RetainedCount, int HistoryCapacity, long RetainedBytes,
     long TotalFrames, long EvictedFrames, long DroppedChunks, long DroppedBytes, long PendingBytes,
-    string? LastError, IReadOnlyList<ModbusRtuFrame>? Frames, ProtocolAnalysisStatistics Statistics, long LastFrameId = 0);
+    string? LastError, IReadOnlyList<ModbusRtuFrame>? Frames, ProtocolAnalysisStatistics Statistics, long LastFrameId = 0)
+{
+    // Frames remains the typed Modbus API used by existing integrations.
+    public IReadOnlyList<IProtocolFrame>? Packets { get; init; }
+    public IReadOnlyList<IProtocolFrame>? Results => Packets ?? Frames;
+}
 
 public interface IProtocolAnalyzer : IAsyncDisposable
 {

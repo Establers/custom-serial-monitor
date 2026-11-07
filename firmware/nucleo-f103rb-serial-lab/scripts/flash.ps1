@@ -37,4 +37,4 @@ Get-FileHash -LiteralPath $backup -Algorithm SHA256 | Format-List
 Write-Host "Original firmware backup: $backup"
 # No mass erase, option-byte changes, RDP unlock, or ST-LINK firmware upgrade.
 Invoke-LabNative $toolset.Programmer ($connection + @('-d',$binary,'0x08000000','-v','-rst'))
-Write-Host 'Flashed and verified. Serial Monitor: COM3, 115200, 8N1, no handshake, HEX Modbus RTU requests (CRC included, no CR/LF).'
+Write-Host 'Flashed and verified. Serial Monitor: COM3, 115200, 8N1, no handshake, HEX Modbus RTU or MS/TP Test Requests (complete frame, no CR/LF).'

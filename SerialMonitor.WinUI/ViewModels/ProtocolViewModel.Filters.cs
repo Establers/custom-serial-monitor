@@ -17,11 +17,12 @@ public sealed partial class ProtocolViewModel
         ? UiText.Format("ProtocolFilterCountFormat", "Filter ({0})", _filter.ActiveCount)
         : UiText.Get("ProtocolFilter", "Filter");
     public string FilterTitle => UiText.Get("ProtocolFilterTitle", "Filter recent packets");
-    public string FilterUnitLabel => UiText.Get("ProtocolFilterUnit", "Unit ID");
+    public string FilterUnitLabel => IsMstp ? UiText.Get("ProtocolMstpSource", "Source MAC") : UiText.Get("ProtocolFilterUnit", "Unit ID");
     public string FilterUnitPlaceholder => UiText.Get("ProtocolFilterUnitHint", "All, or 0–255 (decimal)");
-    public string FilterFunctionLabel => "FC (HEX)";
+    public string FilterFunctionLabel => IsMstp ? "Type (HEX)" : "FC (HEX)";
     public string FilterFunctionPlaceholder => UiText.Get("ProtocolFilterFunctionHint", "All, or 03 / 0x03");
-    public string FilterFunctionHelp => UiText.Get("ProtocolFilterFunctionHelp", "03 also includes exception 83. Enter 83 to show only that exception function.");
+    public string FilterFunctionHelp => IsMstp ? UiText.Get("ProtocolMstpFilterHelp", "Frame type is an exact HEX match: 03 Test Request, 04 Test Response, 00 Token.")
+        : UiText.Get("ProtocolFilterFunctionHelp", "03 also includes exception 83. Enter 83 to show only that exception function.");
     public string FilterDirectionLabel => UiText.Get("ProtocolFilterDirection", "Direction");
     public string FilterStateLabel => UiText.Get("ProtocolState", "State");
     public string ApplyFiltersLabel => UiText.Get("ProtocolFilterApply", "Apply");
@@ -57,7 +58,7 @@ public sealed partial class ProtocolViewModel
             if (!HasActiveFilters) return UiText.Get("ProtocolFilterOpenHelp", "Filter by unit ID, function, direction or analysis state.");
             var parts = new List<string>();
             if (_filter.UnitId is { } id) parts.Add($"ID {id}");
-            if (_filter.FunctionCode is { } fc) parts.Add(fc < 0x80 ? $"FC {fc:X2} (+{fc | 0x80:X2})" : $"FC {fc:X2}");
+            if (_filter.FunctionCode is { } fc) parts.Add(IsMstp ? $"Type {fc:X2}" : fc < 0x80 ? $"FC {fc:X2} (+{fc | 0x80:X2})" : $"FC {fc:X2}");
             if (_filter.Direction is { } direction) parts.Add(direction == ProtocolDirection.Rx ? "RX" : "TX");
             if (_filter.Status != ProtocolStatusFilter.All) parts.Add(FilterStatusOptions[(int)_filter.Status]);
             return string.Join(" · ", parts);

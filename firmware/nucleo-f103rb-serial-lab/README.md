@@ -6,6 +6,9 @@ CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다
 
 ## 기본 동작: HEX Modbus RTU 슬레이브
 
+1.6.0은 기존 Modbus RTU와 **BACnet MS/TP Test Request/Response**를 같은 UART에서 시험합니다.
+앱의 분석 프로토콜을 선택하고 해당 HEX 시퀀스를 실행하세요. [MS/TP 시험 안내·패킷 예시](BACNET-MSTP.md)를 제공합니다.
+
 1.5.0은 **장치 ID 1, 115200 / 8N1**의 조용한 RTU 서버로 부팅합니다.
 HEX에서 `01 03 00 00 00 02 C4 0B`를 보내면 값 250, 100의 정상 응답을 받습니다.
 예외·CRC 오류 주입 요청과 Protocol 탭 기대값은 [Modbus RTU 시험 안내](MODBUS-RTU.md)를 참고하세요.

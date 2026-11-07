@@ -127,8 +127,8 @@
                         <Grid ColumnDefinitions="82,32,30,30,82,*" ColumnSpacing="8">
                             <TextBlock Text="{Binding TimeLabel}" Style="{StaticResource ColumnHeader}" />
                             <TextBlock Grid.Column="1" Text="RX/TX" Style="{StaticResource ColumnHeader}" />
-                            <TextBlock Grid.Column="2" Text="ID" Style="{StaticResource ColumnHeader}" />
-                            <TextBlock Grid.Column="3" Text="FC" Style="{StaticResource ColumnHeader}" />
+                            <TextBlock Grid.Column="2" Text="{Binding AddressLabel}" Style="{StaticResource ColumnHeader}" />
+                            <TextBlock Grid.Column="3" Text="{Binding CodeLabel}" Style="{StaticResource ColumnHeader}" />
                             <TextBlock Grid.Column="4" Text="{Binding StateLabel}" Style="{StaticResource ColumnHeader}" ToolTipService.ToolTip="{Binding StateToolTip}" />
                             <TextBlock Grid.Column="5" Text="{Binding FunctionLabel}" Style="{StaticResource ColumnHeader}" />
                         </Grid>

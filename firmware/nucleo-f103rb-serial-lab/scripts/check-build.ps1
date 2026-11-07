@@ -15,6 +15,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Independent fixture contract verification fail
 dotnet run --project (Join-Path $root 'tests\AssetsCheck') -- (Join-Path $root 'sequences') |
     Tee-Object -FilePath (Join-Path $output 'asset-check.txt')
 if ($LASTEXITCODE -ne 0) { throw 'GUI/CLI sequence definitions rejected by app parsers.' }
+& (Join-Path $PSScriptRoot 'verify-mstp.ps1') -Mode Offline -BuildDirectory $BuildDirectory |
+    Tee-Object -FilePath (Join-Path $output 'mstp-check.txt')
 $manifest = Get-Content -LiteralPath (Join-Path $output 'manifest.json') -Raw | ConvertFrom-Json
 $contract = Get-Content -LiteralPath (Join-Path $output 'contract-report.json') -Raw | ConvertFrom-Json
 $validatorFiles = @(Get-ChildItem -LiteralPath (Join-Path $root 'tests\FixtureContractCheck') -File -Filter '*.cs') +
@@ -25,7 +27,7 @@ $validation = [ordered]@{
     nativeProtocolChecks=$nativeChecks; independentContractChecks=$contract.assertions
     binaryPayloadLengths=$contract.binaryLengths; binaryContractChecks=$contract.binaryAssertions
     maxBinaryPayloadBytes=$manifest.maxBinaryPayloadBytes; maxBinaryFrameBytes=$manifest.maxBinaryFrameBytes
-    guiDefinitions=5; cliDefinitions=2; fixtureCases=$contract.cases
+    guiDefinitions=5; cliDefinitions=2; mstpGuiDefinitions=1; mstpCliDefinitions=1; mstpNativeCases=6; fixtureCases=$contract.cases
     hardwareVerified=$false; hardwareStatus='Not run for this build; previous hardware reports identify an earlier BIN hash.'
     deviceOperations='none'; guiModeChanges=0
     testPlanSha256=(Get-FileHash -LiteralPath (Join-Path $root 'test-plan.json') -Algorithm SHA256).Hash

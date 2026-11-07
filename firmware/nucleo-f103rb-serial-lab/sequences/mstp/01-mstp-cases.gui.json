@@ -1,0 +1,90 @@
+{
+  "_manual": [
+    "펌웨어 1.6.0, COM3 / 115200 / 8N1, HEX. Protocol에서 BACnet MS/TP를 선택합니다.",
+    "표준 MS/TP Test Request/Response로 시험합니다. CRCH/CRCD 페이로드는 이 시험 펌웨어에서만 CRC 오류를 주입하는 예약 값입니다.",
+    "정상 → 헤더 CRC 오류 → 데이터 CRC 오류 → 정상 복구. 각 RX Check 700ms, 1회 실행합니다.",
+    "통계 초기화 후 TX 4 / RX 4 / CRC 정상 6 / 오류 2 (헤더 1, 데이터 1) / 불완전 0 / 분석 큐 누락 0.",
+    "CRC 오류 단계도 의도한 손상 바이트를 받으면 RX Check PASS입니다. 토큰 관리나 실제 RS-485 버스에 참여하지 않는 격리 UART 시험입니다."
+  ],
+  "FormatVersion": 3,
+  "Name": "STM32 BACnet MS/TP - 정상·CRC·복구 검사",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "01 정상 응답 요청",
+      "CommandText": "55 FF 03 01 02 00 03 C8 41 42 43 2F 9F",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0,
+      "Comment": "MAC 2 → MAC 1, Test Request. 요청 CRC는 정상입니다."
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "01 정상 응답 확인",
+      "CommandText": "",
+      "RxPattern": "55 FF 04 02 01 00 03 6C 41 42 43 2F 9F",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700,
+      "Comment": "지정한 원본 응답을 받으면 PASS. CRC 오류 단계는 Protocol에 오류로 집계되어야 합니다."
+    },
+    {
+      "Kind": "Tx",
+      "Name": "02 헤더 CRC 오류 요청",
+      "CommandText": "55 FF 03 01 02 00 04 34 43 52 43 48 BD 5B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0,
+      "Comment": "MAC 2 → MAC 1, Test Request. 요청 CRC는 정상입니다."
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "02 헤더 CRC 오류 확인",
+      "CommandText": "",
+      "RxPattern": "55 FF 04 02 01 00 04 91 43 52 43 48 BD 5B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700,
+      "Comment": "지정한 원본 응답을 받으면 PASS. CRC 오류 단계는 Protocol에 오류로 집계되어야 합니다."
+    },
+    {
+      "Kind": "Tx",
+      "Name": "03 데이터 CRC 오류 요청",
+      "CommandText": "55 FF 03 01 02 00 04 34 43 52 43 44 D1 91",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0,
+      "Comment": "MAC 2 → MAC 1, Test Request. 요청 CRC는 정상입니다."
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "03 데이터 CRC 오류 확인",
+      "CommandText": "",
+      "RxPattern": "55 FF 04 02 01 00 04 90 43 52 43 44 D1 90",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700,
+      "Comment": "지정한 원본 응답을 받으면 PASS. CRC 오류 단계는 Protocol에 오류로 집계되어야 합니다."
+    },
+    {
+      "Kind": "Tx",
+      "Name": "04 정상 복구 요청",
+      "CommandText": "55 FF 03 01 02 00 03 C8 41 42 43 2F 9F",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0,
+      "Comment": "MAC 2 → MAC 1, Test Request. 요청 CRC는 정상입니다."
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "04 정상 복구 확인",
+      "CommandText": "",
+      "RxPattern": "55 FF 04 02 01 00 03 6C 41 42 43 2F 9F",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700,
+      "Comment": "지정한 원본 응답을 받으면 PASS. CRC 오류 단계는 Protocol에 오류로 집계되어야 합니다."
+    }
+  ]
+}

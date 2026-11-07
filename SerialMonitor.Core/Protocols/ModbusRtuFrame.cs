@@ -12,13 +12,21 @@ public enum ModbusFrameStatus { Decoded, CrcError, Incomplete, Undecoded, Except
 // selected result; the receive queue and retained history hold binary data.
 public sealed record ModbusRtuFrame(
     long Id, long Session, DateTimeOffset Timestamp, ProtocolDirection Direction,
-    ReadOnlyMemory<byte> Bytes, ModbusFrameKind Kind, ModbusCrcStatus CrcStatus)
+    ReadOnlyMemory<byte> Bytes, ModbusFrameKind Kind, ModbusCrcStatus CrcStatus) : IProtocolFrame
 {
     public const int MaximumBytes = 256;
     public byte? UnitId => Bytes.Length > 0 ? Bytes.Span[0] : null;
     public byte? FunctionCode => Bytes.Length > 1 ? Bytes.Span[1] : null;
     public int Length => Bytes.Length;
     public long RetainedBytes => Length + 256L;
+    public byte? Address => UnitId;
+    public byte? Code => FunctionCode;
+    public string CodeName => Status == ModbusFrameStatus.Exception && Length == 5
+        ? $"{FunctionName(FunctionCode)} · {ExceptionName(Bytes.Span[2])}" : FunctionName(FunctionCode);
+    ProtocolFrameStatus IProtocolFrame.Status => (ProtocolFrameStatus)(int)Status;
+    ProtocolCrcStatus IProtocolFrame.CrcStatus => (ProtocolCrcStatus)(int)CrcStatus;
+    public bool MatchesCode(byte code) => FunctionCode is { } actual &&
+        (code < 0x80 ? (actual & 0x7F) == code : actual == code);
     // CRC validity is independent of request/response role. A complete-length
     // candidate with a bad CRC must not be presented as missing bytes.
     public ModbusFrameStatus Status => CrcStatus switch

@@ -7,6 +7,12 @@ using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
+if (args.Length > 0 && args[0].StartsWith("mstp-",StringComparison.Ordinal))
+{
+    await MstpUartCheck.Run(args);
+    return;
+}
+
 if (args.Length > 0 && args[0].StartsWith("server-",StringComparison.Ordinal))
 {
     await RtuServerCheck.Run(args);

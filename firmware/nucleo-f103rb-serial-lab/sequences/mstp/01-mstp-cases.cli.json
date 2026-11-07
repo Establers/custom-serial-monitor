@@ -1,0 +1,54 @@
+{
+  "name": "STM32 BACnet MS/TP - 정상·CRC·복구 검사",
+  "repeatCount": 1,
+  "steps": [
+    {
+      "name": "01 정상 응답",
+      "command": "55 FF 03 01 02 00 03 C8 41 42 43 2F 9F",
+      "txMode": "hex",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "delayAfterMs": 0,
+      "expect": {
+        "kind": "hex",
+        "value": "55 FF 04 02 01 00 03 6C 41 42 43 2F 9F"
+      }
+    },
+    {
+      "name": "02 헤더 CRC 오류",
+      "command": "55 FF 03 01 02 00 04 34 43 52 43 48 BD 5B",
+      "txMode": "hex",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "delayAfterMs": 0,
+      "expect": {
+        "kind": "hex",
+        "value": "55 FF 04 02 01 00 04 91 43 52 43 48 BD 5B"
+      }
+    },
+    {
+      "name": "03 데이터 CRC 오류",
+      "command": "55 FF 03 01 02 00 04 34 43 52 43 44 D1 91",
+      "txMode": "hex",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "delayAfterMs": 0,
+      "expect": {
+        "kind": "hex",
+        "value": "55 FF 04 02 01 00 04 90 43 52 43 44 D1 90"
+      }
+    },
+    {
+      "name": "04 정상 복구",
+      "command": "55 FF 03 01 02 00 03 C8 41 42 43 2F 9F",
+      "txMode": "hex",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "delayAfterMs": 0,
+      "expect": {
+        "kind": "hex",
+        "value": "55 FF 04 02 01 00 03 6C 41 42 43 2F 9F"
+      }
+    }
+  ]
+}

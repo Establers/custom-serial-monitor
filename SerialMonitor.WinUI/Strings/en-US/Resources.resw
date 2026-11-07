@@ -1053,6 +1053,11 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolClear" xml:space="preserve"><value>Clear results</value></data>
   <data name="ProtocolDetails" xml:space="preserve"><value>Packet details</value></data>
   <data name="ProtocolRetention" xml:space="preserve"><value>Recent {0:N0} · memory only · analysis across tabs</value></data>
+  <data name="ProtocolMstpFrameType" xml:space="preserve"><value>Frame type</value></data>
+  <data name="ProtocolMstpSource" xml:space="preserve"><value>Source MAC</value></data>
+  <data name="ProtocolMstpFilterHelp" xml:space="preserve"><value>Exact frame type in HEX: 03 Test Request, 04 Test Response, 00 Token.</value></data>
+  <data name="ProtocolMstpCrcDetails" xml:space="preserve"><value> · header {0:N0} / data {1:N0}</value></data>
+  <data name="ProtocolChoose" xml:space="preserve"><value>Select a protocol above to start analyzing new RX/TX.</value></data>
   <data name="ProtocolSelectHint" xml:space="preserve"><value>Select a packet in the list to inspect its raw HEX, fields and CRC.</value></data>
   <data name="ProtocolSelectionExpired" xml:space="preserve"><value>The selected packet has expired from recent history.</value></data>
   <data name="ProtocolRunning" xml:space="preserve"><value>Analyzing</value></data>

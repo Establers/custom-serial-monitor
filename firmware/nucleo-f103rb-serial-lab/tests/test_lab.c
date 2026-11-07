@@ -1,6 +1,7 @@
 #include "lab.h"
 #include "lab_fixtures.h"
 #include "lab_modbus.h"
+#include "lab_mstp.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -330,6 +331,66 @@ static void rtu_tests(void) {
     assert(used == normal_size && !memcmp(out,normal,used)); ++checks;
 }
 
+static size_t mstp_packet(uint8_t *bytes, uint8_t destination, uint8_t source, const uint8_t *data, size_t length) {
+    bytes[0] = 0x55; bytes[1] = 0xff; bytes[2] = 3; bytes[3] = destination; bytes[4] = source;
+    bytes[5] = (uint8_t)(length >> 8); bytes[6] = (uint8_t)length; bytes[7] = lab_mstp_header_crc(bytes + 2,5);
+    if (length) {
+        memcpy(bytes + 8,data,length); uint16_t crc = lab_mstp_data_crc(data,length);
+        bytes[8 + length] = (uint8_t)crc; bytes[9 + length] = (uint8_t)(crc >> 8);
+    }
+    return 8 + length + (length ? 2u : 0u);
+}
+
+static void mstp_tests(void) {
+    uint8_t request[LAB_MSTP_MAX_BYTES], reply[LAB_MSTP_MAX_BYTES], data[LAB_MSTP_MAX_DATA];
+    const uint8_t normal[] = {0x55,0xff,4,2,1,0,3,0x6c,0x41,0x42,0x43,0x2f,0x9f};
+    assert(lab_mstp_header_crc((const uint8_t *)"123456789",9) == 0x89); ++checks;
+    assert(lab_mstp_data_crc((const uint8_t *)"123456789",9) == 0x906e); ++checks;
+    size_t length = mstp_packet(request,1,2,(const uint8_t *)"ABC",3);
+    assert(request[7] == 0xc8); ++checks;
+    assert(lab_mstp_reply(request,length,reply,sizeof(reply)) == sizeof(normal) && !memcmp(reply,normal,sizeof(normal))); ++checks;
+    rtu_init(0); feed_bytes(request,4); poll(3,1); feed_bytes(request + 4,length - 4);
+    poll(7,1); equals(""); poll(8,1); assert(used == sizeof(normal) && !memcmp(out,normal,used)); ++checks;
+    clear(); poll(100,4); equals("");
+    /* Both protocols work without terminal-mode setup or changing firmware. */
+    uint8_t modbus[8]; rtu_packet(modbus,1,3,0,2); feed_bytes(modbus,8); poll(105,1);
+    assert(used == 9 && out[0] == 1 && out[1] == 3); ++checks;
+    clear(); feed_bytes(request,length); poll(110,1); assert(used == sizeof(normal)); ++checks;
+    request[7] ^= 1; assert(!lab_mstp_reply(request,length,reply,sizeof(reply))); ++checks; request[7] ^= 1;
+    request[length - 1] ^= 1; assert(!lab_mstp_reply(request,length,reply,sizeof(reply))); ++checks; request[length - 1] ^= 1;
+    assert(!lab_mstp_reply(request,length - 1,reply,sizeof(reply))); ++checks;
+    assert(!lab_mstp_reply(request,length,reply,length - 1)); ++checks;
+    assert(!lab_mstp_reply(NULL,length,reply,sizeof(reply))); ++checks;
+    for (unsigned destination = 0; destination < 256; ++destination) {
+        if (destination == 1) continue;
+        length = mstp_packet(request,(uint8_t)destination,2,(const uint8_t *)"ABC",3);
+        assert(!lab_mstp_reply(request,length,reply,sizeof(reply))); ++checks;
+    }
+    length = mstp_packet(request,1,255,(const uint8_t *)"ABC",3);
+    assert(!lab_mstp_reply(request,length,reply,sizeof(reply))); ++checks;
+    length = mstp_packet(request,1,2,NULL,0);
+    assert(lab_mstp_reply(request,length,reply,sizeof(reply)) == 8); ++checks;
+    request[length] = 0xff;
+    assert(lab_mstp_reply(request,length + 1,reply,sizeof(reply)) == 8); ++checks;
+    length = mstp_packet(request,1,2,(const uint8_t *)"CRCH",4);
+    assert(lab_mstp_reply(request,length,reply,sizeof(reply)) == length && reply[7] != lab_mstp_header_crc(reply + 2,5)); ++checks;
+    length = mstp_packet(request,1,2,(const uint8_t *)"CRCD",4);
+    assert(lab_mstp_reply(request,length,reply,sizeof(reply)) == length && reply[length - 1] != request[length - 1]); ++checks;
+    length = mstp_packet(request,1,2,(const uint8_t *)"ABC",3);
+    rtu_init(0); data_blocked = true; feed_bytes(request,length); poll(5,5); equals("");
+    data_blocked = false; poll(6,10); assert(used == sizeof(normal)); ++checks;
+    for (size_t i = 0; i < sizeof(data); ++i) data[i] = (uint8_t)i;
+    length = mstp_packet(request,1,2,data,sizeof(data));
+    assert(length == 511 && request[5] == 1 && request[6] == 245); ++checks;
+    rtu_init(0); feed_bytes(request,length); poll(5,1);
+    assert(used == length && !memcmp(out + 8,data,sizeof(data))); ++checks;
+    rtu_init(0); for (unsigned i = 0; i < 600; ++i) lab_receive(0x55,0);
+    feed_bytes(request,length); poll(5,1); equals("");
+    feed_bytes(request,length); poll(10,1); assert(used == length); ++checks;
+    rtu_init(0xfffffffdu); length = mstp_packet(request,1,2,(const uint8_t *)"ABC",3);
+    feed_bytes(request,length); poll(2,1); assert(used == sizeof(normal)); ++checks;
+}
+
 static void fixture_tests(void) {
     init(0); send("BUILD?\n"); contains("BUILD version=" LAB_FIRMWARE_VERSION " protocol=1 id=");
     clear(); send("CAPS?\n"); contains("line_max=511 payload_max=1024 long_max=2048 fixture_count=9");
@@ -410,6 +471,15 @@ static void export_contract(const char *directory) {
         snprintf(file,sizeof(file),"rtu-%u.bin",i); export_bytes(directory,file);
     }
     puts("Exported actual C protocol responses for independent PC contract verification.");
+    for (unsigned i = 0; i < 6; ++i) {
+        uint8_t request[LAB_MSTP_MAX_BYTES], data[LAB_MSTP_MAX_DATA]; char file[64];
+        const char *payloads[] = {"ABC","CRCH","CRCD","ABC"};
+        for (size_t j = 0; j < sizeof(data); ++j) data[j] = (uint8_t)j;
+        size_t length = i < 4 ? mstp_packet(request,1,2,(const uint8_t *)payloads[i],strlen(payloads[i])) :
+            mstp_packet(request,1,2,data,i == 4 ? sizeof(data) : 0);
+        rtu_init(0); feed_bytes(request,length); poll(5,1);
+        snprintf(file,sizeof(file),"mstp-%u.bin",i); export_bytes(directory,file);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -421,6 +491,7 @@ int main(int argc, char **argv) {
     large_binary_tests();
     modbus_tests();
     rtu_tests();
+    mstp_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);
     if (argc == 3 && !strcmp(argv[1],"--export")) export_contract(argv[2]);
     return 0;

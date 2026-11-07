@@ -6,7 +6,7 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed partial class MainViewModel
 {
-    public ProtocolViewModel Protocol { get; } = new(new ModbusRtuAnalyzer());
+    public ProtocolViewModel Protocol { get; } = new(new ProtocolAnalyzer());
 
     private void InitializeProtocolAnalysis()
     {
