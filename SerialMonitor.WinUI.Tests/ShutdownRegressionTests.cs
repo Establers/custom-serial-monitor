@@ -48,7 +48,8 @@ public sealed class ShutdownRegressionTests
     {
         await using var bridge = new SerialBridgeService();
         using var sequence = new CancellationTokenSource();
-        var model = CreateState(bridge);
+        using var connectDiagnosticStop = new CancellationTokenSource();
+        var model = CreateState(bridge, connectDiagnosticStop);
         Set(model, "_sequenceCancellation", sequence);
         Set(model, "_isSequenceRunning", true);
         var changes = new HashSet<string>();
@@ -63,6 +64,7 @@ public sealed class ShutdownRegressionTests
 
         Assert.True((bool)Invoke(model, "TryBeginShutdown")!);
         Assert.True(sequence.IsCancellationRequested);
+        Assert.True(connectDiagnosticStop.IsCancellationRequested);
         Assert.True(model.WasSequenceRunningDuringShutdown);
         Assert.False(model.CanSendManualTx);
         Assert.Contains(nameof(model.CanSendManualTx), changes);
@@ -74,7 +76,8 @@ public sealed class ShutdownRegressionTests
     public async Task ShutdownRejectsManualAndRuleSequencesAndEveryDirectTxEntry()
     {
         await using var bridge = new SerialBridgeService();
-        var model = CreateState(bridge);
+        using var connectDiagnosticStop = new CancellationTokenSource();
+        var model = CreateState(bridge, connectDiagnosticStop);
         Assert.True(model.CanSendManualTx);
         Assert.True(CanRun(model));
         Assert.True((bool)Invoke(model, "TryBeginShutdown")!);
@@ -133,10 +136,11 @@ public sealed class ShutdownRegressionTests
         }
     }
 
-    private static MainViewModel CreateState(SerialBridgeService bridge)
+    private static MainViewModel CreateState(SerialBridgeService bridge, CancellationTokenSource connectDiagnosticStop)
     {
         var model = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
         Set(model, "_isConnected", true);
+        Set(model, "_connectDiagnosticStop", connectDiagnosticStop);
         Set(model, "_bridgeService", bridge);
         Set(model, "_automationControl", new AutomationControlGate());
         Set(model, "_selectedCommandSequence", new CommandSequence { Name = "test", Steps = [new() { CommandText = "ping" }] });

@@ -1080,4 +1080,26 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
   <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
   <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input.</value></data>
+  <data name="ConnectDiagChecking" xml:space="preserve"><value>{0}: connection failed; checking details…</value></data>
+  <data name="ConnectDiagOwnerSummary" xml:space="preserve"><value>{0}: connection failed; open in {1} (PID {2}).</value></data>
+  <data name="ConnectDiagSummary" xml:space="preserve"><value>{0}: connection failed. {1}</value></data>
+  <data name="ConnectDiagOwners" xml:space="preserve"><value>Programs confirmed to have this port open:</value></data>
+  <data name="ConnectDiagThisApp" xml:space="preserve"><value>[this app]</value></data>
+  <data name="ConnectDiagCloseOwner" xml:space="preserve"><value>Close the port connection in that program, then retry Connect.</value></data>
+  <data name="ConnectDiagProbeTimeout" xml:space="preserve"><value>Owner lookup reached its time limit; no program was identified.</value></data>
+  <data name="ConnectDiagProbeLimited" xml:space="preserve"><value>No owner was identified. Some processes could not be inspected because of permissions or scan limits.</value></data>
+  <data name="ConnectDiagProbeAbsent" xml:space="preserve"><value>The port mapping was unavailable when checking its owner. Refresh the port list.</value></data>
+  <data name="ConnectDiagProbeUnavailable" xml:space="preserve"><value>Owner lookup is unavailable in this environment.</value></data>
+  <data name="ConnectDiagProbeUnknown" xml:space="preserve"><value>No owner was identified. This does not prove that the port is free.</value></data>
+  <data name="ConnectDiagNativeCode" xml:space="preserve"><value>Windows error: {0} (0x{0:X8})</value></data>
+  <data name="ConnectDiagOriginalError" xml:space="preserve"><value>Original error:</value></data>
+  <data name="ConnectDiagUnnamedProcess" xml:space="preserve"><value>Process name unavailable</value></data>
+  <data name="ConnectDiagAccessDenied" xml:space="preserve"><value>Access to the port was denied. Another connection, permissions, or the device driver may be responsible.</value></data>
+  <data name="ConnectDiagPortBusy" xml:space="preserve"><value>The port could not be opened because it is reported as in use or sharing is restricted.</value></data>
+  <data name="ConnectDiagPortMissing" xml:space="preserve"><value>The selected port was not found. Refresh ports and check the USB connection and driver.</value></data>
+  <data name="ConnectDiagDeviceUnavailable" xml:space="preserve"><value>The device is disconnected, unavailable, or its driver reported an error. Check the device and USB connection.</value></data>
+  <data name="ConnectDiagOpenTimeout" xml:space="preserve"><value>Opening the port timed out. Check the device and driver; wait for the previous connection to finish closing.</value></data>
+  <data name="ConnectDiagSettings" xml:space="preserve"><value>The requested port settings are invalid or unsupported by this device or driver.</value></data>
+  <data name="ConnectDiagOpenFailed" xml:space="preserve"><value>The port could not be opened. Check the device, cable, driver, and other serial programs.</value></data>
+  <data name="ConnectDiagSessionStartup" xml:space="preserve"><value>The connection session could not be started. Check the original error below; port ownership was not queried for a session startup failure.</value></data>
 </root>

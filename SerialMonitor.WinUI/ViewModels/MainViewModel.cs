@@ -710,14 +710,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         ProfileOnly
     }
 
-    private enum ConnectFailureKind
-    {
-        AccessDenied,
-        PortNotFound,
-        OpenFailed,
-        Unknown
-    }
-
     private readonly record struct ResourceSnapshot(
         long DiskFreeBytes,
         long DiskTotalBytes,
@@ -4338,6 +4330,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool TryBeginShutdown()
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return false;
+        _connectDiagnosticStop.Cancel();
         IsTerminalDirectInputEnabled = false;
         _eventPresentationStop?.Cancel();
         _wasSequenceRunningDuringShutdown = IsSequenceRunning;
@@ -4354,6 +4347,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _connectDiagnosticStop.Cancel();
         await DisposeProtocolAnalysisAsync();
         IsTerminalDirectInputEnabled = false;
         await _terminalInputCleanup;
@@ -6448,6 +6442,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         IsBusy = true;
         RecordConnectRequested(settings);
+        var openingPort = false;
         try
         {
             if (_connectionCancellation is not null && !IsConnected)
@@ -6471,12 +6466,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 CancellationToken.None);
             cancellationToken.ThrowIfCancellationRequested();
             ApplySessionFileNaming(requestNewFile: false);
+            openingPort = true;
             await _serialService.ConnectAsync(
                 settings,
                 CreateLiveModeReceiveOptions(requestedHexGroupTimeoutMs),
                 _connectionCancellation.Token);
             cancellationToken.ThrowIfCancellationRequested();
             EnsureSerialConnectedAfterStartup();
+            openingPort = false;
             ApplyRxDisplayRuntime(
                 requestedRxDisplayMode,
                 requestedHexGroupTimeoutMs,
@@ -6522,7 +6519,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 SetStatus(string.IsNullOrEmpty(cleanupError) ? "Connection canceled." : $"Connection canceled. {cleanupError}");
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            RecordConnectFailure(settings, ex, cleanupError);
+            await RecordConnectFailureAsync(settings, ex, cleanupError, cancellationToken, openingPort);
         }
         finally
         {
@@ -6599,34 +6596,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         RefreshStatusBar();
     }
 
-    private void RecordConnectFailure(SerialSettings settings, Exception exception, string cleanupError)
-    {
-        var kind = ClassifyConnectFailure(exception);
-        var reason = CreateConnectFailureReason(settings.PortName, kind);
-        var status = CreateConnectFailureStatus(settings.PortName, kind);
-        var relevantException = GetRelevantConnectException(exception);
-
-        RuntimeDiagnostics.RecordError("MainViewModel.ConnectAsync", exception);
-
-        _lastConnectRequestedPort = settings.PortName;
-        _lastConnectRequestedBaud = settings.BaudRate;
-        _lastConnectResult = string.IsNullOrWhiteSpace(cleanupError)
-            ? "failed"
-            : $"failed; {cleanupError}";
-        _lastConnectFailureReason = reason;
-        _lastConnectExceptionType = relevantException.GetType().Name;
-        _lastConnectFailureTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
-        _selectedPortAfterConnectFailure = SelectedPort ?? "(none)";
-        _lastBackgroundError = string.IsNullOrWhiteSpace(cleanupError)
-            ? status
-            : $"{status} {cleanupError}";
-
-        NotifyConnectDiagnosticsChanged();
-        SetStatus(_lastBackgroundError);
-        RefreshStatusBar();
-        RequestConnectFailureDialog(settings, reason);
-    }
-
     private void RequestConnectFailureDialog(SerialSettings settings, string reason)
     {
         try
@@ -6656,105 +6625,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastConnectExceptionType));
         OnPropertyChanged(nameof(LastConnectFailureTimeText));
         OnPropertyChanged(nameof(SelectedPortAfterConnectFailure));
-    }
-
-    private static string CreateConnectFailureReason(string portName, ConnectFailureKind kind)
-    {
-        return kind switch
-        {
-            ConnectFailureKind.AccessDenied =>
-                $"Port {portName} is already in use or access was denied. Close other serial terminals and try again.",
-            ConnectFailureKind.PortNotFound =>
-                $"Selected port {portName} was not found. Refresh ports and check the cable or driver.",
-            ConnectFailureKind.OpenFailed =>
-                $"Port {portName} could not be opened. Check the cable, driver, and whether another terminal is connected.",
-            _ =>
-                $"Port {portName} could not be opened. Hover over the footer health status for details."
-        };
-    }
-
-    private static string CreateConnectFailureStatus(string portName, ConnectFailureKind kind)
-    {
-        return kind switch
-        {
-            ConnectFailureKind.AccessDenied => $"Connect failed: {portName} is in use or access denied.",
-            ConnectFailureKind.PortNotFound => $"Connect failed: {portName} not found.",
-            ConnectFailureKind.OpenFailed => $"Connect failed: {portName} could not be opened.",
-            _ => $"Connect failed: {portName}. Hover over the footer health status for details."
-        };
-    }
-
-    private static ConnectFailureKind ClassifyConnectFailure(Exception exception)
-    {
-        var relevantException = GetRelevantConnectException(exception);
-        var message = CreateExceptionMessageChain(exception).ToLowerInvariant();
-
-        if (relevantException is UnauthorizedAccessException ||
-            message.Contains("access denied", StringComparison.Ordinal) ||
-            message.Contains("access is denied", StringComparison.Ordinal) ||
-            message.Contains("unauthorized", StringComparison.Ordinal) ||
-            message.Contains("already in use", StringComparison.Ordinal) ||
-            message.Contains("being used", StringComparison.Ordinal) ||
-            message.Contains("busy", StringComparison.Ordinal))
-        {
-            return ConnectFailureKind.AccessDenied;
-        }
-
-        if (relevantException is FileNotFoundException or DirectoryNotFoundException ||
-            message.Contains("not found", StringComparison.Ordinal) ||
-            message.Contains("does not exist", StringComparison.Ordinal) ||
-            message.Contains("not exist", StringComparison.Ordinal) ||
-            message.Contains("cannot find", StringComparison.Ordinal) ||
-            message.Contains("no such", StringComparison.Ordinal) ||
-            message.Contains("invalid port", StringComparison.Ordinal))
-        {
-            return ConnectFailureKind.PortNotFound;
-        }
-
-        if (relevantException is IOException ||
-            message.Contains("could not open", StringComparison.Ordinal) ||
-            message.Contains("cannot open", StringComparison.Ordinal) ||
-            message.Contains("failed to open", StringComparison.Ordinal) ||
-            message.Contains("open failed", StringComparison.Ordinal) ||
-            message.Contains("semaphore timeout", StringComparison.Ordinal))
-        {
-            return ConnectFailureKind.OpenFailed;
-        }
-
-        return ConnectFailureKind.Unknown;
-    }
-
-    private static Exception GetRelevantConnectException(Exception exception)
-    {
-        var current = exception;
-        while (current.InnerException is not null)
-        {
-            current = current.InnerException;
-        }
-
-        return current;
-    }
-
-    private static string CreateExceptionMessageChain(Exception exception)
-    {
-        var builder = new StringBuilder();
-        var current = exception;
-        while (current is not null)
-        {
-            if (!string.IsNullOrWhiteSpace(current.Message))
-            {
-                if (builder.Length > 0)
-                {
-                    builder.Append(' ');
-                }
-
-                builder.Append(current.Message);
-            }
-
-            current = current.InnerException;
-        }
-
-        return builder.ToString();
     }
 
     private Task DisconnectAsync()

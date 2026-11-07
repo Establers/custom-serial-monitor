@@ -1191,11 +1191,17 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Root.XamlRoot,
             Title = UiText.Get("ConnectFailureTitle", "Failed to connect"),
-            Content = new TextBlock
+            Content = new ScrollViewer
             {
-                Text = request.Message,
-                TextWrapping = TextWrapping.WrapWholeWords,
-                MaxWidth = 420
+                MaxHeight = 420,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = new TextBlock
+                {
+                    Text = request.Message,
+                    TextWrapping = TextWrapping.WrapWholeWords,
+                    IsTextSelectionEnabled = true,
+                    MaxWidth = 420
+                }
             },
             CloseButtonText = "OK",
             DefaultButton = ContentDialogButton.Close

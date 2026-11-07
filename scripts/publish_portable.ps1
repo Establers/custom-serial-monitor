@@ -231,6 +231,13 @@ $requiredAssets = @(
     "agent-plugin\plugins\serial-monitor\scripts\Start-SerialMonitorMcp.ps1",
     "agent-plugin\plugins\serial-monitor\skills\serial-monitor-control\SKILL.md",
     "tools\serialctl.exe",
+    "PortDiagnostics\SerialMonitor.PortDiagnosticWorker.exe",
+    "PortDiagnostics\SerialMonitor.PortDiagnosticWorker.dll",
+    "PortDiagnostics\SerialMonitor.PortDiagnosticWorker.deps.json",
+    "PortDiagnostics\SerialMonitor.PortDiagnosticWorker.runtimeconfig.json",
+    "PortDiagnostics\SerialMonitor.Core.dll",
+    "PortDiagnostics\hostfxr.dll",
+    "PortDiagnostics\coreclr.dll",
     "LICENSE"
 )
 

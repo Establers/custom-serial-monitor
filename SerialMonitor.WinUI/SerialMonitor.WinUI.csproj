@@ -35,7 +35,43 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.Core\SerialMonitor.Core.csproj" />
+    <ProjectReference Include="..\SerialMonitor.PortDiagnosticWorker\SerialMonitor.PortDiagnosticWorker.csproj"
+                      ReferenceOutputAssembly="false" SetPlatform="Platform=AnyCPU" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained" />
   </ItemGroup>
+
+  <Target Name="CollectPortDiagnosticWorker" BeforeTargets="GetCopyToOutputDirectoryItems;ComputeFilesToPublish" DependsOnTargets="ResolveProjectReferences">
+    <MSBuild Projects="..\SerialMonitor.PortDiagnosticWorker\SerialMonitor.PortDiagnosticWorker.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=AnyCPU" RemoveProperties="RuntimeIdentifier;SelfContained">
+      <Output TaskParameter="TargetOutputs" ItemName="PortDiagnosticAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <PortDiagnosticFiles Include="@(PortDiagnosticAssembly);@(PortDiagnosticAssembly->'%(RootDir)%(Directory)%(Filename).exe');@(PortDiagnosticAssembly->'%(RootDir)%(Directory)%(Filename).deps.json');@(PortDiagnosticAssembly->'%(RootDir)%(Directory)%(Filename).runtimeconfig.json');@(PortDiagnosticAssembly->'%(RootDir)%(Directory)SerialMonitor.Core.dll')" />
+      <ContentWithTargetPath Include="@(PortDiagnosticFiles)" TargetPath="PortDiagnostics\%(Filename)%(Extension)"
+                             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <!-- A portable app must not require an installed .NET runtime just for diagnostics. -->
+  <Target Name="PublishPortDiagnosticWorker" AfterTargets="ComputeFilesToPublish">
+    <PropertyGroup>
+      <PortDiagnosticSelfContained Condition="'$(SelfContained)' == 'true'">true</PortDiagnosticSelfContained>
+      <PortDiagnosticSelfContained Condition="'$(SelfContained)' != 'true'">false</PortDiagnosticSelfContained>
+      <PortDiagnosticPublishDirectory>$(MSBuildProjectDirectory)\obj\PortDiagnosticPublish\$(Configuration)\self-contained-$(PortDiagnosticSelfContained)\</PortDiagnosticPublishDirectory>
+    </PropertyGroup>
+    <MSBuild Projects="..\SerialMonitor.PortDiagnosticWorker\SerialMonitor.PortDiagnosticWorker.csproj"
+             Targets="Restore;Publish" BuildInParallel="false"
+             Properties="Configuration=$(Configuration);Platform=AnyCPU;RuntimeIdentifier=win-x64;SelfContained=$(PortDiagnosticSelfContained);PublishSingleFile=false;PublishTrimmed=false;PublishDir=$(PortDiagnosticPublishDirectory);NoBuild=false"
+             RemoveProperties="RuntimeIdentifierOverride" />
+    <Error Condition="!Exists('$(PortDiagnosticPublishDirectory)SerialMonitor.PortDiagnosticWorker.exe') or !Exists('$(PortDiagnosticPublishDirectory)SerialMonitor.PortDiagnosticWorker.dll') or !Exists('$(PortDiagnosticPublishDirectory)SerialMonitor.PortDiagnosticWorker.runtimeconfig.json') or !Exists('$(PortDiagnosticPublishDirectory)SerialMonitor.PortDiagnosticWorker.deps.json') or !Exists('$(PortDiagnosticPublishDirectory)SerialMonitor.Core.dll')"
+           Text="Port diagnostic worker publish payload is incomplete." />
+    <Error Condition="'$(PortDiagnosticSelfContained)' == 'true' and (!Exists('$(PortDiagnosticPublishDirectory)hostfxr.dll') or !Exists('$(PortDiagnosticPublishDirectory)coreclr.dll'))"
+           Text="The portable port diagnostic worker is missing its .NET runtime." />
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('PortDiagnostics\')) or $([System.String]::Copy('%(ResolvedFileToPublish.Filename)').StartsWith('SerialMonitor.PortDiagnosticWorker'))" />
+      <PortDiagnosticPublishedFiles Include="$(PortDiagnosticPublishDirectory)**\*" Exclude="$(PortDiagnosticPublishDirectory)**\*.pdb" />
+      <ResolvedFileToPublish Include="@(PortDiagnosticPublishedFiles)" RelativePath="PortDiagnostics\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="SerialMonitor.WinUI.Tests" />
