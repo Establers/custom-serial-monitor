@@ -2832,9 +2832,7 @@
                             <StackPanel Spacing="4"
                                         MinWidth="440"
                                         Width="{Binding ViewportWidth, ElementName=BridgeFormScrollViewer}"
-                                        Padding="6"
-                                        MaxWidth="760"
-                                        HorizontalAlignment="Left">
+                                        Padding="6">
                                 <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="8,4">
                                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                         <TextBlock Text="Serial bridge"
@@ -3053,9 +3051,7 @@
                             <StackPanel Spacing="4"
                                         MinWidth="440"
                                         Width="{Binding ViewportWidth, ElementName=LogFormScrollViewer}"
-                                        Padding="6"
-                                        MaxWidth="760"
-                                        HorizontalAlignment="Left">
+                                        Padding="6">
                                 <Border Style="{StaticResource FormCardBorderStyle}">
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="Capture"
@@ -3273,9 +3269,7 @@
                             <StackPanel Spacing="4"
                                         MinWidth="440"
                                         Width="{Binding ViewportWidth, ElementName=SettingsFormScrollViewer}"
-                                        Padding="6"
-                                        MaxWidth="760"
-                                        HorizontalAlignment="Left">
+                                        Padding="6">
                                 <Border Style="{StaticResource FormCardBorderStyle}">
                                     <StackPanel Spacing="4">
                                         <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
