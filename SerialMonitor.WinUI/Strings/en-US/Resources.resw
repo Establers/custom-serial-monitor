@@ -1142,12 +1142,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolFilterFunctionError" xml:space="preserve"><value>Enter a function code in HEX from 00 to FF, or leave it empty.</value></data>
   <data name="ProtocolNoMatches" xml:space="preserve"><value>No matching packets</value></data>
   <data name="ProtocolNoMatchesHelp" xml:space="preserve"><value>Change or reset the filters. Analysis continues in the background.</value></data>
-  <data name="FormLogTitle.Text" xml:space="preserve">
-    <value>Log files</value>
-  </data>
-  <data name="FormLogDescription.Text" xml:space="preserve">
-    <value>Save live traffic, export retained records, and manage log files.</value>
-  </data>
   <data name="FormLogCapture.Text" xml:space="preserve">
     <value>Capture</value>
   </data>
@@ -1157,12 +1151,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="FormLogRotation.Text" xml:space="preserve">
     <value>File rotation</value>
   </data>
-  <data name="FormSettingsTitle.Text" xml:space="preserve">
-    <value>Settings</value>
-  </data>
-  <data name="FormSettingsDescription.Text" xml:space="preserve">
-    <value>Connection, terminal appearance, and saved preferences.</value>
-  </data>
   <data name="FormSerialBehavior.Text" xml:space="preserve">
     <value>Data and connection behavior</value>
   </data>
@@ -1170,9 +1158,12 @@ Review commands and Terminal/HEX mode before running.</value></data>
     <value>Serial bridge</value>
   </data>
   <data name="FormBridgeDescription.Text" xml:space="preserve">
-    <value>Forward raw bytes between your device and a paired virtual COM port.</value>
+    <value>Raw bytes · Device ↔ paired virtual COM port</value>
   </data>
   <data name="FormBridgeDetails.Header" xml:space="preserve">
     <value>How the bridge works</value>
+  </data>
+  <data name="StaticUi180.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Reset custom background</value>
   </data>
 </root>
