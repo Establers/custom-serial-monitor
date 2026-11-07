@@ -37,6 +37,13 @@
             <Setter Property="BorderBrush" Value="{ThemeResource AppSurfaceBorderBrush}" />
             <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
         </Style>
+        <Style x:Key="ToolbarToggle" TargetType="ToggleButton">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
     </UserControl.Resources>
 
     <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*" MinHeight="0" MinWidth="0">
@@ -52,12 +59,47 @@
                         <TextBlock Grid.Column="1" Text="{Binding RetainedSummary}" Style="{StaticResource ColumnHeader}" />
                     </Grid>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5">
+                        <ToggleButton Content="{Binding FollowLabel}" IsChecked="{Binding IsFollowingLatest, Mode=TwoWay}"
+                                      Style="{StaticResource ToolbarToggle}" ToolTipService.ToolTip="{Binding FollowToolTip}" />
+                        <ToggleButton Content="{Binding PauseLabel}" IsChecked="{Binding IsDisplayPaused, Mode=TwoWay}"
+                                      Style="{StaticResource ToolbarToggle}" ToolTipService.ToolTip="{Binding PauseToolTip}" />
+                        <Button Content="{Binding FilterLabel}" Style="{StaticResource ToolbarButton}" ToolTipService.ToolTip="{Binding FilterSummary}">
+                            <Button.Flyout>
+                                <Flyout x:Name="FilterFlyout" Opening="FilterFlyout_Opening" Placement="BottomEdgeAlignedRight">
+                                    <StackPanel x:Name="FilterEditorPanel" Width="320" Spacing="10">
+                                        <TextBlock Text="{Binding FilterTitle}" FontSize="14" FontWeight="SemiBold" />
+                                        <Grid ColumnDefinitions="84,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
+                                            <TextBlock Text="{Binding FilterUnitLabel}" FontSize="12" VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Text="{Binding FilterUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     PlaceholderText="{Binding FilterUnitPlaceholder}" MaxLength="3" FontSize="12" KeyDown="FilterInput_KeyDown" />
+                                            <TextBlock Grid.Row="1" Text="{Binding FilterFunctionLabel}" FontSize="12" VerticalAlignment="Center" />
+                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FilterFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     PlaceholderText="{Binding FilterFunctionPlaceholder}" MaxLength="4" FontSize="12" KeyDown="FilterInput_KeyDown" />
+                                            <TextBlock Grid.Row="2" Text="{Binding FilterDirectionLabel}" FontSize="12" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding FilterDirectionOptions}"
+                                                      SelectedIndex="{Binding FilterDirectionIndex, Mode=TwoWay}" FontSize="12" HorizontalAlignment="Stretch" />
+                                            <TextBlock Grid.Row="3" Text="{Binding FilterStateLabel}" FontSize="12" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding FilterStatusOptions}"
+                                                      SelectedIndex="{Binding FilterStatusIndex, Mode=TwoWay}" FontSize="12" HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding FilterFunctionHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding FilterScopeHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding FilterValidationError}" Visibility="{Binding FilterValidationVisibility}"
+                                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Button Content="{Binding ResetFiltersLabel}" Click="ResetFilters_Click" FontSize="12" />
+                                            <Button Grid.Column="1" Content="{Binding ApplyFiltersLabel}" Click="ApplyFilters_Click" FontSize="12" Style="{StaticResource AccentButtonStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                         <Button Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ToolbarButton}" />
                         <Button Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" Style="{StaticResource ToolbarButton}" />
                     </StackPanel>
                 </Grid>
                 <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,2.6*" ColumnSpacing="10"
-                      ToolTipService.ToolTip="{Binding Statistics}">
+                      ToolTipService.ToolTip="{Binding StatisticsToolTip}">
                     <TextBlock Text="{Binding TrafficSummary}" Style="{StaticResource CellText}" />
                     <Border Grid.Column="1" Width="1" Margin="0,1" Background="{ThemeResource AppSurfaceBorderBrush}" />
                     <TextBlock Grid.Column="2" Text="{Binding CrcSummary}" Style="{StaticResource CellText}" />
@@ -82,12 +124,12 @@
                 <Grid RowDefinitions="Auto,*" MinHeight="0">
                     <Border Background="{ThemeResource InspectorHeaderBrush}" BorderThickness="0,0,0,1"
                             BorderBrush="{ThemeResource AppSurfaceBorderBrush}" Padding="8,4,22,4">
-                        <Grid ColumnDefinitions="82,32,30,30,48,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="82,32,30,30,82,*" ColumnSpacing="8">
                             <TextBlock Text="{Binding TimeLabel}" Style="{StaticResource ColumnHeader}" />
                             <TextBlock Grid.Column="1" Text="RX/TX" Style="{StaticResource ColumnHeader}" />
                             <TextBlock Grid.Column="2" Text="ID" Style="{StaticResource ColumnHeader}" />
                             <TextBlock Grid.Column="3" Text="FC" Style="{StaticResource ColumnHeader}" />
-                            <TextBlock Grid.Column="4" Text="CRC" Style="{StaticResource ColumnHeader}" />
+                            <TextBlock Grid.Column="4" Text="{Binding StateLabel}" Style="{StaticResource ColumnHeader}" ToolTipService.ToolTip="{Binding StateToolTip}" />
                             <TextBlock Grid.Column="5" Text="{Binding FunctionLabel}" Style="{StaticResource ColumnHeader}" />
                         </Grid>
                     </Border>
@@ -107,7 +149,7 @@
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid ColumnDefinitions="82,32,30,30,48,*" ColumnSpacing="8"
+                                    <Grid ColumnDefinitions="82,32,30,30,82,*" ColumnSpacing="8"
                                           ToolTipService.ToolTip="{Binding Summary}" AutomationProperties.Name="{Binding Heading}">
                                         <TextBlock Text="{Binding TimeText}" FontFamily="Consolas" Style="{StaticResource CellText}" />
                                         <Border Grid.Column="1" Background="{ThemeResource AppAccentTintBrush}" CornerRadius="3" Padding="2,0">
@@ -116,8 +158,8 @@
                                         <TextBlock Grid.Column="2" Text="{Binding UnitText}" FontFamily="Consolas" Style="{StaticResource CellText}" />
                                         <TextBlock Grid.Column="3" Text="{Binding FunctionCodeText}" FontFamily="Consolas" Style="{StaticResource CellText}" />
                                         <Grid Grid.Column="4">
-                                            <TextBlock Text="{Binding CrcText}" Visibility="{Binding CrcOtherVisibility}" Style="{StaticResource CellText}" FontFamily="Consolas" />
-                                            <TextBlock Text="{Binding CrcText}" Visibility="{Binding CrcErrorVisibility}" Style="{StaticResource CellText}" FontFamily="Consolas"
+                                            <TextBlock Text="{Binding StatusText}" Visibility="{Binding NeutralVisibility}" Style="{StaticResource CellText}" />
+                                            <TextBlock Text="{Binding StatusText}" Visibility="{Binding ErrorVisibility}" Style="{StaticResource CellText}"
                                                        Foreground="{ThemeResource ErrorTextBrush}" FontWeight="SemiBold" />
                                         </Grid>
                                         <TextBlock Grid.Column="5" Text="{Binding FunctionText}" Style="{StaticResource CellText}" />

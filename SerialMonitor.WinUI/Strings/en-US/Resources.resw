@@ -1102,4 +1102,44 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ConnectDiagSettings" xml:space="preserve"><value>The requested port settings are invalid or unsupported by this device or driver.</value></data>
   <data name="ConnectDiagOpenFailed" xml:space="preserve"><value>The port could not be opened. Check the device, cable, driver, and other serial programs.</value></data>
   <data name="ConnectDiagSessionStartup" xml:space="preserve"><value>The connection session could not be started. Check the original error below; port ownership was not queried for a session startup failure.</value></data>
+  <data name="ProtocolState" xml:space="preserve"><value>State</value></data>
+  <data name="ProtocolStateHelp" xml:space="preserve"><value>CRC errors, incomplete data and exception responses are shown separately. CRC OK does not imply request success.</value></data>
+  <data name="ProtocolStateCrcError" xml:space="preserve"><value>CRC error</value></data>
+  <data name="ProtocolStateIncomplete" xml:space="preserve"><value>Incomplete</value></data>
+  <data name="ProtocolStateUndecoded" xml:space="preserve"><value>Undecoded</value></data>
+  <data name="ProtocolStateException" xml:space="preserve"><value>Exception</value></data>
+  <data name="ProtocolStateExceptionFormat" xml:space="preserve"><value>Exception {0:X2}</value></data>
+  <data name="ProtocolFollow" xml:space="preserve"><value>Follow</value></data>
+  <data name="ProtocolFollowHelp" xml:space="preserve"><value>Follow new matching results. Selecting a packet or scrolling upward stops following.</value></data>
+  <data name="ProtocolPauseDisplay" xml:space="preserve"><value>Pause list</value></data>
+  <data name="ProtocolResumeDisplayFormat" xml:space="preserve"><value>Resume (+{0:N0})</value></data>
+  <data name="ProtocolPauseHelp" xml:space="preserve"><value>Freeze only this packet list. RX, analysis, statistics and bounded recent history continue.</value></data>
+  <data name="ProtocolResumeHelp" xml:space="preserve"><value>Resume the retained results. {0:N0} new analysis results since this view was frozen.</value></data>
+  <data name="ProtocolStatisticsHelp" xml:space="preserve"><value>Cumulative statistics include all analyzed traffic, regardless of filters or list pause.</value></data>
+  <data name="ProtocolDisplayPaused" xml:space="preserve"><value>Packet list paused</value></data>
+  <data name="ProtocolPausedEmptyHelp" xml:space="preserve"><value>New results remain in recent history. Resume the list to see them.</value></data>
+  <data name="ProtocolPausedActivityFormat" xml:space="preserve"><value>{0} · list paused</value></data>
+  <data name="ProtocolShownFormat" xml:space="preserve"><value>Shown {0:N0} / retained {1:N0}</value></data>
+  <data name="ProtocolSelectionFiltered" xml:space="preserve"><value>The selected packet is excluded by the current filters.</value></data>
+  <data name="ProtocolFilter" xml:space="preserve"><value>Filter</value></data>
+  <data name="ProtocolFilterCountFormat" xml:space="preserve"><value>Filter ({0})</value></data>
+  <data name="ProtocolFilterTitle" xml:space="preserve"><value>Filter recent packets</value></data>
+  <data name="ProtocolFilterUnit" xml:space="preserve"><value>Unit ID</value></data>
+  <data name="ProtocolFilterUnitHint" xml:space="preserve"><value>All, or 0–255 (decimal)</value></data>
+  <data name="ProtocolFilterFunctionHint" xml:space="preserve"><value>All, or 03 / 0x03</value></data>
+  <data name="ProtocolFilterFunctionHelp" xml:space="preserve"><value>03 also includes exception 83. Enter 83 to show only that exception function.</value></data>
+  <data name="ProtocolFilterDirection" xml:space="preserve"><value>Direction</value></data>
+  <data name="ProtocolFilterApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="ProtocolFilterReset" xml:space="preserve"><value>Reset filters</value></data>
+  <data name="ProtocolFilterPausedHelp" xml:space="preserve"><value>These filters apply to the frozen list. Resume to include newly retained packets.</value></data>
+  <data name="ProtocolFilterScopeHelp" xml:space="preserve"><value>Filters affect this list only. Cumulative statistics include all analysis results.</value></data>
+  <data name="ProtocolFilterAllDirections" xml:space="preserve"><value>All directions</value></data>
+  <data name="ProtocolFilterAllStates" xml:space="preserve"><value>All states</value></data>
+  <data name="ProtocolFilterProblems" xml:space="preserve"><value>CRC errors / exceptions</value></data>
+  <data name="ProtocolFilterCrcValid" xml:space="preserve"><value>CRC valid (incl. exceptions)</value></data>
+  <data name="ProtocolFilterOpenHelp" xml:space="preserve"><value>Filter by unit ID, function, direction or analysis state.</value></data>
+  <data name="ProtocolFilterUnitError" xml:space="preserve"><value>Enter a decimal unit ID from 0 to 255, or leave it empty.</value></data>
+  <data name="ProtocolFilterFunctionError" xml:space="preserve"><value>Enter a function code in HEX from 00 to FF, or leave it empty.</value></data>
+  <data name="ProtocolNoMatches" xml:space="preserve"><value>No matching packets</value></data>
+  <data name="ProtocolNoMatchesHelp" xml:space="preserve"><value>Change or reset the filters. Analysis continues in the background.</value></data>
 </root>

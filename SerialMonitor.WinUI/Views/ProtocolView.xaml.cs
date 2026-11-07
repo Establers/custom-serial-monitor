@@ -1,7 +1,9 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI.Views;
@@ -12,8 +14,17 @@ public sealed partial class ProtocolView : UserControl
     private TabView? _tabs;
     private TabViewItem? _tab;
     private bool _isNarrow;
+    private ProtocolViewModel? _attachedModel;
+    private bool _latestScrollQueued;
+    private int _viewGeneration;
     private ProtocolViewModel? Model => DataContext as ProtocolViewModel;
-    public ProtocolView() => InitializeComponent();
+    public ProtocolView()
+    {
+        InitializeComponent();
+        PacketList.AddHandler(PointerPressedEvent, new PointerEventHandler(PacketList_PointerPressed), true);
+        PacketList.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(PacketList_PointerWheelChanged), true);
+        PacketList.AddHandler(KeyDownEvent, new KeyEventHandler(PacketList_KeyDown), true);
+    }
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs args)
     {
@@ -36,6 +47,11 @@ public sealed partial class ProtocolView : UserControl
 
     private void View_Loaded(object sender, RoutedEventArgs args)
     {
+        _viewGeneration++;
+        _latestScrollQueued = false;
+        if (_attachedModel is not null) _attachedModel.LatestRequested -= Model_LatestRequested;
+        _attachedModel = Model;
+        if (_attachedModel is not null) _attachedModel.LatestRequested += Model_LatestRequested;
         DependencyObject? parent = this;
         while ((parent = VisualTreeHelper.GetParent(parent)) is not null)
         {
@@ -43,7 +59,11 @@ public sealed partial class ProtocolView : UserControl
             if (parent is TabView tabs) { _tabs = tabs; break; }
         }
         _tab ??= _tabs?.TabItems.OfType<TabViewItem>().FirstOrDefault(item => ReferenceEquals(item.Content, this));
-        if (_tabs is not null) _tabs.SelectionChanged += Tabs_SelectionChanged;
+        if (_tabs is not null)
+        {
+            _tabs.SelectionChanged -= Tabs_SelectionChanged;
+            _tabs.SelectionChanged += Tabs_SelectionChanged;
+        }
         _timer ??= DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(200);
         _timer.Tick -= Timer_Tick;
@@ -59,7 +79,7 @@ public sealed partial class ProtocolView : UserControl
         {
             var restoreSelection = visible && !model.IsVisible;
             model.IsVisible = visible;
-            if (restoreSelection && model.SelectedFrame is not null)
+            if (restoreSelection && model.SelectedFrame is not null && (!model.IsFollowingLatest || model.IsDisplayPaused))
                 DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
                 {
                     if (Model is { IsVisible: true, SelectedFrame: { } selected })
@@ -72,8 +92,66 @@ public sealed partial class ProtocolView : UserControl
     private void Clear_Click(object sender, RoutedEventArgs args) => Model?.Clear();
     private void ResetStatistics_Click(object sender, RoutedEventArgs args) => Model?.ResetStatistics();
 
+    private void Model_LatestRequested(object? sender, EventArgs args)
+    {
+        if (_latestScrollQueued) return;
+        _latestScrollQueued = true;
+        var generation = _viewGeneration;
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (generation != _viewGeneration) return;
+            _latestScrollQueued = false;
+            if (Model is { IsVisible: true, IsFollowingLatest: true, IsDisplayPaused: false } model && model.Frames.Count > 0)
+                PacketList.ScrollIntoView(model.Frames[^1]);
+        })) _latestScrollQueued = false;
+    }
+
+    private void PacketList_PointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        if (Model is { } model) model.IsFollowingLatest = false;
+    }
+
+    private void PacketList_PointerWheelChanged(object sender, PointerRoutedEventArgs args)
+    {
+        if (args.GetCurrentPoint(PacketList).Properties.MouseWheelDelta > 0 && Model is { } model)
+            model.IsFollowingLatest = false;
+    }
+
+    private void PacketList_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (AppShortcuts.Matches(AppShortcutAction.TextNavigation, args.Key) && Model is { } model)
+            model.IsFollowingLatest = false;
+    }
+
+    private void FilterFlyout_Opening(object sender, object args)
+    {
+        FilterEditorPanel.DataContext = Model;
+        Model?.BeginFilterEdit();
+    }
+
+    private void ApplyFilters_Click(object sender, RoutedEventArgs args) => ApplyFilters();
+    private void ApplyFilters()
+    {
+        if (Model?.TryApplyFilters() == true) FilterFlyout.Hide();
+    }
+    private void ResetFilters_Click(object sender, RoutedEventArgs args)
+    {
+        Model?.ResetFilters();
+        FilterFlyout.Hide();
+    }
+    private void FilterInput_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (!AppShortcuts.Matches(AppShortcutAction.EditorConfirm, args.Key)) return;
+        args.Handled = true;
+        ApplyFilters();
+    }
+
     private void View_Unloaded(object sender, RoutedEventArgs args)
     {
+        _viewGeneration++;
+        _latestScrollQueued = false;
+        if (_attachedModel is not null) _attachedModel.LatestRequested -= Model_LatestRequested;
+        _attachedModel = null;
         if (_tabs is not null) _tabs.SelectionChanged -= Tabs_SelectionChanged;
         if (_timer is not null) { _timer.Stop(); _timer.Tick -= Timer_Tick; }
         if (Model is { } model) model.IsVisible = false;

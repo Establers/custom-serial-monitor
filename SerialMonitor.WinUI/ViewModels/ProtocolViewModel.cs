@@ -5,31 +5,20 @@ using SerialMonitor.WinUI.Infrastructure;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
-public sealed class ProtocolFrameRow(ModbusRtuFrame frame)
-{
-    public ModbusRtuFrame Frame { get; } = frame;
-    public long Id => Frame.Id;
-    // Bind individual columns only for realized rows; avoid expanding every
-    // retained packet into presentation strings when a hidden tab is reopened.
-    public string TimeText => Frame.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
-    public string DirectionText => Frame.Direction == ProtocolDirection.Rx ? "RX" : "TX";
-    public string UnitText => Frame.UnitId?.ToString(CultureInfo.InvariantCulture) ?? "—";
-    public string FunctionCodeText => Frame.FunctionCode?.ToString("X2", CultureInfo.InvariantCulture) ?? "—";
-    public string FunctionText => ModbusRtuFrame.FunctionName(Frame.FunctionCode);
-    public string CrcText => Frame.CrcStatus switch { ModbusCrcStatus.Valid => "OK", ModbusCrcStatus.Invalid => "ERROR", _ => "—" };
-    public Visibility CrcErrorVisibility => Frame.CrcStatus == ModbusCrcStatus.Invalid ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility CrcOtherVisibility => Frame.CrcStatus == ModbusCrcStatus.Invalid ? Visibility.Collapsed : Visibility.Visible;
-    public string Heading => $"{TimeText}  {DirectionText}  ID {UnitText}  FC {FunctionCodeText}  ·  {Frame.Length} B";
-    public string Summary => $"{FunctionText} · {Frame.Kind} · {Frame.CrcStatus}";
-}
-
-public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBase
+public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBase
 {
     private int _selectedProtocolIndex;
     private long _version = -1;
     private long? _selectedId;
     private ProtocolFrameRow? _selectedFrame;
     private bool _isVisible;
+    private bool _isFollowingLatest = true;
+    private bool _isDisplayPaused;
+    private bool _hasDisplaySnapshot;
+    private long _displayedThroughFrameId;
+    private long _pauseBaselineId;
+    private long _pendingDisplayFrames;
+    private IReadOnlyList<ModbusRtuFrame> _displaySource = Array.Empty<ModbusRtuFrame>();
     private string _status = string.Empty;
     private string _statistics = string.Empty;
     private string _statisticsPeriod = string.Empty;
@@ -39,34 +28,53 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
     private string _crcSummary = string.Empty;
     private string _errorSummary = string.Empty;
     private string _otherSummary = string.Empty;
-    private string _details = UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
+    private string _details = SelectionPrompt;
+
     public IProtocolAnalyzer Analyzer { get; } = analyzer;
     public BulkObservableCollection<ProtocolFrameRow> Frames { get; } = new();
+    public event EventHandler? LatestRequested;
+    private static string SelectionPrompt => UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
     public string TabTitle => UiText.Get("ProtocolTitle", "Protocol");
     public string DisabledLabel => UiText.Get("ProtocolDisabled", "Not in use");
     public IReadOnlyList<string> ProtocolOptions { get; } = [UiText.Get("ProtocolDisabled", "Not in use"), "Modbus RTU"];
     public string ClearLabel => UiText.Get("ProtocolClear", "Clear results");
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
-    public string EmptyTitle => SelectedProtocolIndex == 1
-        ? UiText.Get("ProtocolWaitingTitle", "Waiting for packets")
-        : UiText.Get("ProtocolEmptyTitle", "Choose a protocol to start");
-    public string EmptyLabel => SelectedProtocolIndex == 1
-        ? UiText.Get("ProtocolWaitingHint", "New RX/TX packets appear here. Analysis continues across tabs.")
-        : UiText.Get("ProtocolEmpty", "Select Modbus RTU above to start analyzing new RX/TX.");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");
     public string TimeLabel => UiText.Get("ProtocolTime", "Time");
     public string FunctionLabel => UiText.Get("ProtocolFunction", "Function");
+    public string StateLabel => UiText.Get("ProtocolState", "State");
+    public string StateToolTip => UiText.Get("ProtocolStateHelp", "CRC errors, incomplete data and exception responses are shown separately. CRC OK does not imply request success.");
     public string RetentionLabel => UiText.Format("ProtocolRetention", "Recent {0:N0} · memory only · analysis across tabs", ModbusRtuAnalyzer.DefaultHistoryCapacity);
     public string ResetStatisticsLabel => UiText.Get("ProtocolResetStatistics", "Reset statistics");
+    public string FollowLabel => UiText.Get("ProtocolFollow", "Follow");
+    public string FollowToolTip => UiText.Get("ProtocolFollowHelp", "Follow new matching results. Selecting a packet or scrolling upward stops following.");
+    public string PauseLabel => IsDisplayPaused
+        ? UiText.Format("ProtocolResumeDisplayFormat", "Resume (+{0:N0})", PendingDisplayFrames) : UiText.Get("ProtocolPauseDisplay", "Pause list");
+    public string PauseToolTip => IsDisplayPaused
+        ? UiText.Format("ProtocolResumeHelp", "Resume the retained results. {0:N0} new analysis results since this view was frozen.", PendingDisplayFrames)
+        : UiText.Get("ProtocolPauseHelp", "Freeze only this packet list. RX, analysis, statistics and bounded recent history continue.");
+    public string StatisticsToolTip => $"{Statistics}\n{UiText.Get("ProtocolStatisticsHelp", "Cumulative statistics include all analyzed traffic, regardless of filters or list pause.")}";
+    public string EmptyTitle => HasActiveFilters && _displaySource.Count > 0
+        ? UiText.Get("ProtocolNoMatches", "No matching packets")
+        : IsDisplayPaused ? UiText.Get("ProtocolDisplayPaused", "Packet list paused")
+        : SelectedProtocolIndex == 1 ? UiText.Get("ProtocolWaitingTitle", "Waiting for packets")
+        : UiText.Get("ProtocolEmptyTitle", "Choose a protocol to start");
+    public string EmptyLabel => HasActiveFilters && _displaySource.Count > 0
+        ? UiText.Get("ProtocolNoMatchesHelp", "Change or reset the filters. Analysis continues in the background.")
+        : IsDisplayPaused ? UiText.Get("ProtocolPausedEmptyHelp", "New results remain in recent history. Resume the list to see them.")
+        : SelectedProtocolIndex == 1 ? UiText.Get("ProtocolWaitingHint", "New RX/TX packets appear here. Analysis continues across tabs.")
+        : UiText.Get("ProtocolEmpty", "Select Modbus RTU above to start analyzing new RX/TX.");
+
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
-    public string Statistics { get => _statistics; private set => SetProperty(ref _statistics, value); }
+    public string Statistics
+    {
+        get => _statistics;
+        private set { if (SetProperty(ref _statistics, value)) OnPropertyChanged(nameof(StatisticsToolTip)); }
+    }
     public string StatisticsPeriod
     {
         get => _statisticsPeriod;
-        private set
-        {
-            if (SetProperty(ref _statisticsPeriod, value)) OnPropertyChanged(nameof(HeaderMetadata));
-        }
+        private set { if (SetProperty(ref _statisticsPeriod, value)) OnPropertyChanged(nameof(HeaderMetadata)); }
     }
     public string HeaderMetadata => $"{RetentionLabel}   ·   {StatisticsPeriod}";
     public string Details { get => _details; private set => SetProperty(ref _details, value); }
@@ -76,10 +84,55 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
     public string CrcSummary { get => _crcSummary; private set => SetProperty(ref _crcSummary, value); }
     public string ErrorSummary { get => _errorSummary; private set => SetProperty(ref _errorSummary, value); }
     public string OtherSummary { get => _otherSummary; private set => SetProperty(ref _otherSummary, value); }
+    public long PendingDisplayFrames
+    {
+        get => _pendingDisplayFrames;
+        private set
+        {
+            if (!SetProperty(ref _pendingDisplayFrames, value)) return;
+            OnPropertyChanged(nameof(PauseToolTip));
+            OnPropertyChanged(nameof(PauseLabel));
+        }
+    }
     public bool HasFrames => Frames.Count > 0;
     public Visibility EmptyStateVisibility => HasFrames ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DetailsVisibility => _selectedFrame is null ? Visibility.Collapsed : Visibility.Visible;
     public Visibility SelectionHintVisibility => _selectedFrame is null ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool IsFollowingLatest
+    {
+        get => _isFollowingLatest;
+        set
+        {
+            if (!SetProperty(ref _isFollowingLatest, value)) return;
+            if (value)
+            {
+                if (IsDisplayPaused) IsDisplayPaused = false;
+                RequestLatest();
+            }
+        }
+    }
+
+    public bool IsDisplayPaused
+    {
+        get => _isDisplayPaused;
+        set
+        {
+            if (_isDisplayPaused == value) return;
+            if (value && !_hasDisplaySnapshot)
+            {
+                var snapshot = Analyzer.Snapshot();
+                _displaySource = snapshot.Frames ?? Array.Empty<ModbusRtuFrame>();
+                _displayedThroughFrameId = snapshot.LastFrameId;
+                _hasDisplaySnapshot = true;
+            }
+            if (value) _pauseBaselineId = _displayedThroughFrameId;
+            SetProperty(ref _isDisplayPaused, value);
+            OnPropertyChanged(nameof(PauseLabel));
+            OnPropertyChanged(nameof(PauseToolTip));
+            Refresh(force: true);
+        }
+    }
 
     public int SelectedProtocolIndex
     {
@@ -88,20 +141,14 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         {
             var normalized = value == 1 ? 1 : 0;
             if (_selectedProtocolIndex == normalized) return;
-            try
-            {
-                Analyzer.SetEnabled(normalized == 1);
-                SetProperty(ref _selectedProtocolIndex, normalized);
-                OnPropertyChanged(nameof(EmptyTitle));
-                OnPropertyChanged(nameof(EmptyLabel));
-            }
+            try { Analyzer.SetEnabled(normalized == 1); SetProperty(ref _selectedProtocolIndex, normalized); }
             catch (Exception ex) { Status = ex.Message; return; }
             Refresh(force: true);
         }
     }
 
-    // Only presentation follows tab visibility. The analyzer and its retained
-    // ring belong to MainViewModel, not to this view's Loaded/Unloaded lifetime.
+    // Only presentation follows tab visibility. Frozen views retain one bounded
+    // binary snapshot; live hidden views release their presentation caches.
     public bool IsVisible
     {
         get => _isVisible;
@@ -113,6 +160,12 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
             {
                 _selectedFrame = null;
                 Frames.Clear();
+                if (!IsDisplayPaused)
+                {
+                    _displaySource = Array.Empty<ModbusRtuFrame>();
+                    _hasDisplaySnapshot = false;
+                    _version = -1;
+                }
                 OnPropertyChanged(nameof(SelectedFrame));
                 NotifyPresentationState();
             }
@@ -124,12 +177,13 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         get => _selectedFrame;
         set
         {
-            // ListView can clear its selection while a batched reset is being
-            // applied. Keep the logical ID until explicit Clear or eviction.
-            if (value is null) return;
+            // ListView may clear selection during a batched reset. Programmatic
+            // restoration of the same row must not disable automatic following.
+            if (value is null || ReferenceEquals(value, _selectedFrame)) return;
             _selectedId = value.Id;
             if (SetProperty(ref _selectedFrame, value))
             {
+                IsFollowingLatest = false;
                 Details = value.Frame.Describe();
                 NotifyPresentationState();
             }
@@ -138,15 +192,12 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
 
     public void Refresh(bool force = false)
     {
-        var snapshot = Analyzer.Snapshot(force ? -1 : _version);
-        Status = snapshot.LastError ?? string.Format(CultureInfo.CurrentCulture,
-            UiText.Get("ProtocolStatusFormat", "{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)"),
-            snapshot.Enabled ? UiText.Get("ProtocolRunning", "Analyzing") : DisabledLabel,
-            snapshot.RetainedCount, snapshot.HistoryCapacity, snapshot.EvictedFrames, snapshot.DroppedChunks, snapshot.DroppedBytes);
-        var stats = snapshot.Statistics;
-        Activity = snapshot.LastError is not null ? UiText.Get("ProtocolError", "Analysis error")
+        var snapshot = Analyzer.Snapshot(force ? -1 : _version, includeFrames: _isVisible && !IsDisplayPaused);
+        PendingDisplayFrames = IsDisplayPaused ? Math.Max(0, snapshot.LastFrameId - _pauseBaselineId) : 0;
+        var state = snapshot.LastError is not null ? UiText.Get("ProtocolError", "Analysis error")
             : snapshot.Enabled ? UiText.Get("ProtocolRunning", "Analyzing") : DisabledLabel;
-        RetainedSummary = UiText.Format("ProtocolRetainedFormat", "Retained {0:N0} / {1:N0}", snapshot.RetainedCount, snapshot.HistoryCapacity);
+        Activity = IsDisplayPaused ? UiText.Format("ProtocolPausedActivityFormat", "{0} · list paused", state) : state;
+        var stats = snapshot.Statistics;
         TrafficSummary = string.Format(CultureInfo.CurrentCulture, "RX {0:N0}   TX {1:N0}", stats.Rx, stats.Tx);
         CrcSummary = UiText.Format("ProtocolCrcValidFormat", "CRC OK {0:N0}", stats.CrcValid);
         ErrorSummary = UiText.Format("ProtocolCrcErrorFormat", "CRC errors {0:N0}", stats.CrcErrors);
@@ -157,9 +208,28 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         StatisticsPeriod = UiText.Format("ProtocolStatisticsPeriodFormat", "Since {0} · last CRC OK {1}",
             stats.StartedAt.ToLocalTime().ToString("MM-dd HH:mm:ss"),
             stats.LastCrcValidAt?.ToLocalTime().ToString("MM-dd HH:mm:ss.fff") ?? "—");
-        if (!_isVisible || snapshot.Frames is null) return;
-        _version = snapshot.Version;
-        var packets = snapshot.Frames;
+
+        if (_isVisible)
+        {
+            if (!IsDisplayPaused && snapshot.Frames is { } packets)
+            {
+                _version = snapshot.Version;
+                _displaySource = packets;
+                _displayedThroughFrameId = snapshot.LastFrameId;
+                _hasDisplaySnapshot = true;
+                UpdateRows(force);
+            }
+            else if (IsDisplayPaused && force) UpdateRows(force: true);
+        }
+        RetainedSummary = UiText.Format("ProtocolShownFormat", "Shown {0:N0} / retained {1:N0}", Frames.Count, snapshot.RetainedCount);
+        Status = snapshot.LastError ?? UiText.Format("ProtocolStatusFormat", "{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)",
+            Activity, snapshot.RetainedCount, snapshot.HistoryCapacity, snapshot.EvictedFrames, snapshot.DroppedChunks, snapshot.DroppedBytes);
+        NotifyPresentationState();
+    }
+
+    private void UpdateRows(bool force)
+    {
+        var packets = _filter.ActiveCount == 0 ? _displaySource : _displaySource.Where(_filter.Matches).ToArray();
         var firstId = packets.Count == 0 ? long.MaxValue : packets[0].Id;
         var removed = Frames.TakeWhile(row => row.Id < firstId).Count();
         var lastId = Frames.Count == 0 ? -1 : Frames[^1].Id;
@@ -178,11 +248,19 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         _selectedFrame = selected;
         if (selected is null && _selectedId is not null)
         {
+            var filteredOut = _displaySource.Any(frame => frame.Id == _selectedId);
             _selectedId = null;
-            Details = UiText.Get("ProtocolSelectionExpired", "The selected packet has expired from recent history.");
+            Details = filteredOut ? UiText.Get("ProtocolSelectionFiltered", "The selected packet is excluded by the current filters.")
+                : UiText.Get("ProtocolSelectionExpired", "The selected packet has expired from recent history.");
         }
         OnPropertyChanged(nameof(SelectedFrame));
-        NotifyPresentationState();
+        if (force || added > 0) RequestLatest();
+    }
+
+    private void RequestLatest()
+    {
+        if (_isVisible && IsFollowingLatest && !IsDisplayPaused && Frames.Count > 0)
+            LatestRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void NotifyPresentationState()
@@ -191,14 +269,21 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         OnPropertyChanged(nameof(EmptyStateVisibility));
         OnPropertyChanged(nameof(DetailsVisibility));
         OnPropertyChanged(nameof(SelectionHintVisibility));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyLabel));
     }
 
     public void Clear()
     {
         Analyzer.Clear();
+        var snapshot = Analyzer.Snapshot(includeFrames: false);
+        _displaySource = Array.Empty<ModbusRtuFrame>();
+        _displayedThroughFrameId = _pauseBaselineId = snapshot.LastFrameId;
+        _hasDisplaySnapshot = true;
         _selectedId = null;
         _selectedFrame = null;
-        Details = UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
+        Frames.Clear();
+        Details = SelectionPrompt;
         Refresh(force: true);
     }
 

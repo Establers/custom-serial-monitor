@@ -13,7 +13,7 @@ public sealed record ProtocolAnalysisStatistics(long Rx, long Tx, long CrcValid,
 
 public sealed record ProtocolAnalysisSnapshot(long Version, bool Enabled, int RetainedCount, int HistoryCapacity, long RetainedBytes,
     long TotalFrames, long EvictedFrames, long DroppedChunks, long DroppedBytes, long PendingBytes,
-    string? LastError, IReadOnlyList<ModbusRtuFrame>? Frames, ProtocolAnalysisStatistics Statistics);
+    string? LastError, IReadOnlyList<ModbusRtuFrame>? Frames, ProtocolAnalysisStatistics Statistics, long LastFrameId = 0);
 
 public interface IProtocolAnalyzer : IAsyncDisposable
 {
@@ -22,7 +22,7 @@ public interface IProtocolAnalyzer : IAsyncDisposable
     void SetEnabled(bool enabled);
     bool TryEnqueue(ReadOnlyMemory<byte> bytes, ProtocolDirection direction, long session, DateTimeOffset timestamp,
         ProtocolInputTiming timing = default);
-    ProtocolAnalysisSnapshot Snapshot(long knownVersion = -1);
+    ProtocolAnalysisSnapshot Snapshot(long knownVersion = -1, bool includeFrames = true);
     void Clear();
     void ResetStatistics();
 }

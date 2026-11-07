@@ -84,12 +84,12 @@ public sealed class ModbusRtuAnalyzer : IProtocolAnalyzer
         }
     }
 
-    public ProtocolAnalysisSnapshot Snapshot(long knownVersion = -1)
+    public ProtocolAnalysisSnapshot Snapshot(long knownVersion = -1, bool includeFrames = true)
     {
         lock (_gate) return new(_version, _enabled, _history.Count, _historyCapacity, _retainedBytes, _totalFrames,
             _evictedFrames, _droppedChunks, _droppedBytes, _pendingBytes, _lastError,
-            knownVersion == _version ? null : _history.ToArray(),
-            new(_rx, _tx, _crcValid, _crcErrors, _incomplete, _undecoded, _exceptions, _statisticsStartedAt, _lastCrcValidAt));
+            !includeFrames || knownVersion == _version ? null : _history.ToArray(),
+            new(_rx, _tx, _crcValid, _crcErrors, _incomplete, _undecoded, _exceptions, _statisticsStartedAt, _lastCrcValidAt), _nextFrameId);
     }
 
     public void Clear()
