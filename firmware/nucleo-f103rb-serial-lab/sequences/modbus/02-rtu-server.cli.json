@@ -1,0 +1,78 @@
+{
+  "name": "F103RB RTU - HEX request response v1.5",
+  "repeatCount": 1,
+  "steps": [
+    {
+      "name": "NORMAL",
+      "txMode": "hex",
+      "command": "01 03 00 00 00 02 C4 0B",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 03 04 00 FA 00 64 DB E9"
+      },
+      "delayAfterMs": 50
+    },
+    {
+      "name": "EXCEPTION 02",
+      "txMode": "hex",
+      "command": "01 03 02 00 00 02 C5 B3",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 83 02 C0 F1"
+      },
+      "delayAfterMs": 50
+    },
+    {
+      "name": "CRC ERROR",
+      "txMode": "hex",
+      "command": "01 03 01 00 00 02 C5 F7",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 03 04 00 FA 00 64 DB E8"
+      },
+      "delayAfterMs": 50
+    },
+    {
+      "name": "NORMAL RECOVERY",
+      "txMode": "hex",
+      "command": "01 03 00 00 00 02 C4 0B",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 03 04 00 FA 00 64 DB E9"
+      },
+      "delayAfterMs": 50
+    },
+    {
+      "name": "INPUT REGISTER",
+      "txMode": "hex",
+      "command": "01 04 00 01 00 01 60 0A",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 04 02 00 64 B8 DB"
+      },
+      "delayAfterMs": 50
+    },
+    {
+      "name": "EXCEPTION 03",
+      "txMode": "hex",
+      "command": "01 03 00 00 00 00 45 CA",
+      "lineEnding": "none",
+      "captureMs": 700,
+      "expect": {
+        "kind": "hex",
+        "value": "01 83 03 01 31"
+      },
+      "delayAfterMs": 50
+    }
+  ]
+}

@@ -36,6 +36,12 @@ static uint8_t modbus_bytes[LAB_MODBUS_MAX_BYTES];
 static size_t modbus_length, modbus_position;
 static uint32_t modbus_remaining, modbus_sent, modbus_due, modbus_interval;
 static bool modbus_gap;
+static uint8_t rtu_request[LAB_MODBUS_MAX_BYTES], rtu_response[LAB_MODBUS_MAX_BYTES];
+static size_t rtu_length, rtu_response_length;
+static uint32_t rtu_last_byte;
+static bool rtu_mode, rtu_overflow;
+/* Conservative assembly idle on this millisecond-tick UART bench, not t1.5 certification. */
+#define RTU_ASSEMBLY_IDLE_MS 5u
 static bool monitor_enabled, button_raw, button_stable;
 static uint32_t heartbeat_due, heartbeat_seq, button_changed_at, button_pressed_at;
 static uint32_t button_presses, button_releases, monitor_missed;
@@ -274,6 +280,7 @@ static void command(uint32_t now) {
                   "RESET CONFIRM (explicit software reset)\r\n");
         (void)say("MODBUS case [count_1..1000000] [gap_ms_0..60000]; requires MONITOR OFF, idle, FAULT CLEAR\r\n"
                   "MODBUS cases: " LAB_MODBUS_CASES " | MODBUS?\r\n");
+        (void)say("RTU (quiet unit 1 HEX slave); LAB enters legacy commands from RTU\r\n");
     } else if (!strcmp(cmd, "ID?") && !*cursor) {
         (void)say("ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1\r\n");
     } else if (!strcmp(cmd, "BUILD?") && !*cursor) {
@@ -285,6 +292,12 @@ static void command(uint32_t now) {
         selftest();
     } else if (!strcmp(cmd, "RUN")) {
         run_fixture(cursor,now);
+    } else if (!strcmp(cmd, "RTU") && !*cursor) {
+        stop_jobs(); rtu_length = rtu_response_length = 0; rtu_overflow = false;
+        rtu_mode = true;
+        (void)say("OK RTU\r\n");
+    } else if (!strcmp(cmd, "LAB") && !*cursor) {
+        (void)say("OK LAB\r\n");
     } else if (!strcmp(cmd, "MODBUS?" ) && !*cursor) {
         (void)say("MODBUS active=%u remaining=%lu sent=%lu bytes=%u gap_ms=%lu split_gap_ms=%u\r\n",
             modbus_remaining ? 1u : 0u, (unsigned long)modbus_remaining, (unsigned long)modbus_sent,
@@ -434,16 +447,48 @@ void lab_init(const lab_platform *platform, uint32_t now) {
     drop_every = dup_every = crc_every = 0;
     stop_jobs(); last_byte = now;
     modbus_length = 0; modbus_sent = modbus_due = modbus_interval = 0; modbus_gap = false;
-    monitor_enabled = true;
+    monitor_enabled = false;
+    rtu_mode = true; rtu_length = rtu_response_length = 0;
+    rtu_last_byte = now; rtu_overflow = false;
     heartbeat_due = now + HEARTBEAT_MS;
     heartbeat_seq = button_presses = button_releases = monitor_missed = 0;
     button_raw = button_stable = io.button();
     button_changed_at = button_pressed_at = now;
-    (void)say("BOOT NUCLEO-F103RB SERIAL-LAB/1 baud=115200 8N1\r\n");
-    (void)say("READY USER=B1/PC13 heartbeat_ms=1000 debounce_ms=20; MONITOR OFF or STOP pauses output\r\n");
+}
+
+static void poll_rtu(uint32_t now) {
+    if ((rtu_length || rtu_overflow) && (uint32_t)(now - rtu_last_byte) >= RTU_ASSEMBLY_IDLE_MS) {
+        if (!rtu_overflow && !rtu_response_length)
+            rtu_response_length = lab_modbus_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+        rtu_length = 0; rtu_overflow = false;
+    }
+    if (rtu_response_length && io.write_data(rtu_response,rtu_response_length)) rtu_response_length = 0;
+}
+
+static void receive_rtu(uint8_t byte, uint32_t now) {
+    if (swallow_lf && byte == '\n') { swallow_lf = false; return; }
+    swallow_lf = false;
+    poll_rtu(now);
+    rtu_last_byte = now;
+    if (rtu_overflow) return;
+    if (rtu_length == sizeof(rtu_request)) { rtu_overflow = true; return; }
+    rtu_request[rtu_length++] = byte;
+    /* Explicit compatibility escapes only; binary unit-1 requests never enter the text parser. */
+    if (byte == '\r' || byte == '\n') {
+        size_t length = rtu_length - 1;
+        if ((length == 3 && !memcmp(rtu_request,"LAB",3)) ||
+            (length == 3 && !memcmp(rtu_request,"ID?",3)) ||
+            (length == 4 && !memcmp(rtu_request,"STOP",4)) ||
+            (length == 6 && !memcmp(rtu_request,"BUILD?",6))) {
+            memcpy(line,rtu_request,length); line[length] = 0;
+            line_len = 0; line_discard = false; swallow_lf = byte == '\r';
+            rtu_length = 0; rtu_mode = false; command(now);
+        }
+    }
 }
 
 void lab_receive(uint8_t byte, uint32_t now) {
+    if (rtu_mode) { receive_rtu(byte,now); return; }
     if (frame_len && (uint32_t)(now - last_byte) > 500) {
         frame_len = frame_expected = 0; ++parse_errors;
     }
@@ -500,6 +545,7 @@ static bool numbered(const uint8_t *data, size_t length, uint32_t seq) {
 }
 
 void lab_poll(uint32_t now) {
+    if (rtu_mode) { poll_rtu(now); return; }
     poll_monitor(now);
     if (baud_pending) {
         if (due(now, baud_due) && io.baud(baud_pending)) {

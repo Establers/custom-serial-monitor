@@ -1,4 +1,5 @@
 #include "lab_modbus.h"
+#include <stdbool.h>
 #include <string.h>
 
 uint16_t lab_modbus_crc(const uint8_t *bytes, size_t length) {
@@ -16,6 +17,41 @@ static size_t finish(uint8_t *bytes, size_t length) {
     bytes[length] = (uint8_t)crc;
     bytes[length + 1] = (uint8_t)(crc >> 8);
     return length + 2;
+}
+
+size_t lab_modbus_reply(const uint8_t *request, size_t length, uint8_t *reply, size_t capacity) {
+    if (!request || !reply || length < 4 || length > LAB_MODBUS_MAX_BYTES || request[0] != 1 ||
+        lab_modbus_crc(request,length) != 0 || (request[1] & 0x80)) return 0;
+    uint8_t exception = 0;
+    uint16_t address = 0, quantity = 0;
+    bool corrupt = false;
+    if (request[1] != 3 && request[1] != 4) exception = 1;
+    else if (length != 8) exception = 3;
+    else {
+        address = (uint16_t)((uint16_t)request[2] << 8 | request[3]);
+        quantity = (uint16_t)((uint16_t)request[4] << 8 | request[5]);
+        if (!quantity || quantity > 125) exception = 3;
+        else if (address == 0x0100 && quantity == 2) corrupt = true;
+        else if (address >= 2 || quantity > 2 - address) exception = 2;
+    }
+    size_t required = exception ? 5u : 5u + (size_t)quantity * 2u;
+    if (capacity < required) return 0;
+    reply[0] = 1; reply[1] = request[1];
+    if (exception) {
+        reply[1] |= 0x80; reply[2] = exception;
+        return finish(reply,3);
+    }
+    static const uint16_t registers[] = {250,100};
+    if (corrupt) address = 0;
+    reply[2] = (uint8_t)(quantity * 2);
+    for (size_t i = 0; i < quantity; ++i) {
+        uint16_t value = registers[address + i];
+        reply[3 + i * 2] = (uint8_t)(value >> 8);
+        reply[4 + i * 2] = (uint8_t)value;
+    }
+    size_t result = finish(reply,required - 2);
+    if (corrupt) reply[result - 1] ^= 1;
+    return result;
 }
 
 size_t lab_modbus_copy(const char *name, uint8_t *destination, size_t capacity) {

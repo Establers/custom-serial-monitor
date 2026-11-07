@@ -1,0 +1,109 @@
+{
+  "FormatVersion": 3,
+  "Name": "F103RB RTU - HEX request response v1.5",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "NORMAL",
+      "CommandText": "01 03 00 00 00 02 C4 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "NORMAL / RX",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E9",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "EXCEPTION 02",
+      "CommandText": "01 03 02 00 00 02 C5 B3",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "EXCEPTION 02 / RX",
+      "CommandText": "",
+      "RxPattern": "01 83 02 C0 F1",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "CRC ERROR",
+      "CommandText": "01 03 01 00 00 02 C5 F7",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "CRC ERROR / RX",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E8",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "NORMAL RECOVERY",
+      "CommandText": "01 03 00 00 00 02 C4 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "NORMAL RECOVERY / RX",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E9",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "INPUT REGISTER",
+      "CommandText": "01 04 00 01 00 01 60 0A",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "INPUT REGISTER / RX",
+      "CommandText": "",
+      "RxPattern": "01 04 02 00 64 B8 DB",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "EXCEPTION 03",
+      "CommandText": "01 03 00 00 00 00 45 CA",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "EXCEPTION 03 / RX",
+      "CommandText": "",
+      "RxPattern": "01 83 03 01 31",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    }
+  ]
+}

@@ -4,17 +4,16 @@ NUCLEO-F103RB 한 장과 현재 연결한 USB 케이블로 Serial Monitor를 시
 기본 통신, 시퀀스 응답 검사, Terminal/HEX, UTF-8, 이벤트, 대량 수신, 지연·분할 응답,
 CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다.
 
-## 기본 동작: USER 버튼 + 1초 로그
+## 기본 동작: HEX Modbus RTU 슬레이브
 
-1.4.0에는 **Modbus RTU 분석기 검증용 원본 프레임 송신**이 추가되었습니다.
-정상·CRC 오류·예외·오분할 회귀·80ms 간격·10,005건 보관 시험은
-[Modbus RTU 시험 안내](MODBUS-RTU.md)를 참고하세요. 아래 1.3.0 기록은 이전 이미지의 결과입니다.
+1.5.0은 **장치 ID 1, 115200 / 8N1**의 조용한 RTU 서버로 부팅합니다.
+HEX에서 `01 03 00 00 00 02 C4 0B`를 보내면 값 250, 100의 정상 응답을 받습니다.
+예외·CRC 오류 주입 요청과 Protocol 탭 기대값은 [Modbus RTU 시험 안내](MODBUS-RTU.md)를 참고하세요.
 
-부팅하면 1초마다 HEARTBEAT가 출력되고 파란 USER 버튼의 누름·뗌·누른 시간을 출력합니다.
-보드 업로드와 COM3 검증을 완료했습니다. 연결 설정과 빌드·재업로드 방법은
-[1.3.0 온보딩](ONBOARDING-1.3.0.md)을 참고하세요.
-기존의 정밀 응답 검사는 먼저 `STOP` 또는 `MONITOR OFF`로 배경 출력을 멈추고,
-끝나면 `MONITOR ON`으로 다시 켭니다.
+기존 텍스트 시험은 `LAB` + CRLF로 진입합니다. 그 뒤 PING/RUN/시퀀스 등을 사용하세요.
+USER 버튼과 1초 HEARTBEAT는 LAB 모드에서 `MONITOR ON`으로 켭니다.
+`RTU` + CRLF 또는 보드 리셋으로 RTU 서버에 복귀합니다.
+[1.3.0 온보딩](ONBOARDING-1.3.0.md)과 [1.4.0 프레임 송신기 기록](MODBUS-RTU-VALIDATION.md)은 이전 이미지의 결과입니다.
 
 ## 신뢰성 검증용 빌드와 이전 1.2.0 결과
 

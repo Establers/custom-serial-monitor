@@ -7,6 +7,12 @@ using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 
+if (args.Length > 0 && args[0].StartsWith("server-",StringComparison.Ordinal))
+{
+    await RtuServerCheck.Run(args);
+    return;
+}
+
 // Owns one real port only when no GUI owns it. No UI automation, no flash/reset,
 // no retry after TX, and no files are written from the receive observer.
 if (args.Length == 0) throw new ArgumentException("offline BUILD_DIR | probe PORT | live PORT MANIFEST NEW_EVIDENCE_DIR");
@@ -40,8 +46,8 @@ if (args is ["offline", var directory])
         AutomationSequenceValidation.Parse(definition.RootElement);
     }
     var sequences=await new CommandSequenceFileService().LoadAsync(Directory.GetFiles(examples,"*.gui.json"),stop.Token);
-    Require(sequences.Count==1 && sequences[0].Steps.Count==24,"Modbus GUI sequence definition");
-    Console.WriteLine("PASS CLI and GUI RX Check sequence parsers (HEX-encoded text TX preserves binary RX checks)");
+    Require(sequences.Count==2 && sequences.Sum(s=>s.Steps.Count)==36,"Modbus GUI sequence definitions");
+    Console.WriteLine("PASS legacy fixture and true RTU HEX CLI/GUI RX Check sequence parsers");
     return;
 }
 bool probe = args is ["probe", _];

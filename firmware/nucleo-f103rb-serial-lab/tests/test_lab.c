@@ -29,8 +29,8 @@ static void clear(void) { used = 0; out[0] = 0; }
 static void init(uint32_t now) {
     blocked = data_blocked = baud_blocked = was_reset = led_state = false;
     switched = 0; clock_ms = now; button_state = true; clear(); lab_init(&platform, now);
-    /* Legacy exact-response cases explicitly disable the new boot-on background output. */
-    const char quiet[] = "MONITOR OFF\n";
+    /* Legacy cases enter the explicit text lab; production-style RTU boots quiet. */
+    const char quiet[] = "LAB\nMONITOR OFF\n";
     for (size_t i = 0; i < sizeof(quiet) - 1; ++i) lab_receive((uint8_t)quiet[i], now);
     clear();
 }
@@ -53,7 +53,7 @@ static size_t packet(uint8_t *p, uint8_t type, uint32_t seq, const uint8_t *payl
 }
 
 static void monitor_tests(void) {
-    init(0); button_state = false; lab_init(&platform, 0); clear();
+    init(0); button_state = false; lab_init(&platform, 0); send("LAB\nMONITOR ON\n"); clear();
     poll(999, 1); equals(""); poll(1000, 1);
     contains("HEARTBEAT seq=1 uptime_ms=1000 user=RELEASED");
     clear(); poll(1000, 5); poll(1999, 1); equals("");
@@ -72,9 +72,9 @@ static void monitor_tests(void) {
     send("STOP\n"); clear(); poll(8000, 2); equals("");
     send("MONITOR?\n"); contains("MONITOR enabled=0");
     clear(); send("HELP\n"); contains("MONITOR ON|OFF");
-    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); clear();
+    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); send("LAB\nMONITOR ON\n"); clear();
     poll(983, 1); equals(""); poll(984, 1); contains("HEARTBEAT seq=1");
-    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); clear();
+    init(0xfffffff0u); button_state = false; lab_init(&platform, 0xfffffff0u); send("LAB\nMONITOR ON\n"); clear();
     button_state = true; poll(0xfffffff8u, 1); poll(11, 1); equals("");
     poll(12, 1); contains("USER PRESS count=1");
     init(0); send("MONITOR ON\n"); clear(); data_blocked = true; poll(1000, 1); equals("");
@@ -256,6 +256,80 @@ static void modbus_tests(void) {
     init(0); send("MODBUS NORMAL\nMODBUS CRC\n"); contains("BUSY MODBUS");
 }
 
+static size_t rtu_packet(uint8_t *bytes, uint8_t unit, uint8_t function, uint16_t address, uint16_t quantity) {
+    bytes[0] = unit; bytes[1] = function;
+    bytes[2] = (uint8_t)(address >> 8); bytes[3] = (uint8_t)address;
+    bytes[4] = (uint8_t)(quantity >> 8); bytes[5] = (uint8_t)quantity;
+    uint16_t crc = lab_modbus_crc(bytes,6);
+    bytes[6] = (uint8_t)crc; bytes[7] = (uint8_t)(crc >> 8);
+    return 8;
+}
+
+static void rtu_init(uint32_t now) {
+    init(now); lab_init(&platform,now); clear();
+}
+
+static void rtu_tests(void) {
+    uint8_t request[8], normal[9], reply[256];
+    size_t normal_size = lab_modbus_copy("NORMAL",normal,sizeof(normal));
+    rtu_packet(request,1,3,0,2);
+    const uint8_t literal[] = {1,3,0,0,0,2,0xc4,0x0b};
+    assert(!memcmp(request,literal,8)); ++checks;
+    rtu_init(0); poll(10000,10); equals(""); /* No boot/heartbeat/button text. */
+    feed_bytes(request,8); poll(10004,1); equals(""); poll(10005,1);
+    assert(used == normal_size && !memcmp(out,normal,used)); ++checks;
+    clear(); poll(20000,10); equals(""); /* Exactly once, no periodic replay. */
+    rtu_init(0); feed_bytes(request,3); poll(4,1); feed_bytes(request + 3,5);
+    poll(8,1); equals(""); poll(9,1); assert(used == normal_size); ++checks;
+    rtu_init(0); feed_bytes(request,3); poll(5,1); feed_bytes(request + 3,5);
+    poll(10,1); equals(""); feed_bytes(request,8); poll(15,1); assert(used == normal_size); ++checks;
+    rtu_init(0xfffffffdu); feed_bytes(request,8); poll(1,1); equals("");
+    poll(2,1); assert(used == normal_size); ++checks;
+    rtu_init(0); data_blocked = true; feed_bytes(request,8); poll(5,10); equals("");
+    data_blocked = false; poll(6,10); assert(used == normal_size); ++checks;
+    /* Overflow and nested CRC-valid request bytes must not create a response. */
+    rtu_init(0); for (unsigned i = 0; i < 300; ++i) lab_receive(0x55,0);
+    feed_bytes(request,8); poll(5,1); equals("");
+    feed_bytes(request,8); poll(10,1); assert(used == normal_size); ++checks;
+    rtu_init(0); uint8_t nested[256]; size_t nested_size = lab_modbus_copy("CORRUPT",nested,sizeof(nested));
+    feed_bytes(nested,nested_size); poll(5,1); equals("");
+    feed_bytes(request,8); poll(10,1); assert(used == normal_size); ++checks;
+    /* Bad incoming CRC is silent. Special address corrupts only its own reply. */
+    rtu_init(0); request[7] ^= 1; feed_bytes(request,8); poll(5,1); equals("");
+    request[7] ^= 1; feed_bytes(request,8); poll(10,1); assert(used == normal_size); ++checks;
+    rtu_packet(request,1,3,0x100,2);
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 9 && lab_modbus_crc(reply,9) != 0); ++checks;
+    rtu_packet(request,1,3,0,2);
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 9 && !memcmp(reply,normal,9)); ++checks;
+    assert(!lab_modbus_reply(request,8,reply,8)); ++checks;
+    assert(!lab_modbus_reply(NULL,8,reply,sizeof(reply))); ++checks;
+    for (unsigned unit = 0; unit < 256; ++unit) {
+        if (unit == 1) continue;
+        rtu_packet(request,(uint8_t)unit,3,0,2);
+        assert(!lab_modbus_reply(request,8,reply,sizeof(reply))); ++checks;
+    }
+    const uint16_t addresses[] = {2,0x200,0xffff,1};
+    for (size_t i = 0; i < sizeof(addresses)/sizeof(addresses[0]); ++i) {
+        rtu_packet(request,1,3,addresses[i],2);
+        assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[1] == 0x83 && reply[2] == 2 && !lab_modbus_crc(reply,5)); ++checks;
+    }
+    const uint16_t quantities[] = {0,126,0xffff};
+    for (size_t i = 0; i < sizeof(quantities)/sizeof(quantities[0]); ++i) {
+        rtu_packet(request,1,3,0,quantities[i]);
+        assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[2] == 3); ++checks;
+    }
+    rtu_packet(request,1,4,1,1);
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 7 && reply[1] == 4 && reply[2] == 2 && reply[4] == 100 && !lab_modbus_crc(reply,7)); ++checks;
+    rtu_packet(request,1,6,0,1);
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[1] == 0x86 && reply[2] == 1); ++checks;
+    rtu_packet(request,1,0x83,0,1);
+    assert(!lab_modbus_reply(request,8,reply,sizeof(reply))); ++checks;
+    rtu_init(0); send("ID?\r\n"); contains("ID NUCLEO-F103RB");
+    clear(); send("RTU\r\n"); equals("OK RTU\r\n");
+    clear(); rtu_packet(request,1,3,0,2); feed_bytes(request,8); poll(5,1);
+    assert(used == normal_size && !memcmp(out,normal,used)); ++checks;
+}
+
 static void fixture_tests(void) {
     init(0); send("BUILD?\n"); contains("BUILD version=" LAB_FIRMWARE_VERSION " protocol=1 id=");
     clear(); send("CAPS?\n"); contains("line_max=511 payload_max=1024 long_max=2048 fixture_count=9");
@@ -325,6 +399,16 @@ static void export_contract(const char *directory) {
         snprintf(file,sizeof(file),"modbus-%s.bin",modbus_names[i]);
         init(0); send(text); poll(0,1); poll(80,1); export_bytes(directory,file);
     }
+    const uint16_t addresses[] = {0,0x200,0x100,1,0,0,0,0,0};
+    const uint16_t quantities[] = {2,2,2,1,0,126,1,2,2};
+    const uint8_t functions[] = {3,3,3,4,3,3,6,3,3};
+    const uint8_t units[] = {1,1,1,1,1,1,1,0,2};
+    for (unsigned i = 0; i < 9; ++i) {
+        uint8_t request[8]; char file[64];
+        rtu_packet(request,units[i],functions[i],addresses[i],quantities[i]);
+        rtu_init(0); feed_bytes(request,8); poll(5,1);
+        snprintf(file,sizeof(file),"rtu-%u.bin",i); export_bytes(directory,file);
+    }
     puts("Exported actual C protocol responses for independent PC contract verification.");
 }
 
@@ -336,6 +420,7 @@ int main(int argc, char **argv) {
     fixture_tests();
     large_binary_tests();
     modbus_tests();
+    rtu_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);
     if (argc == 3 && !strcmp(argv[1],"--export")) export_contract(argv[2]);
     return 0;
