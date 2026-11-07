@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using SerialMonitor.Core.Automation;
 using SerialMonitor.WinUI.Infrastructure;
+using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
@@ -22,12 +23,32 @@ public sealed partial class MainViewModel
             throw new AutomationException("port_mismatch", "The connected port does not match the expected port.");
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (configuration.BaudRate is { } requestedBaudRate)
+        if (configuration.BaudRate.HasValue || configuration.DataBits.HasValue || configuration.Parity is not null ||
+            configuration.StopBits is not null || configuration.Handshake is not null)
         {
-            int effectiveBaudRate;
+            var current = _serialService.AppliedConfiguration ?? SerialPortConfiguration.FromSettings(_currentSerialSettings);
+            var handshake = configuration.Handshake is { } flow
+                ? Enum.Parse<SerialHandshakeMode>(flow, ignoreCase: true) : current.Handshake;
+            var requested = current with
+            {
+                BaudRate = configuration.BaudRate ?? current.BaudRate,
+                DataBits = configuration.DataBits ?? current.DataBits,
+                Parity = configuration.Parity is { } parity ? Enum.Parse<SerialParityMode>(parity, true) : current.Parity,
+                StopBits = configuration.StopBits switch
+                {
+                    "1" => SerialStopBitsMode.One, "1.5" => SerialStopBitsMode.OnePointFive,
+                    "2" => SerialStopBitsMode.Two, _ => current.StopBits
+                },
+                Handshake = handshake,
+                RtsToggleOnTransmit = !SerialControlLinePolicy.UsesRtsHandshake(handshake) && current.RtsToggleOnTransmit
+            };
             try
             {
-                effectiveBaudRate = await _serialService.ChangeBaudRateAsync(requestedBaudRate, cancellationToken);
+                requested.Validate();
+                var generation = _serialService.ReceiveSessionGeneration;
+                var appliedConfiguration = await RunOrderedSerialChangeAsync(ct => _serialService.ConfigureAsync(requested,
+                    generation, ct), cancellationToken);
+                ApplyConfirmedSerialConfiguration(appliedConfiguration);
             }
             catch (TimeoutException ex)
             {
@@ -39,24 +60,6 @@ public sealed partial class MainViewModel
                 throw new AutomationException("configure_error", ex.Message);
             }
 
-            // The driver change is committed. Finish updating the UI-owned
-            // snapshot even if cancellation arrives after the successful call.
-            if (!BaudRates.Contains(effectiveBaudRate)) BaudRates.Add(effectiveBaudRate);
-            _selectedBaudRate = effectiveBaudRate;
-            _currentSerialSettings.BaudRate = effectiveBaudRate;
-            if (_lastSuccessfulSerialSettings is { } connectedSettings)
-                connectedSettings.BaudRate = effectiveBaudRate;
-            _lastSuccessfulBaudRate = effectiveBaudRate;
-            RefreshAutomaticHexGroupTimeoutDefault();
-            OnPropertyChanged(nameof(SelectedBaudRate));
-            OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
-            OnPropertyChanged(nameof(ConnectionStateText));
-            OnPropertyChanged(nameof(CompactConnectionStatusText));
-            NotifyConnectionSelectionCommandState();
-            RecordSettingsChange("Baudrate", SettingsApplyBehavior.Immediate,
-                effectiveBaudRate.ToString(CultureInfo.InvariantCulture));
-            NotifyConnectDiagnosticsChanged();
-            RestartSerialBusUtilizationMeasurement("serial baud rate changed by AI/CLI");
         }
 
         if (configuration.ByteTimeoutMs is { } byteTimeoutMs)

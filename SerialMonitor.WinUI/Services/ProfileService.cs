@@ -922,6 +922,12 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Handshake was invalid.");
         }
 
+        if (settings.RtsToggleOnTransmit && SerialControlLinePolicy.UsesRtsHandshake(settings.Handshake))
+        {
+            settings.RtsToggleOnTransmit = false;
+            warnings.Add("RTS TX Toggle was disabled because RTS/CTS handshaking controls the line.");
+        }
+
         if (!Enum.IsDefined(settings.RxLineEnding))
         {
             settings.RxLineEnding = defaults.RxLineEnding;

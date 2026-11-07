@@ -388,7 +388,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi126.Text" xml:space="preserve">
-    <value>Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now.</value>
+    <value>Frame/handshake: reconnect · Line controls: live</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi126.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -1166,4 +1166,18 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="StaticUi180.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Reset custom background</value>
   </data>
+  <data name="SerialLinesInputs.Text" xml:space="preserve"><value>Input control lines</value></data>
+  <data name="SerialLinesRtsToggle.Content" xml:space="preserve"><value>RTS TX Toggle</value></data>
+  <data name="SerialLinesDisconnected" xml:space="preserve"><value>Disconnected; output settings apply on connection.</value></data>
+  <data name="SerialLinesApplying" xml:space="preserve"><value>Applying control-line change…</value></data>
+  <data name="SerialLinesMock" xml:space="preserve"><value>MOCK: output modes are simulated; physical inputs are unavailable.</value></data>
+  <data name="SerialLinesLive" xml:space="preserve"><value>Live driver status · AUTO/TX outputs are controlled by the driver.</value></data>
+  <data name="SerialLinesInputToolTip" xml:space="preserve"><value>PC input control-line states. ON: active; OFF: inactive; —: disconnected; N/A: unavailable. Sampled about every 250 ms; displayed about every second. Short pulses may be missed.</value></data>
+  <data name="SerialLinesCtsToolTip" xml:space="preserve"><value>CTS (Clear To Send): permission for the PC to transmit; used by RTS/CTS flow control.</value></data>
+  <data name="SerialLinesDsrToolTip" xml:space="preserve"><value>DSR (Data Set Ready): the peer’s ready signal; used by DTR/DSR flow control.</value></data>
+  <data name="SerialLinesDcdToolTip" xml:space="preserve"><value>DCD (RLSD): modem carrier detection. Its meaning depends on the adapter and wiring.</value></data>
+  <data name="SerialLinesRiToolTip" xml:space="preserve"><value>RI (RING): modem incoming-call indicator. Short pulses may be missed by this status display.</value></data>
+  <data name="SerialLinesDtrToolTip" xml:space="preserve"><value>DTR output: ON/OFF selects the driver’s manual mode; AUTO belongs to hardware flow control. Changes apply to the current connection and may reset a wired board.</value></data>
+  <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS output: ON/OFF is manual, AUTO is hardware flow control, TX follows transmission. Manual changes require ON/OFF mode. These are driver modes, not measured voltages.</value></data>
+  <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>The driver controls RTS during transmission. Disabling restores the previous manual RTS choice. Adapter support and wiring determine RS-485 suitability; no polarity or turnaround-delay adjustment is provided.</value></data>
 </root>

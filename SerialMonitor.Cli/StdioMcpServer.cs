@@ -38,6 +38,7 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
         ["serial_list_instances"] = "list_instances", ["serial_get_status"] = "status", ["serial_list_ports"] = "ports",
         ["serial_list_commands"] = "list_commands", ["serial_connect"] = "connect", ["serial_disconnect"] = "disconnect",
         ["serial_set_mode"] = "set_mode", ["serial_configure"] = "configure",
+        ["serial_get_control_lines"] = "get_control_lines", ["serial_set_control_line"] = "set_control_line",
         ["serial_sequence_list"] = "sequence_list", ["serial_sequence_get"] = "sequence_get",
         ["serial_sequence_save"] = "sequence_save", ["serial_sequence_delete"] = "sequence_delete",
         ["serial_sequence_start"] = "sequence_start", ["serial_sequence_status"] = "sequence_status",
@@ -337,6 +338,24 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             Property("port", "string", "Optional expected connected port. Rejects changes when the GUI is connected elsewhere.");
             Property("baudRate", "integer", "New baud rate, including custom rates supported by the serial driver. Requires a connected port and applies live on the same open connection; inspect returned state before TX.", minimum: 1, maximum: 10000000);
             Property("byteTimeoutMs", "integer", "Live HEX RX grouping gap in milliseconds, independent of capture duration and raw bytes. Windows/USB/RS-485 buffering can split/combine reads: allow margin above theoretical wire timing. Omit to retain the current setting.", minimum: 1, maximum: 5000);
+            Property("dataBits", "integer", "Data bits. Supported data/stop-bit combinations depend on the driver and are verified by readback.", minimum: 5, maximum: 8);
+            Property("parity", "string", "Parity applied to the current connection.");
+            ((Dictionary<string, object>)properties["parity"])["enum"] = AutomationSerialConfiguration.ParityValues;
+            Property("stopBits", "string", "Stop bits applied to the current connection.");
+            ((Dictionary<string, object>)properties["stopBits"])["enum"] = AutomationSerialConfiguration.StopBitsValues;
+            Property("handshake", "string", "Flow control: xon is XON/XOFF, rts is RTS/CTS, dtr is DTR/DSR; combined names enable both. Selecting RTS handshake disables RTS TX Toggle.");
+            ((Dictionary<string, object>)properties["handshake"])["enum"] = AutomationSerialConfiguration.HandshakeValues;
+        }
+        if (pair.Value is "get_control_lines" or "set_control_line")
+        {
+            Property("port", "string", "Optional expected current port; a mismatch fails without changing a line.");
+        }
+        if (pair.Value == "set_control_line")
+        {
+            Property("line", "string", "Output to change. AUTO outputs are owned by hardware flow control.", true);
+            ((Dictionary<string, object>)properties["line"])["enum"] = new[] { "dtr", "rts", "rts_toggle" };
+            Property("enabled", "boolean", "Enable or disable the output/mode. A DTR/RTS transition may reset a wired board.", true);
+            Property("sessionGeneration", "integer", "Optional original session generation from status/control-line query. A stale session fails without mutation.", minimum: 1);
         }
         if (pair.Value == "set_mode")
         {
@@ -398,7 +417,9 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             "list_commands" => "Read saved device commands and line endings in bounded pages. Follow nextOffset while hasMore=true, even when fewer than limit entries were returned. Use device documentation for other commands.",
             "connect" => "Connect through the GUI using its current advanced serial settings. An existing different connection is never replaced.",
             "disconnect" => "Disconnect the GUI's COM connection. Returns busy during an active capture/sequence/bridge.",
-            "configure" => "Change baudRate and/or byteTimeoutMs through the connected GUI without sending. At least one setting is required. Both apply live on the same open connection. Returns busy during capture/sequence/bridge/other control. Raw RX remains byte-exact; timing gaps are not protocol packet boundaries.",
+            "configure" => "Change baudRate, dataBits, parity, stopBits, handshake and/or byteTimeoutMs on the current open connection without sending. At least one setting is required. Driver settings are verified; failures restore previous settings or fault the connection when restoration is unverified. Returns busy during capture/sequence/bridge/other control.",
+            "get_control_lines" => "Read DTR/RTS driver modes and CTS/DSR/DCD/RI input states without reserving TX or sending. Inputs are driver-reported snapshots, not edge recordings. Unavailable inputs are null; disconnected outputs are N/A.",
+            "set_control_line" => "Change DTR, RTS or RTS TX Toggle on the existing connection and return verified driver status. Direct terminal input stays enabled. Hardware handshaking owns AUTO outputs; TX Toggle owns RTS. Port/session mismatches fail without mutation. Physical voltage and RS-485 timing require hardware verification.",
             "set_mode" => "Set the GUI Terminal/HEX mode without connecting or sending. Changes clear visible logs and change GUI manual TX interpretation, while saved captures and per-call txMode stay independent. Returns busy during capture/sequence/bridge/other control. Read the current mode with serial_get_status.",
             "sequence_list" => "List GUI sequence metadata in bounded pages without sending. Follow nextOffset when hasMore is true.",
             "sequence_get" => "Read a registered TX sequence as a lowercase automation definition without sending. Enabled GUI RX Check or legacy ResponseCheck steps return unsupported_sequence_feature; disabled steps are omitted. Oversized definitions are rejected, never truncated.",
@@ -418,7 +439,8 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             ["type"] = "object", ["properties"] = properties, ["required"] = required, ["additionalProperties"] = false
         };
         if (pair.Value == "configure")
-            inputSchema["anyOf"] = new[] { new { required = new[] { "baudRate" } }, new { required = new[] { "byteTimeoutMs" } } };
+            inputSchema["anyOf"] = new[] { "baudRate", "byteTimeoutMs", "dataBits", "parity", "stopBits", "handshake" }
+                .Select(name => new { required = new[] { name } }).ToArray();
         return (object)new { name = pair.Key, description, inputSchema };
     }).ToArray();
 

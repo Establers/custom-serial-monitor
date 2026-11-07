@@ -1229,7 +1229,7 @@
                 <ComboBox Grid.Column="3"
                           ItemsSource="{Binding BaudRates}"
                           SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
-                          IsEnabled="{Binding CanEditConnectionSettings}"
+                          IsEnabled="{Binding CanEditSerialParameters}"
                           MinWidth="86"
                           HorizontalAlignment="Stretch" />
 
@@ -3285,7 +3285,7 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding BaudRates}"
                                                       SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      IsEnabled="{Binding CanEditSerialParameters}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3293,7 +3293,7 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding DataBitOptions}"
                                                       SelectedItem="{Binding SelectedDataBits, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      IsEnabled="{Binding CanEditSerialParameters}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3301,7 +3301,7 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding ParityModes}"
                                                       SelectedItem="{Binding SelectedParity, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      IsEnabled="{Binding CanEditSerialParameters}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3309,7 +3309,7 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding StopBitsModes}"
                                                       SelectedItem="{Binding SelectedStopBits, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      IsEnabled="{Binding CanEditSerialParameters}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3317,28 +3317,75 @@
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding HandshakeModes}"
                                                       SelectedItem="{Binding SelectedHandshake, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditConnectionSettings}"
+                                                      IsEnabled="{Binding CanEditSerialParameters}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
                                             <TextBlock Text="Lines" Style="{StaticResource FormLabelTextStyle}" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                                <CheckBox Content="DTR"
-                                                          IsChecked="{Binding DtrEnable, Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanEditConnectionSettings}"
+                                                <CheckBox Content="{Binding DtrControlText}"
+                                                          IsChecked="{Binding DtrControlChecked, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanEditDtrControl}"
+                                                          infra:AppToolTipService.ToolTip="{Binding DtrControlToolTip}"
                                                           HorizontalAlignment="Stretch"
                                                           HorizontalContentAlignment="Stretch"
                                                           ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
                                                           Style="{StaticResource FormCheckBoxStyle}" />
-                                                <CheckBox Content="RTS"
-                                                          IsChecked="{Binding RtsEnable, Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanEditConnectionSettings}"
+                                                <CheckBox Content="{Binding RtsControlText}"
+                                                          IsChecked="{Binding RtsControlChecked, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanEditRtsControl}"
+                                                          infra:AppToolTipService.ToolTip="{Binding RtsControlToolTip}"
                                                           HorizontalAlignment="Stretch"
                                                           HorizontalContentAlignment="Stretch"
                                                           ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
                                                           Style="{StaticResource FormCheckBoxStyle}" />
                                             </StackPanel>
                                         </Grid>
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
+                                            <TextBlock x:Uid="SerialLinesInputs"
+                                                       Text="Input control lines"
+                                                       Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="10"
+                                                        infra:AppToolTipService.ToolTip="{Binding SerialInputToolTip}">
+                                                <TextBlock Text="{Binding CtsStatusText}"
+                                                           infra:AppToolTipService.ToolTip="{Binding CtsToolTip}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding DsrStatusText}"
+                                                           infra:AppToolTipService.ToolTip="{Binding DsrToolTip}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding DcdStatusText}"
+                                                           infra:AppToolTipService.ToolTip="{Binding DcdToolTip}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding RiStatusText}"
+                                                           infra:AppToolTipService.ToolTip="{Binding RiToolTip}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
+                                            <TextBlock Text="RS-485 / RTS" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox Grid.Column="1"
+                                                      x:Uid="SerialLinesRtsToggle"
+                                                      Content="RTS TX Toggle"
+                                                      IsChecked="{Binding RtsToggleOnTransmit, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditRtsToggle}"
+                                                      infra:AppToolTipService.ToolTip="{Binding RtsToggleToolTip}"
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding SerialControlLineHint}"
+                                                   FontSize="11"
+                                                   Opacity="0.8"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,4"
+                                                   infra:AppToolTipService.ToolTip="{Binding SerialControlLineHint}" />
                                     </StackPanel>
                                 </Border>
                                 <Border Style="{StaticResource FormCardBorderStyle}">

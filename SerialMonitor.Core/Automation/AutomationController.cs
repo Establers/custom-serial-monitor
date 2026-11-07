@@ -32,6 +32,7 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
             switch (request.Operation)
             {
                 case "status":
+                case "get_control_lines":
                 case "ports":
                 case "list_commands":
                 case "sequence_list":
@@ -42,12 +43,15 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
                 case "disconnect":
                 case "set_mode":
                 case "configure":
+                case "set_control_line":
                 case "sequence_save":
                 case "sequence_delete":
                     if (request.Operation == "set_mode" && request.Arguments.String("mode") is not ("terminal" or "hex"))
                         throw new AutomationException("invalid_argument", "mode must be terminal or hex. Changing mode clears the visible log and changes GUI manual TX interpretation; per-call txMode is independent.");
                     if (request.Operation == "configure")
                         _ = AutomationSerialConfiguration.Parse(request.Arguments);
+                    if (request.Operation == "set_control_line")
+                        _ = AutomationControlLineChange.Parse(request.Arguments);
                     if (request.Operation == "sequence_save")
                     {
                         if (!request.Arguments.TryGetProperty("sequence", out var definition))
@@ -114,7 +118,7 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
     private async Task<AutomationResponse> ControlAsync(AutomationRequest request, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        await device.InvokeAsync("reserve", request.Arguments, token).ConfigureAwait(false);
+        await device.InvokeAsync("reserve", JsonSerializer.SerializeToElement(new { operation = request.Operation }), token).ConfigureAwait(false);
         object? committed = null;
         Exception? failure = null;
         try

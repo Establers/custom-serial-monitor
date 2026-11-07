@@ -79,6 +79,8 @@ public sealed class SerialSettings
 
     public bool RtsEnable { get; set; }
 
+    public bool RtsToggleOnTransmit { get; set; }
+
     public RxLineEndingMode RxLineEnding { get; set; } = RxLineEndingMode.Auto;
 
     public TxLineEndingMode TxLineEnding { get; set; } = TxLineEndingMode.Crlf;
@@ -100,6 +102,7 @@ public sealed class SerialSettings
             Handshake = Handshake,
             DtrEnable = DtrEnable,
             RtsEnable = RtsEnable,
+            RtsToggleOnTransmit = RtsToggleOnTransmit,
             RxLineEnding = RxLineEnding,
             TxLineEnding = TxLineEnding,
             Encoding = Encoding,

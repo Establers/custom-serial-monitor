@@ -833,7 +833,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         ToggleFileLoggingCommand = new AsyncRelayCommand(ToggleFileLoggingAsync,
             () => !IsBusy && (FileLoggingEnabled || !_isLogSaveDirectoryValidating));
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync,
-            () => !IsBusy && !IsAutomationBusy && !_isProfileSaveActive && !_isLogSaveDirectoryValidating);
+            () => !IsBusy && !IsAutomationBusy && !_serialControlLineBusy && !_isProfileSaveActive && !_isLogSaveDirectoryValidating);
         LoadProfileCommand = new AsyncRelayCommand(
             LoadProfileAsync,
             () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
@@ -1541,7 +1541,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool IsShuttingDown => Volatile.Read(ref _shutdownStarted) != 0;
 
-    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning;
+    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning && !_serialControlLineBusy && !_serialConfigurationBusy;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -1674,6 +1674,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            if (!_suppressSettingsApplyRecording && RequestLiveSerialParameter(current => current with { BaudRate = value })) return;
             if (SetProperty(ref _selectedBaudRate, value))
             {
                 _currentSerialSettings.BaudRate = value;
@@ -2150,6 +2151,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            if (!_suppressSettingsApplyRecording && RequestLiveSerialParameter(current => current with { DataBits = value })) return;
             _currentSerialSettings.DataBits = value;
             RecordSettingsChange("Data bits", SettingsApplyBehavior.ReconnectRequired, value.ToString(CultureInfo.InvariantCulture));
             RefreshAutomaticHexGroupTimeoutDefault();
@@ -2175,6 +2177,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            if (!_suppressSettingsApplyRecording && RequestLiveSerialParameter(current => current with { Parity = value })) return;
             _currentSerialSettings.Parity = value;
             RecordSettingsChange("Parity", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             RefreshAutomaticHexGroupTimeoutDefault();
@@ -2200,6 +2203,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            if (!_suppressSettingsApplyRecording && RequestLiveSerialParameter(current => current with { StopBits = value })) return;
             _currentSerialSettings.StopBits = value;
             RecordSettingsChange("Stop bits", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             RefreshAutomaticHexGroupTimeoutDefault();
@@ -2225,41 +2229,37 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
+            if (!_suppressSettingsApplyRecording && RequestLiveSerialParameter(current => current with
+            {
+                Handshake = value,
+                RtsToggleOnTransmit = !SerialControlLinePolicy.UsesRtsHandshake(value) && current.RtsToggleOnTransmit
+            })) return;
             _currentSerialSettings.Handshake = value;
+            if (SerialControlLinePolicy.UsesRtsHandshake(value))
+                _currentSerialSettings.RtsToggleOnTransmit = false;
             RecordSettingsChange("Handshake", SettingsApplyBehavior.ReconnectRequired, value.ToString());
             OnPropertyChanged();
+            RefreshSerialControlLineProperties();
         }
     }
 
     public bool DtrEnable
     {
-        get => _currentSerialSettings.DtrEnable;
+        get => IsConnected && SerialControlLinePolicy.IsManual(_serialControlLineStatus.Dtr)
+            ? _serialControlLineStatus.Dtr == SerialControlLineMode.On : _currentSerialSettings.DtrEnable;
         set
         {
-            if (_currentSerialSettings.DtrEnable == value)
-            {
-                return;
-            }
-
-            _currentSerialSettings.DtrEnable = value;
-            RecordSettingsChange("DTR", SettingsApplyBehavior.ReconnectRequired, value ? "enabled" : "disabled");
-            OnPropertyChanged();
+            RequestSerialControlLineChange(SerialControlLine.Dtr, value);
         }
     }
 
     public bool RtsEnable
     {
-        get => _currentSerialSettings.RtsEnable;
+        get => IsConnected && SerialControlLinePolicy.IsManual(_serialControlLineStatus.Rts)
+            ? _serialControlLineStatus.Rts == SerialControlLineMode.On : _currentSerialSettings.RtsEnable;
         set
         {
-            if (_currentSerialSettings.RtsEnable == value)
-            {
-                return;
-            }
-
-            _currentSerialSettings.RtsEnable = value;
-            RecordSettingsChange("RTS", SettingsApplyBehavior.ReconnectRequired, value ? "enabled" : "disabled");
-            OnPropertyChanged();
+            RequestSerialControlLineChange(SerialControlLine.Rts, value);
         }
     }
 
@@ -12372,6 +12372,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void RefreshSettingsProperties(bool includeBackgroundVisualSettings = true)
     {
+        RefreshSerialControlLineProperties();
         OnPropertyChanged(nameof(CanEditConnectionSettings));
         OnPropertyChanged(nameof(CanEditSizeRotationMegabytes));
         OnPropertyChanged(nameof(CanEditLogFileName));
@@ -12960,6 +12961,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnStatusTimerTick(DispatcherQueueTimer sender, object args)
     {
+        RefreshSerialControlLineProperties();
         RefreshSequenceTxActivity();
         StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
@@ -13624,6 +13626,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void NotifyCommandStates()
     {
+        OnPropertyChanged(nameof(CanEditSerialParameters));
+        RefreshSerialControlLineProperties();
         OnPropertyChanged(nameof(CanManualDisconnect));
         OnPropertyChanged(nameof(CanToggleConnection));
         ConnectCommand.NotifyCanExecuteChanged();

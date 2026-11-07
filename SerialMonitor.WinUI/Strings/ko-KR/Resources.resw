@@ -388,7 +388,7 @@
     <comment>English: Configure serial, display, and profile options.</comment>
   </data>
   <data name="StaticUi126.Text" xml:space="preserve">
-    <value>포트 설정은 재연결 후 적용됩니다. 모드, HEX 타임아웃, TX 종결 문자, 확인 설정은 즉시 적용됩니다.</value>
+    <value>통신 형식·흐름 제어: 재연결 / 제어선: 즉시 적용</value>
     <comment>English: Port settings apply on reconnect. Mode, HEX timeout, TX ending, and confirmation apply now.</comment>
   </data>
   <data name="StaticUi126.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -1166,4 +1166,18 @@
   <data name="StaticUi180.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>사용자 지정 배경 초기화</value>
   </data>
+  <data name="SerialLinesInputs.Text" xml:space="preserve"><value>입력 제어선</value></data>
+  <data name="SerialLinesRtsToggle.Content" xml:space="preserve"><value>RTS 송신 자동 제어</value></data>
+  <data name="SerialLinesDisconnected" xml:space="preserve"><value>연결 해제 상태 · 출력 설정은 다음 연결에 적용됩니다.</value></data>
+  <data name="SerialLinesApplying" xml:space="preserve"><value>제어선 변경을 적용하는 중…</value></data>
+  <data name="SerialLinesMock" xml:space="preserve"><value>MOCK: 출력 모드는 모의 동작이며 실제 입력 신호는 조회할 수 없습니다.</value></data>
+  <data name="SerialLinesLive" xml:space="preserve"><value>드라이버 실시간 상태 · AUTO/TX 출력은 드라이버가 제어합니다.</value></data>
+  <data name="SerialLinesInputToolTip" xml:space="preserve"><value>PC로 들어오는 제어선 상태입니다. ON: 활성 · OFF: 비활성 · —: 연결 안 됨 · N/A: 조회 불가. 약 250ms마다 조회하고 화면은 약 1초마다 갱신합니다. 짧은 펄스는 놓칠 수 있습니다.</value></data>
+  <data name="SerialLinesCtsToolTip" xml:space="preserve"><value>CTS(송신 허용): 상대 장치가 PC의 송신을 허용하는 입력입니다. RTS/CTS 흐름 제어에서 사용합니다.</value></data>
+  <data name="SerialLinesDsrToolTip" xml:space="preserve"><value>DSR(장치 준비): 상대 장치의 준비 상태 입력입니다. DTR/DSR 흐름 제어에서 사용합니다.</value></data>
+  <data name="SerialLinesDcdToolTip" xml:space="preserve"><value>DCD(RLSD): 모뎀의 반송파 감지 입력입니다. 실제 의미는 어댑터와 배선에 따라 달라집니다.</value></data>
+  <data name="SerialLinesRiToolTip" xml:space="preserve"><value>RI(RING): 모뎀의 호출 알림 입력입니다. 짧은 펄스는 이 상태 표시에서 놓칠 수 있습니다.</value></data>
+  <data name="SerialLinesDtrToolTip" xml:space="preserve"><value>DTR 출력입니다. ON/OFF는 수동 모드, AUTO는 하드웨어 흐름 제어입니다. 현재 연결에 적용되며 배선에 따라 보드가 리셋될 수 있습니다.</value></data>
+  <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS 출력입니다. ON/OFF는 수동, AUTO는 하드웨어 흐름 제어, TX는 송신 자동 제어입니다. 수동 변경은 ON/OFF 모드에서 가능합니다. 표시는 드라이버 모드이며 전압 실측값이 아닙니다.</value></data>
+  <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>드라이버가 송신에 맞춰 RTS를 제어합니다. 끄면 이전 수동 RTS 설정으로 돌아갑니다. RS-485 사용 가능 여부는 어댑터 지원과 배선에 따라 달라지며, 극성·전환 지연 조절은 제공하지 않습니다.</value></data>
 </root>

@@ -12,9 +12,11 @@ public static class AutomationArguments
         {
             "capabilities" or "list_instances" => "",
             "status" or "ports" or "disconnect" or "cancel_capture" => "instanceId",
+            "get_control_lines" => "instanceId port",
+            "set_control_line" => "instanceId port line enabled sessionGeneration",
             "list_commands" or "sequence_list" => "instanceId offset limit",
             "connect" => "instanceId port baudRate",
-            "configure" => "instanceId port baudRate byteTimeoutMs",
+            "configure" => "instanceId port baudRate byteTimeoutMs dataBits parity stopBits handshake",
             "set_mode" => "instanceId mode",
             "sequence_get" or "sequence_delete" => "instanceId name",
             "sequence_save" => "instanceId sequence overwrite",
@@ -36,8 +38,9 @@ public static class AutomationArguments
             var valid = field.Name switch
             {
                 "sequence" => field.Value.ValueKind == JsonValueKind.Object,
-                "overwrite" => field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-                "baudRate" or "byteTimeoutMs" or "offset" or "limit" or "previewBytes" or "durationMs" =>
+                "overwrite" or "enabled" => field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "sessionGeneration" => field.Value.ValueKind == JsonValueKind.Number && field.Value.TryGetInt64(out var generation) && generation > 0,
+                "baudRate" or "byteTimeoutMs" or "dataBits" or "offset" or "limit" or "previewBytes" or "durationMs" =>
                     field.Value.ValueKind == JsonValueKind.Number && field.Value.TryGetInt32(out _),
                 _ => field.Value.ValueKind == JsonValueKind.String
             };
@@ -54,6 +57,7 @@ public static class AutomationArguments
         string[] required = operation switch
         {
             "connect" => ["port"], "set_mode" => ["mode"],
+            "set_control_line" => ["line", "enabled"],
             "sequence_get" or "sequence_delete" or "sequence_start" => ["name"],
             "sequence_save" => ["sequence"], "sequence_cancel" => ["runId"],
             "send" or "send_and_capture" => ["command"], "read_capture" => ["captureId"], _ => []
@@ -64,6 +68,11 @@ public static class AutomationArguments
         CheckChoice(args, "format", "text", "hex");
         CheckChoice(args, "mode", "terminal", "hex");
         CheckChoice(args, "lineEnding", "none", "cr", "lf", "crlf");
+        CheckChoice(args, "line", "dtr", "rts", "rts_toggle");
+        CheckChoice(args, "parity", AutomationSerialConfiguration.ParityValues);
+        CheckChoice(args, "stopBits", AutomationSerialConfiguration.StopBitsValues);
+        CheckChoice(args, "handshake", AutomationSerialConfiguration.HandshakeValues);
+        CheckRange(args, "dataBits", 5, 8);
         CheckRange(args, "baudRate", 1, 10000000);
         CheckRange(args, "byteTimeoutMs", 1, 5000);
         CheckRange(args, "durationMs", 0, 60000);

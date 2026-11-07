@@ -132,6 +132,7 @@ public sealed partial class MainViewModel
 
     private void SetAutomationStatus(string text)
     {
+        RefreshSerialControlLineProperties();
         _automationStatus = text;
         OnPropertyChanged(nameof(AutomationStatusText));
         OnPropertyChanged(nameof(IsAutomationBusy));
@@ -169,6 +170,10 @@ public sealed partial class MainViewModel
         switch (operation)
         {
             case "status": return AutomationState();
+            case "get_control_lines":
+                return ReadAutomationControlLines(args);
+            case "set_control_line":
+                return await ChangeAutomationControlLineAsync(args, cancellationToken);
             case "sequence_list":
             case "sequence_get":
             case "sequence_save":
@@ -187,8 +192,14 @@ public sealed partial class MainViewModel
                         hex ? "none" : (command.LineEndingMode ?? SelectedTxLineEnding).ToString().ToLowerInvariant());
                 }, args);
             case "reserve":
-                if (AutomationState().Busy || !_automationControl.TryReserveAutomation())
+                var serialControl = args.String("operation") is "set_control_line" or "configure";
+                var busy = serialControl
+                    ? IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting || IsAutoReconnectRunning ||
+                        IsAutomationBusy || _activeGuiSends > 0 || _isProfileSaveActive || _serialConfigurationBusy || _serialControlLineBusy
+                    : AutomationState().Busy;
+                if (busy || !_automationControl.TryReserveAutomation())
                     throw new AutomationException("busy", "GUI TX, sequence, bridge, reconnect, connection change or another AI/CLI operation is active.");
+                _automationSerialControl = serialControl;
                 _automationLastResult = null;
                 SetAutomationStatus(UiText.Get("AutomationActive", "AI/CLI active — RX capture / control"));
                 return AutomationState();
@@ -201,6 +212,7 @@ public sealed partial class MainViewModel
                 finally
                 {
                     _automationControl.ReleaseAutomation();
+                    _automationSerialControl = false;
                     SetAutomationStatus(_automationLastResult ?? UiText.Get("AutomationReady", "AI/CLI ready"));
                 }
                 return AutomationState();

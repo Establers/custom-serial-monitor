@@ -1,8 +1,7 @@
 namespace SerialMonitor.WinUI.Services;
 
-// RJCP stages its baud value before calling SetCommState. Restore both the
-// driver and the staged value on failure; its property getter alone is not a
-// driver acknowledgement, so readback must fetch GetCommState first.
+// A property's staged value alone is not a driver acknowledgement. Readback
+// must fetch GetCommState, and a failed update needs a verified restoration.
 internal static class SerialBaudRateUpdate
 {
     internal static int Apply(int requestedBaudRate, Func<int> readDriverBaudRate, Action<int> writeBaudRate)

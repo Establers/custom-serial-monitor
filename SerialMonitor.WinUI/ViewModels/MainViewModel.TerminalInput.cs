@@ -13,7 +13,10 @@ public sealed partial class MainViewModel
     private TerminalOutputBuffer? _terminalOutput;
     private bool _terminalDirectInputLocalEcho = true;
 
-    public bool CanEnableTerminalDirectInput => CanSendManualTx && !IsHexRxViewSelected &&
+    // Keystrokes and driver changes share the service's write gate. A pending
+    // control-line/configuration operation must not tear down the input session.
+    public bool CanEnableTerminalDirectInput => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy &&
+        (!IsAutomationBusy || _automationSerialControl) && !IsSequenceRunning && !IsHexRxViewSelected &&
         IsXtermReady && !IsBridgeActive && !IsBridgeStarting && !IsLogRenderingPaused;
 
     public string TerminalDirectInputVisibility => IsHexRxViewSelected ? "Collapsed" : "Visible";

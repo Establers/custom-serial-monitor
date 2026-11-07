@@ -48,6 +48,20 @@ public interface ISerialService : IAsyncDisposable
 
     int AppliedBaudRate { get; }
 
+    SerialControlLineStatus ControlLineStatus { get; }
+
+    SerialPortConfiguration? AppliedConfiguration => null;
+
+    Task<SerialPortConfiguration> ConfigureAsync(SerialPortConfiguration configuration,
+        long expectedGeneration, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Live serial configuration is unavailable.");
+
+    Task<SerialControlLineStatus> SetControlLineAsync(SerialControlLine line, bool enabled,
+        long expectedGeneration, CancellationToken cancellationToken);
+
+    Task<SerialControlLineStatus> SetRtsToggleAsync(bool enabled,
+        long expectedGeneration, CancellationToken cancellationToken);
+
     bool IsRawBridgePriorityEnabled { get; }
 
     long BridgePriorityDroppedPipelineByteCount { get; }

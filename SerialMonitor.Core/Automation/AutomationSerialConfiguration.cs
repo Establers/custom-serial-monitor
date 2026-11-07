@@ -4,8 +4,12 @@ namespace SerialMonitor.Core.Automation;
 
 // ByteTimeoutMs controls host-side HEX grouping. It is deliberately independent
 // of baud rate: driver buffering and Windows scheduling need measured slack.
-public sealed record AutomationSerialConfiguration(int? BaudRate, int? ByteTimeoutMs)
+public sealed record AutomationSerialConfiguration(int? BaudRate, int? ByteTimeoutMs,
+    int? DataBits = null, string? Parity = null, string? StopBits = null, string? Handshake = null)
 {
+    public static readonly string[] ParityValues = ["none", "odd", "even", "mark", "space"];
+    public static readonly string[] StopBitsValues = ["1", "1.5", "2"];
+    public static readonly string[] HandshakeValues = ["none", "xon", "rts", "dtr", "rtsxon", "dtrxon", "dtrrts", "dtrrtsxon"];
     public const int MinBaudRate = 1;
     public const int MaxBaudRate = 10_000_000;
     public const int MinByteTimeoutMs = 1;
@@ -14,11 +18,11 @@ public sealed record AutomationSerialConfiguration(int? BaudRate, int? ByteTimeo
     public static AutomationSerialConfiguration Parse(JsonElement arguments)
     {
         if (arguments.ValueKind != JsonValueKind.Object)
-            throw Invalid("configure requires an object containing baudRate and/or byteTimeoutMs.");
+            throw Invalid("configure requires an object containing at least one serial setting.");
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in arguments.EnumerateObject())
         {
-            if (property.Name is not ("baudRate" or "byteTimeoutMs" or "port" or "instanceId") || !names.Add(property.Name))
+            if (property.Name is not ("baudRate" or "byteTimeoutMs" or "dataBits" or "parity" or "stopBits" or "handshake" or "port" or "instanceId") || !names.Add(property.Name))
                 throw Invalid("Unknown, misspelled or duplicate configure property: " + property.Name);
             if (property.Name is "port" or "instanceId" &&
                 (property.Value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(property.Value.GetString())))
@@ -27,9 +31,13 @@ public sealed record AutomationSerialConfiguration(int? BaudRate, int? ByteTimeo
 
         var baud = ReadInteger(arguments, "baudRate", MinBaudRate, MaxBaudRate);
         var timeout = ReadInteger(arguments, "byteTimeoutMs", MinByteTimeoutMs, MaxByteTimeoutMs);
-        if (baud is null && timeout is null)
-            throw Invalid("Specify baudRate and/or byteTimeoutMs.");
-        return new(baud, timeout);
+        var data = ReadInteger(arguments, "dataBits", 5, 8);
+        var parity = ReadChoice(arguments, "parity", ParityValues);
+        var stop = ReadChoice(arguments, "stopBits", StopBitsValues);
+        var handshake = ReadChoice(arguments, "handshake", HandshakeValues);
+        if (baud is null && timeout is null && data is null && parity is null && stop is null && handshake is null)
+            throw Invalid("Specify at least one serial setting.");
+        return new(baud, timeout, data, parity, stop, handshake);
     }
 
     private static int? ReadInteger(JsonElement arguments, string name, int minimum, int maximum)
@@ -41,4 +49,12 @@ public sealed record AutomationSerialConfiguration(int? BaudRate, int? ByteTimeo
     }
 
     private static AutomationException Invalid(string message) => new("invalid_argument", message);
+
+    private static string? ReadChoice(JsonElement arguments, string name, string[] choices)
+    {
+        if (!arguments.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind != JsonValueKind.String || !choices.Contains(value.GetString()))
+            throw Invalid(name + " must be one of: " + string.Join(", ", choices));
+        return value.GetString();
+    }
 }

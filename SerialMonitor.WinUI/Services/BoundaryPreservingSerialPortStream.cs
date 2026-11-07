@@ -100,6 +100,10 @@ internal sealed class BoundaryPreservingSerialPortStream : WinSerialPortStream
         return BaudRate;
     }
 
+    internal ISerialControlLinePort CreateControlLinePort() => new WindowsSerialControlLines(NativeSerial);
+
+    internal void WriteOpenPortBaudRate(int baudRate) => new WindowsSerialControlLines(NativeSerial).WriteBaudRate(baudRate);
+
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -229,7 +229,7 @@ public sealed partial class AutomationCliMcpTests
         Assert.Equal(10000000, properties.GetProperty("baudRate").GetProperty("maximum").GetInt32());
         Assert.Equal(1, properties.GetProperty("byteTimeoutMs").GetProperty("minimum").GetInt32());
         Assert.Equal(5000, properties.GetProperty("byteTimeoutMs").GetProperty("maximum").GetInt32());
-        Assert.Equal(new[] { "baudRate", "byteTimeoutMs" }, schema.GetProperty("anyOf").EnumerateArray().Select(option => option.GetProperty("required")[0].GetString()));
+        Assert.Equal(new[] { "baudRate", "byteTimeoutMs", "dataBits", "parity", "stopBits", "handshake" }, schema.GetProperty("anyOf").EnumerateArray().Select(option => option.GetProperty("required")[0].GetString()));
         foreach (var name in new[] { "serial_send", "serial_send_and_capture", "serial_capture_rx" })
         {
             var format = tools.Single(tool => tool.GetProperty("name").GetString() == name).GetProperty("inputSchema").GetProperty("properties").GetProperty("format");
@@ -400,6 +400,7 @@ public sealed partial class AutomationCliMcpTests
         public string Mode => "terminal";
         private int _baudRate = 115200;
         private int _byteTimeoutMs = 40;
+        private bool _dtr, _rts, _rtsToggle;
         private readonly Dictionary<string, AutomationSequenceDefinition> _sequences = new(StringComparer.Ordinal);
 
         public Task<object> InvokeAsync(string operation, JsonElement arguments, CancellationToken cancellationToken)
@@ -412,6 +413,16 @@ public sealed partial class AutomationCliMcpTests
             }
             switch (operation)
             {
+                case "get_control_lines":
+                    return Task.FromResult<object>(new { connected = true, sessionGeneration = 1,
+                        dtr = _dtr ? "ON" : "OFF", rts = _rtsToggle ? "TX" : _rts ? "ON" : "OFF", cts = true });
+                case "set_control_line":
+                    Assert.True(Reserved);
+                    var line = AutomationControlLineChange.Parse(arguments);
+                    if (line.Line == "dtr") _dtr = line.Enabled;
+                    if (line.Line == "rts") _rts = line.Enabled;
+                    if (line.Line == "rts_toggle") _rtsToggle = line.Enabled;
+                    return InvokeAsync("get_control_lines", arguments, cancellationToken);
                 case "disconnect": DisconnectCount++; break;
                 case "list_commands":
                     return Task.FromResult<object>(AutomationCommandPaging.Create(SavedCommandCount,

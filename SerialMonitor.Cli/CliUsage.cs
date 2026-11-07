@@ -10,6 +10,8 @@ internal static class CliUsage
     serialctl mode [--set terminal|hex] [--instance INSTANCE_ID]
     serialctl connect --port COM7 [--baud 115200] [--instance INSTANCE_ID]
     serialctl configure [--baud 115200] [--byte-timeout-ms 50] [--port COM7] [--instance INSTANCE_ID]
+    serialctl configure [--data-bits 8] [--parity none|odd|even|mark|space] [--stop-bits 1|1.5|2] [--handshake none|xon|rts|dtr|rtsxon|dtrxon|dtrrts|dtrrtsxon] [--instance INSTANCE_ID]
+    serialctl lines [--dtr on|off | --rts on|off | --rts-toggle on|off] [--generation N] [--port COM7] [--instance INSTANCE_ID]
     serialctl disconnect [--instance INSTANCE_ID]
     serialctl request --text "status" [--ending crlf] [--duration-ms 2000] [--instance INSTANCE_ID]
     serialctl request --hex "AA 01 FF" [--duration-ms 2000] [--format hex] [--instance INSTANCE_ID]

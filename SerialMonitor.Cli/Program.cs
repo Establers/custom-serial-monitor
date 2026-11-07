@@ -17,10 +17,8 @@ try
         throw new ArgumentException("--byte-timeout-ms is only supported by serialctl configure.");
     if (command == "configure")
     {
-        if (flags.Keys.Any(key => key is not ("instance" or "port" or "baud" or "byte-timeout-ms")))
-            throw new ArgumentException("configure accepts only --baud, --byte-timeout-ms, --port and --instance.");
-        if (!flags.ContainsKey("baud") && !flags.ContainsKey("byte-timeout-ms"))
-            throw new ArgumentException("configure requires --baud and/or --byte-timeout-ms. Use status to read current settings.");
+        if (!new[] { "baud", "byte-timeout-ms", "data-bits", "parity", "stop-bits", "handshake" }.Any(flags.ContainsKey))
+            throw new ArgumentException("configure requires at least one serial setting. Use status to read current settings.");
         if (flags.TryGetValue("baud", out var baud) && (!int.TryParse(baud, out var baudRate) || baudRate is < 1 or > 10000000))
             throw new ArgumentException("--baud must be an integer between 1 and 10000000. The serial driver must support the requested rate.");
         if (flags.TryGetValue("byte-timeout-ms", out var timeout) &&
@@ -74,13 +72,21 @@ try
     }
     Add("instance", "instanceId"); Add("port", "port"); Add("baud", "baudRate", true);
     Add("byte-timeout-ms", "byteTimeoutMs", true);
+    Add("data-bits", "dataBits", true); Add("parity", "parity");
+    Add("stop-bits", "stopBits"); Add("handshake", "handshake");
     Add("duration-ms", "durationMs", true); Add("ending", "lineEnding");
     Add("preview-bytes", "previewBytes", true);
     Add("set", "mode");
     Add("capture", "captureId"); Add("offset", "offset", true); Add("limit", "limit", true); Add("format", "format");
     CliCommandInput.AddArguments(flags, arguments);
     var request = command == "sequence" ? CliSequenceInput.Parse(args.Skip(1).ToArray()) :
+        command == "lines" ? CliControlLineInput.Parse(flags) :
         new AutomationRequest(operation, JsonSerializer.SerializeToElement(arguments, AutomationJson.Options));
+    if (command == "configure")
+    {
+        try { _ = AutomationSerialConfiguration.Parse(request.Arguments); }
+        catch (AutomationException ex) { throw new ArgumentException(ex.Message); }
+    }
     stop.CancelAfter(TimeSpan.FromSeconds(90));
     var response = await AutomationToolRouter.CallAsync(request.Operation, request.Arguments, null, stop.Token);
     await CliOutput.WriteLineAsync(JsonSerializer.Serialize(response, AutomationJson.Options), stop.Token);

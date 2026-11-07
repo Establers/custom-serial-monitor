@@ -5,7 +5,7 @@ using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
 
-public sealed class SerialService : ISerialService
+public sealed partial class SerialService : ISerialService
 {
     private const int SerialReadBufferBytes = 1024 * 1024;
     private const int MockVisualPacketOverheadBytes = 16;
@@ -206,6 +206,8 @@ public sealed class SerialService : ISerialService
         ArgumentNullException.ThrowIfNull(receiveOptions);
         if (settings.BaudRate is < 1 or > 10_000_000)
             throw new ArgumentOutOfRangeException(nameof(settings), "Baud rate must be between 1 and 10,000,000 bps.");
+        if (settings.RtsToggleOnTransmit && SerialControlLinePolicy.UsesRtsHandshake(settings.Handshake))
+            throw new ArgumentException("RTS TX Toggle cannot be combined with RTS/CTS hardware handshaking.", nameof(settings));
 
         var normalizedReceiveOptions = receiveOptions.Normalize();
 
@@ -246,6 +248,7 @@ public sealed class SerialService : ISerialService
                     () => RunMockReceiverAsync(session, settings.Clone()),
                     CancellationToken.None);
                 SetConnectedIfCurrentSession(session);
+                StartControlLineRuntime(session, settings);
                 await EnsureConnectedAfterStartupAsync(session, cancellationToken);
                 return;
             }
@@ -259,7 +262,16 @@ public sealed class SerialService : ISerialService
                 // Subscribe before Open(). Some adapters can report errors as
                 // soon as DTR/RTS and the driver state are applied during open.
                 serialPort.ErrorReceived += OnSerialErrorReceived;
-                openTask = Task.Run(serialPort.Open, cancellationToken);
+                openTask = Task.Run(() =>
+                {
+                    serialPort.Open();
+                    if (settings.RtsToggleOnTransmit)
+                    {
+                        var control = serialPort.CreateControlLinePort();
+                        SerialControlLineUpdate.Apply(SerialControlLine.Rts, SerialControlLineMode.Toggle,
+                            control.ReadModes, control.WriteMode);
+                    }
+                }, cancellationToken);
                 await openTask.WaitAsync(ReceiveTeardownTimeout, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -294,6 +306,7 @@ public sealed class SerialService : ISerialService
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
             SetConnectedIfCurrentSession(session);
+            StartControlLineRuntime(session, settings);
             await EnsureConnectedAfterStartupAsync(session, cancellationToken);
         }
         finally
@@ -358,13 +371,15 @@ public sealed class SerialService : ISerialService
                         cancellationToken.ThrowIfCancellationRequested();
                         return SerialBaudRateUpdate.Apply(baudRate,
                             serialPort.ReadOpenPortBaudRate,
-                            value => serialPort.BaudRate = value);
+                            serialPort.WriteOpenPortBaudRate);
                     }, cancellationToken).ConfigureAwait(false);
                 }
 
                 // The driver change is the commit point. Cancellation after
                 // it must not leave the effective setting unreported.
                 Volatile.Write(ref _appliedBaudRate, applied);
+                if (_appliedConfiguration is { } configuration)
+                    Volatile.Write(ref _appliedConfiguration, configuration with { BaudRate = applied });
                 RaiseStatusChanged();
                 return applied;
             }
@@ -584,7 +599,8 @@ public sealed class SerialService : ISerialService
         var portCloseTask = StartPortCloseAfterWriteIdle(session, writeIdleTask);
         var teardownTask = Task.WhenAll(
             portCloseTask,
-            session.Worker ?? Task.CompletedTask);
+            session.Worker ?? Task.CompletedTask,
+            session.ControlLines?.Worker ?? Task.CompletedTask);
 
         bool completed;
         try { completed = await WaitForTeardownAsync(teardownTask, cancellationToken); }
@@ -707,7 +723,7 @@ public sealed class SerialService : ISerialService
         ReceiveSession session,
         Task writeIdleTask)
     {
-        return session.StartPortRetirement(() => CloseAfterWriteIdleAsync(session.Port, writeIdleTask));
+        return session.StartPortRetirement(() => CloseAfterWriteIdleAsync(session, writeIdleTask));
     }
 
     private async Task CloseAfterOpenAsync(
@@ -729,11 +745,18 @@ public sealed class SerialService : ISerialService
     }
 
     private async Task CloseAfterWriteIdleAsync(
-        SerialPortStream? serialPort,
+        ReceiveSession session,
         Task writeIdleTask)
     {
         await writeIdleTask.ConfigureAwait(false);
-        await StartPortClose(serialPort).ConfigureAwait(false);
+        if (session.ControlLineChangeTask is { } change)
+        {
+            try { await change.ConfigureAwait(false); }
+            catch (Exception) { } // Its caller reports the update/rollback error.
+        }
+        if (session.ControlLines is { } control)
+            await control.Worker.ConfigureAwait(false);
+        await StartPortClose(session.Port).ConfigureAwait(false);
     }
 
     private async Task EnsureConnectedAfterStartupAsync(ReceiveSession session, CancellationToken cancellationToken)
@@ -864,9 +887,11 @@ public sealed class SerialService : ISerialService
         }
         finally
         {
+            var unexpectedStop = !cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session);
+            session.RequestStop(); // End the control observer before disposing its cancellation source.
             session.Channel.Writer.TryComplete();
 
-            if (!cancellationToken.IsCancellationRequested && IsCurrentReceiveSession(session))
+            if (unexpectedStop)
             {
                 _ = StartPortCloseAfterWriteIdle(
                     session,
@@ -959,6 +984,7 @@ public sealed class SerialService : ISerialService
         }
         finally
         {
+            session.RequestStop();
             session.Channel.Writer.TryComplete();
             session.Dispose();
         }
@@ -1469,6 +1495,10 @@ public sealed class SerialService : ISerialService
         public BoundaryPreservingSerialPortStream? Port { get; set; }
 
         public Task? Worker { get; set; }
+
+        public SerialControlLineRuntime? ControlLines { get; set; }
+
+        public Task? ControlLineChangeTask { get; set; }
 
         public Task StartPortRetirement(Func<Task> retirementFactory)
         {
