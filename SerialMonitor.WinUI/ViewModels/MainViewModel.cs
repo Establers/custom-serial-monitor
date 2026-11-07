@@ -903,6 +903,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         _serialService.Error += OnBackgroundError;
         _serialService.StatusChanged += OnSerialStatusChanged;
+        InitializeProtocolAnalysis();
         _logPipeline.Error += OnBackgroundError;
         _logPipeline.StatusChanged += OnPipelineStatusChanged;
         _fileLogWriter.Error += OnBackgroundError;
@@ -4352,6 +4353,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await DisposeProtocolAnalysisAsync();
         IsTerminalDirectInputEnabled = false;
         await _terminalInputCleanup;
         PropertyChanged -= OnTerminalInputStateChanged;
@@ -11946,6 +11948,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         bool useBridgeVisualQueue = false,
         bool renderInView = true)
     {
+        OfferProtocolTransmit(line);
         if (detectEvent)
         {
             _eventDetector.TryEnqueue(line);

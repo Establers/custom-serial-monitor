@@ -1053,4 +1053,16 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
   <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input</value></data>
   <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Send keys immediately from the terminal. Tab, arrows and Ctrl+C go to the device; Ctrl+C copies when text is selected. Device echo displays your input. TX Ending applies only to the TX box.</value></data>
+  <data name="ProtocolTitle" xml:space="preserve"><value>Protocol</value></data>
+  <data name="ProtocolDisabled" xml:space="preserve"><value>Not in use</value></data>
+  <data name="ProtocolClear" xml:space="preserve"><value>Clear results</value></data>
+  <data name="ProtocolDetails" xml:space="preserve"><value>Selected packet</value></data>
+  <data name="ProtocolRetention" xml:space="preserve"><value>Recent {0:N0} packets · memory only · analysis continues across tabs</value></data>
+  <data name="ProtocolSelectHint" xml:space="preserve"><value>Select Modbus RTU to analyze new RX/TX without sending requests. Select a packet to inspect its fields and CRC.</value></data>
+  <data name="ProtocolSelectionExpired" xml:space="preserve"><value>The selected packet has expired from recent history.</value></data>
+  <data name="ProtocolRunning" xml:space="preserve"><value>Analyzing</value></data>
+  <data name="ProtocolStatusFormat" xml:space="preserve"><value>{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)</value></data>
+  <data name="ProtocolResetStatistics" xml:space="preserve"><value>Reset statistics</value></data>
+  <data name="ProtocolStatisticsFormat" xml:space="preserve"><value>RX {0:N0} · TX {1:N0} · CRC OK {2:N0} / error {3:N0} · incomplete {4:N0} · undecoded {5:N0} · exceptions {6:N0}</value></data>
+  <data name="ProtocolStatisticsPeriodFormat" xml:space="preserve"><value>Since {0} · last CRC OK {1}</value></data>
 </root>

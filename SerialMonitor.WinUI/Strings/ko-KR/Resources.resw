@@ -1053,4 +1053,16 @@
   <data name="TerminalDirectInputOff" xml:space="preserve"><value>직접 입력: OFF</value></data>
   <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>터미널 직접 입력</value></data>
   <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>터미널에서 키를 장치로 즉시 전송합니다. Tab·방향키·Ctrl+C를 사용할 수 있으며, 텍스트 선택 중 Ctrl+C는 복사합니다. 입력 표시는 장치 에코를 사용합니다. TX 줄끝 설정은 TX 창에만 적용됩니다.</value></data>
+  <data name="ProtocolTitle" xml:space="preserve"><value>프로토콜</value></data>
+  <data name="ProtocolDisabled" xml:space="preserve"><value>사용 안 함</value></data>
+  <data name="ProtocolClear" xml:space="preserve"><value>분석 목록 비우기</value></data>
+  <data name="ProtocolDetails" xml:space="preserve"><value>선택한 패킷</value></data>
+  <data name="ProtocolRetention" xml:space="preserve"><value>최근 {0:N0}개 · 메모리 보관 · 다른 탭에서도 분석 유지</value></data>
+  <data name="ProtocolSelectHint" xml:space="preserve"><value>Modbus RTU를 선택하면 새 RX/TX를 자동 분석합니다. 요청을 보내지 않습니다. 패킷을 선택하면 필드와 CRC를 확인할 수 있습니다.</value></data>
+  <data name="ProtocolSelectionExpired" xml:space="preserve"><value>선택한 패킷이 최근 보관 범위에서 만료되었습니다.</value></data>
+  <data name="ProtocolRunning" xml:space="preserve"><value>분석 중</value></data>
+  <data name="ProtocolStatusFormat" xml:space="preserve"><value>{0} · 보관 {1:N0}/{2:N0} · 만료 {3:N0} · 분석 누락 {4:N0}개 조각 ({5:N0} B)</value></data>
+  <data name="ProtocolResetStatistics" xml:space="preserve"><value>통계 초기화</value></data>
+  <data name="ProtocolStatisticsFormat" xml:space="preserve"><value>RX {0:N0} · TX {1:N0} · CRC 정상 {2:N0} / 오류 {3:N0} · 불완전 {4:N0} · 미해석 {5:N0} · 예외 {6:N0}</value></data>
+  <data name="ProtocolStatisticsPeriodFormat" xml:space="preserve"><value>집계 시작 {0} · 마지막 CRC 정상 {1}</value></data>
 </root>

@@ -2127,6 +2127,9 @@
                         </Grid>
                     </TabViewItem>
 
+                    <TabViewItem Header="{Binding Protocol.TabTitle}" IsClosable="False">
+                        <views:ProtocolView DataContext="{Binding Protocol}" />
+                    </TabViewItem>
                     <TabViewItem x:Uid="StaticUi027" Header="Search"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result or press Enter to jump to it.">

@@ -34,6 +34,7 @@ Windows 10/11 **x64**와 Microsoft Edge WebView2 Runtime이 필요합니다.
 | 영역 | 기능 |
 | --- | --- |
 | 통신 | Terminal·HEX 표시, UTF-8·CP949 등 인코딩, 자동 재연결, 선택적 COM 브리지 |
+| 프로토콜 분석 | 선택형 Modbus RTU 자동 해석, CRC·누락 통계, 최근 10,000개 메모리 보관 |
 | 로그 저장 | 비동기 파일 기록, 크기별 파일 회전, 보관 로그 내보내기 |
 | 로그 탐색 | 검색·필터·하이라이트, 시간별 위치 이동, 사용자 마커 |
 | 이벤트 탐지 | 문자·HEX 규칙, 일치 시점의 전후 문맥 수집, 트레이 알림 |
@@ -105,6 +106,7 @@ dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln -c Release --no-build -m
 | [로깅 동작](docs/logging.md) | 파일 기록, 회전, 내보내기와 오류 처리 |
 | [시리얼 제어선](docs/serial-control-lines.md) | CTS·DSR·DCD·RI 상태, 연결 중 DTR/RTS 조작과 RTS 송신 자동 제어 |
 | [아키텍처](docs/architecture.md) | 수신 파이프라인과 백그라운드 처리 구조 |
+| [Modbus RTU 분석](docs/modbus-rtu-analysis.md) | 사용법, 메모리 상한, 해석 범위와 공개 상용 도구 조사 |
 | [테스트 체크리스트](docs/manual_test_checklist.md) | 기능별 수동 회귀 검사 |
 | [장치 테스트](docs/device-test-development-guide.md) | STM32 테스트 펌웨어와 실제 RX 기반 검증 |
 | [릴리스 기록](https://github.com/Establers/custom-serial-monitor/releases) | 버전별 변경 사항과 배포 파일 |

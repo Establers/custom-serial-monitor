@@ -1,0 +1,43 @@
+<UserControl
+    x:Class="SerialMonitor.WinUI.Views.ProtocolView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="View_Loaded"
+    Unloaded="View_Unloaded">
+    <Grid Padding="6" RowSpacing="6" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <ComboBox MinWidth="150" SelectedIndex="{Binding SelectedProtocolIndex, Mode=TwoWay}">
+                <ComboBoxItem Content="{Binding DisabledLabel}" />
+                <ComboBoxItem Content="Modbus RTU" />
+            </ComboBox>
+            <TextBlock Grid.Column="1" Text="{Binding Status}" TextWrapping="Wrap" FontSize="11" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Content="{Binding ClearLabel}" Click="Clear_Click" VerticalAlignment="Center" />
+        </Grid>
+        <TextBlock Grid.Row="1" Text="{Binding Statistics}" FontSize="11" TextWrapping="Wrap" />
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10" MinHeight="110">
+            <Grid>
+                <ListView x:Name="PacketList" ItemsSource="{Binding Frames}" SelectedItem="{Binding SelectedFrame, Mode=TwoWay}" SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Padding="0,2" Spacing="1">
+                                <TextBlock Text="{Binding Heading}" FontFamily="Consolas" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Summary}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="4">
+                <TextBlock Text="{Binding DetailsLabel}" FontSize="11" />
+                <TextBox Grid.Row="1" Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" />
+            </Grid>
+        </Grid>
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="2">
+                <TextBlock Text="{Binding RetentionLabel}" FontSize="11" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding StatisticsPeriod}" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" VerticalAlignment="Center" />
+        </Grid>
+    </Grid>
+</UserControl>
