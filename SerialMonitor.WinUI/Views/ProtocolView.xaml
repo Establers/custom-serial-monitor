@@ -39,7 +39,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*,Auto" MinHeight="0" MinWidth="0">
+    <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto" RowSpacing="5">
                 <Grid ColumnDefinitions="142,*,Auto" ColumnSpacing="10">
@@ -56,13 +56,15 @@
                         <Button Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" Style="{StaticResource ToolbarButton}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*" ColumnSpacing="10"
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,2.6*" ColumnSpacing="10"
                       ToolTipService.ToolTip="{Binding Statistics}">
                     <TextBlock Text="{Binding TrafficSummary}" Style="{StaticResource CellText}" />
                     <Border Grid.Column="1" Width="1" Margin="0,1" Background="{ThemeResource AppSurfaceBorderBrush}" />
                     <TextBlock Grid.Column="2" Text="{Binding CrcSummary}" Style="{StaticResource CellText}" />
                     <TextBlock Grid.Column="3" Text="{Binding ErrorSummary}" Style="{StaticResource CellText}" />
                     <TextBlock Grid.Column="4" Text="{Binding OtherSummary}" Style="{StaticResource ColumnHeader}" />
+                    <TextBlock Grid.Column="5" Text="{Binding HeaderMetadata}" Style="{StaticResource ColumnHeader}" TextAlignment="Right"
+                               ToolTipService.ToolTip="{Binding HeaderMetadata}" />
                 </Grid>
             </Grid>
         </Border>
@@ -150,11 +152,6 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
-        </Grid>
-        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="12" Padding="2,0">
-            <TextBlock Text="{Binding RetentionLabel}" Style="{StaticResource ColumnHeader}" ToolTipService.ToolTip="{Binding Status}" />
-            <TextBlock Grid.Column="1" Text="{Binding StatisticsPeriod}" Style="{StaticResource ColumnHeader}"
-                       TextAlignment="Right" ToolTipService.ToolTip="{Binding StatisticsPeriod}" />
         </Grid>
     </Grid>
 </UserControl>

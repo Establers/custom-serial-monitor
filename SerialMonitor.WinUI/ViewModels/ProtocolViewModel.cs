@@ -60,7 +60,15 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
     public string ResetStatisticsLabel => UiText.Get("ProtocolResetStatistics", "Reset statistics");
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string Statistics { get => _statistics; private set => SetProperty(ref _statistics, value); }
-    public string StatisticsPeriod { get => _statisticsPeriod; private set => SetProperty(ref _statisticsPeriod, value); }
+    public string StatisticsPeriod
+    {
+        get => _statisticsPeriod;
+        private set
+        {
+            if (SetProperty(ref _statisticsPeriod, value)) OnPropertyChanged(nameof(HeaderMetadata));
+        }
+    }
+    public string HeaderMetadata => $"{RetentionLabel}   ·   {StatisticsPeriod}";
     public string Details { get => _details; private set => SetProperty(ref _details, value); }
     public string Activity { get => _activity; private set => SetProperty(ref _activity, value); }
     public string RetainedSummary { get => _retainedSummary; private set => SetProperty(ref _retainedSummary, value); }
