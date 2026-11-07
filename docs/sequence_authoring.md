@@ -197,8 +197,9 @@ RX는 수신 chunk나 HEX 화면의 byte timeout 묶음과 별개인 원본 바�
 CLI의 `configure --port COM7 --baud 57600 --byte-timeout-ms 80` 또는 MCP의
 `serial_configure` (`port`, `baudRate`, `byteTimeoutMs`)로 현재 연결의 호스트 BPS와
 HEX 화면의 byte timeout을 바꿀 수 있습니다. BPS는 1..10,000,000 범위에서 드라이버가
-지원해야 하며, byte timeout은 1..5,000ms(기본 40ms)입니다. 제품의 BPS 변경 명령은
-별도로 제품 규격에 따라 보내야 합니다. 이 설정들은 Step 필드가 아니므로 시퀀스 JSON에
+지원해야 하며, byte timeout은 1..5,000ms입니다. 자동 기본값은 8N1 기준 115200bps에서
+4ms, 9600bps에서 6ms이며 BPS를 바꾸면 갱신됩니다. 직접 지정한 timeout은 유지됩니다.
+제품의 BPS 변경 명령은 별도로 제품 규격에 따라 보내야 합니다. 이 설정들은 Step 필드가 아니므로 시퀀스 JSON에
 임의로 추가하지 말고 실행 전후 별도 제어 요청으로 적용합니다.
 
 Windows·USB·RS485 전환과 처리의 지연 변동을 고려해 이론적인 바이트 간격보다 여유 있게

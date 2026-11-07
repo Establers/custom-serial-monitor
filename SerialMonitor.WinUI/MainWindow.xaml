@@ -3265,7 +3265,7 @@
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
+                                                         ToolTipService.ToolTip="Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
                                                 <TextBlock x:Uid="StaticUi143" Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
@@ -3288,13 +3288,13 @@
                                                            Style="{StaticResource SettingApplyHintTextStyle}"
                                                            TextWrapping="Wrap"
                                                            VerticalAlignment="Center"
-                                                           ToolTipService.ToolTip="Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile." />
+                                                           ToolTipService.ToolTip="Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile." />
                                             </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*"
                                               ColumnSpacing="4">
                                             <TextBlock x:Uid="StaticUi146" Grid.Column="1"
-                                                       Text="Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms)."
+                                                       Text="Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout."
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        TextWrapping="Wrap"
                                                        ToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />

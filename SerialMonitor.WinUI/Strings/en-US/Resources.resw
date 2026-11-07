@@ -404,7 +404,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi142.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</value>
+    <value>Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi143.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -416,11 +416,11 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi145.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile.</value>
+    <value>Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi146.Text" xml:space="preserve">
-    <value>Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms).</value>
+    <value>Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi148.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -769,7 +769,7 @@
     <comment>Log restore overlay line-count format.</comment>
   </data>
   <data name="HexFtdiHelpNotice" xml:space="preserve">
-    <value>Default 40 ms. Increase it if a packet splits across lines; decrease it if packets merge. For FTDI devices, try Latency Timer = 2 ms in the COM port&apos;s advanced settings in Device Manager, then reconnect.</value>
+    <value>Automatic HEX timeout: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). FTDI: try Latency Timer = 2 ms in Device Manager, then reconnect. Increase HEX timeout if a packet splits; a driver still at 16 ms may need a longer timeout.</value>
     <comment>English essential help text.</comment>
   </data>
   <data name="HelpQuickStartTitle" xml:space="preserve">

@@ -149,8 +149,9 @@ Date: 2026-08-22
 - In-app Help/Guide tab.
 - Live Terminal/HEX mode and HEX timeout changes without disconnecting the
   active COM port.
-- Fixed 40 ms automatic HEX grouping timeout across all baud rates, while
-  retaining explicitly saved custom timeout values.
+- Baud-aware automatic HEX grouping timeout: 3.5 character times + 2 ms,
+  minimum 4 ms (115200/8N1: 4 ms; 9600/8N1: 6 ms), while retaining
+  explicitly saved custom timeout values.
 - Inline FTDI troubleshooting guidance without startup or connection popups.
 - HEX-only rolling one-minute RX BUSY/IDLE estimate using the applied baud,
   data-bit, parity, and stop-bit framing settings; local TX is excluded. The

@@ -30,13 +30,13 @@ public sealed class ProfileServiceDefaultsTests
     }
 
     [Fact]
-    public void DefaultProfile_UsesFixedFortyMillisecondHexTimeout()
+    public void DefaultProfile_UsesFourMillisecondHexTimeout()
     {
         var service = new ProfileService();
 
         var profile = service.CreateDefaultProfile();
 
-        Assert.Equal(40, profile.UiSettings.HexGroupTimeoutMs);
+        Assert.Equal(4, profile.UiSettings.HexGroupTimeoutMs);
         Assert.False(profile.UiSettings.HexGroupTimeoutUserConfigured);
     }
 
@@ -426,13 +426,21 @@ public sealed class ProfileServiceDefaultsTests
         }
     }
 
-    [Fact]
-    public async Task AutomaticDefault_RemainsFortyMillisecondsAcrossBaudRates()
+    [Theory]
+    [InlineData(115200, 8, SerialParityMode.None, SerialStopBitsMode.One, 4)]
+    [InlineData(9600, 8, SerialParityMode.None, SerialStopBitsMode.One, 6)]
+    [InlineData(9600, 8, SerialParityMode.Even, SerialStopBitsMode.Two, 7)]
+    [InlineData(1200, 8, SerialParityMode.None, SerialStopBitsMode.One, 32)]
+    public async Task AutomaticDefault_FollowsBaudRateAndFrameFormat(
+        int baudRate, int dataBits, SerialParityMode parity, SerialStopBitsMode stopBits, int expectedTimeoutMs)
     {
         var service = new ProfileService();
         var profile = service.CreateDefaultProfile();
-        profile.SerialSettings.BaudRate = 9_600;
-        profile.UiSettings.HexGroupTimeoutMs = 3;
+        profile.SerialSettings.BaudRate = baudRate;
+        profile.SerialSettings.DataBits = dataBits;
+        profile.SerialSettings.Parity = parity;
+        profile.SerialSettings.StopBits = stopBits;
+        profile.UiSettings.HexGroupTimeoutMs = 40; // Migrate the previous automatic default.
         profile.UiSettings.HexGroupTimeoutUserConfigured = false;
         var path = CreateTemporaryProfilePath();
 
@@ -441,7 +449,7 @@ public sealed class ProfileServiceDefaultsTests
             await service.SaveAsync(path, profile, CancellationToken.None);
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
-            Assert.Equal(40, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.Equal(expectedTimeoutMs, loaded.UiSettings.HexGroupTimeoutMs);
             Assert.False(loaded.UiSettings.HexGroupTimeoutUserConfigured);
         }
         finally
@@ -450,13 +458,49 @@ public sealed class ProfileServiceDefaultsTests
         }
     }
 
-    [Fact]
-    public async Task UserConfiguredTimeout_IsPreservedExactly()
+    [Theory]
+    [InlineData(115200, false, 4)]
+    [InlineData(9600, false, 6)]
+    [InlineData(1200, false, 32)]
+    [InlineData(1200, true, 32)]
+    public async Task LoadingOldAutomaticProfile_RecalculatesTimeout(int baudRate, bool omitTimeout, int expectedMs)
+    {
+        var service = new ProfileService();
+        var path = CreateTemporaryProfilePath();
+        var json = JsonSerializer.SerializeToNode(service.CreateDefaultProfile())!.AsObject();
+        json["SerialSettings"]!["BaudRate"] = baudRate;
+        var ui = json["UiSettings"]!.AsObject();
+        if (omitTimeout)
+            ui.Remove("HexGroupTimeoutMs");
+        else
+            ui["HexGroupTimeoutMs"] = 40;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, json.ToJsonString());
+
+            var loaded = await service.LoadAsync(path, CancellationToken.None);
+
+            Assert.Equal(expectedMs, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.False(loaded.UiSettings.HexGroupTimeoutUserConfigured);
+        }
+        finally
+        {
+            DeleteTemporaryProfileDirectory(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(37)]
+    [InlineData(40)]
+    public async Task UserConfiguredTimeout_IsPreservedExactly(int timeoutMs)
     {
         var service = new ProfileService();
         var profile = service.CreateDefaultProfile();
         profile.SerialSettings.BaudRate = 9_600;
-        profile.UiSettings.HexGroupTimeoutMs = 37;
+        profile.UiSettings.HexGroupTimeoutMs = timeoutMs;
         profile.UiSettings.HexGroupTimeoutUserConfigured = true;
         var path = CreateTemporaryProfilePath();
 
@@ -465,7 +509,7 @@ public sealed class ProfileServiceDefaultsTests
             await service.SaveAsync(path, profile, CancellationToken.None);
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
-            Assert.Equal(37, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.Equal(timeoutMs, loaded.UiSettings.HexGroupTimeoutMs);
             Assert.True(loaded.UiSettings.HexGroupTimeoutUserConfigured);
         }
         finally
@@ -477,7 +521,7 @@ public sealed class ProfileServiceDefaultsTests
     [Theory]
     [InlineData(0)]
     [InlineData(5_001)]
-    public async Task InvalidUserConfiguredTimeout_UsesFixedDefaultAndReturnsToAutomaticMode(
+    public async Task InvalidUserConfiguredTimeout_UsesBaudBasedDefaultAndReturnsToAutomaticMode(
         int invalidTimeoutMs)
     {
         var service = new ProfileService();
@@ -507,9 +551,9 @@ public sealed class ProfileServiceDefaultsTests
 
             var loaded = await service.LoadAsync(path, CancellationToken.None);
 
-            Assert.Equal(40, loaded.UiSettings.HexGroupTimeoutMs);
+            Assert.Equal(32, loaded.UiSettings.HexGroupTimeoutMs);
             Assert.False(loaded.UiSettings.HexGroupTimeoutUserConfigured);
-            Assert.Contains("automatic 40 ms default", service.LastError, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("automatic 32 ms default", service.LastError, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

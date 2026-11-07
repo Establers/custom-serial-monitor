@@ -48,7 +48,7 @@ public sealed class UiSettings
     public const int DefaultVisibleLogLines = 1_000_000;
     public const int MaxVisibleLogLinesLimit = 1_000_000;
     public const int FixedMaxVisibleEventCount = 100;
-    public const int DefaultHexGroupTimeoutMs = 40;
+    public const int DefaultHexGroupTimeoutMs = SerialMonitor.Core.SerialTimingAdvisor.MinimumSuggestedTimeoutMilliseconds;
     public const int DefaultXtermFontSize = 13;
     public const int MinXtermFontSize = 10;
     public const int MaxXtermFontSize = 15;

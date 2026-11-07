@@ -100,7 +100,7 @@ it does not connect/reconnect. Use the GUI/profile to configure offline settings
 Configuration is exclusive and returns `busy` during capture, TX, sequences,
 bridge activity or another control operation. Let that work finish first.
 
-Byte timeout changes the live HEX display's idle-gap grouping (default 40 ms).
+Byte timeout changes the live HEX display's idle-gap grouping (automatic: 4 ms at 115200 bps, 6 ms at 9600 bps, 8N1).
 It does not set the total response wait; `--duration-ms`/step `captureMs` do that.
 Theoretical per-byte or RS485 gap calculations do not include Windows/USB adapter
 buffering and scheduling/processing jitter. Start with empirical slack and observe

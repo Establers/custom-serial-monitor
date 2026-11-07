@@ -10,6 +10,8 @@ public sealed class LogPipelineHexFramingTests
 {
     [Theory]
     [InlineData(2, 4, 220, 12002)]
+    [InlineData(4, 6, 220, 12004)]
+    [InlineData(6, 9, 220, 12006)]
     [InlineData(10, 30, 180, 12010)]
     [InlineData(100, 300, 120, 12100)]
     [InlineData(500, 1200, 80, 12500)]

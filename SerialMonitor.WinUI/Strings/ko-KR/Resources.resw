@@ -404,8 +404,8 @@
     <comment>English: Applies immediately to RX display and the next TX send.</comment>
   </data>
   <data name="StaticUi142.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>모든 보드레이트의 기본값은 40ms입니다. 한 패킷 내부에서 관찰된 최장 간격보다 크고 패킷 사이의 최단 간격보다 작은 값을 선택하세요. Enter 또는 설정 버튼으로 적용합니다.</value>
-    <comment>English: The default is 40 ms for every baud rate. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</comment>
+    <value>자동값은 3.5문자 전송시간 + 2ms이며 최소 4ms입니다. 한 패킷 내부에서 관찰된 최장 간격보다 크고 패킷 사이의 최단 간격보다 작은 값을 선택하세요. Enter 또는 설정 버튼으로 적용합니다.</value>
+    <comment>English: Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</comment>
   </data>
   <data name="StaticUi143.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>밀리초</value>
@@ -416,12 +416,12 @@
     <comment>English: Save and apply the entered timeout immediately without disconnecting the active port.</comment>
   </data>
   <data name="StaticUi145.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>설정을 누르기 전에는 모든 보드레이트에 기본값 40ms를 사용합니다. 설정 후에는 사용자 값이 프로필에 저장됩니다.</value>
-    <comment>English: Until you press Set, the default is 40 ms for every baud rate. After Set, your custom value is retained in the profile.</comment>
+    <value>설정을 누르기 전에는 보드레이트·데이터 비트·패리티·정지 비트에 따라 자동 조정합니다. 설정 후에는 사용자 값이 프로필에 저장됩니다.</value>
+    <comment>English: Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile.</comment>
   </data>
   <data name="StaticUi146.Text" xml:space="preserve">
-    <value>기본값은 40ms입니다. 한 패킷 내부의 최장 간격 &lt; HEX 타임아웃 &lt; 패킷 사이의 최단 간격이 되도록 선택하세요. FTDI가 한 패킷을 15~30ms 청크로 나누면 타임아웃을 그 간격보다 크게 설정하거나 장치 관리자 &gt; Latency Timer(고급: 2ms)를 확인하세요.</value>
-    <comment>English: Default 40 ms. Choose: longest gap inside one packet &lt; HEX timeout &lt; shortest gap between packets. If FTDI splits one packet into 15–30 ms chunks, keep this timeout above that gap or review Device Manager &gt; Latency Timer (advanced: 2 ms).</comment>
+    <value>자동값은 8N1 기준 115200bps에서 4ms, 9600bps에서 6ms입니다. 패킷이 나뉘면 타임아웃을 늘리거나 장치 관리자에서 FTDI Latency Timer를 2ms로 설정한 뒤 재연결하세요. 드라이버가 16ms이면 더 긴 타임아웃이 필요할 수 있습니다.</value>
+    <comment>English: Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout.</comment>
   </data>
   <data name="StaticUi148.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>활성 시리얼 연결을 수동으로 끊기 전에 확인합니다.</value>
@@ -769,7 +769,7 @@
     <comment>English: {0:N0} lines</comment>
   </data>
   <data name="HexFtdiHelpNotice" xml:space="preserve">
-    <value>기본 40ms. 패킷이 여러 줄로 나뉘면 늘리고, 서로 붙으면 줄이세요. FTDI 장비는 장치 관리자 → COM 포트 고급 설정의 Latency Timer도 2ms로 조정한 뒤 재연결해 보세요.</value>
+    <value>HEX 자동값: 8N1 기준 115200bps는 4ms, 9600bps는 6ms입니다. FTDI는 장치 관리자에서 Latency Timer를 2ms로 조정한 뒤 재연결하세요. 패킷이 나뉘면 HEX 타임아웃을 늘리세요. 드라이버가 16ms이면 더 긴 값이 필요할 수 있습니다.</value>
     <comment>Korean essential help text.</comment>
   </data>
   <data name="HelpQuickStartTitle" xml:space="preserve">

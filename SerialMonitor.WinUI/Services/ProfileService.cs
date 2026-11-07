@@ -102,7 +102,7 @@ public sealed class ProfileService : IProfileService
         var serialSettings = new SerialSettings();
         var uiSettings = new UiSettings
         {
-            HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs,
+            HexGroupTimeoutMs = HexGroupTimingPolicy.GetDefaultTimeoutMilliseconds(serialSettings),
             HexGroupTimeoutUserConfigured = false
         };
         var logSettings = new LogSettings
@@ -665,7 +665,7 @@ public sealed class ProfileService : IProfileService
             warnings.Add("UI settings were missing.");
         }
 
-        NormalizeUiSettings(profile.UiSettings, defaults.UiSettings, warnings);
+        NormalizeUiSettings(profile.UiSettings, defaults.UiSettings, profile.SerialSettings, warnings);
 
         if (profile.EventContextSettings is null)
         {
@@ -1003,6 +1003,7 @@ public sealed class ProfileService : IProfileService
     private void NormalizeUiSettings(
         UiSettings settings,
         UiSettings defaults,
+        SerialSettings serialSettings,
         ICollection<string> warnings)
     {
 #if !DEBUG
@@ -1027,14 +1028,14 @@ public sealed class ProfileService : IProfileService
 
         if (settings.HexGroupTimeoutMs is < MinHexGroupTimeoutMs or > MaxHexGroupTimeoutMs)
         {
-            settings.HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
+            settings.HexGroupTimeoutMs = HexGroupTimingPolicy.GetDefaultTimeoutMilliseconds(serialSettings);
             settings.HexGroupTimeoutUserConfigured = false;
-            warnings.Add("HEX group timeout was invalid and was reset to the automatic 40 ms default.");
+            warnings.Add($"HEX group timeout was invalid and was reset to the automatic {settings.HexGroupTimeoutMs} ms default.");
         }
 
         if (!settings.HexGroupTimeoutUserConfigured)
         {
-            settings.HexGroupTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
+            settings.HexGroupTimeoutMs = HexGroupTimingPolicy.GetDefaultTimeoutMilliseconds(serialSettings);
         }
 
         if (!Enum.IsDefined(settings.TimestampDisplayFormat))

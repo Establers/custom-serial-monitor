@@ -9,6 +9,8 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class LogPipelineLiveTimeoutTests
 {
     [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
     [InlineData(20)]
     [InlineData(100)]
     [InlineData(200)]

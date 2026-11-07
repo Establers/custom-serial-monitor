@@ -47,6 +47,7 @@ public sealed partial class MainViewModel
             if (_lastSuccessfulSerialSettings is { } connectedSettings)
                 connectedSettings.BaudRate = effectiveBaudRate;
             _lastSuccessfulBaudRate = effectiveBaudRate;
+            RefreshAutomaticHexGroupTimeoutDefault();
             OnPropertyChanged(nameof(SelectedBaudRate));
             OnPropertyChanged(nameof(HexGroupTimeoutRecommendationText));
             OnPropertyChanged(nameof(ConnectionStateText));

@@ -1940,7 +1940,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             var mode = _currentUiSettings.HexGroupTimeoutUserConfigured
                 ? $"custom {HexGroupTimeoutMs:N0} ms retained"
                 : "automatic default";
-            return $"Default {UiSettings.DefaultHexGroupTimeoutMs:N0} ms for all baud rates; {mode}";
+            var defaultTimeoutMs = HexGroupTimingPolicy.GetDefaultTimeoutMilliseconds(_currentSerialSettings);
+            return $"Auto {defaultTimeoutMs:N0} ms (3.5 chars + 2 ms, min 4 ms); {mode}";
         }
     }
 
@@ -2072,7 +2073,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var defaultTimeoutMs = UiSettings.DefaultHexGroupTimeoutMs;
+        var defaultTimeoutMs = HexGroupTimingPolicy.GetDefaultTimeoutMilliseconds(_currentSerialSettings);
         if (_currentUiSettings.HexGroupTimeoutMs == defaultTimeoutMs)
         {
             return;
@@ -4033,7 +4034,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string HexFtdiHelpNoticeText => UiText.Get(
         "HexFtdiHelpNotice",
-        "Default 40 ms. Increase it if a packet splits across lines; decrease it if packets merge. For FTDI devices, try Latency Timer = 2 ms in the COM port's advanced settings in Device Manager, then reconnect.");
+        "Automatic HEX timeout: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). FTDI: try Latency Timer = 2 ms in Device Manager, then reconnect. Increase HEX timeout if a packet splits; a driver still at 16 ms may need a longer timeout.");
 
     public IReadOnlyList<HelpSection> HelpSections { get; } = CreateHelpSections();
 

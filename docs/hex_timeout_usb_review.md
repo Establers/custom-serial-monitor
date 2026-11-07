@@ -1,5 +1,39 @@
 # HEX timeout와 USB-RS485 전달 지연 검토 — 2026-10-03
 
+## 2026-11-07 자동 기본값 변경
+
+아래는 40ms를 사용하던 당시의 조사 기록이다. 현재 HEX 자동값은
+`ceil(3.5 × 문자 전송시간(ms) + 2ms)`이며 최소 4ms, 최대 5000ms다.
+문자 크기는 start bit + data bits + parity bit(사용 시) + stop bits로 계산한다.
+8N1 기준 115200bps는 4ms, 9600bps는 6ms, 4800bps는 10ms,
+1200bps는 32ms다. 2ms 여유와 4ms 하한은 저지연 USB 환경을 위한 앱의
+시작값이며 제조사가 보장하는 전달 지연이나 Modbus 규격 타이머가 아니다.
+
+자동 모드는 baud·data bits·parity·stop bits와 AI/CLI의 baud 변경에 따라 갱신된다.
+기존 자동 40ms 프로필은 다시 계산한다. 사용자가 Set으로 지정한 값과
+자동/수동 표시가 없는 구형 프로필의 명시적인 timeout은 그대로 보존한다.
+
+FT231X/FT232 계열도 앱 HEX timeout과 드라이버 Latency Timer는 별개다.
+[FTDI VCP 드라이버 안내](https://ftdichip.com/Support/Knowledgebase/settingacustomdefaultlaten.htm)는
+기본 16ms, 1~255ms 설정 범위와 USB frame 길이와 같은 1ms의 비권장을 설명한다.
+[D2XX 안내](https://ftdichip.com/Support/Knowledgebase/ft_setlatencytimer.htm)는
+2~255ms 범위를 설명한다. 지원 드라이버에서 2ms는 저지연 시작값으로 사용할 수 있지만,
+칩 이름만으로 실제 전달 간격을 보장하지 않는다. 앱이 드라이버 설정을 변경하지는 않는다.
+16ms 드라이버를 유지하거나 OS 부하로 패킷이 나뉘면 앱 timeout을 실제 관측 간격보다
+크게 올리거나 Latency Timer를 2ms로 조정한 뒤 재연결하여 확인한다.
+
+Modbus 분석은 HEX 그룹과 독립적으로 길이·CRC를 사용한다. 모호하거나 불완전한
+조각의 50ms 호스트 조립 대기는 유지한다. 이를 HEX 4ms로 줄이면 USB에서 늦게
+전달되는 정상 프레임을 끊을 수 있다. 선로상의 RTU t3.5는
+[공식 규격](https://www.modbus.org/docs/Modbus_over_serial_line_V1_02.pdf)대로
+19200bps 이하에서는 3.5문자, 초과에서는 권장 고정값 1.75ms이며, 앱의 호스트
+timeout으로 선로 규격 준수를 판정하지 않는다.
+
+이번 변경만 적용한 독립 작업 폴더에서 Release 솔루션 빌드가 경고·오류 0으로
+통과했다. 타이밍 계산·프로필 이관·4/6ms HEX 수신·기존 Modbus 회귀 검사
+146개(Core 42, WinUI 104)가 통과했다. GUI 조작, 실물 FT231X/FT232 장치와
+장시간 부하 시험은 이번 변경에서 실행하지 않았다.
+
 ## 결론
 
 9600bps, 8N1의 연속 전송은 한 바이트당 약 1.042ms다. 하지만 현재 앱의
