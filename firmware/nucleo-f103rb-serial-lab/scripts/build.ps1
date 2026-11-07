@@ -42,6 +42,7 @@ $inputs = @(
     (Join-Path $labRoot 'src\main.c'),
     (Join-Path $labRoot 'src\lab.c'),
     (Join-Path $labRoot 'src\lab_fixtures.c'),
+    (Join-Path $labRoot 'src\lab_modbus.c'),
     (Join-Path $device 'Source\Templates\system_stm32f1xx.c'),
     (Join-Path $device 'Source\Templates\gcc\startup_stm32f103xb.s'))
 $objects = @()

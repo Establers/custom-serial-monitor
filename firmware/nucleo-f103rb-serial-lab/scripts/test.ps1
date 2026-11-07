@@ -17,7 +17,7 @@ $batch = @"
 @echo off
 call "$vcvars" >nul
 if errorlevel 1 exit /b 1
-cl.exe /nologo /W4 /WX /std:c11 /D_CRT_SECURE_NO_WARNINGS $buildFlags /I"$labRoot\include" "$labRoot\src\lab.c" "$labRoot\src\lab_fixtures.c" "$labRoot\tests\test_lab.c" /Fe:"$exe" /Fo:"$buildDir\\"
+cl.exe /nologo /W4 /WX /std:c11 /D_CRT_SECURE_NO_WARNINGS $buildFlags /I"$labRoot\include" "$labRoot\src\lab.c" "$labRoot\src\lab_fixtures.c" "$labRoot\src\lab_modbus.c" "$labRoot\tests\test_lab.c" /Fe:"$exe" /Fo:"$buildDir\\"
 if errorlevel 1 exit /b 1
 "$exe" --export "$buildDir"
 exit /b %errorlevel%

@@ -1,5 +1,6 @@
 #include "lab.h"
 #include "lab_fixtures.h"
+#include "lab_modbus.h"
 #ifdef LAB_TARGET_BUILD
 #include "lab_build_info.h"
 #else
@@ -31,6 +32,10 @@ static uint32_t records, injected_drops, injected_duplicates, injected_crc;
 static uint8_t pending[2200];
 static size_t pending_len, pending_pos, pending_chunk;
 static uint32_t pending_due, pending_gap;
+static uint8_t modbus_bytes[LAB_MODBUS_MAX_BYTES];
+static size_t modbus_length, modbus_position;
+static uint32_t modbus_remaining, modbus_sent, modbus_due, modbus_interval;
+static bool modbus_gap;
 static bool monitor_enabled, button_raw, button_stable;
 static uint32_t heartbeat_due, heartbeat_seq, button_changed_at, button_pressed_at;
 static uint32_t button_presses, button_releases, monitor_missed;
@@ -119,6 +124,8 @@ static void stop_jobs(void) {
     monitor_enabled = false;
     stream_interval = stream_remaining = burst_remaining = hex_remaining = 0;
     pending_len = pending_pos = 0;
+    modbus_remaining = 0;
+    modbus_position = 0;
 }
 
 static bool number(const char *text, uint32_t low, uint32_t high, uint32_t *result) {
@@ -213,7 +220,7 @@ static void run_fixture(char *arguments, uint32_t now) {
     }
     /* Deterministic fixtures require exclusive device output, without stopping
        jobs owned by another operator or silently changing fault settings. */
-    if (stream_interval || burst_remaining || hex_remaining || pending_len || baud_pending || reset_pending ||
+    if (stream_interval || burst_remaining || hex_remaining || pending_len || modbus_remaining || baud_pending || reset_pending ||
         drop_every || dup_every || crc_every) { error("BUSY RUN requires idle and FAULT CLEAR"); return; }
     uint8_t payload[256], packet[512];
     size_t length = lab_fixture_copy(name,payload,sizeof(payload));
@@ -265,6 +272,8 @@ static void command(uint32_t now) {
                   "FAULT DROP|DUP|CRC every_n | FAULT CLEAR\r\n"
                   "LED ON|OFF | BUTTON? | BAUD 9600|19200|38400|57600|115200|230400|460800|921600\r\n"
                   "RESET CONFIRM (explicit software reset)\r\n");
+        (void)say("MODBUS case [count_1..1000000] [gap_ms_0..60000]; requires MONITOR OFF, idle, FAULT CLEAR\r\n"
+                  "MODBUS cases: " LAB_MODBUS_CASES " | MODBUS?\r\n");
     } else if (!strcmp(cmd, "ID?") && !*cursor) {
         (void)say("ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1\r\n");
     } else if (!strcmp(cmd, "BUILD?") && !*cursor) {
@@ -276,6 +285,26 @@ static void command(uint32_t now) {
         selftest();
     } else if (!strcmp(cmd, "RUN")) {
         run_fixture(cursor,now);
+    } else if (!strcmp(cmd, "MODBUS?" ) && !*cursor) {
+        (void)say("MODBUS active=%u remaining=%lu sent=%lu bytes=%u gap_ms=%lu split_gap_ms=%u\r\n",
+            modbus_remaining ? 1u : 0u, (unsigned long)modbus_remaining, (unsigned long)modbus_sent,
+            (unsigned)modbus_length, (unsigned long)modbus_interval, modbus_gap ? 80u : 0u);
+    } else if (!strcmp(cmd, "MODBUS")) {
+        char *name = token(&cursor), *count_text = token(&cursor), *gap_text = token(&cursor);
+        uint32_t count = 1, gap = 100;
+        if (!name || (count_text && !number(count_text,1,1000000,&count)) ||
+            (gap_text && !number(gap_text,0,60000,&gap)) || *cursor) {
+            error("ARGS MODBUS case [count_1..1000000] [gap_ms_0..60000]"); return;
+        }
+        if (monitor_enabled || stream_interval || burst_remaining || hex_remaining || pending_len || modbus_remaining ||
+            baud_pending || reset_pending || drop_every || dup_every || crc_every) {
+            error("BUSY MODBUS requires MONITOR OFF, idle and FAULT CLEAR"); return;
+        }
+        size_t length = lab_modbus_copy(name,modbus_bytes,sizeof(modbus_bytes));
+        if (!length) { error("CASE MODBUS " LAB_MODBUS_CASES); return; }
+        modbus_length = length; modbus_position = 0; modbus_remaining = count; modbus_sent = 0;
+        modbus_interval = gap; modbus_due = now; modbus_gap = !strcmp(name,"GAP");
+        /* Successful commands produce raw stimulus bytes only, without ASCII ACK/trailer. */
     } else if (!strcmp(cmd, "STATUS?") && !*cursor) {
         uint32_t drops = 0, errors = 0;
         io.stats(&drops, &errors);
@@ -404,6 +433,7 @@ void lab_init(const lab_platform *platform, uint32_t now) {
     baud_rate = 115200; baud_pending = 0; reset_pending = false;
     drop_every = dup_every = crc_every = 0;
     stop_jobs(); last_byte = now;
+    modbus_length = 0; modbus_sent = modbus_due = modbus_interval = 0; modbus_gap = false;
     monitor_enabled = true;
     heartbeat_due = now + HEARTBEAT_MS;
     heartbeat_seq = button_presses = button_releases = monitor_missed = 0;
@@ -481,6 +511,17 @@ void lab_poll(uint32_t now) {
     if (reset_pending) {
         if (due(now, reset_due) && io.reset()) reset_pending = false;
         return;
+    }
+    if (modbus_remaining && due(now,modbus_due)) {
+        size_t count = modbus_length - modbus_position;
+        if (modbus_gap && modbus_position == 0) count = 3;
+        if (io.write_data(modbus_bytes + modbus_position,count)) {
+            modbus_position += count;
+            if (modbus_position == modbus_length) {
+                modbus_position = 0; --modbus_remaining; ++modbus_sent;
+                modbus_due = now + modbus_interval;
+            } else modbus_due = now + 80;
+        }
     }
     if (pending_len && due(now, pending_due)) {
         size_t count = pending_len - pending_pos;

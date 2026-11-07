@@ -1,13 +1,16 @@
 {
   "schemaVersion": 1,
   "protocol": "SERIAL-LAB/1",
-  "contractFirmwareVersion": "1.2.0",
+  "contractFirmwareVersion": "1.4.0",
   "defaultPolicy": {"preserveGuiMode": true, "autoFlash": false, "retryUncertainTx": false},
   "fixtures": ["TEXT", "UTF8", "CP949", "BYTES", "NEWLINES", "EVENTS", "JSON", "ANSI", "CONTROL"],
   "binaryPayloadLengths": [0, 1, 255, 256, 257, 511, 512, 513, 1023, 1024],
   "maxBinaryPayloadBytes": 1024,
   "maxBinaryFrameBytes": 1035,
   "cases": [
+    {"id":"MODBUS-01","area":"Modbus RX decoding and CRC statistics","stimulus":"MODBUS NORMAL/CRC/EXCEPTION/PREFIX/NESTED/CORRUPT/PAIR/TRUNCATED/MAX","oracle":"exact independent bytes; correct results/CRC/exception/incomplete/undecoded counts; no invented inner frames","validator":"test_lab.c; ModbusUartCheck offline/live","level":"native-and-UART","sideEffects":["requires MONITOR OFF and FAULT CLEAR"]},
+    {"id":"MODBUS-02","area":"observed receive boundaries","stimulus":"MODBUS GAP (3 bytes, 80ms silence, remaining 6 bytes)","oracle":"two incomplete fragments; no false complete CRC-valid response; real chunk timing preserved","validator":"ModbusUartCheck live","level":"UART","sideEffects":["intentional invalid RTU inter-character gap"]},
+    {"id":"MODBUS-03","area":"retention and cumulative counters","stimulus":"MODBUS NORMAL 10005 0","oracle":"90045 exact RX bytes; total=10005 retained=10000 expired=5 CRC errors=0 analysis drops=0; Clear preserves totals","validator":"ModbusUartCheck live","level":"UART","sideEffects":["about 8 seconds or more of binary traffic; GUI rendering separate"]},
     {"id":"BUILD-01","area":"firmware identity","stimulus":"BUILD?; CAPS?; SELFTEST","oracle":"exact manifest buildId, version, supported limits, PASS primitive checks","validator":"FixtureContractCheck offline / mcp","level":"native-and-UART","sideEffects":[]},
     {"id":"TXT-01","area":"TX endings and spaces","stimulus":"PING with CR/LF/CRLF; ECHO with leading/trailing spaces; RUN TEXT token","oracle":"all expected bytes exactly, including spaces/endings","validator":"test_lab.c; verify.ps1; FixtureContractCheck","level":"native-and-UART","sideEffects":[]},
     {"id":"ENC-01","area":"UTF-8 / CP949 / emoji","stimulus":"RUN UTF8 token; RUN CP949 token; SPLIT 30 multibyte-text","oracle":"independent standard encoding bytes and CRC; GUI decode checked separately with chosen encoding","validator":"FixtureContractCheck; test_lab.c; GUI manual","level":"native-UART-and-GUI","sideEffects":["manual encoding change if validating CP949 display"]},

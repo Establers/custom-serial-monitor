@@ -1,5 +1,6 @@
 #include "lab.h"
 #include "lab_fixtures.h"
+#include "lab_modbus.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -208,6 +209,41 @@ static void malformed_tests(void) {
 }
 
 static const char *fixture_names[] = {"TEXT","UTF8","CP949","BYTES","NEWLINES","EVENTS","JSON","ANSI","CONTROL"};
+static const char *modbus_names[] = {"NORMAL","CRC","EXCEPTION","PREFIX","NESTED","CORRUPT","PAIR","TRUNCATED","GAP","MAX"};
+
+static void modbus_tests(void) {
+    static const uint8_t prefix[] = {1,3,4,0,0,1,0x85,0x3a,0};
+    uint8_t bytes[LAB_MODBUS_MAX_BYTES];
+    assert(lab_modbus_crc((const uint8_t *)"123456789",9) == 0x4b37); ++checks;
+    assert(lab_modbus_copy("PREFIX",bytes,sizeof(bytes)) == sizeof(prefix));
+    assert(!memcmp(bytes,prefix,sizeof(prefix))); ++checks;
+    assert(!lab_modbus_copy("UNKNOWN",bytes,sizeof(bytes))); ++checks;
+    assert(!lab_modbus_copy("NORMAL",bytes,8)); ++checks;
+    for (size_t i = 0; i < sizeof(modbus_names)/sizeof(modbus_names[0]); ++i) {
+        char text[64]; snprintf(text,sizeof(text),"MODBUS %s\n",modbus_names[i]);
+        size_t size = lab_modbus_copy(modbus_names[i],bytes,sizeof(bytes));
+        init(0); send(text); assert(used == 0); poll(0,1);
+        if (!strcmp(modbus_names[i],"GAP")) { assert(used == 3); poll(79,1); assert(used == 3); poll(80,1); }
+        assert(size && used == size && !memcmp(out,bytes,size)); ++checks;
+    }
+    size_t normal_length = lab_modbus_copy("NORMAL",bytes,sizeof(bytes));
+    init(0); send("MODBUS NORMAL 3 10\n"); poll(0,1); poll(9,1); assert(used == normal_length);
+    poll(10,1); poll(20,1); poll(100,1); assert(used == normal_length * 3); ++checks;
+    for (size_t i = 0; i < 3; ++i) assert(!memcmp(out + i * normal_length,bytes,normal_length)); ++checks;
+    clear(); send("MODBUS?\n"); contains("active=0 remaining=0 sent=3 bytes=9");
+    init(0); send("MODBUS NORMAL 2 0\n"); data_blocked = true; poll(0,20); equals("");
+    data_blocked = false; poll(1,3); assert(used == normal_length * 2); ++checks;
+    init(0); send("MODBUS GAP\n"); poll(0,1); send("STOP\n"); clear(); poll(1000,10); equals("");
+    init(0xfffffff0u); send("MODBUS NORMAL 2 20\n"); poll(0xfffffff0u,1); poll(3,1);
+    assert(used == normal_length); poll(4,1); assert(used == normal_length * 2); ++checks;
+    const char *invalid[] = {"MODBUS\n","MODBUS NORMAL 0\n","MODBUS NORMAL 1000001\n",
+        "MODBUS NORMAL 1 60001\n","MODBUS NORMAL 1 1 extra\n","MODBUS UNKNOWN\n","MODBUS? extra\n"};
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) { init(0); send(invalid[i]); contains("ERR"); }
+    init(0); send("MONITOR ON\nMODBUS NORMAL\n"); contains("BUSY MODBUS");
+    init(0); send("FAULT DROP 2\nMODBUS NORMAL\n"); contains("BUSY MODBUS");
+    init(0); send("MODBUS NORMAL\nRUN TEXT other\n"); contains("BUSY RUN");
+    init(0); send("MODBUS NORMAL\nMODBUS CRC\n"); contains("BUSY MODBUS");
+}
 
 static void fixture_tests(void) {
     init(0); send("BUILD?\n"); contains("BUILD version=" LAB_FIRMWARE_VERSION " protocol=1 id=");
@@ -272,6 +308,12 @@ static void export_contract(const char *directory) {
         snprintf(file,sizeof(file),"binary-%lu.bin",(unsigned long)binary_lengths[i]);
         export_bytes(directory,file);
     }
+    for (size_t i = 0; i < sizeof(modbus_names)/sizeof(modbus_names[0]); ++i) {
+        char text[64], file[64];
+        snprintf(text,sizeof(text),"MODBUS %s\n",modbus_names[i]);
+        snprintf(file,sizeof(file),"modbus-%s.bin",modbus_names[i]);
+        init(0); send(text); poll(0,1); poll(80,1); export_bytes(directory,file);
+    }
     puts("Exported actual C protocol responses for independent PC contract verification.");
 }
 
@@ -281,6 +323,7 @@ int main(int argc, char **argv) {
     monitor_tests();
     fixture_tests();
     large_binary_tests();
+    modbus_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);
     if (argc == 3 && !strcmp(argv[1],"--export")) export_contract(argv[2]);
     return 0;
