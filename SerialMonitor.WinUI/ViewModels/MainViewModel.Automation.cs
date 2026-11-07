@@ -123,7 +123,7 @@ public sealed partial class MainViewModel
             ? _serialService.AppliedBaudRate : settings.BaudRate;
         return new(_serialService.IsConnected, settings.PortName, effectiveBaudRate,
             _serialService.ReceiveSessionGeneration, _currentSerialSettings.Encoding.ToString(),
-            CaptureConnectionSnapshot.SerialErrorCount, IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
+            CaptureConnectionSnapshot.SerialErrorCount, IsVirtualModbusActive || IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
             IsAutoReconnectRunning || IsAutomationBusy || IsTerminalDirectInputEnabled ||
             _activeGuiSends > 0 || _isProfileSaveActive, _serialService.LastError,
             settings.DataBits, settings.Parity.ToString(), settings.StopBits.ToString(), settings.Handshake.ToString(),

@@ -44,7 +44,7 @@ public sealed partial class MainViewModel
                         // Remote echo owns the on-screen cursor. Keep TX evidence on disk
                         // without adding one displayed TX row for every typed character.
                         FanOutLogLine(LogLine.Tx(text, bytes), fileEligible: true, detectEvent: true,
-                            renderInView: false);
+                            renderInView: false, protocolSession: serialGeneration);
                     },
                     message => RunOnUiThread(() =>
                     {

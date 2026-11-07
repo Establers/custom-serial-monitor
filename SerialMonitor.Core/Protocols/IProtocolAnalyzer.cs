@@ -1,7 +1,9 @@
 namespace SerialMonitor.Core.Protocols;
 
+public enum ProtocolFrameRole { Automatic, Request, Response }
+
 public readonly record struct ProtocolInputTiming(long ReceivedTimestamp = 0, bool EndsAtNativeIdleBoundary = false,
-    int AppliedIdleTimeoutMs = 0, double MinimumFrameGapMs = 0)
+    int AppliedIdleTimeoutMs = 0, double MinimumFrameGapMs = 0, ProtocolFrameRole Role = ProtocolFrameRole.Automatic)
 {
     public bool HasQualifiedBoundary => EndsAtNativeIdleBoundary && MinimumFrameGapMs > 0 && AppliedIdleTimeoutMs >= MinimumFrameGapMs;
     public static double FrameGapMilliseconds(int baud, double bitsPerCharacter) =>

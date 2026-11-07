@@ -1480,6 +1480,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanStartBridge =>
         !IsShuttingDown && IsConnected &&
+        !IsVirtualModbusActive &&
         !IsTerminalDirectInputEnabled &&
         !IsAutomationBusy &&
         !IsBridgeStarting &&
@@ -1549,7 +1550,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool IsShuttingDown => Volatile.Read(ref _shutdownStarted) != 0;
 
-    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning;
+    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsVirtualModbusActive && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -4337,6 +4338,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool TryBeginShutdown()
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return false;
+        _virtualModbus?.RequestStop();
         IsTerminalDirectInputEnabled = false;
         _eventPresentationStop?.Cancel();
         _wasSequenceRunningDuringShutdown = IsSequenceRunning;
@@ -8037,6 +8039,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             ? request.Sequence
             : SelectedCommandSequence;
         return !IsShuttingDown && IsConnected &&
+            !IsVirtualModbusActive &&
             !IsBusy &&
             !IsAutomationBusy &&
             !IsBridgeActive &&
@@ -8295,6 +8298,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsShuttingDown) return false;
+        if (IsVirtualModbusActive)
+        {
+            RecordTxError("Stop Virtual Modbus Device before sending other TX commands.");
+            return false;
+        }
         if (IsSequenceRunning && !isSequence && !isAutomation)
         {
             RecordTxError("TX busy: a sequence owns the response observation window.");
@@ -11946,9 +11954,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         bool fileEligible,
         bool detectEvent,
         bool useBridgeVisualQueue = false,
-        bool renderInView = true)
+        bool renderInView = true,
+        long? protocolSession = null,
+        SerialMonitor.Core.Protocols.ProtocolFrameRole protocolRole = SerialMonitor.Core.Protocols.ProtocolFrameRole.Automatic)
     {
-        OfferProtocolTransmit(line);
+        OfferProtocolTransmit(line, protocolSession, protocolRole);
         if (detectEvent)
         {
             _eventDetector.TryEnqueue(line);

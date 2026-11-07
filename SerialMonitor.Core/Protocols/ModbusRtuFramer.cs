@@ -6,6 +6,9 @@ namespace SerialMonitor.Core.Protocols;
 // to be physical RTU silence. One bounded buffer survives arbitrary read splits.
 public sealed class ModbusRtuFramer(ProtocolDirection direction)
 {
+    private ProtocolFrameRole _role;
+    private bool RequestOnly => _role == ProtocolFrameRole.Request || _role == ProtocolFrameRole.Automatic && direction == ProtocolDirection.Tx;
+    public void SetRole(ProtocolFrameRole role) { if (_role != role) { Reset(); _role = role; } }
     private readonly byte[] _buffer = new byte[ModbusRtuFrame.MaximumBytes];
     private readonly DateTimeOffset[] _timestamps = new DateTimeOffset[ModbusRtuFrame.MaximumBytes];
     private int _count;
@@ -36,7 +39,7 @@ public sealed class ModbusRtuFramer(ProtocolDirection direction)
         while (_count > 0)
         {
             var bytes = _buffer.AsSpan(0, _count);
-            var candidateCount = CandidateLengths(bytes, direction == ProtocolDirection.Tx, candidates);
+            var candidateCount = CandidateLengths(bytes, RequestOnly, candidates);
             var continuation = 0;
             var budget = 256;
             for (var i = 0; i < candidateCount; i++)
@@ -72,7 +75,7 @@ public sealed class ModbusRtuFramer(ProtocolDirection direction)
         if (variableLayout && !allowUnknown) return 0;
         if (variableLayout && ModbusRtuCrc.Compute(bytes) == 0) return bytes.Length;
         Span<int> lengths = stackalloc int[3];
-        var count = CandidateLengths(bytes, direction == ProtocolDirection.Tx, lengths);
+        var count = CandidateLengths(bytes, RequestOnly, lengths);
         if (!allowUnknown)
             for (var i = 0; i < count; i++) if (lengths[i] > bytes.Length) return 0;
         var validLength = 0;
@@ -116,7 +119,7 @@ public sealed class ModbusRtuFramer(ProtocolDirection direction)
         if (--budget < 0 || bytes.Length < 4 || bytes[0] > 247 || (bytes[1] & 127) == 0) return false;
         if (!IsFixedLayout(bytes[1]) && ModbusRtuCrc.Compute(bytes) == 0) return true;
         Span<int> lengths = stackalloc int[3];
-        var count = CandidateLengths(bytes, direction == ProtocolDirection.Tx, lengths);
+        var count = CandidateLengths(bytes, RequestOnly, lengths);
         for (var i = 0; i < count; i++)
         {
             var length = lengths[i];
@@ -130,11 +133,13 @@ public sealed class ModbusRtuFramer(ProtocolDirection direction)
     {
         var bytes = _buffer.AsSpan(0, length).ToArray();
         Span<int> candidates = stackalloc int[3];
-        var count = CandidateLengths(bytes, direction == ProtocolDirection.Tx, candidates);
+        var count = CandidateLengths(bytes, RequestOnly, candidates);
         var knownLength = candidates[..count].Contains(length);
         var crcMatches = length >= 4 && ModbusRtuCrc.Compute(bytes) == 0;
         var status = crcMatches ? ModbusCrcStatus.Valid : knownLength && length >= 4 ? ModbusCrcStatus.Invalid : ModbusCrcStatus.Unavailable;
-        var kind = undecoded ? ModbusFrameKind.Undecoded : valid && crcMatches ? Classify(bytes, direction == ProtocolDirection.Tx) : crcMatches ? ModbusFrameKind.Undecoded : ModbusFrameKind.Incomplete;
+        var kind = undecoded ? ModbusFrameKind.Undecoded : valid && crcMatches ? Classify(bytes, RequestOnly) : crcMatches ? ModbusFrameKind.Undecoded : ModbusFrameKind.Incomplete;
+        if (_role == ProtocolFrameRole.Response)
+            kind = kind == ModbusFrameKind.RequestOrResponse ? ModbusFrameKind.Response : kind == ModbusFrameKind.Request ? ModbusFrameKind.Undecoded : kind;
         // A CRC-invalid complete candidate may be inspected, but is never used
         // as a valid register response or as evidence of a successful request.
         var result = new ModbusRtuFrame(0, 0, _timestamps[0], direction, bytes, kind, status);

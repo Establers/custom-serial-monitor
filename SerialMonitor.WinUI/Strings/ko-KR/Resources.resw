@@ -1077,4 +1077,29 @@
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC 정상 {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC 오류 {0:N0}</value></data>
   <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>불완전 {0:N0} · 미해석 {1:N0} · 예외 {2:N0}</value></data>
+  <data name="VmdAnalysis" xml:space="preserve"><value>분석</value></data>
+  <data name="VmdImport" xml:space="preserve"><value>JSON 추가…</value></data>
+  <data name="VmdPaste" xml:space="preserve"><value>JSON 붙여넣기…</value></data>
+  <data name="VmdClose" xml:space="preserve"><value>닫기</value></data>
+  <data name="VmdSave" xml:space="preserve"><value>JSON 저장…</value></data>
+  <data name="VmdGuide" xml:space="preserve"><value>GPT 작성 지침 복사</value></data>
+  <data name="VmdSample" xml:space="preserve"><value>예제 추가</value></data>
+  <data name="VmdRemove" xml:space="preserve"><value>장치 제거</value></data>
+  <data name="VmdApply" xml:space="preserve"><value>값 적용</value></data>
+  <data name="VmdChangeId" xml:space="preserve"><value>ID 변경</value></data>
+  <data name="VmdValue" xml:space="preserve"><value>새 값 (소수점은 . 사용)</value></data>
+  <data name="VmdHint" xml:space="preserve"><value>센서 JSON 추가 후 제품을 연결하고 시작하세요. RX 요청 → 가상 레지스터 → TX 응답. 실행 중 값·ID 변경 가능. 주소는 0 기반입니다.</value></data>
+  <data name="VmdPersistence" xml:space="preserve"><value>현재 값과 ID를 보존하려면 JSON을 저장하세요. 앱 시작·재연결만으로 자동 응답이 켜지지는 않습니다.</value></data>
+  <data name="VmdStart" xml:space="preserve"><value>시작</value></data>
+  <data name="VmdStop" xml:space="preserve"><value>중지</value></data>
+  <data name="VmdStopping" xml:space="preserve"><value>중지 중…</value></data>
+  <data name="VmdRunning" xml:space="preserve"><value>실행 중 · 자동 응답 ON</value></data>
+  <data name="VmdStopped" xml:space="preserve"><value>중지됨 · 자동 응답 OFF</value></data>
+  <data name="VmdStatus" xml:space="preserve"><value>{0} · RX 요청 {1:N0} · TX 응답 {2:N0} · 무시 {3:N0} · 잘못된 프레임 {4:N0} · 예외 {5:N0} · 방송 {6:N0} · 에코 {7:N0}</value></data>
+  <data name="VmdEcho" xml:space="preserve"><value>어댑터 TX 에코 있음 (다음 동일 프레임 무시)</value></data>
+  <data name="VmdAdded" xml:space="preserve"><value>장치 {0}개를 추가했습니다.</value></data>
+  <data name="VmdSaved" xml:space="preserve"><value>현재 ID와 레지스터 값을 저장했습니다.</value></data>
+  <data name="VmdApplied" xml:space="preserve"><value>값을 적용했습니다. 다음 요청부터 변경된 값을 읽습니다.</value></data>
+  <data name="VmdIdApplied" xml:space="preserve"><value>센서 ID를 변경했습니다.</value></data>
+  <data name="VmdGuideCopied" xml:space="preserve"><value>GPT 작성 지침을 복사했습니다. 센서 프로토콜 PDF와 함께 GPT에 전달하세요.</value></data>
 </root>

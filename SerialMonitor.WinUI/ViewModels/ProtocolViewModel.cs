@@ -25,6 +25,22 @@ public sealed class ProtocolFrameRow(ModbusRtuFrame frame)
 
 public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBase
 {
+    private int _selectedWorkspaceIndex;
+    public VirtualModbusDeviceViewModel? VirtualDevice { get; set; }
+    public int SelectedWorkspaceIndex
+    {
+        get => _selectedWorkspaceIndex;
+        set
+        {
+            if (!SetProperty(ref _selectedWorkspaceIndex, value == 1 ? 1 : 0)) return;
+            OnPropertyChanged(nameof(AnalysisVisibility));
+            OnPropertyChanged(nameof(VirtualDeviceVisibility));
+            VirtualDevice?.Refresh(true);
+        }
+    }
+    public Visibility AnalysisVisibility => _selectedWorkspaceIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility VirtualDeviceVisibility => _selectedWorkspaceIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+    public string AnalysisLabel => UiText.Get("VmdAnalysis", "Analysis");
     private int _selectedProtocolIndex;
     private long _version = -1;
     private long? _selectedId;
@@ -130,6 +146,7 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
 
     public void Refresh(bool force = false)
     {
+        VirtualDevice?.Refresh(force);
         var snapshot = Analyzer.Snapshot(force ? -1 : _version);
         Status = snapshot.LastError ?? string.Format(CultureInfo.CurrentCulture,
             UiText.Get("ProtocolStatusFormat", "{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)"),

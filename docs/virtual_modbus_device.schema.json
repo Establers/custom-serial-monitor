@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Serial Monitor Virtual Modbus Device v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "devices"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "devices": {
+      "type": "array", "minItems": 1, "maxItems": 32,
+      "items": { "$ref": "#/$defs/device" }
+    }
+  },
+  "$defs": {
+    "device": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "unitId", "registers"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "unitId": { "type": "integer", "minimum": 1, "maximum": 247 },
+        "registers": {
+          "type": "array", "minItems": 1, "maxItems": 8192,
+          "items": { "$ref": "#/$defs/register" }
+        }
+      }
+    },
+    "register": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "area", "address", "dataType"],
+      "oneOf": [{ "required": ["value"], "not": { "required": ["rawWords"] } }, { "required": ["rawWords"], "not": { "required": ["value"] } }],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "area": { "enum": ["holding", "input", "coil", "discrete"] },
+        "address": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Zero-based on-wire address. Convert reference 40001 or 30001 to address 0." },
+        "dataType": { "enum": ["bool", "uint16", "int16", "uint32", "int32", "float32", "float64"] },
+        "value": { "type": ["number", "boolean"], "description": "Engineering value. Wire numeric value = (value - offset) / scale." },
+        "rawWords": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "integer", "minimum": 0, "maximum": 65535 }, "description": "Exact unsigned 16-bit words in ascending wire-address order; mutually exclusive with value." },
+        "scale": { "type": "number", "default": 1, "anyOf": [{ "minimum": 1e-12, "maximum": 1e12 }, { "minimum": -1e12, "maximum": -1e-12 }] },
+        "offset": { "type": "number", "minimum": -1e12, "maximum": 1e12, "default": 0 },
+        "byteOrder": { "enum": ["bigEndian", "littleEndian"], "default": "bigEndian", "description": "Byte order inside each register value. Modbus register transport remains big endian." },
+        "wordOrder": { "enum": ["highFirst", "lowFirst"], "default": "highFirst" },
+        "writable": { "type": "boolean", "default": true, "description": "Allow product writes to holding/coil. UI edits are always allowed." },
+        "unit": { "type": "string", "maxLength": 32, "default": "" },
+        "description": { "type": "string", "maxLength": 1024, "default": "" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "area": { "enum": ["coil", "discrete"] } } },
+          "then": { "properties": { "dataType": { "const": "bool" }, "value": { "type": "boolean" }, "rawWords": { "minItems": 1, "maxItems": 1, "items": { "enum": [0, 1] } }, "scale": { "const": 1 }, "offset": { "const": 0 } } },
+          "else": { "properties": { "dataType": { "enum": ["uint16", "int16", "uint32", "int32", "float32", "float64"] }, "value": { "type": "number" } } }
+        },
+        { "if": { "properties": { "dataType": { "enum": ["uint16", "int16", "bool"] } } }, "then": { "properties": { "rawWords": { "minItems": 1, "maxItems": 1 } } } },
+        { "if": { "properties": { "dataType": { "enum": ["uint32", "int32", "float32"] } } }, "then": { "properties": { "address": { "maximum": 65534 }, "rawWords": { "minItems": 2, "maxItems": 2 } } } },
+        { "if": { "properties": { "dataType": { "const": "float64" } } }, "then": { "properties": { "address": { "maximum": 65532 }, "rawWords": { "minItems": 4, "maxItems": 4 } } } }
+      ]
+    }
+  }
+}

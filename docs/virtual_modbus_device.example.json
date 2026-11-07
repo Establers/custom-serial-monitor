@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "devices": [
+    {
+      "name": "Example temperature sensor",
+      "unitId": 1,
+      "registers": [
+        {
+          "name": "Temperature",
+          "area": "holding",
+          "address": 0,
+          "dataType": "int16",
+          "value": 25.0,
+          "scale": 0.1,
+          "unit": "°C",
+          "writable": false,
+          "description": "FC03, reference 40001, wire value 250 means 25.0 °C. Example only."
+        },
+        {
+          "name": "Setpoint",
+          "area": "holding",
+          "address": 1,
+          "dataType": "int16",
+          "value": 30.0,
+          "scale": 0.1,
+          "unit": "°C"
+        },
+        {
+          "name": "Measurement",
+          "area": "input",
+          "address": 0,
+          "dataType": "float32",
+          "value": 12.5,
+          "wordOrder": "lowFirst",
+          "description": "FC04, float32 low word first; occupies addresses 0 and 1."
+        },
+        {
+          "name": "Alarm",
+          "area": "discrete",
+          "address": 0,
+          "dataType": "bool",
+          "value": false
+        },
+        {
+          "name": "Enable",
+          "area": "coil",
+          "address": 0,
+          "dataType": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Example second sensor",
+      "unitId": 2,
+      "registers": [
+        {
+          "name": "Counter",
+          "area": "holding",
+          "address": 100,
+          "dataType": "uint32",
+          "value": 123456,
+          "wordOrder": "highFirst"
+        }
+      ]
+    }
+  ]
+}
