@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Win32;
 using SerialMonitor.Core.Diagnostics;
 using SerialMonitor.WinUI.Services;
@@ -99,19 +100,78 @@ public sealed class PortOwnerProbeProcessTests
     [Com0comPair0Fact]
     public async Task ActualExclusiveVirtualComOwner_IsIdentifiedWithoutChangingTheConnection()
     {
-        using var registry = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\com0com\port\CNCA0");
-        Assert.NotNull(registry); Assert.Equal("com0com", registry.GetValue("Service"));
-        using var parameters = registry.OpenSubKey("Device Parameters"); Assert.Equal("CNCA0", parameters!.GetValue("PortName"));
+        VerifyVirtualPort();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var owner = new SerialService(); await using var denied = new SerialService();
         await owner.ConnectAsync(new() { PortName = "CNCA0" }, new(), timeout.Token);
         var generation = owner.ReceiveSessionGeneration;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => denied.ConnectAsync(new() { PortName = "CNCA0" }, new(), timeout.Token));
         var report = await new SerialConnectFailureDiagnostics().DiagnoseAsync("CNCA0", error, timeout.Token);
-        Assert.Equal(PortOwnerProbeStatus.Found, report.OwnerProbe.Status);
+        Assert.True(report.OwnerProbe.Status == PortOwnerProbeStatus.Found,
+            $"Owner lookup returned {report.OwnerProbe.Status}: {report.OwnerProbe.Detail}");
         var process = Assert.Single(report.OwnerProbe.Owners); Assert.Equal(Environment.ProcessId, process.ProcessId); Assert.NotEmpty(process.ProcessName);
         Assert.True(owner.IsConnected); Assert.Equal(generation, owner.ReceiveSessionGeneration);
         Assert.Equal(0, owner.ReceivedByteCount); Assert.Equal(0, owner.WrittenByteCount);
+    }
+
+    [Com0comPair0Fact]
+    public async Task ActualOwnerInAnotherProcess_IsFoundWithoutClosingThatProcess()
+    {
+        VerifyVirtualPort();
+        const string script = """
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Runtime.InteropServices;
+            using Microsoft.Win32.SafeHandles;
+            public static class VirtualComOwnerFixture {
+                [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+                static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+                public static SafeFileHandle Open() { return CreateFile(@"\\.\CNCA0",0xC0000000,0,IntPtr.Zero,3,0,IntPtr.Zero); }
+            }
+            '@
+            $port = [VirtualComOwnerFixture]::Open()
+            if ($port.IsInvalid) { throw 'Virtual COM fixture could not open CNCA0.' }
+            try { [Console]::Out.WriteLine('READY'); [Console]::Out.Flush(); [Console]::In.ReadLine() | Out-Null }
+            finally { $port.Dispose() }
+            """;
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        foreach (var arg in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) })
+            start.ArgumentList.Add(arg);
+        using var process = new Process { StartInfo = start };
+        Assert.True(process.Start());
+        try
+        {
+            Assert.Equal("READY", await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(8)));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            await using var denied = new SerialService();
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => denied.ConnectAsync(new() { PortName = "CNCA0" }, new(), timeout.Token));
+            var report = await new SerialConnectFailureDiagnostics().DiagnoseAsync("CNCA0", error, timeout.Token);
+            Assert.True(report.OwnerProbe.Status == PortOwnerProbeStatus.Found,
+                $"Owner lookup returned {report.OwnerProbe.Status}: {report.OwnerProbe.Detail}");
+            var owner = Assert.Single(report.OwnerProbe.Owners);
+            Assert.Equal(process.Id, owner.ProcessId); Assert.Equal("powershell.exe", owner.ProcessName, ignoreCase: true);
+            Assert.False(process.HasExited);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                await process.StandardInput.WriteLineAsync();
+                try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
+                catch (TimeoutException) { process.Kill(); await process.WaitForExitAsync(); }
+            }
+        }
+    }
+
+    private static void VerifyVirtualPort()
+    {
+        using var registry = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\com0com\port\CNCA0");
+        Assert.NotNull(registry); Assert.Equal("com0com", registry.GetValue("Service"));
+        using var parameters = registry.OpenSubKey("Device Parameters"); Assert.Equal("CNCA0", parameters!.GetValue("PortName"));
     }
 
     private static (WindowsPortOwnerProbeClient Client, string LockPath) CreateFixture(TimeSpan timeout)

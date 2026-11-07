@@ -39,13 +39,28 @@ publish하여 해당 폴더에 .NET 런타임을 함께 넣는다. 일반 개발
 - UI 스레드에서 프로세스 시작/네이티브 조회를 수행하지 않는다.
 - 앱 응답 제한은 2.5초이고 보조 프로세스의 자체 종료 타이머는 2초다.
 - 네이티브 조회 루프는 1.4초/프로세스 1024개/핸들 100,000개로 제한한다.
-- 시스템 핸들 스냅샷은 최대 64 MiB, stdout은 32,768자, stderr는 2,048자다.
+- 시스템 전체 핸들 목록을 만들지 않는다. 요청한 앱을 먼저 확인하고 프로세스별로 순서대로
+  조회한다. 각 스냅샷은 64 KiB에서 시작해 최대 8 MiB로 제한한다. 이 한도를 넘는 프로세스는
+  추가 메모리를 할당하지 않고 건너뛰며, 다른 프로세스 조회는 계속한다. 확인된 점유자가 없고
+  접근 권한·메모리·조회 범위 제한이 있으면 `Limited`로 안내한다.
+- stdout은 32,768자, stderr는 2,048자다.
 - 앱 프로세스당 동시에 하나의 진단 보조 프로세스만 허용한다. 취소/시간 초과 시 앱이 시작한
   보조 프로세스만 종료한다. 드라이버 정리가 지연되면 해당 조회의 정리가 끝날 때까지 새 조회를
   만들지 않아 보조 프로세스가 누적되지 않는다.
-- Windows x64 핸들 스냅샷 API/레이아웃을 지원하지 않는 환경에서는 조회 불가로 안내한다.
+- Windows x64 프로세스 핸들 스냅샷 API/레이아웃을 지원하지 않는 환경에서는 조회 불가로 안내한다.
   네이티브 호출은 이 보조 프로그램에 격리되어 있다.
 
 참조: [GetFileType](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfiletype),
 [DuplicateHandle](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle),
-[NtQuerySystemInformation](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntquerysysteminformation).
+[NtQueryInformationProcess](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationprocess),
+[EnumProcesses](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-enumprocesses).
+`ProcessHandleInformation`과 x64 레코드 레이아웃은 공개 [phnt 선언](https://github.com/winsiderss/phnt/blob/master/ntpsapi.h)을
+확인해 직접 구현했으며, 해당 내부 정보 클래스가 지원되지 않으면 조회 불가로 처리한다.
+
+## 회귀 검사
+
+`ProcessHandleSnapshotTests`는 134 MiB를 요구하는 응답의 사전 거부, 반복 크기 증가 상한,
+잘못된 네이티브 반환 길이/개수와 레코드 오프셋·버퍼 수명을 검증한다.
+`PortOwnerProbeProcessTests`의 실제 점유 검사는 `SERIAL_MONITOR_TEST_COM0COM_PAIR0=1`에서만
+실행하며 레지스트리로 `CNCA0`가 com0com 가상 포트인지 먼저 확인한다. 현재 앱과 별도 프로세스가
+점유한 경우를 각각 검증하고, 조회 후 기존 연결과 점유 프로세스가 유지되는지도 확인한다.

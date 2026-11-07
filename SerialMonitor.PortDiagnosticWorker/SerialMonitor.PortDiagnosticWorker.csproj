@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SerialMonitor.Core\SerialMonitor.Core.csproj" />
+    <InternalsVisibleTo Include="SerialMonitor.WinUI.Tests" />
   </ItemGroup>
 </Project>
