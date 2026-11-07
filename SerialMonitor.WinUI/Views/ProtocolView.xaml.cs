@@ -11,8 +11,26 @@ public sealed partial class ProtocolView : UserControl
     private DispatcherQueueTimer? _timer;
     private TabView? _tabs;
     private TabViewItem? _tab;
+    private bool _isNarrow;
     private ProtocolViewModel? Model => DataContext as ProtocolViewModel;
     public ProtocolView() => InitializeComponent();
+
+    private void View_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var narrow = args.NewSize.Width < 780;
+        if (narrow == _isNarrow) return;
+        _isNarrow = narrow;
+        // Keep both panes scrollable inside the available Inspector height.
+        // A fixed minimum here pushes the footer and details out of small panels.
+        PacketWorkspace.ColumnDefinitions[0].Width = new GridLength(narrow ? 1 : 3, GridUnitType.Star);
+        PacketWorkspace.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(2, GridUnitType.Star);
+        PacketWorkspace.RowDefinitions[0].Height = new GridLength(narrow ? 3 : 1, GridUnitType.Star);
+        PacketWorkspace.RowDefinitions[1].Height = narrow ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
+        PacketWorkspace.ColumnSpacing = narrow ? 0 : 6;
+        PacketWorkspace.RowSpacing = narrow ? 6 : 0;
+        Grid.SetColumn(DetailsPanel, narrow ? 0 : 1);
+        Grid.SetRow(DetailsPanel, narrow ? 1 : 0);
+    }
 
     private void View_Loaded(object sender, RoutedEventArgs args)
     {

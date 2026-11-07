@@ -1,5 +1,6 @@
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.ViewModels;
+using Microsoft.UI.Xaml;
 
 namespace SerialMonitor.WinUI.Tests;
 
@@ -12,20 +13,27 @@ public sealed class ProtocolViewModelTests
     {
         await using var analyzer = new ModbusRtuAnalyzer();
         var viewModel = new ProtocolViewModel(analyzer) { IsVisible = true, SelectedProtocolIndex = 1 };
+        Assert.Equal("Protocol", viewModel.TabTitle);
+        Assert.Equal(Visibility.Visible, viewModel.EmptyStateVisibility);
+        Assert.Equal(Visibility.Collapsed, viewModel.DetailsVisibility);
         analyzer.TryEnqueue(Request, ProtocolDirection.Tx, 1, DateTimeOffset.Now);
         await Wait(analyzer, state => state.TotalFrames == 1);
         viewModel.Refresh();
         viewModel.SelectedFrame = Assert.Single(viewModel.Frames);
         var selectedId = viewModel.SelectedFrame.Id;
+        Assert.Equal(Visibility.Collapsed, viewModel.EmptyStateVisibility);
+        Assert.Equal(Visibility.Visible, viewModel.DetailsVisibility);
         Assert.Contains("Start address (base 0): 0", viewModel.Details);
         viewModel.IsVisible = false;
         Assert.Empty(viewModel.Frames);
+        Assert.Equal(Visibility.Collapsed, viewModel.DetailsVisibility);
         Assert.True(analyzer.Enabled);
         analyzer.TryEnqueue(Request, ProtocolDirection.Rx, 1, DateTimeOffset.Now);
         await Wait(analyzer, state => state.TotalFrames == 2);
         viewModel.IsVisible = true;
         Assert.Equal(2, viewModel.Frames.Count);
         Assert.Equal(selectedId, viewModel.SelectedFrame!.Id);
+        Assert.Equal(Visibility.Visible, viewModel.DetailsVisibility);
     }
 
     [Fact]
@@ -41,12 +49,16 @@ public sealed class ProtocolViewModelTests
         await Wait(analyzer, state => state.TotalFrames == 3);
         viewModel.Refresh();
         Assert.Null(viewModel.SelectedFrame);
+        Assert.Equal(Visibility.Visible, viewModel.SelectionHintVisibility);
+        Assert.Equal(Visibility.Collapsed, viewModel.DetailsVisibility);
         Assert.Equal(2, viewModel.Frames.Count);
         viewModel.SelectedProtocolIndex = 0;
         Assert.False(analyzer.Enabled);
         Assert.Equal(2, viewModel.Frames.Count);
         viewModel.Clear();
         Assert.Empty(viewModel.Frames);
+        Assert.Equal(Visibility.Visible, viewModel.EmptyStateVisibility);
+        Assert.Equal(Visibility.Visible, viewModel.SelectionHintVisibility);
         Assert.Empty(analyzer.Snapshot().Frames!);
     }
 
