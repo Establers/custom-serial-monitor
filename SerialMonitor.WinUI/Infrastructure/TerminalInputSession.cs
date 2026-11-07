@@ -14,6 +14,7 @@ internal sealed class TerminalInputSession : IAsyncDisposable
         Func<CancellationToken, Task>? Operation = null, Action<CancellationToken>? Cancel = null);
     private readonly Channel<InputItem> _input;
     private readonly CancellationTokenSource _cancellation = new();
+    private readonly CancellationToken _sessionToken;
     private readonly Func<string, byte[], CancellationToken, Task> _send;
     private readonly Action<string> _reportError;
     private readonly Task _worker;
@@ -25,6 +26,7 @@ internal sealed class TerminalInputSession : IAsyncDisposable
     {
         _send = send;
         _reportError = reportError;
+        _sessionToken = _cancellation.Token;
         _input = Channel.CreateBounded<InputItem>(new BoundedChannelOptions(QueueCapacity)
         {
             SingleReader = true,
@@ -63,6 +65,7 @@ internal sealed class TerminalInputSession : IAsyncDisposable
             if (Interlocked.CompareExchange(ref state, 2, 0) == 0) completion.TrySetCanceled(canceled);
         }
         var registration = token.Register(() => Cancel(token));
+        var sessionRegistration = _sessionToken.Register(() => Cancel(_sessionToken));
         async Task ExecuteAsync(CancellationToken sessionToken)
         {
             if (Interlocked.CompareExchange(ref state, 1, 0) != 0) return;
@@ -81,7 +84,8 @@ internal sealed class TerminalInputSession : IAsyncDisposable
 
         async Task<T> ObserveAsync()
         {
-            using (registration) return await completion.Task.ConfigureAwait(false);
+            using (registration)
+            using (sessionRegistration) return await completion.Task.ConfigureAwait(false);
         }
     }
 

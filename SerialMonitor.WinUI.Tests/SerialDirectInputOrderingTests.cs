@@ -9,6 +9,52 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class SerialDirectInputOrderingTests
 {
+    [Fact]
+    public async Task StopCancelsAQueuedChangeWithoutWaitingForAnEarlierSlowWrite()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var input = new TerminalInputSession(async (_, _, _) =>
+        {
+            started.TrySetResult();
+            await release.Task; // Model a driver write whose cancellation is delayed.
+        }, _ => { });
+        Assert.True(input.TryEnqueue("slow write"));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var changed = false;
+        var operation = input.RunOrderedAsync(_ => { changed = true; return Task.FromResult(true); }, default);
+        try
+        {
+            input.Stop();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation.WaitAsync(TimeSpan.FromSeconds(1)));
+            Assert.False(changed);
+            Assert.False(release.Task.IsCompleted);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task StopStillObservesTheResultOfAnAlreadyStartedDriverChange()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var input = new TerminalInputSession((_, _, _) => Task.CompletedTask, _ => { });
+        var operation = input.RunOrderedAsync(async _ =>
+        {
+            started.TrySetResult();
+            await release.Task;
+            return true;
+        }, default);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        try
+        {
+            input.Stop();
+            Assert.False(operation.IsCompleted);
+        }
+        finally { release.TrySetResult(); }
+        Assert.True(await operation.WaitAsync(TimeSpan.FromSeconds(3)));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
