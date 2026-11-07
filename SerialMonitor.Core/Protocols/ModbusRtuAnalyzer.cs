@@ -175,13 +175,11 @@ public sealed class ModbusRtuAnalyzer : IProtocolAnalyzer
                         if (tx.PendingBytes > 0 && txAt > 0 && Stopwatch.GetElapsedTime(txAt, input.OfferedAt) >= AssemblyIdle) tx.Flush(Store);
                         if (input.Direction == ProtocolDirection.Rx)
                         {
-                            rx.SetRole(input.Timing.Role);
                             if (rxAt > 0 && Stopwatch.GetElapsedTime(rxAt, input.OfferedAt) >= AssemblyIdle) rx.Flush(Store);
                             rx.Feed(input.Bytes.Span, input.Timestamp, Store, _stop.Token, input.Timing.HasQualifiedBoundary); rxAt = input.OfferedAt;
                         }
                         else
                         {
-                            tx.SetRole(input.Timing.Role);
                             if (txAt > 0 && Stopwatch.GetElapsedTime(txAt, input.OfferedAt) >= AssemblyIdle) tx.Flush(Store);
                             tx.Feed(input.Bytes.Span, input.Timestamp, Store, _stop.Token); txAt = input.OfferedAt;
                         }

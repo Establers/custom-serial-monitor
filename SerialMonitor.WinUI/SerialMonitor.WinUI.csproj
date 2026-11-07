@@ -43,11 +43,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\docs\virtual_modbus_device.md;..\docs\virtual_modbus_device_gpt.md;..\docs\virtual_modbus_device.schema.json;..\docs\virtual_modbus_device.example.json">
-      <Link>docs\%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Include="..\docs\sequence_authoring.md;..\docs\sequence_examples.json;..\docs\sequence_rx_example.json;..\docs\ai_control.md;..\docs\agent_skills.md;..\docs\agent_plugins.md">
       <Link>docs\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

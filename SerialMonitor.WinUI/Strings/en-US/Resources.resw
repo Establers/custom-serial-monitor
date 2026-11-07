@@ -1077,29 +1077,4 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC OK {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC errors {0:N0}</value></data>
   <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>Incomplete {0:N0} · undecoded {1:N0} · exceptions {2:N0}</value></data>
-  <data name="VmdAnalysis" xml:space="preserve"><value>Analysis</value></data>
-  <data name="VmdImport" xml:space="preserve"><value>Add JSON…</value></data>
-  <data name="VmdPaste" xml:space="preserve"><value>Paste JSON…</value></data>
-  <data name="VmdClose" xml:space="preserve"><value>Close</value></data>
-  <data name="VmdSave" xml:space="preserve"><value>Save JSON…</value></data>
-  <data name="VmdGuide" xml:space="preserve"><value>Copy GPT instructions</value></data>
-  <data name="VmdSample" xml:space="preserve"><value>Load example</value></data>
-  <data name="VmdRemove" xml:space="preserve"><value>Remove device</value></data>
-  <data name="VmdApply" xml:space="preserve"><value>Apply value</value></data>
-  <data name="VmdChangeId" xml:space="preserve"><value>Change ID</value></data>
-  <data name="VmdValue" xml:space="preserve"><value>New value (use . for decimals)</value></data>
-  <data name="VmdHint" xml:space="preserve"><value>Add sensor JSON files, connect the product, then start. RX requests → virtual registers → TX responses. Values and IDs can change while running. Addresses are zero-based.</value></data>
-  <data name="VmdPersistence" xml:space="preserve"><value>Save JSON to keep the current values and IDs. Starting and reconnecting never enable automatic replies by themselves.</value></data>
-  <data name="VmdStart" xml:space="preserve"><value>Start</value></data>
-  <data name="VmdStop" xml:space="preserve"><value>Stop</value></data>
-  <data name="VmdStopping" xml:space="preserve"><value>Stopping…</value></data>
-  <data name="VmdRunning" xml:space="preserve"><value>RUNNING · auto reply ON</value></data>
-  <data name="VmdStopped" xml:space="preserve"><value>Stopped · auto reply OFF</value></data>
-  <data name="VmdStatus" xml:space="preserve"><value>{0} · RX requests {1:N0} · TX replies {2:N0} · ignored {3:N0} · invalid {4:N0} · exceptions {5:N0} · broadcasts {6:N0} · echoes {7:N0}</value></data>
-  <data name="VmdEcho" xml:space="preserve"><value>Adapter echoes TX (ignore the next matching frame)</value></data>
-  <data name="VmdAdded" xml:space="preserve"><value>Added {0} device(s).</value></data>
-  <data name="VmdSaved" xml:space="preserve"><value>Saved current IDs and register values.</value></data>
-  <data name="VmdApplied" xml:space="preserve"><value>Value applied. The next request will read the updated value.</value></data>
-  <data name="VmdIdApplied" xml:space="preserve"><value>Sensor ID changed.</value></data>
-  <data name="VmdGuideCopied" xml:space="preserve"><value>GPT instructions copied. Paste them into GPT along with the sensor protocol PDF.</value></data>
 </root>

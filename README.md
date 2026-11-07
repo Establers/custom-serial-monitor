@@ -35,7 +35,6 @@ Windows 10/11 **x64**와 Microsoft Edge WebView2 Runtime이 필요합니다.
 | --- | --- |
 | 통신 | Terminal·HEX 표시, UTF-8·CP949 등 인코딩, 자동 재연결, 선택적 COM 브리지 |
 | 프로토콜 분석 | 선택형 Modbus RTU 자동 해석, CRC·누락 통계, 최근 10,000개 메모리 보관 |
-| [Virtual Modbus Device](docs/virtual_modbus_device.md) | 센서 JSON 추가·GPT 작성 지침, 여러 센서 ID, 실행 중 레지스터 값 편집, 표준 Modbus RTU 자동 응답 |
 | 로그 저장 | 비동기 파일 기록, 크기별 파일 회전, 보관 로그 내보내기 |
 | 로그 탐색 | 검색·필터·하이라이트, 시간별 위치 이동, 사용자 마커 |
 | 이벤트 탐지 | 문자·HEX 규칙, 일치 시점의 전후 문맥 수집, 트레이 알림 |
