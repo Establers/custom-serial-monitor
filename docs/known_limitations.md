@@ -158,7 +158,7 @@ This file tracks current intentional limits and validation gaps.
 - Ctrl+C copies selected text; without a selection it sends the interrupt byte.
   App search/navigation shortcuts remain available. Saved command shortcuts are
   suspended while typing directly in xterm.
-- The leftmost 24-pixel terminal icon opens the ON/OFF and local-echo menu.
+- The rightmost fixed 24-pixel terminal icon opens the ON/OFF and local-echo menu.
   Local echo defaults on so typed text is visible without device echo; disable
   it when the device itself echoes input. Local display editing supports
   Backspace/Delete, Left/Right, Home/End, wide/combining characters and wrapping
@@ -169,6 +169,11 @@ This file tracks current intentional limits and validation gaps.
   to the device's line editor. The bounded display mirror never delays or
   rewrites TX. It retains at most 16,384 characters and 32 pending echo chunks;
   overflow or an uneditable span stops direct input with a visible error.
+- Local echo edits only the display. Backspace/DEL, Tab and ANSI arrow bytes
+  still go to the device; a line-only parser can reject them. The serial lab
+  board rejects the entire line with `ERR LINE_TOO_LONG_OR_CONTROL max=511`.
+  Use the TX editor when editing commands for such a device; a fresh uppercase
+  `STOP` plus Enter is accepted, while lowercase `stop` is not a command.
 - Direct input turns off on disconnect, HEX mode, view pause, sequence execution
   or an unavailable terminal. It is unavailable during a bridge or automation
   reservation. Turn it off before starting an AI/CLI operation or a bridge.

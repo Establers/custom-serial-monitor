@@ -116,8 +116,21 @@ const { chromium } = require('playwright');
     await keys('Backspace');
     await expect('device>', 8, 2);
     assert.equal((await screen()).rows[1], 'device> abc');
+
+    await start();
+    await text('STOX');
+    await keys('Backspace');
+    await text('P');
+    await keys('Enter');
+    assert.equal((await screen()).rows[1], 'device> STOP');
+    const editedWire = await page.evaluate(() => window.messages.filter(message => message.type === 'terminalInput').map(message => message.data).join(''));
+    assert.equal(editedWire, 'STOX\x7fP\r', 'Local echo edits do not retract bytes already sent to the device');
+    await start();
+    await text('STOP');
+    await keys('Enter');
+    assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'terminalInput').map(message => message.data).join('')), 'STOP\r');
     assert.deepEqual(errors, []);
     assert.deepEqual(await page.evaluate(() => window.messages.filter(message => message.type === 'terminalInputEchoError')), []);
-    console.log('PASS: prompt boundaries, excess Backspace, insertion/navigation/delete, wide and combining glyphs, wrapped editing and Enter/RX boundaries');
+    console.log('PASS: prompt boundaries, wide/combining/wrapped editing, Enter/RX boundaries and exact plain/edited STOP wire bytes');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

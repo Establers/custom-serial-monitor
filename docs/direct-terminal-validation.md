@@ -11,7 +11,7 @@ prompts stay intact in the direct screen. Streaming decoding supports split
 UTF-8 and CP949 characters. The device still owns completion and prompt redraw;
 completion and history remain device-owned.
 
-The leftmost 24-pixel terminal icon opens an ON/OFF menu with local echo.
+The rightmost fixed 24-pixel terminal icon opens a right-aligned ON/OFF menu with local echo.
 Local echo defaults on for devices that do not echo keystrokes, and can be
 turned off for shells with their own echo. Printed input appears immediately;
 Enter still sends CR for the device to execute its accumulated command. Native
@@ -23,6 +23,10 @@ and redraws only its own span across wrapped rows. Empty/excess Backspace
 cannot erase the prompt. Device RX and resize relinquish the local span;
 out-of-viewport edits and display failures stop direct input with an error.
 The mirror never buffers a command for TX or rewrites the bytes sent.
+For example, typing `STOX`, Backspace, `P`, Enter displays `STOP` but sends
+`53 54 4F 58 7F 50 0D`. The lab board rejects that control-containing line;
+plain `53 54 4F 50 0D` returns `OK STOP`. Use the TX editor to edit commands
+for a line-only device. A real shell must support terminal editing controls.
 
 The raw RX observer only copies bytes into a queue capped at 1 MiB / 1,024
 chunks. A UI timer drains at most 32 KiB per batch and awaits xterm's parse

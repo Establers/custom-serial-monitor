@@ -1079,5 +1079,5 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Direct input ON</value></data>
   <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
   <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
-  <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Turn this off when the device echoes your input.</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input.</value></data>
 </root>

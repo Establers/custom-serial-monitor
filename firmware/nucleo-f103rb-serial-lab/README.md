@@ -245,6 +245,9 @@ dotnet run --project .\tests\SessionRaceCheck -- $cli $instance '.\results\new-b
 
 대소문자를 구분하며 CR, LF, CRLF를 모두 받습니다. 명령 한 줄 최대 511바이트,
 초과/제어 문자가 있는 줄은 줄 끝까지 버리고 ERR을 출력합니다. 정상 텍스트 응답은 CRLF입니다.
+Backspace(`08`/`7F`), Tab(`09`), 방향키의 ESC(`1B`)도 이 제어 문자에 해당합니다.
+PC의 로컬 에코에서 `STOX`를 지워 `STOP`처럼 보여도 실제 `STOX 7F P CR` 줄은 거부됩니다.
+편집 없이 대문자 `STOP`과 Enter를 보내면 `OK STOP`이며, 편집이 필요하면 앱의 TX 입력창을 사용합니다.
 
 | 명령 | 동작 / 제한 |
 | --- | --- |

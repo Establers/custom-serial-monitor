@@ -209,6 +209,17 @@ static void malformed_tests(void) {
 }
 
 static const char *fixture_names[] = {"TEXT","UTF8","CP949","BYTES","NEWLINES","EVENTS","JSON","ANSI","CONTROL"};
+static void direct_terminal_control_tests(void) {
+    init(0); send("STOP\r"); equals("OK STOP\r\n");
+    clear(); send("stop\r"); equals("ERR UNKNOWN_OR_ARGS; HELP\r\n");
+    /* The display may show STOP, but editing controls were already sent. */
+    const char *edited[] = {"STOX\x7f" "P\r", "STOX\bP\r", "STO\x1b[DP\r", "STO\tP\r"};
+    for (size_t i = 0; i < sizeof(edited) / sizeof(edited[0]); ++i) {
+        clear(); send(edited[i]); equals("ERR LINE_TOO_LONG_OR_CONTROL max=511\r\n");
+        clear(); send("STOP\r"); equals("OK STOP\r\n");
+    }
+}
+
 static const char *modbus_names[] = {"NORMAL","CRC","EXCEPTION","PREFIX","NESTED","CORRUPT","PAIR","TRUNCATED","GAP","MAX"};
 
 static void modbus_tests(void) {
@@ -320,6 +331,7 @@ static void export_contract(const char *directory) {
 int main(int argc, char **argv) {
     assert(lab_crc16((const uint8_t *)"123456789",9) == 0x29b1); ++checks;
     text_tests(); scheduling_tests(); generator_tests(); binary_tests(); malformed_tests();
+    direct_terminal_control_tests();
     monitor_tests();
     fixture_tests();
     large_binary_tests();
