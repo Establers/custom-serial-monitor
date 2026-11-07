@@ -1070,7 +1070,7 @@
   <data name="ProtocolPackets" xml:space="preserve"><value>패킷 목록</value></data>
   <data name="ProtocolEmptyTitle" xml:space="preserve"><value>분석할 프로토콜을 선택하세요</value></data>
   <data name="ProtocolWaitingTitle" xml:space="preserve"><value>패킷 수신 대기 중</value></data>
-  <data name="ProtocolEmpty" xml:space="preserve"><value>위에서 Modbus RTU를 선택하면 새 RX/TX를 분석합니다. 요청은 보내지 않습니다.</value></data>
+  <data name="ProtocolEmpty" xml:space="preserve"><value>위에서 Modbus RTU를 선택해 분석을 시작하세요.</value></data>
   <data name="ProtocolWaitingHint" xml:space="preserve"><value>새 RX/TX 패킷이 여기에 표시됩니다. 다른 탭에서도 분석은 계속됩니다.</value></data>
   <data name="ProtocolError" xml:space="preserve"><value>분석 오류</value></data>
   <data name="ProtocolRetainedFormat" xml:space="preserve"><value>보관 {0:N0} / {1:N0}</value></data>

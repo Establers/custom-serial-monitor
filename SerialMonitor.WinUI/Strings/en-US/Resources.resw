@@ -1070,7 +1070,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolPackets" xml:space="preserve"><value>Packets</value></data>
   <data name="ProtocolEmptyTitle" xml:space="preserve"><value>Choose a protocol to start</value></data>
   <data name="ProtocolWaitingTitle" xml:space="preserve"><value>Waiting for packets</value></data>
-  <data name="ProtocolEmpty" xml:space="preserve"><value>Select Modbus RTU above to analyze new RX/TX. No requests are sent.</value></data>
+  <data name="ProtocolEmpty" xml:space="preserve"><value>Select Modbus RTU above to start analyzing new RX/TX.</value></data>
   <data name="ProtocolWaitingHint" xml:space="preserve"><value>New RX/TX packets appear here. Analysis continues across tabs.</value></data>
   <data name="ProtocolError" xml:space="preserve"><value>Analysis error</value></data>
   <data name="ProtocolRetainedFormat" xml:space="preserve"><value>Retained {0:N0} / {1:N0}</value></data>

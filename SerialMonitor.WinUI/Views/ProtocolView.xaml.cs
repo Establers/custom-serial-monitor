@@ -17,7 +17,9 @@ public sealed partial class ProtocolView : UserControl
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var narrow = args.NewSize.Width < 780;
+        // Stacking needs enough vertical space for two headers and scrollable
+        // content. Keep the split layout in short Inspectors, even when narrow.
+        var narrow = args.NewSize.Width < 780 && args.NewSize.Height >= 280;
         if (narrow == _isNarrow) return;
         _isNarrow = narrow;
         // Keep both panes scrollable inside the available Inspector height.
@@ -53,7 +55,17 @@ public sealed partial class ProtocolView : UserControl
     private void UpdateVisibility()
     {
         var visible = _tabs is null || ReferenceEquals(_tabs.SelectedItem, _tab);
-        if (Model is { } model) model.IsVisible = visible;
+        if (Model is { } model)
+        {
+            var restoreSelection = visible && !model.IsVisible;
+            model.IsVisible = visible;
+            if (restoreSelection && model.SelectedFrame is not null)
+                DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+                {
+                    if (Model is { IsVisible: true, SelectedFrame: { } selected })
+                        PacketList.ScrollIntoView(selected);
+                });
+        }
         if (visible) _timer?.Start(); else _timer?.Stop();
     }
     private void Timer_Tick(DispatcherQueueTimer sender, object args) => Model?.Refresh();

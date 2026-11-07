@@ -1977,6 +1977,7 @@
                          AllowDropTabs="False"
                          TabWidthMode="SizeToContent"
                          HorizontalAlignment="Stretch"
+                         VerticalAlignment="Stretch"
                          Loaded="InspectorTabView_Loaded"
                          SelectionChanged="InspectorTabView_SelectionChanged">
                     <TabView.Resources>

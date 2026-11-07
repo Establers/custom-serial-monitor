@@ -44,6 +44,7 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
     public BulkObservableCollection<ProtocolFrameRow> Frames { get; } = new();
     public string TabTitle => UiText.Get("ProtocolTitle", "Protocol");
     public string DisabledLabel => UiText.Get("ProtocolDisabled", "Not in use");
+    public IReadOnlyList<string> ProtocolOptions { get; } = [UiText.Get("ProtocolDisabled", "Not in use"), "Modbus RTU"];
     public string ClearLabel => UiText.Get("ProtocolClear", "Clear results");
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
     public string EmptyTitle => SelectedProtocolIndex == 1
@@ -51,7 +52,7 @@ public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBas
         : UiText.Get("ProtocolEmptyTitle", "Choose a protocol to start");
     public string EmptyLabel => SelectedProtocolIndex == 1
         ? UiText.Get("ProtocolWaitingHint", "New RX/TX packets appear here. Analysis continues across tabs.")
-        : UiText.Get("ProtocolEmpty", "Select Modbus RTU above to analyze new RX/TX. No requests are sent.");
+        : UiText.Get("ProtocolEmpty", "Select Modbus RTU above to start analyzing new RX/TX.");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");
     public string TimeLabel => UiText.Get("ProtocolTime", "Time");
     public string FunctionLabel => UiText.Get("ProtocolFunction", "Function");
