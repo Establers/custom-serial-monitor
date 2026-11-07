@@ -69,7 +69,7 @@ public sealed record BacnetMstpFrame(long Id, long Session, DateTimeOffset Times
         else text.AppendLine("Header fields are untrusted; no addresses, type or payload interpretation is applied.");
         if (Status == ProtocolFrameStatus.CrcError) text.AppendLine("CRC error; payload is not interpreted as successful BACnet data.");
         if (Status == ProtocolFrameStatus.Undecoded) text.AppendLine("Reserved/vendor-specific/extended frame or invalid length. No unsupported CRC variant is claimed as verified.");
-        text.AppendLine(); text.Append(Convert.ToHexString(Bytes.Span));
+        text.AppendLine(); text.Append(string.Join(" ", Bytes.ToArray().Select(value => value.ToString("X2"))));
         return text.ToString();
     }
 }
