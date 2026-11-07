@@ -344,6 +344,7 @@
   <script src="./xterm.js"></script>
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
+  <script src="./local-echo.js"></script>
   <script src="./compact-scrollback.js"></script>
   <script src="./log-navigation.js"></script>
   <script src="./log-navigation-terminal.js"></script>
@@ -520,24 +521,57 @@
     fitAddon.fit();
 
     let directInputSessionId = 0;
-    window.serialMonitorSetDirectInput = (enabled, sessionId) => {
+    let directInputLocalEcho = true;
+    const directInputEcho = new SerialMonitorLocalEcho(terminal);
+    let pendingLocalEchoChunks = 0;
+    function resetDirectEchoRange() {
+      directInputEcho.reset();
+    }
+    terminal.onResize(resetDirectEchoRange);
+    function reportDirectEchoError(error) {
+      directInputLocalEcho = false;
+      window.chrome?.webview?.postMessage({ type: 'terminalInputEchoError', sessionId: directInputSessionId, error: String(error) });
+    }
+    window.serialMonitorSetDirectInput = (enabled, sessionId, localEcho = directInputLocalEcho) => {
       if (enabled && (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !window.chrome?.webview)) return false;
       if (directInputSessionId !== (enabled ? sessionId : 0)) {
-        // Switch at a host append boundary; the normal log history is retained
-        // in C# and rebuilt when direct input ends.
-        window.serialMonitorBeginReplaceLog();
+        resetDirectEchoRange();
+        // Enabling continues at the current cursor and keeps visible history.
+        // Only leaving raw rendering needs the normal retained-log rebuild.
+        if (!enabled) window.serialMonitorBeginReplaceLog();
         window.serialMonitorCancelPendingWrites();
+        if (enabled) terminal.write('\x18\x1b[0m');
       }
       directInputSessionId = enabled ? sessionId : 0;
+      directInputLocalEcho = !!localEcho;
       terminal.options.disableStdin = !enabled;
       terminal.options.cursorBlink = !!enabled;
       terminal.options.convertEol = !enabled;
       if (enabled) terminal.focus();
       return true;
     };
+    window.serialMonitorFocusDirectInput = sessionId => {
+      if (!directInputSessionId || sessionId !== directInputSessionId) return false;
+      terminal.focus();
+      return document.activeElement === terminal.textarea;
+    };
+    window.serialMonitorSetDirectInputLocalEcho = enabled => {
+      resetDirectEchoRange();
+      directInputLocalEcho = !!enabled;
+      return true;
+    };
     terminal.onData(data => {
-      if (directInputSessionId && data)
+      if (directInputSessionId && data) {
         window.chrome?.webview?.postMessage({ type: 'terminalInput', sessionId: directInputSessionId, data });
+        if (directInputLocalEcho && data.length <= 16_384) {
+          if (pendingLocalEchoChunks >= 32) reportDirectEchoError('Local echo display queue is full.');
+          else {
+            pendingLocalEchoChunks++;
+            appendQueue.push({ localEchoData: data, directInputSessionId });
+            queueAppendDrain();
+          }
+        }
+      }
     });
 
     const reportCompactScrollbackError = error => {
@@ -840,10 +874,34 @@
       appendQueue[appendQueueHead++] = null;
       compactAppendQueueIfNeeded();
       appendWriting = true;
+      if (item.localEchoData !== undefined) {
+        pendingLocalEchoChunks = Math.max(0, pendingLocalEchoChunks - 1);
+        const tokens = item.localEchoData.split(/(\r\n|\r|\n|\x03)/).filter(Boolean);
+        let index = 0;
+        const next = () => {
+          try {
+            if (item.directInputSessionId === directInputSessionId && directInputLocalEcho) {
+              while (index < tokens.length) {
+                if (directInputEcho.needsWrap()) { terminal.write('\r\n', next); return; }
+                const text = directInputEcho.render(tokens[index++]);
+                if (text) { terminal.write(text, next); return; }
+              }
+              onTerminalWriteParsed();
+              if (autoScrollEnabled) terminal.scrollToBottom();
+            }
+          } catch (error) { reportDirectEchoError(error); }
+          appendWriting = false;
+          queueAppendDrain();
+        };
+        next();
+        return;
+      }
       try {
+        if (item.directInputSessionId === directInputSessionId) resetDirectEchoRange();
         terminal.write(item.text, () => {
           // This callback runs after write() returns, outside its try/catch.
           try {
+            if (item.directInputSessionId === directInputSessionId) resetDirectEchoRange();
             onTerminalWriteParsed();
             // Re-check Auto Scroll because it can change while xterm parses.
             if (item.autoScroll && autoScrollEnabled && appendQueueLength() === 0) {
@@ -1419,7 +1477,7 @@
       }
       // In particular, never normalize CR to CRLF here. The device controls
       // carriage return, erasure and cursor positioning, including split CSI.
-      appendQueue.push({ text: String(text ?? ''), autoScroll: !!autoScroll, requestId });
+      appendQueue.push({ text: String(text ?? ''), autoScroll: !!autoScroll, requestId, directInputSessionId: sessionId });
       queueAppendDrain();
       return true;
     };
@@ -1430,6 +1488,7 @@
       pointerSelectionGesture = false;
       appendQueue.length = 0;
       appendQueueHead = 0;
+      pendingLocalEchoChunks = 0;
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceWriting = false;
@@ -1469,6 +1528,7 @@
       }
       appendQueue.length = 0;
       appendQueueHead = 0;
+      pendingLocalEchoChunks = 0;
       replaceQueue.length = 0;
       replaceQueueHead = 0;
       replaceOperationId += 1;

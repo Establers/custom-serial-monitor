@@ -133,7 +133,9 @@ public sealed class TerminalOutputBufferTests
         serial.CaptureBytesReceived += output.Offer;
         const string response = "device> ab\b \b\r\u001b[2Kdevice> previous";
         await serial.SendTerminalInputAsync(Encoding.UTF8.GetBytes(response), serial.ReceiveSessionGeneration, default);
-        Assert.Equal(response, output.Drain(out var error));
+        // MOCK telemetry is concurrent and may precede the echo. The response
+        // must stay byte-for-byte intact within that actual RX stream.
+        Assert.Contains(response, output.Drain(out var error));
         Assert.Null(error);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         ReceivedByteChunk chunk;

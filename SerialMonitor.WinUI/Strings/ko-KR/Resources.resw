@@ -1049,10 +1049,6 @@
   <data name="ShortcutActionRegex" xml:space="preserve"><value>검색 정규식 옵션</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>로그 브라우저 기본 기능</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>창 제어</value></data>
-  <data name="TerminalDirectInputOn" xml:space="preserve"><value>직접 입력: ON</value></data>
-  <data name="TerminalDirectInputOff" xml:space="preserve"><value>직접 입력: OFF</value></data>
-  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>터미널 직접 입력</value></data>
-  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>터미널에서 키를 장치로 즉시 전송합니다. Tab·방향키·Ctrl+C를 사용할 수 있으며, 텍스트 선택 중 Ctrl+C는 복사합니다. 입력 표시는 장치 에코를 사용합니다. TX 줄끝 설정은 TX 창에만 적용됩니다.</value></data>
   <data name="ProtocolTitle" xml:space="preserve"><value>Protocol</value></data>
   <data name="ProtocolDisabled" xml:space="preserve"><value>사용 안 함</value></data>
   <data name="ProtocolClear" xml:space="preserve"><value>목록 비우기</value></data>
@@ -1077,4 +1073,12 @@
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC 정상 {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC 오류 {0:N0}</value></data>
   <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>불완전 {0:N0} · 미해석 {1:N0} · 예외 {2:N0}</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>직접 입력: ON</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>직접 입력: OFF</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. 메뉴에서 직접 입력과 로컬 에코를 설정합니다.</value></data>
+  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>터미널 직접 입력 메뉴</value></data>
+  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>직접 입력 ON</value></data>
+  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>직접 입력 OFF</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>로컬 에코</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>입력한 글자를 즉시 표시합니다. 장치가 입력 글자를 에코하면 중복 표시되지 않도록 끄세요.</value></data>
 </root>

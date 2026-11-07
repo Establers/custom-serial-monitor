@@ -11,6 +11,7 @@ public sealed partial class MainViewModel
     private long _terminalInputSessionId;
     private long _terminalInputSerialGeneration;
     private TerminalOutputBuffer? _terminalOutput;
+    private bool _terminalDirectInputLocalEcho = true;
 
     public bool CanEnableTerminalDirectInput => CanSendManualTx && !IsHexRxViewSelected &&
         IsXtermReady && !IsBridgeActive && !IsBridgeStarting && !IsLogRenderingPaused;
@@ -20,6 +21,15 @@ public sealed partial class MainViewModel
     public string TerminalDirectInputButtonText => IsTerminalDirectInputEnabled
         ? UiText.Get("TerminalDirectInputOn", "Direct input: ON")
         : UiText.Get("TerminalDirectInputOff", "Direct input: OFF");
+
+    public string TerminalDirectInputMenuToolTip => UiText.Format("TerminalDirectInputMenuHint",
+        "{0}. Open the menu to switch direct input or local echo.", TerminalDirectInputButtonText);
+
+    public bool TerminalDirectInputLocalEcho
+    {
+        get => _terminalDirectInputLocalEcho;
+        set => SetProperty(ref _terminalDirectInputLocalEcho, value);
+    }
 
     public bool IsTerminalDirectInputEnabled
     {
@@ -63,6 +73,7 @@ public sealed partial class MainViewModel
             }
             OnPropertyChanged();
             OnPropertyChanged(nameof(TerminalDirectInputButtonText));
+            OnPropertyChanged(nameof(TerminalDirectInputMenuToolTip));
             OnPropertyChanged(nameof(CanStartBridge));
             StartBridgeCommand.NotifyCanExecuteChanged();
         }

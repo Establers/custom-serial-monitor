@@ -1358,16 +1358,32 @@
                                 Orientation="Horizontal"
                                 Spacing="2"
                                 VerticalAlignment="Center">
-                        <ToggleButton x:Uid="TerminalDirectInputButton"
-                                      x:Name="TerminalDirectInputButton"
-                                      Style="{StaticResource SearchOptionToggleStyle}"
-                                      Width="Auto" MinWidth="108" Padding="8,0"
-                                      Content="{Binding TerminalDirectInputButtonText}"
-                                      IsChecked="{Binding IsTerminalDirectInputEnabled, Mode=TwoWay}"
-                                      IsEnabled="{Binding CanEnableTerminalDirectInput}"
-                                      Visibility="{Binding TerminalDirectInputVisibility}"
-                                      AutomationProperties.Name="Direct terminal input"
-                                      ToolTipService.ToolTip="Send keys immediately from the terminal. Tab, arrows and Ctrl+C go to the device; Ctrl+C copies when text is selected. Device echo displays your input. TX Ending applies only to the TX box." />
+                        <Button x:Uid="TerminalDirectInputMenuButton"
+                                x:Name="TerminalDirectInputMenuButton"
+                                Style="{StaticResource NavigationIconButtonStyle}"
+                                Visibility="{Binding TerminalDirectInputVisibility}"
+                                AutomationProperties.Name="Direct terminal input menu"
+                                ToolTipService.ToolTip="{Binding TerminalDirectInputMenuToolTip}">
+                            <FontIcon x:Name="TerminalDirectInputMenuIcon" FontSize="14" Glyph="&#xE756;" />
+                            <Button.Flyout>
+                                <MenuFlyout Opening="TerminalDirectInputMenu_Opening" Closed="TerminalDirectInputMenu_Closed">
+                                    <RadioMenuFlyoutItem x:Uid="TerminalDirectInputOnMenuItem"
+                                                        x:Name="TerminalDirectInputOnMenuItem"
+                                                        Text="Direct input ON" GroupName="TerminalDirectInput"
+                                                        IsEnabled="{Binding CanEnableTerminalDirectInput}"
+                                                        Click="TerminalDirectInputOn_Click" />
+                                    <RadioMenuFlyoutItem x:Uid="TerminalDirectInputOffMenuItem"
+                                                        x:Name="TerminalDirectInputOffMenuItem"
+                                                        Text="Direct input OFF" GroupName="TerminalDirectInput"
+                                                        Click="TerminalDirectInputOff_Click" />
+                                    <MenuFlyoutSeparator />
+                                    <ToggleMenuFlyoutItem x:Uid="TerminalDirectInputLocalEchoMenuItem"
+                                                         Text="Local echo"
+                                                         IsChecked="{Binding TerminalDirectInputLocalEcho, Mode=TwoWay}"
+                                                         ToolTipService.ToolTip="Show typed text immediately. Turn this off when the device echoes your input." />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
                         <ToggleButton x:Uid="FollowLatestLogButton" x:Name="FollowLatestLogButton"
                                       Width="24" Height="24" MinWidth="24" MinHeight="24"
                                       Padding="0" CornerRadius="4"

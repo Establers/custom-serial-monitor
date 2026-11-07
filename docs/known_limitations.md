@@ -148,9 +148,9 @@ This file tracks current intentional limits and validation gaps.
 - Direct input is an opt-in, session-only toggle in Terminal mode. The existing
   TX editor and its Ending setting are independent; direct Enter sends CR and
   other keys/pastes use xterm's terminal sequences without an added suffix.
-- Remote echo and shell support provide visible input, completion and history.
-  ON starts a fresh, unformatted device screen; raw RX preserves CR, Backspace
-  and ANSI cursor/erase sequences. OFF restores the retained normal log view.
+- Device shell support provides completion, history and remote prompt redraw.
+  ON preserves the visible screen and continues at the current cursor; raw RX
+  preserves CR, Backspace and ANSI cursor/erase sequences. OFF restores the retained normal log view.
   Normal RX parsing, event detection and asynchronous file logging continue
   independently. Time/line navigation belongs to the retained normal log view.
   Incoming device logs may still disrupt the prompt; the app does not maintain
@@ -158,6 +158,17 @@ This file tracks current intentional limits and validation gaps.
 - Ctrl+C copies selected text; without a selection it sends the interrupt byte.
   App search/navigation shortcuts remain available. Saved command shortcuts are
   suspended while typing directly in xterm.
+- The leftmost 24-pixel terminal icon opens the ON/OFF and local-echo menu.
+  Local echo defaults on so typed text is visible without device echo; disable
+  it when the device itself echoes input. Local display editing supports
+  Backspace/Delete, Left/Right, Home/End, wide/combining characters and wrapping
+  within the current viewport, without erasing the prompt or prior logs.
+  Device responses and resize end ownership of that local display span;
+  completion and history remain device-owned.
+  Characters are still sent immediately; Enter supplies the execution newline
+  to the device's line editor. The bounded display mirror never delays or
+  rewrites TX. It retains at most 16,384 characters and 32 pending echo chunks;
+  overflow or an uneditable span stops direct input with a visible error.
 - Direct input turns off on disconnect, HEX mode, view pause, sequence execution
   or an unavailable terminal. It is unavailable during a bridge or automation
   reservation. Turn it off before starting an AI/CLI operation or a bridge.

@@ -22,7 +22,8 @@ const { chromium } = require('playwright');
     let session = 10;
     let request = 100;
     for (const fixture of fixtures) {
-      await page.evaluate(id => window.serialMonitorSetDirectInput(true, id), ++session);
+      await page.evaluate(() => window.serialMonitorClear());
+      await page.evaluate(id => window.serialMonitorSetDirectInput(true, id, false), ++session);
       for (const batch of fixture.Batches) {
         const requestId = ++request;
         assert.equal(await page.evaluate(({ batch, session, requestId }) =>

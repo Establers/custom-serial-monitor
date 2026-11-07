@@ -2555,7 +2555,12 @@ public sealed partial class MainWindow : Window
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(MainViewModel.IsTerminalDirectInputEnabled))
+        {
+            UpdateTerminalDirectInputIcon();
             _ = SyncXtermDirectInputAsync();
+        }
+        if (args.PropertyName == nameof(MainViewModel.TerminalDirectInputLocalEcho))
+            _ = SyncXtermDirectInputLocalEchoAsync();
         if (args.PropertyName is nameof(MainViewModel.SelectedRxLineEnding) or
             nameof(MainViewModel.SelectedTimestampDisplayFormatOption) or
             nameof(MainViewModel.ShowTimestampInLogView) or nameof(MainViewModel.ShowRxTxDirectionPrefixInLogView))
@@ -2931,6 +2936,11 @@ public sealed partial class MainWindow : Window
             }
 
             var messageType = typeElement.GetString();
+            if (string.Equals(messageType, "terminalInputEchoError", StringComparison.Ordinal))
+            {
+                HandleXtermDirectEchoError(root);
+                return;
+            }
             if (string.Equals(messageType, "terminalInput", StringComparison.Ordinal))
             {
                 if (args.Source.StartsWith("https://serialmonitor.local/", StringComparison.OrdinalIgnoreCase))

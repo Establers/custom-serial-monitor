@@ -1049,10 +1049,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ShortcutActionRegex" xml:space="preserve"><value>regular-expression search</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>built-in log browser controls</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
-  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
-  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
-  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input</value></data>
-  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Send keys immediately from the terminal. Tab, arrows and Ctrl+C go to the device; Ctrl+C copies when text is selected. Device echo displays your input. TX Ending applies only to the TX box.</value></data>
   <data name="ProtocolTitle" xml:space="preserve"><value>Protocol</value></data>
   <data name="ProtocolDisabled" xml:space="preserve"><value>Not in use</value></data>
   <data name="ProtocolClear" xml:space="preserve"><value>Clear results</value></data>
@@ -1077,4 +1073,12 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC OK {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC errors {0:N0}</value></data>
   <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>Incomplete {0:N0} · undecoded {1:N0} · exceptions {2:N0}</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Open the menu to switch direct input or local echo.</value></data>
+  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input menu</value></data>
+  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Direct input ON</value></data>
+  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Turn this off when the device echoes your input.</value></data>
 </root>
