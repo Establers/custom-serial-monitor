@@ -1094,6 +1094,70 @@
                 <Setter Property="TextAlignment"
                         Value="Left" />
             </Style>
+            <!-- Shared form presentation is scoped to Log, Settings, and Bridge. -->
+            <Style x:Key="FormCardBorderStyle" TargetType="Border" BasedOn="{StaticResource InspectorSectionBorderStyle}">
+                <Setter Property="Padding" Value="12" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="FormCardTitleTextStyle" TargetType="TextBlock" BasedOn="{StaticResource InspectorSectionHeaderTextStyle}">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,0,0,3" />
+            </Style>
+            <Style x:Key="FormLabelTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SettingLabelTextStyle}">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="FormValueTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SettingValueTextStyle}">
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="IsTextSelectionEnabled" Value="True" />
+            </Style>
+            <Style x:Key="FormHintTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SettingApplyHintTextStyle}">
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Opacity" Value="1" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="FormApplyBadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource FormHintTextStyle}">
+                <Setter Property="Padding" Value="6,3" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="FormComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource SettingComboBoxStyle}">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+            </Style>
+            <Style x:Key="FormTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="Padding" Value="8,3" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+            </Style>
+            <Style x:Key="FormActionButtonStyle" TargetType="Button" BasedOn="{StaticResource RuleActionButtonStyle}">
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+            <Style x:Key="FormCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}">
+                <Setter Property="Height" Value="Auto" />
+                <Setter Property="MinHeight" Value="28" />
+            </Style>
+            <DataTemplate x:Key="FormCheckBoxContentTemplate">
+                <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" />
+            </DataTemplate>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -2756,127 +2820,157 @@
                         </Grid>
                     </TabViewItem>
 
-                    <TabViewItem x:Uid="StaticUi076" Header="Bridge"
+                    <TabViewItem x:Uid="StaticUi076"
+                                 Header="Bridge"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
-                        <ScrollViewer x:Name="BridgeFormScrollViewer" Padding="4" HorizontalScrollMode="Enabled"
+                        <ScrollViewer x:Name="BridgeFormScrollViewer"
+                                      Padding="0"
+                                      HorizontalScrollMode="Enabled"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="4" MinWidth="440" Width="{Binding ViewportWidth, ElementName=BridgeFormScrollViewer}">
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <Grid ColumnDefinitions="*,Auto"
-                                          ColumnSpacing="4">
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="Bidirectional Raw COM Bridge"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                             <TextBlock Text="{Binding BridgeStatusText}"
-                                                        TextWrapping="Wrap"
-                                                        ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                                                        Style="{StaticResource SettingValueTextStyle}" />
-                                            <TextBlock Text="{Binding ManualTxStateText}"
-                                                       Foreground="{ThemeResource WarningTextBrush}"
+                            <StackPanel Spacing="8"
+                                        MinWidth="440"
+                                        Width="{Binding ViewportWidth, ElementName=BridgeFormScrollViewer}"
+                                        Padding="8">
+                                <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="6" Padding="12,10">
+                                    <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
+                                        <FontIcon Glyph=""
+                                                  FontSize="18"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,3,0,0"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Text="Serial bridge"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
                                                        TextWrapping="Wrap"
-                                                       ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                                       x:Uid="FormBridgeTitle" />
+                                            <TextBlock Text="Forward raw bytes between your device and a paired virtual COM port."
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       x:Uid="FormBridgeDescription" />
                                         </StackPanel>
-                                        <TextBlock Grid.Column="1"
+                                        <TextBlock Grid.Column="2"
                                                    Text="{Binding BridgeStateText}"
                                                    Foreground="{ThemeResource WarningTextBrush}"
-                                                   FontWeight="Bold"
-                                                   VerticalAlignment="Center" />
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                   FontSize="12" />
                                     </Grid>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Connection"
-                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                        <Grid ColumnDefinitions="112,200,*"
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Connection" Style="{StaticResource FormCardTitleTextStyle}" />
+                                        <TextBlock Text="{Binding BridgeStatusText}"
+                                                   TextWrapping="Wrap"
+                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   Style="{StaticResource FormValueTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,Auto"
                                               RowDefinitions="Auto,Auto"
-                                              ColumnSpacing="4">
-                                            <TextBlock x:Uid="StaticUi079" Text="Port"
+                                              ColumnSpacing="8"
+                                              RowSpacing="8">
+                                            <TextBlock x:Uid="StaticUi079"
+                                                       Text="Port"
                                                        Grid.Column="0"
-                                                       Style="{StaticResource SettingLabelTextStyle}"
+                                                       Style="{StaticResource FormLabelTextStyle}"
                                                        ToolTipService.ToolTip="Virtual app-side COM port opened by Serial Monitor" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding BridgePortNames}"
                                                       SelectedItem="{Binding SelectedBridgePort, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditBridgePort}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
-                                            <Button x:Uid="StaticUi080" Grid.Column="2"
+                                                      Style="{StaticResource FormComboBoxStyle}" />
+                                            <Button x:Uid="StaticUi080"
+                                                    Grid.Column="2"
                                                     Content="Refresh"
                                                     Command="{Binding RefreshBridgePortsCommand}"
-                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Style="{StaticResource FormActionButtonStyle}"
                                                     HorizontalAlignment="Left"
                                                     ToolTipService.ToolTip="Refresh available virtual COM port candidates." />
                                             <StackPanel Grid.Row="1"
                                                         Grid.Column="1"
                                                         Grid.ColumnSpan="2"
-                                                        Margin="0,4,0,0"
                                                         Orientation="Horizontal"
-                                                        Spacing="4">
+                                                        Spacing="8">
                                                 <Button Content="Start bridge"
-                                                        Command="{Binding StartBridgeCommand}" />
+                                                        Command="{Binding StartBridgeCommand}"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        MinHeight="30"
+                                                        FontSize="12" />
                                                 <Button Content="Stop bridge"
-                                                        Command="{Binding StopBridgeCommand}" />
+                                                        Command="{Binding StopBridgeCommand}"
+                                                        Style="{StaticResource FormActionButtonStyle}" />
                                             </StackPanel>
                                         </Grid>
-                                        <TextBlock x:Uid="StaticUi083" Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
+                                        <TextBlock x:Uid="StaticUi083"
+                                                   Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
                                                    TextWrapping="Wrap"
                                                    ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Opacity="0.82"
-                                                   Style="{StaticResource SettingValueTextStyle}" />
+                                                   Style="{StaticResource FormValueTextStyle}" />
+                                        <TextBlock Text="{Binding ManualTxStateText}"
+                                                   Foreground="{ThemeResource WarningTextBrush}"
+                                                   TextWrapping="Wrap"
+                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   Style="{StaticResource FormValueTextStyle}" />
                                     </StackPanel>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Transfer"
-                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}" />
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Transfer" Style="{StaticResource FormCardTitleTextStyle}" />
                                         <Grid ColumnDefinitions="140,*,*"
                                               RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                                              ColumnSpacing="4"
-                                              RowSpacing="3">
-                                            <TextBlock Text="Direction"
-                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                              ColumnSpacing="8"
+                                              RowSpacing="8">
+                                            <TextBlock Text="Direction" Style="{StaticResource InspectorTableHeaderTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="Bytes"
-                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
+                                                       Style="{StaticResource InspectorTableHeaderTextStyle}"
+                                                       HorizontalAlignment="Right" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Chunks"
-                                                       Style="{StaticResource InspectorTableHeaderTextStyle}" />
-
+                                                       Style="{StaticResource InspectorTableHeaderTextStyle}"
+                                                       HorizontalAlignment="Right" />
                                             <TextBlock Grid.Row="1"
                                                        Text="Device → Virtual"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="1"
                                                        Grid.Column="1"
                                                        Text="{Binding BridgeDeviceToVirtualByteCount}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="1"
                                                        Grid.Column="2"
                                                        Text="{Binding BridgeDeviceToVirtualChunkCount}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
-
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="2"
                                                        Text="Virtual → Device"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="2"
                                                        Grid.Column="1"
                                                        Text="{Binding BridgeVirtualToDeviceByteCount}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="2"
                                                        Grid.Column="2"
                                                        Text="{Binding BridgeVirtualToDeviceChunkCount}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
-
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold" />
                                             <TextBlock Grid.Row="3"
                                                        Text="Pending / Drops"
                                                        Style="{StaticResource CompactCellTextStyle}" />
@@ -2884,12 +2978,16 @@
                                                        Grid.Column="1"
                                                        Text="{Binding BridgePendingText}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="12" />
                                             <TextBlock Grid.Row="3"
                                                        Grid.Column="2"
                                                        Text="{Binding BridgeDroppedChunksText}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="12" />
                                             <TextBlock Grid.Row="4"
                                                        Text="Dropped bytes / Errors"
                                                        Style="{StaticResource CompactCellTextStyle}" />
@@ -2897,220 +2995,279 @@
                                                        Grid.Column="1"
                                                        Text="{Binding BridgeDroppedBytesText}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="12" />
                                             <TextBlock Grid.Row="4"
                                                        Grid.Column="2"
                                                        Text="{Binding BridgeErrorsText}"
                                                        FontFamily="Consolas"
-                                                       Style="{StaticResource CompactCellTextStyle}" />
+                                                       Style="{StaticResource CompactCellTextStyle}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="12" />
                                         </Grid>
                                         <TextBlock Text="{Binding BridgeLastError}"
                                                    Foreground="{ThemeResource ErrorTextBrush}"
                                                    TextWrapping="Wrap"
                                                    ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Style="{StaticResource CompactCellTextStyle}" />
-                                        <TextBlock x:Uid="StaticUi092" Text="{Binding BridgeVisualLogStatusText}"
+                                        <TextBlock x:Uid="StaticUi092"
+                                                   Text="{Binding BridgeVisualLogStatusText}"
                                                    ToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
                                                    Style="{StaticResource CompactCellTextStyle}" />
-                                        <TextBlock x:Uid="StaticUi093" Text="{Binding BridgePriorityPipelineStatusText}"
+                                        <TextBlock x:Uid="StaticUi093"
+                                                   Text="{Binding BridgePriorityPipelineStatusText}"
                                                    TextWrapping="Wrap"
                                                    ToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                     </StackPanel>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <TextBlock x:Uid="StaticUi094" Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
+                                <Expander Header="How the bridge works"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch"
+                                          FontSize="12"
+                                          x:Uid="FormBridgeDetails">
+                                    <TextBlock x:Uid="StaticUi094"
+                                               Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
                                                TextWrapping="Wrap"
                                                ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                                               Style="{StaticResource CompactCellTextStyle}" />
-                                </Border>
+                                               Style="{StaticResource FormHintTextStyle}" />
+                                </Expander>
                             </StackPanel>
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem x:Uid="StaticUi095" x:Name="LogTabViewItem"
+                    <TabViewItem x:Uid="StaticUi095"
+                                 x:Name="LogTabViewItem"
                                  Header="Log"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
-                        <ScrollViewer x:Name="LogFormScrollViewer" Padding="4" HorizontalScrollMode="Enabled"
+                        <ScrollViewer x:Name="LogFormScrollViewer"
+                                      Padding="0"
+                                      HorizontalScrollMode="Enabled"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="4" MinWidth="440" Width="{Binding ViewportWidth, ElementName=LogFormScrollViewer}">
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Log"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock x:Uid="StaticUi097" Grid.Column="1"
-                                                       Text="Actions and current paths"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Actions"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ScrollViewer Grid.Column="1"
-                                                          HorizontalScrollBarVisibility="Auto"
-                                                          VerticalScrollBarVisibility="Disabled">
-                                                <StackPanel Orientation="Horizontal"
-                                                            Spacing="4">
-                                                    <Button x:Uid="SaveLogHistoryButton" Content="Export logs..."
-                                                            Click="SaveLogHistory_Click"
-                                                            IsEnabled="{Binding CanExportLogHistory}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Save all records still in memory, including filtered records. Logs removed by the retention limit, Clear, or view pause cannot be recovered." />
-                                                    <Button x:Uid="StaticUi099" Content="Open"
-                                                            Command="{Binding OpenCurrentSerialLogCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open the active or most recently completed log file" />
-                                                    <Button x:Uid="StaticUi100" Content="Folder"
-                                                            Command="{Binding OpenLogFolderCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
-                                                    <Button x:Uid="StaticUi101" Content="Copy path"
-                                                            Command="{Binding CopySerialLogPathCommand}"
-                                                            Style="{StaticResource RuleActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Copy the active or most recently completed log file path" />
-                                                </StackPanel>
-                                            </ScrollViewer>
-                                            <TextBlock x:Uid="StaticUi102" Grid.Column="2"
-                                                       Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Log save"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                            <StackPanel Spacing="8"
+                                        MinWidth="440"
+                                        Width="{Binding ViewportWidth, ElementName=LogFormScrollViewer}"
+                                        Padding="8">
+                                <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="6" Padding="12,10">
+                                    <Grid ColumnDefinitions="28,*" ColumnSpacing="8">
+                                        <FontIcon Glyph=""
+                                                  FontSize="18"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,3,0,0"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Text="Log files"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       x:Uid="FormLogTitle" />
+                                            <TextBlock Text="Save live traffic, export retained records, and manage log files."
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       x:Uid="FormLogDescription" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Capture"
+                                                   Style="{StaticResource FormCardTitleTextStyle}"
+                                                   x:Uid="FormLogCapture" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Log save" Style="{StaticResource FormLabelTextStyle}" />
                                             <Button Grid.Column="1"
                                                     Command="{Binding ToggleFileLoggingCommand}"
                                                     AutomationProperties.Name="{Binding FileLoggingToggleText}"
-                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Style="{StaticResource FormActionButtonStyle}"
                                                     HorizontalAlignment="Left"
                                                     ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
                                                 <TextBlock x:Name="FileLoggingSettingsToggleTextBlock"
                                                            Text="{Binding FileLoggingToggleText}" />
                                             </Button>
-                                            <TextBlock x:Uid="StaticUi104" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi104"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="View pause"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi106" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="View pause" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi106"
+                                                      Grid.Column="1"
                                                       Content="Keep saving file log"
                                                       IsChecked="{Binding FileLoggingWhileViewPaused, Mode=TwoWay}"
                                                       VerticalAlignment="Center"
-                                                      ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file." />
-                                            <TextBlock x:Uid="StaticUi107" Grid.Column="2"
+                                                      ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                            <TextBlock x:Uid="StaticUi107"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately, including during an active view pause." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Save dir"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="4">
-                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditLogSaveDirectory}"
-                                                         HorizontalAlignment="Stretch"
-                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
-                                                <Button x:Uid="StaticUi109" Grid.Column="1"
-                                                        Content="Browse"
-                                                        Click="BrowseLogFolder_Click"
-                                                        IsEnabled="{Binding CanEditLogSaveDirectory}"
-                                                        Style="{StaticResource RuleActionButtonStyle}"
-                                                        ToolTipService.ToolTip="Browse log folder" />
-                                            </Grid>
-                                            <TextBlock x:Uid="StaticUi110" Grid.Column="2"
-                                                       Text="OFF only"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Change the folder while logging is OFF. It applies when logging next starts, without reconnecting." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Log file name"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="2*,Auto,3*"
-                                                  ColumnSpacing="4">
-                                                <TextBox x:Uid="StaticUi112" Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource CompactTextBoxStyle}"
-                                                         HorizontalAlignment="Stretch"
-                                                         IsEnabled="{Binding CanEditLogFileName}"
-                                                         PlaceholderText="empty = auto"
-                                                         ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name." />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="Current:"
-                                                           Style="{StaticResource SettingValueTextStyle}" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
-                                                           Style="{StaticResource SettingValueTextStyle}"
-                                                           TextTrimming="None"
-                                                           ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}" />
-                                            </Grid>
-                                            <TextBlock x:Uid="StaticUi114" Grid.Column="2"
-                                                       Text="OFF only"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Rotation"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBlock x:Uid="StaticUi116" Grid.Column="1"
-                                                       Text="New file each time saving starts; no date-based split"
-                                                       Style="{StaticResource SettingValueTextStyle}"
-                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled." />
-                                            <TextBlock x:Uid="StaticUi117" Grid.Column="2"
-                                                       Text="Always"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Starting log saving creates a new file instead of appending to an earlier run." />
-                                        </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Size"
-                                                       Style="{StaticResource SettingLabelTextStyle}"
-                                                       VerticalAlignment="Top" />
-                                            <Grid Grid.Column="1" ColumnDefinitions="200,Auto,*"
-                                                  RowDefinitions="Auto,Auto" ColumnSpacing="4" RowSpacing="2">
-                                                <TextBox Text="{Binding SizeRotationMegabytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         PlaceholderText="10"
-                                                         Style="{StaticResource SettingTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditSizeRotationMegabytes}" />
-                                                <TextBlock Grid.Column="1" Text="MB"
-                                                           VerticalAlignment="Center"
-                                                           Style="{StaticResource SettingValueTextStyle}" />
-                                                <CheckBox Grid.Row="1" Grid.ColumnSpan="3" Content="Size rotation"
-                                                          IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}" />
-                                            </Grid>
-                                            <TextBlock x:Uid="StaticUi121" Grid.Column="2"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Actions" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ScrollViewer Grid.Column="1"
+                                                          HorizontalScrollBarVisibility="Auto"
+                                                          VerticalScrollBarVisibility="Disabled">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button x:Uid="SaveLogHistoryButton"
+                                                            Content="Export logs..."
+                                                            Click="SaveLogHistory_Click"
+                                                            IsEnabled="{Binding CanExportLogHistory}"
+                                                            Style="{StaticResource FormActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Save all records still in memory, including filtered records. Logs removed by the retention limit, Clear, or view pause cannot be recovered." />
+                                                    <Button x:Uid="StaticUi099"
+                                                            Content="Open"
+                                                            Command="{Binding OpenCurrentSerialLogCommand}"
+                                                            Style="{StaticResource FormActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open the active or most recently completed log file" />
+                                                    <Button x:Uid="StaticUi100"
+                                                            Content="Folder"
+                                                            Command="{Binding OpenLogFolderCommand}"
+                                                            Style="{StaticResource FormActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
+                                                    <Button x:Uid="StaticUi101"
+                                                            Content="Copy path"
+                                                            Command="{Binding CopySerialLogPathCommand}"
+                                                            Style="{StaticResource FormActionButtonStyle}"
+                                                            ToolTipService.ToolTip="Copy the active or most recently completed log file path" />
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                            <TextBlock x:Uid="StaticUi102"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Last action"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Last action" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastLogFileActionStatus}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       Style="{StaticResource FormValueTextStyle}"
                                                        ToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Save location"
+                                                   Style="{StaticResource FormCardTitleTextStyle}"
+                                                   x:Uid="FormLogDestination" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Save dir" Style="{StaticResource FormLabelTextStyle}" />
+                                            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource FormTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditLogSaveDirectory}"
+                                                         HorizontalAlignment="Stretch"
+                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
+                                                <Button x:Uid="StaticUi109"
+                                                        Grid.Column="1"
+                                                        Content="Browse"
+                                                        Click="BrowseLogFolder_Click"
+                                                        IsEnabled="{Binding CanEditLogSaveDirectory}"
+                                                        Style="{StaticResource FormActionButtonStyle}"
+                                                        ToolTipService.ToolTip="Browse log folder" />
+                                            </Grid>
+                                            <TextBlock x:Uid="StaticUi110"
+                                                       Grid.Column="2"
+                                                       Text="OFF only"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Change the folder while logging is OFF. It applies when logging next starts, without reconnecting." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Log file name" Style="{StaticResource FormLabelTextStyle}" />
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="8"
+                                                  RowDefinitions="Auto,Auto"
+                                                  RowSpacing="4">
+                                                <TextBox x:Uid="StaticUi112"
+                                                         Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource FormTextBoxStyle}"
+                                                         HorizontalAlignment="Stretch"
+                                                         IsEnabled="{Binding CanEditLogFileName}"
+                                                         PlaceholderText="empty = auto"
+                                                         ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name."
+                                                         Grid.ColumnSpan="2" />
+                                                <TextBlock Grid.Column="0"
+                                                           Text="Current:"
+                                                           Style="{StaticResource FormValueTextStyle}"
+                                                           Grid.Row="1" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
+                                                           Style="{StaticResource FormValueTextStyle}"
+                                                           TextTrimming="None"
+                                                           ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}"
+                                                           Grid.Row="1" />
+                                            </Grid>
+                                            <TextBlock x:Uid="StaticUi114"
+                                                       Grid.Column="2"
+                                                       Text="OFF only"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="File rotation"
+                                                   Style="{StaticResource FormCardTitleTextStyle}"
+                                                   x:Uid="FormLogRotation" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Rotation" Style="{StaticResource FormLabelTextStyle}" />
+                                            <TextBlock x:Uid="StaticUi116"
+                                                       Grid.Column="1"
+                                                       Text="New file each time saving starts; no date-based split"
+                                                       Style="{StaticResource FormValueTextStyle}"
+                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled." />
+                                            <TextBlock x:Uid="StaticUi117"
+                                                       Grid.Column="2"
+                                                       Text="Always"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Starting log saving creates a new file instead of appending to an earlier run." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Size"
+                                                       Style="{StaticResource FormLabelTextStyle}"
+                                                       VerticalAlignment="Top" />
+                                            <Grid Grid.Column="1"
+                                                  ColumnDefinitions="100,Auto,*"
+                                                  RowDefinitions="Auto,Auto"
+                                                  ColumnSpacing="8"
+                                                  RowSpacing="2">
+                                                <TextBox Text="{Binding SizeRotationMegabytesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         PlaceholderText="10"
+                                                         Style="{StaticResource FormTextBoxStyle}"
+                                                         IsEnabled="{Binding CanEditSizeRotationMegabytes}"
+                                                         Width="100" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="MB"
+                                                           VerticalAlignment="Center"
+                                                           Style="{StaticResource FormValueTextStyle}" />
+                                                <CheckBox Grid.Row="1"
+                                                          Grid.ColumnSpan="3"
+                                                          Content="Size rotation"
+                                                          IsChecked="{Binding SizeRotationEnabled, Mode=TwoWay}"
+                                                          HorizontalAlignment="Stretch"
+                                                          HorizontalContentAlignment="Stretch"
+                                                          ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                          Style="{StaticResource FormCheckBoxStyle}" />
+                                            </Grid>
+                                            <TextBlock x:Uid="StaticUi121"
+                                                       Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -3118,505 +3275,523 @@
                         </ScrollViewer>
                     </TabViewItem>
 
-                    <TabViewItem x:Uid="StaticUi124" Header="Settings"
+                    <TabViewItem x:Uid="StaticUi124"
+                                 Header="Settings"
                                  IsClosable="False"
                                  ToolTipService.ToolTip="Configure serial, display, and profile options.">
-                        <ScrollViewer x:Name="SettingsFormScrollViewer" Padding="4" HorizontalScrollMode="Enabled"
+                        <ScrollViewer x:Name="SettingsFormScrollViewer"
+                                      Padding="0"
+                                      HorizontalScrollMode="Enabled"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="4" MinWidth="440" Width="{Binding ViewportWidth, ElementName=SettingsFormScrollViewer}">
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Serial"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock x:Uid="StaticUi126" Grid.Column="1"
+                            <StackPanel Spacing="8"
+                                        MinWidth="440"
+                                        Width="{Binding ViewportWidth, ElementName=SettingsFormScrollViewer}"
+                                        Padding="8">
+                                <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="6" Padding="12,10">
+                                    <Grid ColumnDefinitions="28,*" ColumnSpacing="8">
+                                        <FontIcon Glyph=""
+                                                  FontSize="18"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,3,0,0"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Text="Settings"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       x:Uid="FormSettingsTitle" />
+                                            <TextBlock Text="Connection, terminal appearance, and saved preferences."
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       x:Uid="FormSettingsDescription" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <TextBlock Text="Serial" Style="{StaticResource FormCardTitleTextStyle}" />
+                                            <TextBlock x:Uid="StaticUi126"
                                                        Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, reconnect, and confirmation apply now."
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, automatic reconnect, and disconnect confirmation apply immediately without disconnecting the active port." />
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, automatic reconnect, and disconnect confirmation apply immediately without disconnecting the active port."
+                                                       Grid.Row="1" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Baud"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Baud" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding BaudRates}"
                                                       SelectedItem="{Binding SelectedBaudRate, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Data bits"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Data bits" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding DataBitOptions}"
                                                       SelectedItem="{Binding SelectedDataBits, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Parity"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Parity" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding ParityModes}"
                                                       SelectedItem="{Binding SelectedParity, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Stop bits"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Stop bits" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding StopBitsModes}"
                                                       SelectedItem="{Binding SelectedStopBits, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Handshake"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Handshake" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding HandshakeModes}"
                                                       SelectedItem="{Binding SelectedHandshake, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Lines"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="4">
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Lines" Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                                 <CheckBox Content="DTR"
                                                           IsChecked="{Binding DtrEnable, Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanEditConnectionSettings}" />
+                                                          IsEnabled="{Binding CanEditConnectionSettings}"
+                                                          HorizontalAlignment="Stretch"
+                                                          HorizontalContentAlignment="Stretch"
+                                                          ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                          Style="{StaticResource FormCheckBoxStyle}" />
                                                 <CheckBox Content="RTS"
                                                           IsChecked="{Binding RtsEnable, Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanEditConnectionSettings}" />
+                                                          IsEnabled="{Binding CanEditConnectionSettings}"
+                                                          HorizontalAlignment="Stretch"
+                                                          HorizontalContentAlignment="Stretch"
+                                                          ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                          Style="{StaticResource FormCheckBoxStyle}" />
                                             </StackPanel>
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="RX ending"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Data and connection behavior"
+                                                   Style="{StaticResource FormCardTitleTextStyle}"
+                                                   x:Uid="FormSerialBehavior" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="RX ending" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding RxLineEndingModes}"
                                                       SelectedItem="{Binding SelectedRxLineEnding, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="TX ending"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="TX ending" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding TxLineEndingModes}"
                                                       SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
                                                       IsEnabled="{Binding IsTxLineEndingEffective}"
                                                       ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Encoding"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Encoding" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding RxEncodingModes}"
                                                       SelectedItem="{Binding SelectedRxEncoding, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanEditConnectionSettings}"
-                                                      Style="{StaticResource SettingComboBoxStyle}" />
+                                                      Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Mode"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox x:Uid="StaticUi139" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Mode" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Uid="StaticUi139"
+                                                      Grid.Column="1"
                                                       ItemsSource="{Binding RxDisplayModes}"
                                                       SelectedItem="{Binding SelectedRxDisplayMode, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanChangeTerminalMode}"
                                                       ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
-                                            <TextBlock x:Uid="StaticUi140" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi140"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="HEX timeout"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="HEX timeout" Style="{StaticResource FormLabelTextStyle}" />
                                             <Grid Grid.Column="1"
-                                                  ColumnDefinitions="200,Auto,Auto,*"
+                                                  ColumnDefinitions="100,Auto,Auto,*"
                                                   RowDefinitions="Auto,Auto"
-                                                  ColumnSpacing="4"
+                                                  ColumnSpacing="8"
                                                   HorizontalAlignment="Stretch"
                                                   VerticalAlignment="Center">
-                                                <TextBox x:Uid="StaticUi142" x:Name="HexGroupTimeoutTextBox"
+                                                <TextBox x:Uid="StaticUi142"
+                                                         x:Name="HexGroupTimeoutTextBox"
                                                          Text="{Binding HexGroupTimeoutDraftText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource SettingTextBoxStyle}"
+                                                         Style="{StaticResource FormTextBoxStyle}"
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set." />
-                                                <TextBlock x:Uid="StaticUi143" Grid.Column="1"
+                                                         ToolTipService.ToolTip="Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set."
+                                                         Width="100" />
+                                                <TextBlock x:Uid="StaticUi143"
+                                                           Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
                                                            VerticalAlignment="Center"
                                                            ToolTipService.ToolTip="Milliseconds" />
-                                                <Button x:Uid="StaticUi144" Grid.Column="2"
+                                                <Button x:Uid="StaticUi144"
+                                                        Grid.Column="2"
                                                         Content="Set"
-                                                        Style="{StaticResource RuleActionButtonStyle}"
+                                                        Style="{StaticResource FormActionButtonStyle}"
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
                                                         VerticalAlignment="Center"
                                                         Click="ApplyHexGroupTimeout_Click"
                                                         ToolTipService.ToolTip="Save and apply the entered timeout immediately without disconnecting the active port." />
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding HexGroupTimeoutAppliedText}"
-                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           Style="{StaticResource FormHintTextStyle}"
                                                            VerticalAlignment="Center" />
-                                                <TextBlock x:Uid="StaticUi145" Grid.Row="1" Grid.ColumnSpan="4"
+                                                <TextBlock x:Uid="StaticUi145"
+                                                           Grid.Row="1"
+                                                           Grid.ColumnSpan="4"
                                                            Margin="0,2,0,0"
                                                            Text="{Binding HexGroupTimeoutRecommendationText}"
-                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           Style="{StaticResource FormHintTextStyle}"
                                                            TextWrapping="Wrap"
                                                            VerticalAlignment="Center"
                                                            ToolTipService.ToolTip="Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile." />
                                             </Grid>
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock x:Uid="StaticUi146" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock x:Uid="StaticUi146"
+                                                       Grid.Column="1"
                                                        Text="Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout."
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
+                                                       Style="{StaticResource FormHintTextStyle}"
                                                        TextWrapping="Wrap"
                                                        ToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Reconnect"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="4">
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Reconnect" Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1" Spacing="3">
                                                 <CheckBox Content="Automatically reconnect after an unexpected disconnect"
                                                           IsChecked="{Binding AutoReconnectEnabled, Mode=TwoWay}"
-                                                          ToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying." />
+                                                          ToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying."
+                                                          HorizontalAlignment="Stretch"
+                                                          HorizontalContentAlignment="Stretch"
+                                                          ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                          Style="{StaticResource FormCheckBoxStyle}" />
                                                 <TextBlock Text="{Binding AutoReconnectStatusText}"
-                                                           Style="{StaticResource SettingApplyHintTextStyle}"
+                                                           Style="{StaticResource FormHintTextStyle}"
                                                            VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Disconnect"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi148" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*" ColumnSpacing="8">
+                                            <TextBlock Text="Disconnect" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi148"
+                                                      Grid.Column="1"
                                                       Content="Confirm before disconnect"
                                                       IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection." />
+                                                      ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Appearance"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="Theme and log text"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <TextBlock Text="Appearance" Style="{StaticResource FormCardTitleTextStyle}" />
+                                            <TextBlock Text="Theme and log text"
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       Grid.Row="1" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Theme"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Theme" Style="{StaticResource FormLabelTextStyle}" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding AppThemeOptions}"
                                                       SelectedItem="{Binding SelectedAppTheme, Mode=TwoWay}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="System follows Windows. Dark and Light apply to the window and terminal immediately without clearing logs. Saved with the profile." />
-                                            <TextBlock Grid.Column="2" Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58" ColumnSpacing="4">
-                                            <TextBlock Text="xterm"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox x:Uid="StaticUi152" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="xterm" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Uid="StaticUi152"
+                                                      Grid.Column="1"
                                                       ItemsSource="{Binding XtermFontOptions}"
                                                       SelectedItem="{Binding SelectedXtermFontOption, Mode=TwoWay}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas." />
-                                            <TextBlock x:Uid="StaticUi153" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi153"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Size (px)"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox x:Uid="StaticUi155" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Size (px)" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Uid="StaticUi155"
+                                                      Grid.Column="1"
                                                       ItemsSource="{Binding XtermFontSizeOptions}"
                                                       SelectedItem="{Binding XtermFontSize, Mode=TwoWay}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns." />
-                                            <TextBlock x:Uid="StaticUi156" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi156"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="UI / xterm"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="Visual preferences"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <TextBlock Text="UI / xterm" Style="{StaticResource FormCardTitleTextStyle}" />
+                                            <TextBlock Text="Visual preferences"
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       Grid.Row="1" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Line scrollback"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox x:Uid="StaticUi160" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Line scrollback" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Uid="StaticUi160"
+                                                      Grid.Column="1"
                                                       ItemsSource="{Binding VisibleLogLineCapOptions}"
                                                       SelectedItem="{Binding MaxVisibleLogLines, Mode=TwoWay}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
-                                            <TextBlock x:Uid="StaticUi161" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi161"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Auto-scroll"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi163" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Auto-scroll" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi163"
+                                                      Grid.Column="1"
                                                       Content="xterm auto-scroll"
                                                       IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Applies immediately to xterm visual scrolling." />
-                                            <TextBlock x:Uid="StaticUi164" Grid.Column="2"
+                                                      ToolTipService.ToolTip="Applies immediately to xterm visual scrolling."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                            <TextBlock x:Uid="StaticUi164"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Timestamp"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi166" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Timestamp" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi166"
+                                                      Grid.Column="1"
                                                       Content="Show timestamp in log view"
                                                       IsChecked="{Binding ShowTimestampInLogView, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps." />
-                                            <TextBlock x:Uid="StaticUi167" Grid.Column="2"
+                                                      ToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                            <TextBlock x:Uid="StaticUi167"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="RX/TX prefix"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi169" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="RX/TX prefix" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi169"
+                                                      Grid.Column="1"
                                                       Content="Show RX &lt; and TX &gt;"
                                                       IsChecked="{Binding ShowRxTxDirectionPrefixInLogView, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload." />
-                                            <TextBlock x:Uid="StaticUi170" Grid.Column="2"
+                                                      ToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                            <TextBlock x:Uid="StaticUi170"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Time format"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <ComboBox x:Uid="StaticUi172" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Time format" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Uid="StaticUi172"
+                                                      Grid.Column="1"
                                                       ItemsSource="{Binding TimestampDisplayFormatOptions}"
                                                       SelectedItem="{Binding SelectedTimestampDisplayFormatOption, Mode=TwoWay}"
-                                                      Style="{StaticResource SettingComboBoxStyle}"
+                                                      Style="{StaticResource FormComboBoxStyle}"
                                                       ToolTipService.ToolTip="Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format." />
-                                            <TextBlock x:Uid="StaticUi173" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi173"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Fun"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <CheckBox x:Uid="StaticUi175" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Fun" Style="{StaticResource FormLabelTextStyle}" />
+                                            <CheckBox x:Uid="StaticUi175"
+                                                      Grid.Column="1"
                                                       Content="Cute background mode"
                                                       IsChecked="{Binding CuteBackgroundMode, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged." />
-                                            <TextBlock x:Uid="StaticUi176" Grid.Column="2"
+                                                      ToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged."
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch"
+                                                      ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
+                                                      Style="{StaticResource FormCheckBoxStyle}" />
+                                            <TextBlock x:Uid="StaticUi176"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Visual only." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,44,44,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Custom bg"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <TextBox x:Uid="StaticUi178" Grid.Column="1"
+                                        <Grid ColumnDefinitions="96,*,Auto,Auto,58" ColumnSpacing="8">
+                                            <TextBlock Text="Custom bg" Style="{StaticResource FormLabelTextStyle}" />
+                                            <TextBox x:Uid="StaticUi178"
+                                                     Grid.Column="1"
                                                      Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                     Style="{StaticResource CompactTextBoxStyle}"
+                                                     Style="{StaticResource FormTextBoxStyle}"
                                                      TextWrapping="NoWrap"
                                                      ToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved." />
-                                            <Button x:Uid="StaticUi179" Grid.Column="2"
+                                            <Button x:Uid="StaticUi179"
+                                                    Grid.Column="2"
                                                     Content="..."
-                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Style="{StaticResource FormActionButtonStyle}"
                                                     Click="BrowseCuteBackgroundImage_Click"
                                                     ToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
-                                            <Button x:Uid="StaticUi180" Grid.Column="3"
+                                            <Button x:Uid="StaticUi180"
+                                                    Grid.Column="3"
                                                     Content="Def"
-                                                    Style="{StaticResource RuleActionButtonStyle}"
+                                                    Style="{StaticResource FormActionButtonStyle}"
                                                     Command="{Binding ResetCuteBackgroundCommand}"
                                                     ToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background." />
-                                            <TextBlock x:Uid="StaticUi181" Grid.Column="4"
+                                            <TextBlock x:Uid="StaticUi181"
+                                                       Grid.Column="4"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock x:Uid="BackgroundOpacityLabel" Text="Bg opacity"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock x:Uid="BackgroundOpacityLabel"
+                                                       Text="Bg opacity"
+                                                       Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                                 <infra:PercentageTextBox x:Uid="StaticUi183"
                                                                          Value="{Binding CuteBackgroundOpacityPercent, Mode=TwoWay}"
-                                                                         Style="{StaticResource SettingTextBoxStyle}"
+                                                                         Style="{StaticResource FormTextBoxStyle}"
                                                                          InputScope="Number"
                                                                          IsSpellCheckEnabled="False"
                                                                          IsTextPredictionEnabled="False"
                                                                          ToolTipService.ToolTip="Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image." />
                                                 <TextBlock Text="%" FontSize="11" VerticalAlignment="Center" />
                                             </StackPanel>
-                                            <TextBlock x:Uid="StaticUi184" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi184"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-
-                                <Border Style="{StaticResource InspectorSectionBorderStyle}"
-                                        Padding="4">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <TextBlock Text="Profile"
-                                                       Style="{StaticResource InspectorSectionHeaderTextStyle}" />
-                                            <TextBlock x:Uid="StaticUi186" Grid.Column="1"
+                                <Border Style="{StaticResource FormCardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <TextBlock Text="Profile" Style="{StaticResource FormCardTitleTextStyle}" />
+                                            <TextBlock x:Uid="StaticUi186"
                                                        Text="Load/reset disabled while connected"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}"
-                                                       HorizontalAlignment="Right" />
+                                                       Style="{StaticResource FormHintTextStyle}"
+                                                       Grid.Row="1" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Actions"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
-                                            <StackPanel Grid.Column="1"
-                                                        Orientation="Horizontal"
-                                                        Spacing="4">
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Actions" Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                                 <Button Content="Save"
                                                         Command="{Binding SaveProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                        Style="{StaticResource FormActionButtonStyle}" />
                                                 <Button Content="Load"
                                                         Command="{Binding LoadProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                        Style="{StaticResource FormActionButtonStyle}" />
                                                 <Button Content="Reset"
                                                         Command="{Binding ResetProfileCommand}"
-                                                        Style="{StaticResource RuleActionButtonStyle}" />
+                                                        Style="{StaticResource FormActionButtonStyle}" />
                                             </StackPanel>
-                                            <TextBlock x:Uid="StaticUi191" Grid.Column="2"
+                                            <TextBlock x:Uid="StaticUi191"
+                                                       Grid.Column="2"
                                                        Text="Now"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        ToolTipService.ToolTip="Profile actions run immediately when enabled." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Path"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Path" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding CurrentProfilePath}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       Style="{StaticResource FormValueTextStyle}"
                                                        ToolTipService.ToolTip="{Binding CurrentProfilePath}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Profile"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Profile" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding ProfileStatusText}"
-                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                                       Style="{StaticResource FormValueTextStyle}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Last change"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Last change" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastSettingsChange}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       Style="{StaticResource FormValueTextStyle}"
                                                        ToolTipService.ToolTip="{Binding LastSettingsChange}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Apply"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Apply" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastSettingsApplyStatus}"
-                                                       Style="{StaticResource SettingValueTextStyle}"
+                                                       Style="{StaticResource FormValueTextStyle}"
                                                        ToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Pending"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Pending" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding SettingsPendingSummaryText}"
-                                                       Style="{StaticResource SettingApplyHintTextStyle}" />
+                                                       Style="{StaticResource FormHintTextStyle}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58"
-                                              ColumnSpacing="4">
-                                            <TextBlock Text="Error"
-                                                       Style="{StaticResource SettingLabelTextStyle}" />
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="8">
+                                            <TextBlock Text="Error" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastSettingsApplyError}"
-                                                       Style="{StaticResource SettingValueTextStyle}" />
+                                                       Style="{StaticResource FormValueTextStyle}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
-                                                       Style="{StaticResource SettingApplyBadgeTextStyle}" />
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>

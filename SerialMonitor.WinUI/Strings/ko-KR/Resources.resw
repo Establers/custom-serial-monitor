@@ -1142,4 +1142,37 @@
   <data name="ProtocolFilterFunctionError" xml:space="preserve"><value>기능 코드는 00–FF의 HEX로 입력하거나 비워 주세요.</value></data>
   <data name="ProtocolNoMatches" xml:space="preserve"><value>일치하는 패킷 없음</value></data>
   <data name="ProtocolNoMatchesHelp" xml:space="preserve"><value>필터 조건을 바꾸거나 초기화해 주세요. 수신·분석은 계속됩니다.</value></data>
+  <data name="FormLogTitle.Text" xml:space="preserve">
+    <value>로그 파일</value>
+  </data>
+  <data name="FormLogDescription.Text" xml:space="preserve">
+    <value>실시간 로그 저장, 보관 기록 내보내기와 로그 파일을 관리합니다.</value>
+  </data>
+  <data name="FormLogCapture.Text" xml:space="preserve">
+    <value>로그 저장 및 내보내기</value>
+  </data>
+  <data name="FormLogDestination.Text" xml:space="preserve">
+    <value>저장 위치와 파일명</value>
+  </data>
+  <data name="FormLogRotation.Text" xml:space="preserve">
+    <value>파일 분할 저장</value>
+  </data>
+  <data name="FormSettingsTitle.Text" xml:space="preserve">
+    <value>설정</value>
+  </data>
+  <data name="FormSettingsDescription.Text" xml:space="preserve">
+    <value>시리얼 연결, 터미널 표시와 프로필을 설정합니다.</value>
+  </data>
+  <data name="FormSerialBehavior.Text" xml:space="preserve">
+    <value>데이터 처리 및 연결 동작</value>
+  </data>
+  <data name="FormBridgeTitle.Text" xml:space="preserve">
+    <value>시리얼 브리지</value>
+  </data>
+  <data name="FormBridgeDescription.Text" xml:space="preserve">
+    <value>장치와 가상 COM 포트 사이에서 원본 바이트를 양방향으로 전달합니다.</value>
+  </data>
+  <data name="FormBridgeDetails.Header" xml:space="preserve">
+    <value>브리지 동작 안내</value>
+  </data>
 </root>
