@@ -1049,4 +1049,8 @@
   <data name="ShortcutActionRegex" xml:space="preserve"><value>검색 정규식 옵션</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>로그 브라우저 기본 기능</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>창 제어</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>직접 입력: ON</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>직접 입력: OFF</value></data>
+  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>터미널 직접 입력</value></data>
+  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>터미널에서 키를 장치로 즉시 전송합니다. Tab·방향키·Ctrl+C를 사용할 수 있으며, 텍스트 선택 중 Ctrl+C는 복사합니다. 입력 표시는 장치 에코를 사용합니다. TX 줄끝 설정은 TX 창에만 적용됩니다.</value></data>
 </root>

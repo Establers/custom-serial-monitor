@@ -93,6 +93,8 @@ public interface ISerialService : IAsyncDisposable
 
     Task SendBytesAsync(byte[] payload, string mockEchoText, CancellationToken cancellationToken);
 
+    Task SendTerminalInputAsync(byte[] payload, long expectedSessionGeneration, CancellationToken cancellationToken);
+
     void ConfigureMockStress(
         int linesPerSecond,
         int burstSize,

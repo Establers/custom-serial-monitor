@@ -519,6 +519,27 @@
     terminal.open(document.getElementById('terminal'));
     fitAddon.fit();
 
+    let directInputSessionId = 0;
+    window.serialMonitorSetDirectInput = (enabled, sessionId) => {
+      if (enabled && (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !window.chrome?.webview)) return false;
+      if (directInputSessionId !== (enabled ? sessionId : 0)) {
+        // Switch at a host append boundary; the normal log history is retained
+        // in C# and rebuilt when direct input ends.
+        window.serialMonitorBeginReplaceLog();
+        window.serialMonitorCancelPendingWrites();
+      }
+      directInputSessionId = enabled ? sessionId : 0;
+      terminal.options.disableStdin = !enabled;
+      terminal.options.cursorBlink = !!enabled;
+      terminal.options.convertEol = !enabled;
+      if (enabled) terminal.focus();
+      return true;
+    };
+    terminal.onData(data => {
+      if (directInputSessionId && data)
+        window.chrome?.webview?.postMessage({ type: 'terminalInput', sessionId: directInputSessionId, data });
+    });
+
     const reportCompactScrollbackError = error => {
       console.error('Compact scrollback failed', error);
       window.chrome?.webview?.postMessage({ type: 'xtermHistoryError', error: String(error) });
@@ -997,6 +1018,9 @@
     };
 
     function postCommandShortcut(event, source) {
+      // A saved command bound to A, a number or a function key must not replace
+      // keystrokes intended for the remote shell while directly typing.
+      if (directInputSessionId && terminal.element?.contains(event.target)) return false;
       const shortcut = window.serialMonitorShortcuts.userShortcut(event);
       if (!shortcut || !commandShortcuts.has(shortcut.toUpperCase()) ||
           !window.chrome || !window.chrome.webview) {
@@ -1055,6 +1079,7 @@
     }
 
     function postAutoScrollToggleShortcut(event, source) {
+      if (directInputSessionId) return false;
       if (!window.serialMonitorShortcuts.matches('AutoScroll', event) ||
           !window.chrome || !window.chrome.webview) {
         return false;
@@ -1367,6 +1392,10 @@
     }
 
     window.serialMonitorAppendLog = function (text, autoScroll, requestId) {
+      if (directInputSessionId) {
+        postAppendResult({ requestId }, false, 'direct input owns the display');
+        return false;
+      }
       const normalized = normalizeLogText(text);
       if (!normalized) {
         postAppendResult({ requestId }, true, '');
@@ -1380,6 +1409,18 @@
 
       queueAppendDrain();
 
+      return true;
+    };
+
+    window.serialMonitorAppendDirectOutput = function (text, sessionId, autoScroll, requestId) {
+      if (!directInputSessionId || sessionId !== directInputSessionId) {
+        postAppendResult({ requestId }, false, 'stale direct input session');
+        return false;
+      }
+      // In particular, never normalize CR to CRLF here. The device controls
+      // carriage return, erasure and cursor positioning, including split CSI.
+      appendQueue.push({ text: String(text ?? ''), autoScroll: !!autoScroll, requestId });
+      queueAppendDrain();
       return true;
     };
 

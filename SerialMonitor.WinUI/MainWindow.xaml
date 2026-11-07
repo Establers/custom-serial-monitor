@@ -1358,6 +1358,16 @@
                                 Orientation="Horizontal"
                                 Spacing="2"
                                 VerticalAlignment="Center">
+                        <ToggleButton x:Uid="TerminalDirectInputButton"
+                                      x:Name="TerminalDirectInputButton"
+                                      Style="{StaticResource SearchOptionToggleStyle}"
+                                      Width="Auto" MinWidth="108" Padding="8,0"
+                                      Content="{Binding TerminalDirectInputButtonText}"
+                                      IsChecked="{Binding IsTerminalDirectInputEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding CanEnableTerminalDirectInput}"
+                                      Visibility="{Binding TerminalDirectInputVisibility}"
+                                      AutomationProperties.Name="Direct terminal input"
+                                      ToolTipService.ToolTip="Send keys immediately from the terminal. Tab, arrows and Ctrl+C go to the device; Ctrl+C copies when text is selected. Device echo displays your input. TX Ending applies only to the TX box." />
                         <ToggleButton x:Uid="FollowLatestLogButton" x:Name="FollowLatestLogButton"
                                       Width="24" Height="24" MinWidth="24" MinHeight="24"
                                       Padding="0" CornerRadius="4"

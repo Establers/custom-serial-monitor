@@ -767,6 +767,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         IEventEvidenceStore? eventEvidenceStore = null)
     {
         _serialService = serialService;
+        PropertyChanged += OnTerminalInputStateChanged;
         _logPipeline = logPipeline;
         _fileLogWriter = fileLogWriter;
         _eventDetector = eventDetector;
@@ -909,6 +910,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventDetector.Error += OnBackgroundError;
         _eventDetector.StatusChanged += OnEventDetectorStatusChanged;
         _serialService.RawBytesReceived += OnRawBytesReceived;
+        _serialService.CaptureBytesReceived += OnTerminalBytesReceived;
         _bridgeService.Error += OnBackgroundError;
         _bridgeService.StatusChanged += OnBridgeStatusChanged;
         _bridgeService.ManualTxStateChanged += OnManualTxStateChanged;
@@ -1477,6 +1479,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanStartBridge =>
         !IsShuttingDown && IsConnected &&
+        !IsTerminalDirectInputEnabled &&
         !IsAutomationBusy &&
         !IsBridgeStarting &&
         !IsBusy &&
@@ -4333,6 +4336,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool TryBeginShutdown()
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return false;
+        IsTerminalDirectInputEnabled = false;
         _eventPresentationStop?.Cancel();
         _wasSequenceRunningDuringShutdown = IsSequenceRunning;
         // Cancel before waiting for automation persistence or any other cleanup.
@@ -4348,6 +4352,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        IsTerminalDirectInputEnabled = false;
+        await _terminalInputCleanup;
+        PropertyChanged -= OnTerminalInputStateChanged;
         _settingsValidationCancellation.Cancel();
         Log.CancelPendingViewFilter();
         CancelLogHistoryExport();
@@ -4381,6 +4388,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventDetector.Error -= OnBackgroundError;
         _eventDetector.StatusChanged -= OnEventDetectorStatusChanged;
         _serialService.RawBytesReceived -= OnRawBytesReceived;
+        _serialService.CaptureBytesReceived -= OnTerminalBytesReceived;
         _bridgeService.Error -= OnBackgroundError;
         _bridgeService.StatusChanged -= OnBridgeStatusChanged;
         _bridgeService.ManualTxStateChanged -= OnManualTxStateChanged;
@@ -11935,7 +11943,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         LogLine line,
         bool fileEligible,
         bool detectEvent,
-        bool useBridgeVisualQueue = false)
+        bool useBridgeVisualQueue = false,
+        bool renderInView = true)
     {
         if (detectEvent)
         {
@@ -11953,7 +11962,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 _fileLogWriter.TryEnqueue(line);
             }
 
-            if (decision.OmitFromView)
+            if (decision.OmitFromView || !renderInView)
             {
                 return;
             }

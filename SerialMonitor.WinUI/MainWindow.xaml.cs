@@ -355,6 +355,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _terminalOutputTimer?.Stop();
         _sequenceResultsWindow?.Close();
         DisposeLogNavigationUi();
         _portAlias.PropertyChanged -= OnPortAliasPropertyChanged;
@@ -1221,6 +1222,7 @@ public sealed partial class MainWindow : Window
 
     private void RouteLiveXtermBatch(LogTextBatch batch)
     {
+        if (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0) return;
         var route = XtermAppendRoutingPolicy.GetRoute(
             batch.EndDisplayedLineCount,
             Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
@@ -1476,6 +1478,7 @@ public sealed partial class MainWindow : Window
 
     private void OnLogTextCleared(object? sender, EventArgs args)
     {
+        _viewModel.IsTerminalDirectInputEnabled = false;
         if (IsClosingOrClosed)
         {
             return;
@@ -2225,7 +2228,7 @@ public sealed partial class MainWindow : Window
         bool isRestoreRender = false,
         bool debounce = true)
     {
-        if (IsClosingOrClosed)
+        if (IsClosingOrClosed || _viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0)
         {
             return;
         }
@@ -2537,6 +2540,7 @@ public sealed partial class MainWindow : Window
         await SyncXtermHexSelectionHintModeAsync();
         await SyncXtermAutoScrollContextMenuAsync();
         await SyncXtermCommandShortcutsAsync();
+        await SyncXtermDirectInputAsync();
         QueueXtermFit();
         if (_xtermNeedsFullRerenderAfterRestore)
         {
@@ -2550,6 +2554,8 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainViewModel.IsTerminalDirectInputEnabled))
+            _ = SyncXtermDirectInputAsync();
         if (args.PropertyName is nameof(MainViewModel.SelectedRxLineEnding) or
             nameof(MainViewModel.SelectedTimestampDisplayFormatOption) or
             nameof(MainViewModel.ShowTimestampInLogView) or nameof(MainViewModel.ShowRxTxDirectionPrefixInLogView))
@@ -2925,6 +2931,12 @@ public sealed partial class MainWindow : Window
             }
 
             var messageType = typeElement.GetString();
+            if (string.Equals(messageType, "terminalInput", StringComparison.Ordinal))
+            {
+                if (args.Source.StartsWith("https://serialmonitor.local/", StringComparison.OrdinalIgnoreCase))
+                    HandleXtermDirectInput(root);
+                return;
+            }
             if (string.Equals(messageType, "openLogNavigation", StringComparison.Ordinal))
             {
                 _ = OpenLogNavigationAsync();
@@ -3165,7 +3177,7 @@ public sealed partial class MainWindow : Window
         string reason = "full re-render",
         long renderGeneration = 0)
     {
-        if (!_isXtermReady || IsClosingOrClosed)
+        if (!_isXtermReady || IsClosingOrClosed || _viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0)
         {
             return;
         }
@@ -3223,6 +3235,7 @@ public sealed partial class MainWindow : Window
         await _xtermAppendGate.WaitAsync();
         try
         {
+            if (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0) return;
             if (renderEntryXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
             {
                 _viewModel.RecordFullXtermRerenderEndedAfterError(
@@ -3399,6 +3412,7 @@ public sealed partial class MainWindow : Window
 
     private async Task<bool> AppendLogBatchToXtermAsync(LogTextBatch batch, long generation)
     {
+        if (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0) return true;
         if (!_isXtermReady || IsClosingOrClosed || string.IsNullOrEmpty(batch.AppendedText))
         {
             return string.IsNullOrEmpty(batch.AppendedText) || IsClosingOrClosed;
@@ -3422,6 +3436,7 @@ public sealed partial class MainWindow : Window
         await _xtermAppendGate.WaitAsync();
         try
         {
+            if (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0) return true;
             route = XtermAppendRoutingPolicy.GetRoute(
                 batch.EndDisplayedLineCount,
                 Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
@@ -3610,10 +3625,13 @@ public sealed partial class MainWindow : Window
     private async Task<bool> ExecuteXtermAppendChunksAsync(
         IEnumerable<XtermAppendChunk> chunks,
         bool autoScroll,
-        long? expectedGeneration = null)
+        long? expectedGeneration = null,
+        long? directInputSessionId = null)
     {
         foreach (var chunk in chunks)
         {
+            if (!directInputSessionId.HasValue &&
+                (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0)) return true;
             // A normal live batch is already bounded. Let an in-flight batch finish
             // during minimize so restore can resume from its sequence boundary.
             if (IsXtermVisualAppendSuspended() && expectedGeneration.HasValue)
@@ -3640,8 +3658,10 @@ public sealed partial class MainWindow : Window
             var appendStartedAt = Stopwatch.GetTimestamp();
             try
             {
-                var queuedResult = await ExecuteXtermScriptAsync(
-                    $"window.serialMonitorAppendLog ? window.serialMonitorAppendLog({encodedText}, {autoScrollLiteral}, {requestId}) : false;");
+                var script = directInputSessionId.HasValue
+                    ? $"window.serialMonitorAppendDirectOutput && window.serialMonitorAppendDirectOutput({encodedText}, {directInputSessionId.Value}, {autoScrollLiteral}, {requestId});"
+                    : $"window.serialMonitorAppendLog ? window.serialMonitorAppendLog({encodedText}, {autoScrollLiteral}, {requestId}) : false;";
+                var queuedResult = await ExecuteXtermScriptAsync(script);
                 if (TryParseScriptBoolean(queuedResult) != true)
                 {
                     return false;

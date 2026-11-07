@@ -1049,4 +1049,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ShortcutActionRegex" xml:space="preserve"><value>regular-expression search</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>built-in log browser controls</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
+  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input</value></data>
+  <data name="TerminalDirectInputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Send keys immediately from the terminal. Tab, arrows and Ctrl+C go to the device; Ctrl+C copies when text is selected. Device echo displays your input. TX Ending applies only to the TX box.</value></data>
 </root>

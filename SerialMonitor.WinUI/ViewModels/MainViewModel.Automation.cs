@@ -124,7 +124,8 @@ public sealed partial class MainViewModel
         return new(_serialService.IsConnected, settings.PortName, effectiveBaudRate,
             _serialService.ReceiveSessionGeneration, _currentSerialSettings.Encoding.ToString(),
             CaptureConnectionSnapshot.SerialErrorCount, IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
-            IsAutoReconnectRunning || IsAutomationBusy || _activeGuiSends > 0 || _isProfileSaveActive, _serialService.LastError,
+            IsAutoReconnectRunning || IsAutomationBusy || IsTerminalDirectInputEnabled ||
+            _activeGuiSends > 0 || _isProfileSaveActive, _serialService.LastError,
             settings.DataBits, settings.Parity.ToString(), settings.StopBits.ToString(), settings.Handshake.ToString(),
             SelectedRxDisplayMode == RxDisplayMode.Hex ? "hex" : "terminal", HexGroupTimeoutMs);
     }

@@ -408,11 +408,22 @@ public sealed class SerialService : ISerialService
         await SendPayloadAsync(payload, $"{mockEchoText}{Environment.NewLine}", cancellationToken);
     }
 
-    private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken)
+    public Task SendTerminalInputAsync(byte[] payload, long expectedSessionGeneration, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(payload);
+        // MOCK echoes a stream too: a keypress must not inject a new line.
+        return SendPayloadAsync(payload, Encoding.UTF8.GetString(payload), cancellationToken, expectedSessionGeneration);
+    }
+
+    private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken,
+        long? expectedSessionGeneration = null)
     {
         // Bind before waiting: a disconnect barrier can finish while a later
         // queued writer's continuation is still waiting on the UI dispatcher.
         var session = Volatile.Read(ref _currentReceiveSession);
+        if (expectedSessionGeneration.HasValue && session?.Generation != expectedSessionGeneration.Value)
+            throw new InvalidOperationException("Direct input belongs to a previous serial connection.");
         await _writeGate.WaitAsync(cancellationToken);
         try
         {

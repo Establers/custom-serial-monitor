@@ -52,6 +52,12 @@ Windows 10/11 **x64**와 Microsoft Edge WebView2 Runtime이 필요합니다.
 4. **검증** — 룰로 이벤트를 탐지하거나, 저장 명령과 시퀀스로 시험 절차를 반복합니다. 설정은 프로필로 저장합니다.
 
 파일 기록을 켜기 전의 데이터도 화면에 보관 중이면 `로그 내보내기...`로 저장할 수 있습니다.
+장치 셸을 직접 조작하려면 연결 후 Terminal 로그 위의 **직접 입력: OFF**를 눌러 켜세요.
+Tab·방향키·Enter를 즉시 전송하며, 기존 TX 창과 줄끝 설정은 그대로 사용할 수 있습니다.
+선택한 텍스트가 있을 때 Ctrl+C는 복사하고, 선택이 없으면 장치로 전달합니다.
+직접 입력은 연결 해제·HEX 전환 시 꺼지며, 다시 연결해도 자동으로 켜지지 않습니다.
+ON에서는 접두사 없는 장치 화면을 새로 시작하고, OFF에서는 보관 로그 화면으로 돌아옵니다.
+직접 입력 중에도 기존 로그 파싱·룰 처리·파일 기록은 계속됩니다.
 업데이트는 `About`의 `Check for updates`에서 확인합니다.
 
 <a id="ai-skill-install"></a>
@@ -97,6 +103,7 @@ dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln -c Release --no-build -m
 | --- | --- |
 | [시퀀스 작성](docs/sequence_authoring.md) | JSON 규격, AI 요청문, [기본 예제](docs/sequence_examples.json)와 [RX Check 예제](docs/sequence_rx_example.json) |
 | [로깅 동작](docs/logging.md) | 파일 기록, 회전, 내보내기와 오류 처리 |
+| [시리얼 제어선](docs/serial-control-lines.md) | CTS·DSR·DCD·RI 상태, 연결 중 DTR/RTS 조작과 RTS 송신 자동 제어 |
 | [아키텍처](docs/architecture.md) | 수신 파이프라인과 백그라운드 처리 구조 |
 | [테스트 체크리스트](docs/manual_test_checklist.md) | 기능별 수동 회귀 검사 |
 | [장치 테스트](docs/device-test-development-guide.md) | STM32 테스트 펌웨어와 실제 RX 기반 검증 |

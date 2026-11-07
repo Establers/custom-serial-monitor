@@ -143,6 +143,35 @@ This file tracks current intentional limits and validation gaps.
 - MARK/session lines can appear in context, but they are not RX data and should
   not create events.
 
+## Direct Terminal Input
+
+- Direct input is an opt-in, session-only toggle in Terminal mode. The existing
+  TX editor and its Ending setting are independent; direct Enter sends CR and
+  other keys/pastes use xterm's terminal sequences without an added suffix.
+- Remote echo and shell support provide visible input, completion and history.
+  ON starts a fresh, unformatted device screen; raw RX preserves CR, Backspace
+  and ANSI cursor/erase sequences. OFF restores the retained normal log view.
+  Normal RX parsing, event detection and asynchronous file logging continue
+  independently. Time/line navigation belongs to the retained normal log view.
+  Incoming device logs may still disrupt the prompt; the app does not maintain
+  a separate local editing line or reconstruct the device's command buffer.
+- Ctrl+C copies selected text; without a selection it sends the interrupt byte.
+  App search/navigation shortcuts remain available. Saved command shortcuts are
+  suspended while typing directly in xterm.
+- Direct input turns off on disconnect, HEX mode, view pause, sequence execution
+  or an unavailable terminal. It is unavailable during a bridge or automation
+  reservation. Turn it off before starting an AI/CLI operation or a bridge.
+- TX and direct input share the remote shell's current line. Finish or cancel a
+  partially typed command before sending a command from the TX editor.
+- Pending input is bounded to 32 chunks, each at most 16,384 UTF-16 code units.
+  Oversize paste, queue overflow or a write failure stops direct input and
+  reports a TX error; unsent input is canceled instead of replayed on reconnect.
+- Direct RX display queues at most 1 MiB / 1,024 chunks and decodes at most
+  32 KiB per UI batch, with one acknowledged xterm write in flight. Overflow
+  stops direct input and restores normal logs without dropping parser/file RX.
+- Direct TX records still reach asynchronous file logging and event detection,
+  but do not insert displayed TX rows per key or populate command history.
+
 ## Profiles
 
 - Profile loading normalizes invalid or missing fields to safe defaults.
