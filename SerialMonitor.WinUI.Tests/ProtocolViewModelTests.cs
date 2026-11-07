@@ -9,6 +9,30 @@ public sealed class ProtocolViewModelTests
     private static readonly byte[] Request = Convert.FromHexString("010300000002C40B");
 
     [Fact]
+    public async Task WorkspaceOptions_HaveLabelsAndAnInitialSelection()
+    {
+        await using var analyzer = new ModbusRtuAnalyzer();
+        var model = new ProtocolViewModel(analyzer);
+        Assert.Equal(2, model.WorkspaceOptions.Count);
+        Assert.All(model.WorkspaceOptions, label => Assert.False(string.IsNullOrWhiteSpace(label)));
+        Assert.Equal("Virtual Modbus Device", model.WorkspaceOptions[1]);
+        Assert.Equal(0, model.SelectedWorkspaceIndex);
+        Assert.Equal(Visibility.Visible, model.AnalysisVisibility);
+        Assert.Equal(Visibility.Collapsed, model.VirtualDeviceVisibility);
+    }
+
+    [Fact]
+    public async Task TransientUnselectedWorkspace_DoesNotResetTheChosenPane()
+    {
+        await using var analyzer = new ModbusRtuAnalyzer();
+        var model = new ProtocolViewModel(analyzer) { SelectedWorkspaceIndex = 1 };
+        model.SelectedWorkspaceIndex = -1; // ComboBox transient state during load/reparent.
+        Assert.Equal(1, model.SelectedWorkspaceIndex);
+        Assert.Equal(Visibility.Collapsed, model.AnalysisVisibility);
+        Assert.Equal(Visibility.Visible, model.VirtualDeviceVisibility);
+    }
+
+    [Fact]
     public async Task LeavingTab_PreservesBackgroundAnalysisAndSelection()
     {
         await using var analyzer = new ModbusRtuAnalyzer();

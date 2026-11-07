@@ -41,12 +41,14 @@
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*" MinHeight="0" MinWidth="0">
-      <ComboBox Margin="6,4" SelectedIndex="{Binding SelectedWorkspaceIndex, Mode=TwoWay}" MinHeight="26" FontSize="12">
-          <ComboBoxItem Content="{Binding AnalysisLabel}" />
-          <ComboBoxItem Content="Virtual Modbus Device" />
-      </ComboBox>
-      <views:VirtualModbusDeviceView Grid.Row="1" DataContext="{Binding VirtualDevice}" Visibility="{Binding VirtualDeviceVisibility}" />
-    <Grid Grid.Row="1" Visibility="{Binding AnalysisVisibility}" Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*,Auto" MinHeight="0" MinWidth="0">
+      <ComboBox x:Name="WorkspaceSelector" Margin="6,4" ItemsSource="{Binding WorkspaceOptions}"
+                SelectedIndex="{Binding SelectedWorkspaceIndex, Mode=TwoWay}"
+                MinWidth="220" MinHeight="26" FontSize="12" />
+      <!-- Visibility belongs to ProtocolViewModel; only the child receives the device context. -->
+      <Grid Grid.Row="1" Visibility="{Binding VirtualDeviceVisibility, FallbackValue=Collapsed}" MinHeight="0" MinWidth="0">
+          <views:VirtualModbusDeviceView DataContext="{Binding VirtualDevice}" />
+      </Grid>
+    <Grid Grid.Row="1" Visibility="{Binding AnalysisVisibility, FallbackValue=Collapsed}" Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*,Auto" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto" RowSpacing="5">
                 <Grid ColumnDefinitions="142,*,Auto" ColumnSpacing="10">

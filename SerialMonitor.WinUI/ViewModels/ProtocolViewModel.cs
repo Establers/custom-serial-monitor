@@ -26,13 +26,21 @@ public sealed class ProtocolFrameRow(ModbusRtuFrame frame)
 public sealed class ProtocolViewModel(IProtocolAnalyzer analyzer) : ViewModelBase
 {
     private int _selectedWorkspaceIndex;
+    public IReadOnlyList<string> WorkspaceOptions { get; } = [UiText.Get("VmdAnalysis", "Analysis"), "Virtual Modbus Device"];
     public VirtualModbusDeviceViewModel? VirtualDevice { get; set; }
     public int SelectedWorkspaceIndex
     {
         get => _selectedWorkspaceIndex;
         set
         {
-            if (!SetProperty(ref _selectedWorkspaceIndex, value == 1 ? 1 : 0)) return;
+            // ComboBox can report -1 while its items/context are being loaded.
+            // Keep the selected workspace and re-publish the valid index.
+            if (value < 0 || value >= WorkspaceOptions.Count)
+            {
+                OnPropertyChanged(nameof(SelectedWorkspaceIndex));
+                return;
+            }
+            if (!SetProperty(ref _selectedWorkspaceIndex, value)) return;
             OnPropertyChanged(nameof(AnalysisVisibility));
             OnPropertyChanged(nameof(VirtualDeviceVisibility));
             VirtualDevice?.Refresh(true);

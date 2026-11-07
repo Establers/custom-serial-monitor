@@ -36,6 +36,9 @@ public sealed partial class ProtocolView : UserControl
 
     private void View_Loaded(object sender, RoutedEventArgs args)
     {
+        // Reapply after the ItemsSource is populated, including when the
+        // inspector is reparented or reopened with an existing view model.
+        if (Model is { } model) WorkspaceSelector.SelectedIndex = model.SelectedWorkspaceIndex;
         DependencyObject? parent = this;
         while ((parent = VisualTreeHelper.GetParent(parent)) is not null)
         {
