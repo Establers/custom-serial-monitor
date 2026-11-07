@@ -1,11 +1,19 @@
 {
+  "_manual": [
+    "펌웨어 1.5.0 / NUCLEO-F103RB / COM3 / 115200 / 8N1 / 흐름 제어 없음. 보드는 RTU 모드에서 기다려야 합니다.",
+    "HEX 모드에서 시퀀스 관리 → JSON 불러오기로 이 파일을 추가하고 실행하세요. 약 4.2초, 반복 1회입니다.",
+    "정상 읽기 → 주소 예외 → 응답 CRC 오류 → 정상 복구 → FC04 읽기 → 수량 예외를 검사합니다.",
+    "각 RX Check는 700ms 동안 정확한 응답 바이트를 확인합니다. CRC 오류 주입 단계도 지정한 손상 바이트를 받으면 PASS입니다.",
+    "Protocol의 Modbus RTU 분석을 켜고 통계를 초기화한 뒤 실행하면 TX 6 / RX 6 / CRC 정상 11 / CRC 오류 1 / 예외 2 / 불완전 0 / 분석 큐 누락 0이 기대값입니다."
+  ],
   "FormatVersion": 3,
-  "Name": "F103RB RTU - HEX request response v1.5",
+  "Name": "STM32 Modbus RTU - 정상·예외·CRC·복구 검사",
   "RepeatCount": 1,
   "Steps": [
     {
       "Kind": "Tx",
-      "Name": "NORMAL",
+      "Name": "01 정상 읽기 요청",
+      "Comment": "FC03, 주소 0부터 레지스터 2개를 읽습니다. 값 250 / 100을 기대합니다.",
       "CommandText": "01 03 00 00 00 02 C4 0B",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -13,7 +21,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "NORMAL / RX",
+      "Name": "01 정상 응답 확인",
+      "Comment": "9바이트 정상 응답이며 CRC가 유효해야 합니다.",
       "CommandText": "",
       "RxPattern": "01 03 04 00 FA 00 64 DB E9",
       "TxMode": "Hex",
@@ -22,7 +31,8 @@
     },
     {
       "Kind": "Tx",
-      "Name": "EXCEPTION 02",
+      "Name": "02 없는 주소 요청",
+      "Comment": "주소 0x0200을 읽어 예외 02를 유도합니다.",
       "CommandText": "01 03 02 00 00 02 C5 B3",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -30,7 +40,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "EXCEPTION 02 / RX",
+      "Name": "02 주소 예외 응답 확인",
+      "Comment": "FC83 / 예외 02. 예외 응답의 CRC는 정상입니다.",
       "CommandText": "",
       "RxPattern": "01 83 02 C0 F1",
       "TxMode": "Hex",
@@ -39,7 +50,8 @@
     },
     {
       "Kind": "Tx",
-      "Name": "CRC ERROR",
+      "Name": "03 응답 CRC 오류 주입 요청",
+      "Comment": "시험 주소 0x0100, 수량 2. 요청 CRC는 정상이며 응답 CRC만 고의로 손상합니다.",
       "CommandText": "01 03 01 00 00 02 C5 F7",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -47,7 +59,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "CRC ERROR / RX",
+      "Name": "03 손상 응답 수신 확인",
+      "Comment": "정해진 손상 바이트 수신은 이 RX Check의 PASS입니다. Protocol 탭의 CRC 오류가 1 증가해야 합니다.",
       "CommandText": "",
       "RxPattern": "01 03 04 00 FA 00 64 DB E8",
       "TxMode": "Hex",
@@ -56,7 +69,8 @@
     },
     {
       "Kind": "Tx",
-      "Name": "NORMAL RECOVERY",
+      "Name": "04 정상 복구 요청",
+      "Comment": "일반 주소로 다시 요청해 CRC 오류 주입이 다음 응답에 남지 않는지 확인합니다.",
       "CommandText": "01 03 00 00 00 02 C4 0B",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -64,7 +78,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "NORMAL RECOVERY / RX",
+      "Name": "04 정상 복구 응답 확인",
+      "Comment": "다시 값 250 / 100, 정상 CRC 응답이어야 합니다.",
       "CommandText": "",
       "RxPattern": "01 03 04 00 FA 00 64 DB E9",
       "TxMode": "Hex",
@@ -73,7 +88,8 @@
     },
     {
       "Kind": "Tx",
-      "Name": "INPUT REGISTER",
+      "Name": "05 FC04 입력 레지스터 요청",
+      "Comment": "FC04, 주소 1의 값 100을 읽습니다.",
       "CommandText": "01 04 00 01 00 01 60 0A",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -81,7 +97,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "INPUT REGISTER / RX",
+      "Name": "05 FC04 응답 확인",
+      "Comment": "값 100, CRC 정상인 7바이트 응답입니다.",
       "CommandText": "",
       "RxPattern": "01 04 02 00 64 B8 DB",
       "TxMode": "Hex",
@@ -90,7 +107,8 @@
     },
     {
       "Kind": "Tx",
-      "Name": "EXCEPTION 03",
+      "Name": "06 잘못된 수량 요청",
+      "Comment": "수량 0으로 요청해 예외 03을 유도합니다.",
       "CommandText": "01 03 00 00 00 00 45 CA",
       "TxMode": "Hex",
       "LineEndingMode": "None",
@@ -98,7 +116,8 @@
     },
     {
       "Kind": "RxCheck",
-      "Name": "EXCEPTION 03 / RX",
+      "Name": "06 수량 예외 응답 확인",
+      "Comment": "FC83 / 예외 03. 예외 응답의 CRC는 정상입니다.",
       "CommandText": "",
       "RxPattern": "01 83 03 01 31",
       "TxMode": "Hex",

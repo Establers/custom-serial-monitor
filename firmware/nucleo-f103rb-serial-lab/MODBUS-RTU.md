@@ -39,10 +39,19 @@ RX만 보면 응답 3건, CRC 정상 2 / 오류 1이다. 화면 표시 필터와
 
 ## 저장된 시퀀스
 
-[GUI 가져오기 파일](sequences/modbus/02-rtu-server.gui.json)은 실제 RTU 요청 6개와 HEX RX Check를 포함한다.
-HEX 모드에서 가져와 실행한다. 펌웨어가 LAB 모드라면 보드를 리셋한 다음 실행한다.
+[GUI 가져오기 파일](sequences/modbus/02-rtu-server.gui.json)을 **시퀀스 관리 → JSON 불러오기**에서 선택한다.
+목록의 **STM32 Modbus RTU - 정상·예외·CRC·복구 검사**를 선택하고 실행한다.
+HEX 모드, Modbus RTU 분석 활성화 상태에서 약 4.2초 동안 한 번 실행한다.
+펌웨어가 LAB 모드라면 보드를 리셋한 다음 실행한다.
+
+정상 읽기 → 주소 예외 02 → 응답 CRC 오류 → 정상 복구 → FC04 입력 레지스터 → 수량 예외 03 순서다.
+각 요청 뒤 700ms의 HEX RX Check가 붙으며, 단계 이름과 메모에 기대 결과가 표시된다.
+통계를 초기화하고 전체 6개를 실행하면 **TX 6 / RX 6, CRC 정상 11 / 오류 1, 예외 2, 불완전 0, 분석 큐 누락 0**이다.
+RX 바이트 합계는 44바이트이며, RX Check 6개 모두 PASS가 기대값이다.
+
 [CLI 정의](sequences/modbus/02-rtu-server.cli.json)도 제공한다. GUI가 실행 중일 때 기존 이름을 확인하고 `sequence save`로 등록할 수 있다.
-CRC 오류 시험의 RX Check는 고의로 손상한 바이트의 수신을 검사한다. Protocol 탭에서는 CRC 오류로 보여야 한다.
+GUI 가져오기용은 `.gui.json`, CLI 등록용은 `.cli.json`이다. 한쪽을 등록했다면 같은 이름을 중복 등록하지 않는다.
+CRC 오류 시험의 RX Check는 고의로 손상한 바이트의 수신을 검사한다. 이 단계의 RX Check는 PASS, Protocol 탭에서는 CRC 오류로 보여야 한다.
 
 ## 빌드와 자동 검사
 

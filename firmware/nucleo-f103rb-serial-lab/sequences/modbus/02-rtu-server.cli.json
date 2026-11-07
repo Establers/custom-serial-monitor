@@ -1,9 +1,9 @@
 {
-  "name": "F103RB RTU - HEX request response v1.5",
+  "name": "STM32 Modbus RTU - 정상·예외·CRC·복구 검사",
   "repeatCount": 1,
   "steps": [
     {
-      "name": "NORMAL",
+      "name": "01 정상 읽기",
       "txMode": "hex",
       "command": "01 03 00 00 00 02 C4 0B",
       "lineEnding": "none",
@@ -15,7 +15,7 @@
       "delayAfterMs": 50
     },
     {
-      "name": "EXCEPTION 02",
+      "name": "02 주소 예외 02",
       "txMode": "hex",
       "command": "01 03 02 00 00 02 C5 B3",
       "lineEnding": "none",
@@ -27,7 +27,7 @@
       "delayAfterMs": 50
     },
     {
-      "name": "CRC ERROR",
+      "name": "03 응답 CRC 오류 주입",
       "txMode": "hex",
       "command": "01 03 01 00 00 02 C5 F7",
       "lineEnding": "none",
@@ -39,7 +39,7 @@
       "delayAfterMs": 50
     },
     {
-      "name": "NORMAL RECOVERY",
+      "name": "04 정상 복구",
       "txMode": "hex",
       "command": "01 03 00 00 00 02 C4 0B",
       "lineEnding": "none",
@@ -51,7 +51,7 @@
       "delayAfterMs": 50
     },
     {
-      "name": "INPUT REGISTER",
+      "name": "05 FC04 입력 레지스터",
       "txMode": "hex",
       "command": "01 04 00 01 00 01 60 0A",
       "lineEnding": "none",
@@ -63,7 +63,7 @@
       "delayAfterMs": 50
     },
     {
-      "name": "EXCEPTION 03",
+      "name": "06 수량 예외 03",
       "txMode": "hex",
       "command": "01 03 00 00 00 00 45 CA",
       "lineEnding": "none",
