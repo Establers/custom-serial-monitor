@@ -16,6 +16,17 @@
   </p>
 </div>
 
+## 20초로 보는 주요 기능
+
+<p align="center">
+  <a href="docs/media/serial-monitor-promo-ko.mp4"><img src="docs/media/serial-monitor-promo-ko.gif" width="800" alt="시퀀스의 반복 전송과 RX Check, 룰의 이벤트·강조·필터, AI 플러그인 제어를 소개하는 20초 한국어 영상" /></a>
+</p>
+
+<p align="center">
+  시퀀스 · 룰 · AI 플러그인 제어<br />
+  <a href="docs/media/serial-monitor-promo-ko.mp4">MP4 보기·내려받기</a> · 20초 · 무음 · v1.6.4 실제 설정 화면
+</p>
+
 ![Serial Monitor의 Terminal 로그 화면과 이벤트 목록](docs/images/serial-monitor-overview.png)
 
 ## 다운로드

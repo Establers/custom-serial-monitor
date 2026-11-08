@@ -1,0 +1,33 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; }
+    .rules-actions { margin-top: 38px; }
+    .rules-evidence { top: 224px; }
+  </style>
+  <div id="root" data-composition-id="rules" data-duration="5" data-width="1920" data-height="1080">
+    <div class="surface">
+      <p class="chapter"><span class="number">02</span>룰</p>
+      <h1 class="headline"><span class="line">놓치기 쉬운 로그,</span><span class="line accent">룰로 찾아내세요</span></h1>
+      <p class="description">키워드에 맞춰 탐지하고<br>강조와 필터를 함께 적용</p>
+      <div class="evidence rules-evidence">
+        <p class="proof-label">이벤트 · 하이라이트 · 필터</p>
+        <div class="crop-frame rules-match"><img src="assets/screens/rule-match.png" alt="Error 키워드의 이벤트, 하이라이트, 필터 설정" /></div>
+        <div class="rules-actions"><p class="proof-label rules-action-label">알림과 시퀀스 자동 실행까지</p>
+          <div class="crop-frame rules-notify"><img src="assets/screens/rule-actions.png" alt="RX trigger sequence와 Tray, Sound, Popup 알림 기능" /></div>
+        </div>
+      </div>
+      <p class="footer">문자 · HEX 규칙 지원</p><p class="feature-note">v1.6.4 · 실제 설정창</p>
+      <div class="rail"><div class="rail-fill"></div></div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo('.headline .accent', { color: '#416359' }, { color: '#087c64', duration: .4 }, 0);
+    tl.fromTo('.rules-match', { opacity: .65 }, { opacity: 1, duration: .35 }, 0);
+    tl.fromTo('.description', { opacity: 0 }, { opacity: 1, duration: .3 }, .7);
+    tl.fromTo('.rules-action-label', { opacity: 0 }, { opacity: 1, duration: .3 }, 1.9);
+    tl.fromTo('.rules-notify', { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: .45, ease: 'power4.out' }, 2);
+    tl.fromTo('.rail-fill', { scaleX: .4 }, { scaleX: .65, duration: 4.99, ease: 'none' }, 0);
+    window.__timelines.rules = tl;
+  </script>
+</template>

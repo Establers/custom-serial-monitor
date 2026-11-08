@@ -1,0 +1,31 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; }
+    .outro-surface { background: #123d36; color: #f3f6f4; }
+    .outro-brand { position: absolute; left: 430px; top: 300px; display: flex; align-items: center; gap: 42px; }
+    .outro-icon { width: 144px; height: 144px; object-fit: contain; border-radius: 32px; }
+    .outro-name { font-size: 106px; font-weight: 800; letter-spacing: -.055em; margin: 0; white-space: nowrap; }
+    .outro-sub { position: absolute; left: 0; right: 0; top: 502px; margin: 0; text-align: center; font-size: 47px; font-weight: 500; color: #d2e6da; }
+    .outro-cta { position: absolute; left: 0; right: 0; top: 642px; text-align: center; color: #f3f6f4; font-size: 37px; font-weight: 600; margin: 0; }
+    .outro-url { position: absolute; left: 0; right: 0; top: 718px; text-align: center; font-size: 30px; color: #d2e6da; margin: 0; }
+    .outro-rail { background: #36594e; }
+    .outro-rail .rail-fill { background: #d2e6da; }
+  </style>
+  <div id="root" data-composition-id="outro" data-duration="2.4" data-width="1920" data-height="1080">
+    <div class="surface outro-surface">
+      <div class="outro-brand"><img class="outro-icon" src="assets/icon.png" alt="Serial Monitor 앱 아이콘" /><h1 class="outro-name" data-var-text="product">Serial Monitor</h1></div>
+      <p class="outro-sub">시퀀스 · 룰 · AI 플러그인</p><p class="outro-cta">다음 디버깅부터 함께하세요</p>
+      <p class="outro-url">github.com/Establers/custom-serial-monitor</p>
+      <div class="rail outro-rail"><div class="rail-fill"></div></div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo('.outro-icon', { scale: .8 }, { scale: 1, duration: .32, ease: 'power4.out' }, 0);
+    tl.fromTo('.outro-name', { opacity: .3 }, { opacity: 1, duration: .25 }, 0);
+    tl.fromTo('.outro-sub', { opacity: 0 }, { opacity: 1, duration: .22 }, .08);
+    tl.fromTo('.outro-cta, .outro-url', { opacity: 0 }, { opacity: 1, duration: .18 }, .12);
+    tl.fromTo('.rail-fill', { scaleX: .88 }, { scaleX: 1, duration: 2.39, ease: 'none' }, 0);
+    window.__timelines.outro = tl;
+  </script>
+</template>

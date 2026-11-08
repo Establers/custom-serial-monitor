@@ -1,0 +1,11 @@
+{
+  "name": "promo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.9.23 preview",
+    "check": "npx --yes hyperframes@0.9.23 check",
+    "render": "npx --yes hyperframes@0.9.23 render --quality delivery --fps 30 --output ../media/serial-monitor-promo-ko.mp4",
+    "gif": "node export-gif.mjs"
+  }
+}

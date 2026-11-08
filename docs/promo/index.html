@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko" data-composition-variables='[{"id":"product","type":"string","label":"제품 이름","default":"Serial Monitor"}]'>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>Serial Monitor · 시퀀스, 룰, AI 플러그인</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="assets/vendor/gsap.min.js"></script>
+</head>
+<body>
+  <main id="root" data-composition-id="main" data-start="0" data-duration="20" data-width="1920" data-height="1080" data-fps="30">
+    <div id="intro" class="clip" data-composition-id="intro" data-composition-src="compositions/intro.html" data-start="0" data-duration="3" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+    <div id="sequence" class="clip" data-composition-id="sequence" data-composition-src="compositions/sequence.html" data-start="3" data-duration="5" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+    <div id="rules" class="clip" data-composition-id="rules" data-composition-src="compositions/rules.html" data-start="8" data-duration="5" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+    <div id="plugin" class="clip" data-composition-id="plugin" data-composition-src="compositions/plugin.html" data-start="13" data-duration="4.6" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+    <div id="outro" class="clip" data-composition-id="outro" data-composition-src="compositions/outro.html" data-start="17.6" data-duration="2.4" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+  </main>
+  <script>
+    window.__timelines = window.__timelines || {};
+    window.__timelines.main = gsap.timeline({ paused: true });
+  </script>
+</body>
+</html>

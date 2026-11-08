@@ -1,0 +1,33 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; }
+    .sequence-detail { width: 570px; margin-top: 34px; }
+    .sequence-evidence { top: 234px; }
+  </style>
+  <div id="root" data-composition-id="sequence" data-duration="5" data-width="1920" data-height="1080">
+    <div class="surface">
+      <p class="chapter"><span class="number">01</span>시퀀스</p>
+      <h1 class="headline"><span class="line">순서대로 보내고</span><span class="line accent">응답까지 확인</span></h1>
+      <p class="description">반복 전송과 RX Check로<br>시험 절차를 저장하세요</p>
+      <div class="evidence sequence-evidence">
+        <p class="proof-label">TX와 RX Check를 단계로 연결</p>
+        <div class="crop-frame sequence-list"><img src="assets/screens/sequence-steps.png" alt="status 전송, STATE=READY 검사, HEX 전송과 응답 검사 단계" /></div>
+        <div class="sequence-detail"><p class="proof-label sequence-detail-label">기대 패턴과 검사 시간을 지정</p>
+          <div class="crop-frame sequence-rx"><img src="assets/screens/rx-pattern.png" alt="기대 패턴 STATE=READY와 RX 확인 시간 1000ms 설정" /></div>
+        </div>
+      </div>
+      <p class="footer">반복 횟수 · 단계별 대기 · 응답 패턴</p><p class="feature-note">v1.6.4 · 설정 예시</p>
+      <div class="rail"><div class="rail-fill"></div></div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo('.headline .accent', { color: '#416359' }, { color: '#087c64', duration: .4 }, 0);
+    tl.fromTo('.sequence-list', { x: 25, opacity: .65 }, { x: 0, opacity: 1, duration: .6, ease: 'power4.out' }, 0);
+    tl.fromTo('.description', { opacity: 0 }, { opacity: 1, duration: .3 }, .65);
+    tl.fromTo('.sequence-detail-label', { opacity: 0 }, { opacity: 1, duration: .3 }, 1.7);
+    tl.fromTo('.sequence-rx', { scale: .96, opacity: 0 }, { scale: 1, opacity: 1, duration: .5, ease: 'power3.out' }, 1.8);
+    tl.fromTo('.rail-fill', { scaleX: .15 }, { scaleX: .4, duration: 4.99, ease: 'none' }, 0);
+    window.__timelines.sequence = tl;
+  </script>
+</template>

@@ -1,0 +1,11 @@
+{
+  "FormatVersion": 3,
+  "Name": "홍보 예제 - 응답 확인",
+  "RepeatCount": 3,
+  "Steps": [
+    { "Kind": "Tx", "Name": "상태 조회", "CommandText": "status", "TxMode": "Terminal", "LineEndingMode": "Crlf", "DelayAfterMs": 100 },
+    { "Kind": "RxCheck", "Name": "문자 응답 확인", "CommandText": "", "RxPattern": "STATE=READY", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 1000 },
+    { "Kind": "Tx", "Name": "HEX 조회", "CommandText": "AA 10", "TxMode": "Hex", "LineEndingMode": "None", "DelayAfterMs": 100 },
+    { "Kind": "RxCheck", "Name": "HEX 응답 확인", "CommandText": "", "RxPattern": "AA 55 ?? 00", "TxMode": null, "LineEndingMode": "None", "DelayAfterMs": 1000 }
+  ]
+}
