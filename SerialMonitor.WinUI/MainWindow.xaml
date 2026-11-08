@@ -3146,19 +3146,25 @@
                                                    x:Uid="FormLogDestination" />
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Save dir" Style="{StaticResource FormLabelTextStyle}" />
-                                            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                                <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource FormTextBoxStyle}"
-                                                         IsEnabled="{Binding CanEditLogSaveDirectory}"
-                                                         HorizontalAlignment="Stretch"
-                                                         infra:AppToolTipService.ToolTip="{Binding LogSaveDirectory}" />
-                                                <Button x:Uid="StaticUi109"
-                                                        Grid.Column="1"
-                                                        Content="Browse"
-                                                        Click="BrowseLogFolder_Click"
-                                                        IsEnabled="{Binding CanEditLogSaveDirectory}"
-                                                        Style="{StaticResource FormActionButtonStyle}"
-                                                        infra:AppToolTipService.ToolTip="Browse log folder" />
+                                            <Grid Grid.Column="1" x:Name="LogDirectoryEditorHost">
+                                                <Grid ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="6"
+                                                      Width="{Binding ActualWidth, ElementName=LogDirectoryEditorHost}"
+                                                      MaxWidth="600"
+                                                      HorizontalAlignment="Left">
+                                                    <TextBox Text="{Binding LogSaveDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                             Style="{StaticResource FormTextBoxStyle}"
+                                                             IsEnabled="{Binding CanEditLogSaveDirectory}"
+                                                             HorizontalAlignment="Stretch"
+                                                             infra:AppToolTipService.ToolTip="{Binding LogSaveDirectory}" />
+                                                    <Button x:Uid="StaticUi109"
+                                                            Grid.Column="1"
+                                                            Content="Browse"
+                                                            Click="BrowseLogFolder_Click"
+                                                            IsEnabled="{Binding CanEditLogSaveDirectory}"
+                                                            Style="{StaticResource FormActionButtonStyle}"
+                                                            infra:AppToolTipService.ToolTip="Browse log folder" />
+                                                </Grid>
                                             </Grid>
                                             <TextBlock x:Uid="StaticUi110"
                                                        Grid.Column="2"
@@ -3166,37 +3172,43 @@
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="Change the folder while logging is OFF. It applies when logging next starts, without reconnecting." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
+                                        <Grid ColumnDefinitions="96,*,58"
+                                              ColumnSpacing="6"
+                                              RowDefinitions="Auto,Auto"
+                                              RowSpacing="2">
                                             <TextBlock Text="Log file name" Style="{StaticResource FormLabelTextStyle}" />
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="6"
-                                                  RowDefinitions="Auto,Auto"
-                                                  RowSpacing="4">
+                                            <Grid Grid.Column="1" x:Name="LogFileNameEditorHost">
                                                 <TextBox x:Uid="StaticUi112"
                                                          Text="{Binding LogFileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource FormTextBoxStyle}"
-                                                         HorizontalAlignment="Stretch"
+                                                         HorizontalAlignment="Left"
                                                          IsEnabled="{Binding CanEditLogFileName}"
                                                          PlaceholderText="empty = auto"
                                                          infra:AppToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name."
-                                                         Grid.ColumnSpan="2" />
-                                                <TextBlock Grid.Column="0"
-                                                           Text="Current:"
-                                                           Style="{StaticResource FormValueTextStyle}"
-                                                           Grid.Row="1" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
-                                                           Style="{StaticResource FormValueTextStyle}"
-                                                           TextTrimming="None"
-                                                           infra:AppToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}"
-                                                           Grid.Row="1" />
+                                                         Width="{Binding ActualWidth, ElementName=LogFileNameEditorHost}"
+                                                         MaxWidth="400" />
                                             </Grid>
                                             <TextBlock x:Uid="StaticUi114"
                                                        Grid.Column="2"
                                                        Text="OFF only"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
+                                            <Grid Grid.Row="1"
+                                                  Grid.Column="1"
+                                                  ColumnDefinitions="Auto,*"
+                                                  ColumnSpacing="6"
+                                                  Width="{Binding ActualWidth, ElementName=LogFileNameEditorHost}"
+                                                  MaxWidth="400"
+                                                  HorizontalAlignment="Left">
+                                                <TextBlock Grid.Column="0"
+                                                           Text="Current:"
+                                                           Style="{StaticResource FormHintTextStyle}" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding ConfiguredLogFileNameDisplayText}"
+                                                           Style="{StaticResource FormValueTextStyle}"
+                                                           TextTrimming="None"
+                                                           infra:AppToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}" />
+                                            </Grid>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
