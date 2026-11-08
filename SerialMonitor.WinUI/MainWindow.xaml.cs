@@ -2684,7 +2684,14 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        if (args.PropertyName == nameof(MainViewModel.CuteBackgroundMode) ||
+        if (args.PropertyName == nameof(MainViewModel.CuteBackgroundImageRevision))
+        {
+            _cachedCuteBackgroundImage = null;
+            _lastAppliedCuteBackgroundEnabled = null;
+        }
+
+        if (args.PropertyName == nameof(MainViewModel.CuteBackgroundImageRevision) ||
+            args.PropertyName == nameof(MainViewModel.CuteBackgroundMode) ||
             args.PropertyName == nameof(MainViewModel.CuteBackgroundImagePath) ||
             args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
         {
@@ -2870,7 +2877,12 @@ public sealed partial class MainWindow : Window
                 _cachedCuteBackgroundImage is null ||
                 !string.Equals(_cachedCuteBackgroundPath, resolvedPath, StringComparison.Ordinal))
             {
-                _cachedCuteBackgroundImage = new BitmapImage(new Uri(resolvedPath, UriKind.Absolute));
+                _cachedCuteBackgroundImage = new BitmapImage
+                {
+                    CreateOptions = BitmapCreateOptions.IgnoreImageCache,
+                    DecodePixelWidth = 2560,
+                    UriSource = new Uri(resolvedPath, UriKind.Absolute)
+                };
                 _cachedCuteBackgroundPath = resolvedPath;
                 _viewModel.RecordCuteBackgroundImageReloaded();
             }
@@ -4832,6 +4844,8 @@ public sealed partial class MainWindow : Window
 
     private async void BrowseCuteBackgroundImage_Click(object sender, RoutedEventArgs args)
     {
+        if (!_viewModel.CanEditBackgroundPresets) return;
+        var presetNumber = _viewModel.SelectedBackgroundPreset;
         try
         {
             var picker = new FileOpenPicker
@@ -4847,7 +4861,7 @@ public sealed partial class MainWindow : Window
             WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
 
             var file = await picker.PickSingleFileAsync();
-            _viewModel.SetCuteBackgroundImagePathFromPicker(file?.Path);
+            await _viewModel.SetCuteBackgroundImagePathFromPickerAsync(file?.Path, presetNumber);
         }
         catch (Exception ex)
         {

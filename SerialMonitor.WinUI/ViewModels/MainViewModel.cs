@@ -840,7 +840,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         ResetProfileCommand = new AsyncRelayCommand(
             ResetProfileAsync,
             () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
-        ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync);
+        ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync, () => CanEditBackgroundPresets);
+        SelectBackgroundPresetCommand = new AsyncRelayCommand(SelectBackgroundPresetAsync, _ => CanEditBackgroundPresets);
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
         SearchVisibleLogCommand = new AsyncRelayCommand(
@@ -2899,6 +2900,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _currentUiSettings.CuteBackgroundImagePath;
         set
         {
+            _currentUiSettings.EnsureBackgroundPresets();
             var normalized = value?.Trim() ?? string.Empty;
             if (string.Equals(_currentUiSettings.CuteBackgroundImagePath, normalized, StringComparison.Ordinal))
             {
@@ -2906,6 +2908,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.CuteBackgroundImagePath = normalized;
+            _currentUiSettings.BackgroundPresets![_currentUiSettings.SelectedBackgroundPreset - 1].ImagePath = normalized;
             OnPropertyChanged();
             RecordSettingsChange(
                 "Custom cute background image",
@@ -2922,6 +2925,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _currentUiSettings.CuteBackgroundOpacity;
         set
         {
+            _currentUiSettings.EnsureBackgroundPresets();
             if (!double.IsFinite(value))
             {
                 return;
@@ -2934,6 +2938,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             _currentUiSettings.CuteBackgroundOpacity = clamped;
+            _currentUiSettings.BackgroundPresets![_currentUiSettings.SelectedBackgroundPreset - 1].Opacity = clamped;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
             RecordSettingsChange(
@@ -2968,18 +2973,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public long CuteBackgroundSkippedUnchangedCount => Interlocked.Read(ref _cuteBackgroundSkippedUnchangedCount);
 
-    public void SetCuteBackgroundImagePathFromPicker(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            RecordSettingsChange("Custom cute background image", SettingsApplyBehavior.Immediate, "browse canceled");
-            return;
-        }
-
-        CuteBackgroundImagePath = path;
-    }
-
-    private Task ResetCuteBackgroundAsync()
+    private async Task ResetCuteBackgroundAsync()
     {
         CuteBackgroundImagePath = string.Empty;
         RecordSettingsChange(
@@ -2988,7 +2982,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             "reset to bundled default");
         SetStatus("Cute background reset to bundled default.");
         RefreshStatusBar();
-        return Task.CompletedTask;
+        await SaveProfileAsync();
     }
 
     public void RecordCuteBackgroundApplySkipped()
@@ -4256,6 +4250,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             {
                 if (_startupProfileTask is not null)
                     await _startupProfileTask.WaitAsync(shutdownCancellation.Token);
+                if (_backgroundImageImportTask is not null)
+                    await _backgroundImageImportTask.WaitAsync(shutdownCancellation.Token);
                 var profile = CreateProfileFromCurrentState();
                 await _profileService.SaveAsync(CurrentProfilePath, profile, shutdownCancellation.Token).WaitAsync(shutdownCancellation.Token);
                 RefreshProfileProperties();
@@ -12447,6 +12443,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(XtermFontSize));
         if (includeBackgroundVisualSettings)
         {
+            NotifyBackgroundPresetPropertiesChanged();
+            InvalidateBackgroundImage();
             OnPropertyChanged(nameof(CuteBackgroundMode));
             OnPropertyChanged(nameof(CuteBackgroundImagePath));
             OnPropertyChanged(nameof(CuteBackgroundLayerOpacity));
@@ -13639,6 +13637,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void NotifyCommandStates()
     {
+        OnPropertyChanged(nameof(CanEditBackgroundPresets));
+        SelectBackgroundPresetCommand.NotifyCanExecuteChanged();
+        ResetCuteBackgroundCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanEditSerialParameters));
         RefreshSerialControlLineProperties();
         OnPropertyChanged(nameof(CanManualDisconnect));

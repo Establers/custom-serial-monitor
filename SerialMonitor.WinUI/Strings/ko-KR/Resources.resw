@@ -492,20 +492,20 @@
     <comment>English: Applies immediately. Visual only.</comment>
   </data>
   <data name="StaticUi178.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>선택 사항입니다. 비워 두면 내장 기본 배경을 사용합니다. 이미지를 찾지 못하면 일시적으로 기본 배경을 표시하며, 선택한 경로는 유지됩니다.</value>
-    <comment>English: Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved.</comment>
+    <value>선택한 프리셋에 보관된 이미지입니다. 찾아보기로 이미지를 복사해 저장하면 원본을 지워도 배경이 유지됩니다. 비어 있는 프리셋은 내장 배경을 사용합니다.</value>
+    <comment>Stored image for the selected preset.</comment>
   </data>
   <data name="StaticUi179.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>사용자 배경 이미지(.png, .jpg, .jpeg, .webp)를 선택합니다.</value>
-    <comment>English: Browse for an optional custom background image (.png, .jpg, .jpeg, .webp).</comment>
+    <value>이 프리셋의 PNG, JPG, JPEG, WebP 이미지(최대 20 MB)를 선택합니다. 프로필과 함께 별도 사본을 보관합니다.</value>
+    <comment>Choose an image to preserve with this profile.</comment>
   </data>
   <data name="StaticUi180.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>배경을 기본값으로 되돌립니다. 사용자 경로를 지우고 내장 배경을 사용합니다.</value>
-    <comment>English: Reset bg to default. Clears the custom path and uses the bundled background.</comment>
+    <value>선택한 프리셋의 이미지만 비우고 내장 배경을 사용합니다. 다른 프리셋은 유지됩니다.</value>
+    <comment>Clear only the selected preset image.</comment>
   </data>
   <data name="StaticUi181.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>이미지 경로 입력란에서 포커스가 빠지거나 찾아보기를 완료하면 적용됩니다.</value>
-    <comment>English: Applies after the image path field loses focus or after Browse.</comment>
+    <value>선택한 이미지를 즉시 복사하고 저장합니다.</value>
+    <comment>The selected image is copied and saved immediately.</comment>
   </data>
   <data name="StaticUi183.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>0~100 사이의 정수를 입력하세요. 100을 넘으면 100으로 맞춥니다. 문자, 소수점, 음수는 입력할 수 없습니다. 0은 이미지를 숨기고, 100은 이미지를 완전히 표시합니다.</value>
@@ -517,6 +517,15 @@
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
     <value>배경 불투명도</value>
+  </data>
+  <data name="BackgroundPresetsLabel.Text" xml:space="preserve">
+    <value>배경 프리셋</value>
+  </data>
+  <data name="BackgroundPresetsHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>1~5번 배경 프리셋을 선택한 뒤 찾아보기로 이미지를 지정하세요. 이미지와 불투명도는 번호별로 저장됩니다. 비어 있는 프리셋은 내장 배경을 사용합니다.</value>
+  </data>
+  <data name="BackgroundPresetSaved" xml:space="preserve">
+    <value>배경 프리셋 {0}번을 저장했습니다. 원본 이미지를 지워도 유지됩니다.</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>연결 중에는 불러오기/초기화 불가</value>

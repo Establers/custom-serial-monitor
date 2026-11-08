@@ -148,6 +148,8 @@ The installer does not change the app's user data locations:
 
 - Logs: `%LOCALAPPDATA%\SerialMonitor\logs`
 - Default profile: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json`
+- Background preset images: `%LOCALAPPDATA%\SerialMonitor\profiles\default.json.backgrounds`
+  (five presets; see [background presets](background-presets.md))
 - Runtime diagnostics:
   `%LOCALAPPDATA%\SerialMonitor\diagnostics\instance-<pid>-<launch-id>\last_runtime_error.txt`
 

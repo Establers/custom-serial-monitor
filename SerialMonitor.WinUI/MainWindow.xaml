@@ -3670,25 +3670,114 @@
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="Applies immediately. Visual only." />
                                         </Grid>
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
+                                            <TextBlock x:Uid="BackgroundPresetsLabel" Text="Bg presets" Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel x:Uid="BackgroundPresetsHelp" Grid.Column="1" Orientation="Horizontal" Spacing="3"
+                                                        infra:AppToolTipService.ToolTip="Select background preset 1–5, then browse to set its image. Images and opacity are saved separately. Empty presets use the bundled background.">
+                                                <StackPanel.Resources>
+                                                    <Style x:Key="BackgroundPresetButtonStyle" TargetType="RadioButton">
+                                                        <Setter Property="Width" Value="26" />
+                                                        <Setter Property="MinWidth" Value="26" />
+                                                        <Setter Property="Height" Value="24" />
+                                                        <Setter Property="MinHeight" Value="24" />
+                                                        <Setter Property="Padding" Value="0" />
+                                                        <Setter Property="CornerRadius" Value="4" />
+                                                        <Setter Property="FontSize" Value="11" />
+                                                        <Setter Property="Background" Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                                                        <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
+                                                        <Setter Property="BorderBrush" Value="{ThemeResource CompactButtonBorderBrush}" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        <Setter Property="UseSystemFocusVisuals" Value="True" />
+                                                        <Setter Property="FocusVisualMargin" Value="0" />
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="RadioButton">
+                                                                    <ContentPresenter x:Name="PresetContent"
+                                                                                      Content="{TemplateBinding Content}"
+                                                                                      Background="{TemplateBinding Background}"
+                                                                                      Foreground="{TemplateBinding Foreground}"
+                                                                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                                                                      FontSize="{TemplateBinding FontSize}"
+                                                                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                                      Control.IsTemplateFocusTarget="True">
+                                                                        <VisualStateManager.VisualStateGroups>
+                                                                            <VisualStateGroup x:Name="CommonStates">
+                                                                                <VisualState x:Name="Normal" />
+                                                                                <VisualState x:Name="PointerOver">
+                                                                                    <VisualState.Setters>
+                                                                                        <Setter Target="PresetContent.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                                                                    </VisualState.Setters>
+                                                                                </VisualState>
+                                                                                <VisualState x:Name="Pressed">
+                                                                                    <VisualState.Setters>
+                                                                                        <Setter Target="PresetContent.Opacity" Value="0.8" />
+                                                                                    </VisualState.Setters>
+                                                                                </VisualState>
+                                                                                <VisualState x:Name="Disabled">
+                                                                                    <VisualState.Setters>
+                                                                                        <Setter Target="PresetContent.Opacity" Value="0.4" />
+                                                                                    </VisualState.Setters>
+                                                                                </VisualState>
+                                                                            </VisualStateGroup>
+                                                                            <VisualStateGroup x:Name="CheckStates">
+                                                                                <VisualState x:Name="Unchecked" />
+                                                                                <VisualState x:Name="Checked">
+                                                                                    <VisualState.Setters>
+                                                                                        <Setter Target="PresetContent.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                                                        <Setter Target="PresetContent.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                                                                    </VisualState.Setters>
+                                                                                </VisualState>
+                                                                            </VisualStateGroup>
+                                                                        </VisualStateManager.VisualStateGroups>
+                                                                    </ContentPresenter>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </StackPanel.Resources>
+                                                <RadioButton Content="1" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                              IsChecked="{Binding IsBackgroundPreset1Selected, Mode=OneWay}"
+                                                              Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="1" AutomationProperties.Name="Background preset 1" />
+                                                <RadioButton Content="2" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                              IsChecked="{Binding IsBackgroundPreset2Selected, Mode=OneWay}"
+                                                              Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="2" AutomationProperties.Name="Background preset 2" />
+                                                <RadioButton Content="3" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                              IsChecked="{Binding IsBackgroundPreset3Selected, Mode=OneWay}"
+                                                              Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="3" AutomationProperties.Name="Background preset 3" />
+                                                <RadioButton Content="4" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                              IsChecked="{Binding IsBackgroundPreset4Selected, Mode=OneWay}"
+                                                              Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="4" AutomationProperties.Name="Background preset 4" />
+                                                <RadioButton Content="5" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                              IsChecked="{Binding IsBackgroundPreset5Selected, Mode=OneWay}"
+                                                              Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="5" AutomationProperties.Name="Background preset 5" />
+                                            </StackPanel>
+                                        </Grid>
                                         <Grid ColumnDefinitions="96,*,Auto,Auto,58" ColumnSpacing="6">
                                             <TextBlock Text="Custom bg" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBox x:Uid="StaticUi178"
                                                      Grid.Column="1"
-                                                     Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     Text="{Binding CuteBackgroundImagePath, Mode=OneWay}"
+                                                     IsReadOnly="True"
                                                      Style="{StaticResource FormTextBoxStyle}"
                                                      TextWrapping="NoWrap"
-                                                     infra:AppToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved." />
+                                                     infra:AppToolTipService.ToolTip="Stored image for the selected preset. Use Browse to copy an image into this profile; deleting the original will not remove the background. Empty presets use the bundled background." />
                                             <Button x:Uid="StaticUi179"
                                                     Grid.Column="2"
                                                     Content="..."
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     Click="BrowseCuteBackgroundImage_Click"
-                                                    infra:AppToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
+                                                    IsEnabled="{Binding CanEditBackgroundPresets}"
+                                                    infra:AppToolTipService.ToolTip="Choose a PNG, JPG, JPEG or WebP image (up to 20 MB) for this preset. A separate copy is saved with the profile." />
                                             <Button x:Uid="StaticUi180"
                                                     Grid.Column="3"
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     Command="{Binding ResetCuteBackgroundCommand}"
-                                                    infra:AppToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background."
+                                                    infra:AppToolTipService.ToolTip="Clear only the selected preset's image and use the bundled background. Other presets are kept."
                                                     Width="26"
                                                     MinWidth="26"
                                                     Padding="0"
@@ -3699,7 +3788,7 @@
                                                        Grid.Column="4"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       infra:AppToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
+                                                       infra:AppToolTipService.ToolTip="The selected image is copied and saved immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundOpacityLabel"

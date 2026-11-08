@@ -29,6 +29,7 @@ public sealed class ProfileService : IProfileService
     private const long MaxSizeRotationBytes = 10L * 1024 * 1024 * 1024;
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly IBackgroundImageStore _backgroundImages = new BackgroundImageStore();
     private readonly Dictionary<string, Dictionary<string, InstanceInputHistory>> _historyBaselines = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _sequenceBaselines = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _sequenceBaselineOrder = [];
@@ -260,6 +261,22 @@ public sealed class ProfileService : IProfileService
                 ProfileInputHistory.Apply(profile);
                 RememberSequenceBaseline(path, ProfileSequenceMerge.Snapshot(profile.CommandSequences));
                 _historyBaselines[path] = ProfileInputHistory.CapturePorts(profile);
+                var imageWarnings = new List<string>();
+                var importedImages = await PreserveBackgroundImagesAsync(path, profile.UiSettings, cancellationToken, imageWarnings);
+                // Commit a successful legacy-image migration immediately so deleting
+                // the original does not depend on a later clean application exit.
+                if (importedImages && LastError is null && imageWarnings.Count == 0)
+                {
+                    try { await SaveCoreAsync(path, profile, cancellationToken, fileLeaseHeld: true); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { imageWarnings.Add($"Background image migration could not be saved: {ex.Message}"); }
+                }
+                if (imageWarnings.Count > 0)
+                {
+                    LastError = string.Join(" ", new[] { LastError }.Concat(imageWarnings).Where(message => !string.IsNullOrWhiteSpace(message)));
+                    LastStatus = "Profile loaded; some background images could not be preserved.";
+                    Interlocked.Increment(ref _loadErrorCount);
+                }
                 return profile;
             }
             catch (OperationCanceledException) { throw; }
@@ -448,6 +465,7 @@ public sealed class ProfileService : IProfileService
             path = Path.GetFullPath(path);
             await using var lease = fileLeaseHeld ? null : await ProfileFileLease.AcquireAsync(path, cancellationToken);
             var normalized = NormalizeProfile(profile, out _);
+            await PreserveBackgroundImagesAsync(path, normalized.UiSettings, cancellationToken);
             var localHistories = ProfileInputHistory.CapturePorts(normalized);
             var local = ProfileSequenceMerge.Clone(normalized.CommandSequences);
             var localBaseline = ProfileSequenceMerge.Snapshot(local);
@@ -1106,6 +1124,18 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Cute background opacity was invalid.");
         }
 
+        settings.EnsureBackgroundPresets();
+        foreach (var preset in settings.BackgroundPresets!)
+        {
+            preset.ImagePath = NormalizeCuteBackgroundImagePath(preset.ImagePath, string.Empty, warnings);
+            if (!double.IsFinite(preset.Opacity) || preset.Opacity is < MinCuteBackgroundOpacity or > MaxCuteBackgroundOpacity)
+            {
+                preset.Opacity = defaults.CuteBackgroundOpacity;
+                warnings.Add("Background preset opacity was invalid.");
+            }
+        }
+        settings.ApplySelectedBackgroundPreset();
+
         if (settings.MockStressLinesPerSecond is < MinMockStressLinesPerSecond or > MaxMockStressLinesPerSecond)
         {
             settings.MockStressLinesPerSecond = defaults.MockStressLinesPerSecond;
@@ -1123,6 +1153,32 @@ public sealed class ProfileService : IProfileService
             settings.MockGeneratorPattern = defaults.MockGeneratorPattern;
             warnings.Add("Mock generator pattern was invalid.");
         }
+    }
+
+    private async Task<bool> PreserveBackgroundImagesAsync(string profilePath, UiSettings settings,
+        CancellationToken cancellationToken, ICollection<string>? warnings = null)
+    {
+        settings.EnsureBackgroundPresets();
+        var changed = false;
+        for (var index = 0; index < UiSettings.BackgroundPresetCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var preset = settings.BackgroundPresets![index];
+            if (string.IsNullOrWhiteSpace(preset.ImagePath) || !File.Exists(preset.ImagePath) ||
+                _backgroundImages.IsStoredImage(profilePath, index + 1, preset.ImagePath)) continue;
+            try
+            {
+                preset.ImagePath = await _backgroundImages.ImportAsync(profilePath, index + 1, preset.ImagePath, cancellationToken);
+                changed = true;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (warnings is not null)
+            {
+                warnings.Add($"Background preset {index + 1} could not be preserved: {ex.Message}");
+            }
+        }
+        settings.ApplySelectedBackgroundPreset();
+        return changed;
     }
 
     private string NormalizeCuteBackgroundImagePath(

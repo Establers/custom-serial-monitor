@@ -492,19 +492,19 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi178.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved.</value>
+    <value>Stored image for the selected preset. Use Browse to copy an image into this profile; deleting the original will not remove the background. Empty presets use the bundled background.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi179.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Browse for an optional custom background image (.png, .jpg, .jpeg, .webp).</value>
+    <value>Choose a PNG, JPG, JPEG or WebP image (up to 20 MB) for this preset. A separate copy is saved with the profile.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi180.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Reset bg to default. Clears the custom path and uses the bundled background.</value>
+    <value>Clear only the selected preset's image and use the bundled background. Other presets are kept.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi181.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Applies after the image path field loses focus or after Browse.</value>
+    <value>The selected image is copied and saved immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi183.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
@@ -517,6 +517,15 @@
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
     <value>Bg opacity</value>
+  </data>
+  <data name="BackgroundPresetsLabel.Text" xml:space="preserve">
+    <value>Bg presets</value>
+  </data>
+  <data name="BackgroundPresetsHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Select background preset 1–5, then browse to set its image. Images and opacity are saved separately. Empty presets use the bundled background.</value>
+  </data>
+  <data name="BackgroundPresetSaved" xml:space="preserve">
+    <value>Background preset {0} saved. The original image can be deleted.</value>
   </data>
   <data name="StaticUi186.Text" xml:space="preserve">
     <value>Load/reset disabled while connected</value>

@@ -91,6 +91,35 @@ public sealed class UiSettings
 
     public double CuteBackgroundOpacity { get; set; } = 0.25;
 
+    public const int BackgroundPresetCount = 5;
+
+    public int SelectedBackgroundPreset { get; set; } = 1;
+
+    // Null identifies profiles written before presets existed.
+    public List<BackgroundPreset>? BackgroundPresets { get; set; }
+
+    public void EnsureBackgroundPresets()
+    {
+        if (BackgroundPresets is null || BackgroundPresets.Count == 0)
+        {
+            BackgroundPresets = [new() { ImagePath = CuteBackgroundImagePath, Opacity = CuteBackgroundOpacity }];
+            SelectedBackgroundPreset = 1;
+        }
+
+        BackgroundPresets = BackgroundPresets.Take(BackgroundPresetCount)
+            .Select(preset => preset ?? new BackgroundPreset()).ToList();
+        while (BackgroundPresets.Count < BackgroundPresetCount) BackgroundPresets.Add(new BackgroundPreset());
+        if (SelectedBackgroundPreset is < 1 or > BackgroundPresetCount) SelectedBackgroundPreset = 1;
+    }
+
+    public void ApplySelectedBackgroundPreset()
+    {
+        EnsureBackgroundPresets();
+        var preset = BackgroundPresets![SelectedBackgroundPreset - 1];
+        CuteBackgroundImagePath = preset.ImagePath;
+        CuteBackgroundOpacity = preset.Opacity;
+    }
+
     public bool SearchCaseSensitive { get; set; }
 
     public bool SearchWholeWord { get; set; }
@@ -139,6 +168,8 @@ public sealed class UiSettings
             CuteBackgroundMode = CuteBackgroundMode,
             CuteBackgroundImagePath = CuteBackgroundImagePath,
             CuteBackgroundOpacity = CuteBackgroundOpacity,
+            SelectedBackgroundPreset = SelectedBackgroundPreset,
+            BackgroundPresets = BackgroundPresets?.Select(preset => preset?.Clone() ?? new BackgroundPreset()).ToList(),
             SearchCaseSensitive = SearchCaseSensitive,
             SearchWholeWord = SearchWholeWord,
             SearchUseRegularExpression = SearchUseRegularExpression,
