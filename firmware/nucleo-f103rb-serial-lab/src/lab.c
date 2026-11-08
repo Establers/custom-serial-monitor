@@ -19,7 +19,7 @@
 static lab_platform io;
 static char line[LINE_CAP];
 static size_t line_len;
-static bool line_discard, swallow_lf;
+static bool line_discard, swallow_lf, console_echo;
 static uint8_t frame[FRAME_CAP];
 static size_t frame_len, frame_expected;
 static uint32_t last_byte, commands, parse_errors, tx_rejected;
@@ -258,6 +258,56 @@ static void selftest(void) {
         fixtures ? "PASS" : "FAIL",limits ? "PASS" : "FAIL",LAB_BUILD_ID);
 }
 
+/* Complete only documented command words/fixed arguments. No allocation or
+ * filesystem is involved. Ambiguous prefixes extend to their common prefix;
+ * another Tab lists choices and redraws the current input. */
+static void complete_line(void) {
+    static const char *const choices[] = {
+        "HELP", "PING", "ECHO", "ID?", "STATUS?", "STOP", "MONITOR ON", "MONITOR OFF", "MONITOR?",
+        "BUILD?", "CAPS?", "SELFTEST", "RUN TEXT", "RUN UTF8", "RUN CP949", "RUN BYTES", "RUN NEWLINES",
+        "RUN EVENTS", "RUN JSON", "RUN ANSI", "RUN CONTROL", "STREAM START", "STREAM STOP",
+        "BURST", "HEX", "DELAY", "SPLIT", "LONG", "UTF8", "ANSI", "NEWLINES", "LEVELS", "SILENT",
+        "FAULT DROP", "FAULT DUP", "FAULT CRC", "FAULT CLEAR", "LED ON", "LED OFF", "BUTTON?",
+        "BAUD 9600", "BAUD 19200", "BAUD 38400", "BAUD 57600", "BAUD 115200", "BAUD 230400",
+        "BAUD 460800", "BAUD 921600", "RESET CONFIRM", "MODBUS NORMAL", "MODBUS CRC", "MODBUS EXCEPTION",
+        "MODBUS PREFIX", "MODBUS NESTED", "MODBUS CORRUPT", "MODBUS PAIR", "MODBUS TRUNCATED",
+        "MODBUS GAP", "MODBUS MAX", "MODBUS?", "RTU", "LAB", "CONSOLE ON", "CONSOLE OFF"
+    };
+    const char *first = NULL;
+    size_t common = 0, matches = 0;
+    if (line_discard) return;
+    for (size_t i = 0; i < sizeof(choices) / sizeof(choices[0]); ++i) {
+        const char *candidate = choices[i];
+        if (strncmp(candidate, line, line_len)) continue;
+        if (!first) { first = candidate; common = strlen(candidate); }
+        else {
+            size_t j = line_len;
+            while (j < common && candidate[j] && candidate[j] == first[j]) ++j;
+            common = j;
+        }
+        ++matches;
+    }
+    if (!matches) return;
+    /* Do not fill a second word before the user has typed its separator. */
+    size_t word_end = line_len;
+    while (word_end < common && first[word_end] != ' ') ++word_end;
+    common = word_end;
+    if (common > line_len && common < sizeof(line)) {
+        size_t extra = common - line_len;
+        /* Keep the wire edit and displayed completion consistent on TX failure. */
+        if (output(first + line_len, extra)) {
+            memcpy(line + line_len, first + line_len, extra);
+            line_len = common;
+        }
+    } else if (matches > 1) {
+        (void)say("\r\n");
+        for (size_t i = 0; i < sizeof(choices) / sizeof(choices[0]); ++i)
+            if (!strncmp(choices[i], line, line_len)) (void)say("%s  ", choices[i]);
+        (void)say("\r\n");
+        (void)output(line, line_len);
+    }
+}
+
 static void command(uint32_t now) {
     ++commands;
     if (!strncmp(line, "ECHO ", 5)) { (void)say("ECHO %s\r\n", line + 5); return; }
@@ -281,7 +331,13 @@ static void command(uint32_t now) {
                   "RESET CONFIRM (explicit software reset)\r\n");
         (void)say("MODBUS case [count_1..1000000] [gap_ms_0..60000]; requires MONITOR OFF, idle, FAULT CLEAR\r\n"
                   "MODBUS cases: " LAB_MODBUS_CASES " | MODBUS?\r\n");
-        (void)say("RTU (quiet unit 1 HEX slave); LAB enters legacy commands from RTU\r\n");
+        (void)say("RTU (quiet unit 1 HEX slave); LAB enters legacy commands from RTU\r\n"
+                  "CONSOLE ON|OFF (remote echo); BS/DEL delete; Tab completes commands\r\n");
+    } else if (!strcmp(cmd, "CONSOLE")) {
+        char *state = token(&cursor);
+        if (state && !*cursor && (!strcmp(state,"ON") || !strcmp(state,"OFF"))) {
+            console_echo = !strcmp(state,"ON"); (void)say("OK CONSOLE %s\r\n",state);
+        } else error("ARGS CONSOLE ON|OFF");
     } else if (!strcmp(cmd, "ID?") && !*cursor) {
         (void)say("ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1\r\n");
     } else if (!strcmp(cmd, "BUILD?") && !*cursor) {
@@ -295,7 +351,7 @@ static void command(uint32_t now) {
         run_fixture(cursor,now);
     } else if (!strcmp(cmd, "RTU") && !*cursor) {
         stop_jobs(); rtu_length = rtu_response_length = 0; rtu_overflow = false;
-        rtu_mode = true;
+        rtu_mode = true; console_echo = false;
         (void)say("OK RTU\r\n");
     } else if (!strcmp(cmd, "LAB") && !*cursor) {
         (void)say("OK LAB\r\n");
@@ -441,7 +497,7 @@ static void command(uint32_t now) {
 void lab_init(const lab_platform *platform, uint32_t now) {
     io = *platform;
     line_len = frame_len = frame_expected = 0;
-    line_discard = swallow_lf = false;
+    line_discard = swallow_lf = console_echo = false;
     commands = parse_errors = tx_rejected = 0;
     records = injected_drops = injected_duplicates = injected_crc = 0;
     baud_rate = 115200; baud_pending = 0; reset_pending = false;
@@ -529,12 +585,29 @@ void lab_receive(uint8_t byte, uint32_t now) {
     swallow_lf = false;
     if (byte == '\r' || byte == '\n') {
         swallow_lf = byte == '\r';
+        if (console_echo) (void)say("\r\n");
         if (line_discard) { ++parse_errors; error("LINE_TOO_LONG_OR_CONTROL max=511"); }
         else if (line_len) { line[line_len] = 0; command(now); }
         line_len = 0; line_discard = false;
-    } else if (byte < 32 || byte == 127 || line_len >= sizeof(line) - 1) {
+    } else if (byte == 8 || byte == 127) {
+        /* A malformed/overflowed line remains invalid until its terminator. */
+        if (!line_discard && line_len) {
+            --line_len;
+            /* UTF-8 commands/echo text: remove a complete final code point. */
+            while (line_len && ((uint8_t)line[line_len] & 0xc0u) == 0x80u) --line_len;
+            if (console_echo) (void)say("\b \b");
+        }
+    } else if (byte == '\t') {
+        complete_line();
+    } else if (byte == 3) {
+        line_len = 0; line_discard = false;
+        if (console_echo) (void)say("^C\r\n");
+    } else if (byte < 32 || line_len >= sizeof(line) - 1) {
         line_discard = true;
-    } else if (!line_discard) line[line_len++] = (char)byte;
+    } else if (!line_discard) {
+        line[line_len++] = (char)byte;
+        if (console_echo) (void)output(&byte,1);
+    }
 }
 
 /* A complete record and its intentional duplicate are one atomic queue write. */

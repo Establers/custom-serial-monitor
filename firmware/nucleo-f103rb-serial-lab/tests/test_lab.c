@@ -213,12 +213,27 @@ static const char *fixture_names[] = {"TEXT","UTF8","CP949","BYTES","NEWLINES","
 static void direct_terminal_control_tests(void) {
     init(0); send("STOP\r"); equals("OK STOP\r\n");
     clear(); send("stop\r"); equals("ERR UNKNOWN_OR_ARGS; HELP\r\n");
-    /* The display may show STOP, but editing controls were already sent. */
-    const char *edited[] = {"STOX\x7f" "P\r", "STOX\bP\r", "STO\x1b[DP\r", "STO\tP\r"};
+    const char *edited[] = {"STX\x7f" "OP\r", "STX\bOP\r", "\b\x7fSTOP\r", "STOX\b\bOP\r"};
     for (size_t i = 0; i < sizeof(edited) / sizeof(edited[0]); ++i) {
-        clear(); send(edited[i]); equals("ERR LINE_TOO_LONG_OR_CONTROL max=511\r\n");
-        clear(); send("STOP\r"); equals("OK STOP\r\n");
+        clear(); send(edited[i]); equals("OK STOP\r\n");
     }
+    clear(); send("STO\x1b[DP\r"); equals("ERR LINE_TOO_LONG_OR_CONTROL max=511\r\n");
+    clear(); send("STO\t\r"); equals("POK STOP\r\n");
+    clear(); send("LED O\t"); contains("LED ON"); contains("LED OFF");
+    clear(); send("N\r"); equals("OK LED ON\r\n"); assert(led_state); ++checks;
+    clear(); send("PI\t token\r\n"); equals("NGPONG token\r\n");
+    clear(); send("UNKNOWN\t\r"); equals("ERR UNKNOWN_OR_ARGS; HELP\r\n");
+    clear(); send("ECHO a\xc3\xa9\bZ\r"); equals("ECHO aZ\r\n");
+    clear(); send("unfinished\x03STOP\r"); equals("OK STOP\r\n");
+    clear(); for (unsigned i = 0; i < 512; ++i) lab_receive('X',0);
+    send("\b\t\r"); equals("ERR LINE_TOO_LONG_OR_CONTROL max=511\r\n");
+    clear(); send("STOP\r"); equals("OK STOP\r\n");
+    clear(); send("CONSOLE ON\r"); equals("OK CONSOLE ON\r\n");
+    clear(); send("STX\bOP\r\n"); equals("STX\b \bOP\r\nOK STOP\r\n");
+    clear(); send("PI\t\bG token\r"); equals("PING\b \bG token\r\nPONG token\r\n");
+    clear(); send("bad\x03STOP\r"); equals("bad^C\r\nSTOP\r\nOK STOP\r\n");
+    clear(); send("CONSOLE OFF\r"); equals("CONSOLE OFF\r\nOK CONSOLE OFF\r\n");
+    clear(); send("STOP\r"); equals("OK STOP\r\n");
 }
 
 static const char *modbus_names[] = {"NORMAL","CRC","EXCEPTION","PREFIX","NESTED","CORRUPT","PAIR","TRUNCATED","GAP","MAX"};
