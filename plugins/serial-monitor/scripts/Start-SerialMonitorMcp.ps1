@@ -19,7 +19,9 @@ try {
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 namespace SerialMonitor.Plugin {
     public static class CliProbe {
@@ -71,6 +73,51 @@ namespace SerialMonitor.Plugin {
             catch (ObjectDisposedException) { }
             finally { destination.Dispose(); }
         }
+        private static void Observe(Task task) {
+            task.ContinueWith(t => { var error = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int standardHandle);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool WriteFile(IntPtr handle, byte[] buffer, int count, out int written, IntPtr overlapped);
+        private static void WriteOutput(bool error, byte[] buffer, int count) {
+            if (error ? !Console.IsErrorRedirected : !Console.IsOutputRedirected) {
+                (error ? Console.OpenStandardError() : Console.OpenStandardOutput()).Write(buffer, 0, count);
+                return;
+            }
+            // .NET Framework console/file streams can silently accept broken
+            // Windows pipes. Preserve the native failure instead.
+            int written;
+            if (!WriteFile(GetStdHandle(error ? -12 : -11), buffer, count, out written, IntPtr.Zero))
+                throw new IOException("MCP output forwarding failed.", new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
+            if (written != count) throw new IOException("MCP output forwarding was incomplete.");
+        }
+        public static void ReportFailure(string message) {
+            var write = Task.Run(() => Console.Error.WriteLine(message));
+            Observe(write);
+            // stderr itself can be the broken or blocked stream.
+            Task.WhenAny(write, Task.Delay(1000)).GetAwaiter().GetResult();
+        }
+        private static async Task ForwardOutputAsync(Stream source, bool error) {
+            var buffer = new byte[8192];
+            int count;
+            while ((count = await source.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0) {
+                var length = count;
+                // Native writes to synchronous host pipes can block. Keep the
+                // deadline watcher independent of that worker.
+                var write = Task.Run(() => WriteOutput(error, buffer, length));
+                using (var deadline = new CancellationTokenSource()) {
+                    var timeout = Task.Delay(5000, deadline.Token);
+                    if (await Task.WhenAny(write, timeout).ConfigureAwait(false) != write) {
+                        Observe(write);
+                        throw new TimeoutException("MCP output forwarding timed out. Inspect capture state before retrying; TX is never replayed.");
+                    }
+                    deadline.Cancel();
+                    await write.ConfigureAwait(false);
+                }
+            }
+        }
         public static int RunMcp(string executable) {
             var start = new ProcessStartInfo(executable, "mcp") {
                 UseShellExecute = false, CreateNoWindow = true,
@@ -82,14 +129,27 @@ namespace SerialMonitor.Plugin {
                     // Copy bytes rather than PowerShell objects or decoded lines.
                     // Closing the input stream propagates client EOF to the CLI.
                     var input = ForwardInputAsync(Console.OpenStandardInput(), process.StandardInput.BaseStream);
-                    var output = process.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
-                    var error = process.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
-                    process.WaitForExit();
-                    Task.WaitAll(output, error);
+                    var output = ForwardOutputAsync(process.StandardOutput.BaseStream, false);
+                    var error = ForwardOutputAsync(process.StandardError.BaseStream, true);
+                    var exited = Task.Run(() => process.WaitForExit());
+                    var forwarding = Task.WhenAll(output, error);
+                    Observe(input);
+                    Observe(forwarding);
+                    Observe(exited);
+                    // Watch forwarding failures while stdin remains open. Waiting
+                    // only for child exit hides a broken host pipe from the CLI.
+                    var finished = Task.WhenAny(input, output, error, exited).GetAwaiter().GetResult();
+                    finished.GetAwaiter().GetResult();
+                    if (finished == output || finished == error) process.StandardInput.Close();
+                    if (!exited.Wait(5000)) throw new TimeoutException("MCP did not stop after the transport closed.");
+                    if (Task.WhenAny(forwarding, Task.Delay(5000)).GetAwaiter().GetResult() != forwarding)
+                        throw new TimeoutException("MCP output streams did not close.");
+                    forwarding.GetAwaiter().GetResult();
                     return process.ExitCode;
                 }
                 finally {
                     if (!process.HasExited) { try { process.Kill(); } catch (InvalidOperationException) { } }
+                    process.WaitForExit(1000);
                 }
             }
         }
@@ -124,7 +184,9 @@ namespace SerialMonitor.Plugin {
     exit [SerialMonitor.Plugin.CliProbe]::RunMcp($executable)
 }
 catch {
-    [Console]::Error.WriteLine('Serial Monitor plugin: ' + $_.Exception.Message)
+    $message = 'Serial Monitor plugin: ' + $_.Exception.Message
+    if ('SerialMonitor.Plugin.CliProbe' -as [type]) { [SerialMonitor.Plugin.CliProbe]::ReportFailure($message) }
+    else { [Console]::Error.WriteLine($message) }
     exit 1
 }
 finally {

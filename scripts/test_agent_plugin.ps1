@@ -132,7 +132,19 @@ public static class MockSerialMonitorCli {
             Console.WriteLine(Environment.GetEnvironmentVariable("SERIAL_MONITOR_TEST_METADATA"));
             return 0;
         }
-        if (args.Length > 0 && args[0] == "mcp") Console.WriteLine("MCP_SHOULD_NOT_START_FOR_INVALID_METADATA");
+        if (args.Length > 0 && args[0] == "mcp") {
+            var marker = Environment.GetEnvironmentVariable("SERIAL_MONITOR_TEST_MCP_PID");
+            if (!String.IsNullOrEmpty(marker)) {
+                File.WriteAllText(marker, Process.GetCurrentProcess().Id.ToString());
+                var output = Environment.GetEnvironmentVariable("SERIAL_MONITOR_TEST_STREAM") == "stderr" ? Console.Error : Console.Out;
+                if (Environment.GetEnvironmentVariable("SERIAL_MONITOR_TEST_FLOOD") == "true") {
+                    while (true) { output.Write(new string('X', 8192)); output.Flush(); }
+                }
+                output.WriteLine("fixture output");
+                output.Flush();
+                Console.In.ReadToEnd();
+            } else Console.WriteLine("MCP_SHOULD_NOT_START_FOR_INVALID_METADATA");
+        }
         return 0;
     }
 }
@@ -146,6 +158,49 @@ $result = Run-Launcher $pluginRoot $mockCli 'describe' '' @{ SERIAL_MONITOR_TEST
 Assert-True ($result.ExitCode -eq 0 -and $result.Error -eq '') ('Valid CLI probe failed: ' + $result.Error)
 Assert-True (($result.Output | ConvertFrom-Json).data.cliVersion -eq '1.6.0') 'Probe stdout contains startup text or lost JSON.'
 $passed++
+
+# Host output can close or stop draining while stdin remains open. Exercise the
+# actual PowerShell launcher, including its child cleanup, on both output streams.
+foreach ($stream in @('stdout', 'stderr')) {
+    foreach ($failure in @('closed', 'blocked')) {
+        $marker = Join-Path $scratch ("mcp-$stream-$failure-pid.txt")
+        $launcher = Join-Path $pluginRoot 'scripts\Start-SerialMonitorMcp.ps1'
+        $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher +
+            '" -CliPath "' + $mockCli + '"'
+        $start = [Diagnostics.ProcessStartInfo]::new($powershell, $arguments)
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardInput = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.EnvironmentVariables['SERIAL_MONITOR_TEST_METADATA'] = $goodJson
+        $start.EnvironmentVariables['SERIAL_MONITOR_TEST_MCP_PID'] = $marker
+        $start.EnvironmentVariables['SERIAL_MONITOR_TEST_STREAM'] = $stream
+        $start.EnvironmentVariables['SERIAL_MONITOR_TEST_FLOOD'] = if ($failure -eq 'blocked') { 'true' } else { 'false' }
+        $process = [Diagnostics.Process]::Start($start)
+        try {
+            $target = if ($stream -eq 'stdout') { $process.StandardOutput } else { $process.StandardError }
+            $other = if ($stream -eq 'stdout') { $process.StandardError } else { $process.StandardOutput }
+            $drain = $other.ReadToEndAsync()
+            if ($failure -eq 'closed') { $target.Close() }
+            Assert-True ($process.WaitForExit(15000)) "Plugin hung with $failure $stream and open stdin."
+            Assert-True ($process.ExitCode -ne 0) "Plugin reported success with $failure $stream."
+            Assert-True (Test-Path -LiteralPath $marker -PathType Leaf) 'MCP fixture did not start.'
+            $fixtureProcessId = [int][IO.File]::ReadAllText($marker)
+            Assert-True (-not (Get-Process -Id $fixtureProcessId -ErrorAction SilentlyContinue)) "Plugin leaked its child with $failure $stream."
+            Assert-True ($drain.Wait(2000)) 'Unaffected output stream remained open.'
+        }
+        finally {
+            if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit(1000) | Out-Null }
+            if (Test-Path -LiteralPath $marker -PathType Leaf) {
+                $fixture = Get-Process -Id ([int][IO.File]::ReadAllText($marker)) -ErrorAction SilentlyContinue
+                if ($fixture) { $fixture.Kill(); $fixture.Dispose() }
+            }
+            $process.Dispose()
+        }
+        $passed++
+    }
+}
 
 foreach ($invalid in @('old-cli', 'future-api', 'future-plugin', 'bad-json')) {
     $metadata.data.cliVersion = '1.6.0'
