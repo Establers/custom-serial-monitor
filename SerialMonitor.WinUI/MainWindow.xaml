@@ -15,6 +15,7 @@
           Padding="4"
           RowSpacing="4"
           Loaded="Root_Loaded"
+          LayoutUpdated="BackgroundLayout_Updated"
           SizeChanged="Root_SizeChanged"
           KeyDown="Root_KeyDown">
         <Grid.Resources>

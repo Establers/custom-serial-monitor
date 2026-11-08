@@ -50,7 +50,7 @@ public sealed class XtermBackgroundBridge
     }
 
     public async Task ApplyAsync(CoreWebView2 webView, string imagePath, double opacity,
-        long imageRevision, CancellationToken cancellationToken)
+        long imageRevision, XtermBackgroundLayout? layout, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!ReferenceEquals(_owner, webView))
@@ -64,7 +64,7 @@ public sealed class XtermBackgroundBridge
             _imageRevision = imageRevision;
         }
 
-        var payload = JsonSerializer.Serialize(new { source = _imageUrl, opacity });
+        var payload = JsonSerializer.Serialize(new { source = _imageUrl, opacity, layout });
         if (payload == _lastPayload) return;
         _lastPayload = payload;
         try

@@ -41,6 +41,10 @@ try {
         'custom-0' = @('true', '1', 'serialmonitor-background.local')
         'return-bundled-50' = @('true', '0.5', 'serialmonitor-background-bundled.local')
         'disabled' = @('false', '0.5', '')
+        'alignment-initial' = @('true', '1', 'serialmonitor-background-bundled.local')
+        'alignment-narrow' = @('true', '1', 'serialmonitor-background-bundled.local')
+        'alignment-wide' = @('true', '1', 'serialmonitor-background-bundled.local')
+        'alignment-collapsed' = @('true', '1', 'serialmonitor-background-bundled.local')
     }
     foreach ($case in $expected.Keys) {
         $snapshot = Get-Content -LiteralPath ($result + '.' + $case + '.json') -Raw | ConvertFrom-Json
@@ -53,6 +57,13 @@ try {
             throw "${case}: native image resource did not load: $($snapshot.state)"
         }
         if ($state.text -notlike '*Native WinUI background test - opaque text*') { throw "${case}: retained text was lost." }
+        if ($case -like 'alignment-*') {
+            if ($null -eq $snapshot.alignmentError -or $snapshot.alignmentError -gt 8) {
+                throw "${case}: native XAML/WebView pixels do not align (mean RGB error $($snapshot.alignmentError))."
+            }
+            Write-Output "PASS: $case (native image crop, mean RGB error $($snapshot.alignmentError))"
+            continue
+        }
         Write-Output "PASS: $case (native WebView2 image + retained text)"
     }
     if ((Get-FileHash -LiteralPath $profile).Hash -ne $profileHash) { throw 'The shared profile changed during the test.' }

@@ -63,6 +63,9 @@ public sealed partial class MainWindow : Window
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
     private readonly XtermClearBarrier _xtermClearBarrier = new();
     private readonly XtermBackgroundBridge _xtermBackground = new();
+    private XtermBackgroundLayout? _lastObservedBackgroundLayout;
+    private bool _backgroundLayoutSyncQueued;
+    private bool _backgroundLayoutSyncPending;
     private readonly object _xtermAppendAckGate = new();
     private readonly Dictionary<long, TaskCompletionSource<bool>> _xtermAppendAcknowledgements = new();
     private bool _xtermLiveAppendPumpRunning;
@@ -2729,14 +2732,63 @@ public sealed partial class MainWindow : Window
         if (!_isXtermReady || IsClosingOrClosed || XtermLogWebView.CoreWebView2 is not { } webView) return;
         try
         {
+            var imagePath = _viewModel.CuteBackgroundMode ? _lastAppliedCuteBackgroundPath ?? string.Empty : string.Empty;
+            var layout = GetXtermBackgroundLayout();
+            // Wait for native layout instead of briefly drawing a second,
+            // independently fitted image during startup.
+            if (!string.IsNullOrEmpty(imagePath) && layout is null) return;
             using var timeout = new CancellationTokenSource(XtermScriptExecutionTimeout);
-            await _xtermBackground.ApplyAsync(webView,
-                _viewModel.CuteBackgroundMode ? _lastAppliedCuteBackgroundPath ?? string.Empty : string.Empty,
-                _viewModel.XtermBackgroundOpacity, _viewModel.CuteBackgroundImageRevision, timeout.Token);
+            await _xtermBackground.ApplyAsync(webView, imagePath,
+                _viewModel.XtermBackgroundOpacity, _viewModel.CuteBackgroundImageRevision, layout, timeout.Token);
         }
         catch (Exception ex)
         {
             if (!IsClosingOrClosed) _viewModel.RecordXtermLayoutError($"xterm background update failed: {ex.Message}");
+        }
+    }
+
+    private XtermBackgroundLayout? GetXtermBackgroundLayout()
+    {
+        if (!CuteBackgroundImage.IsLoaded || !XtermLogWebView.IsLoaded ||
+            CuteBackgroundImage.ActualWidth <= 0 || CuteBackgroundImage.ActualHeight <= 0 ||
+            XtermLogWebView.ActualWidth <= 0 || XtermLogWebView.ActualHeight <= 0) return null;
+        var bounds = CuteBackgroundImage.TransformToVisual(XtermLogWebView).TransformBounds(
+            new Windows.Foundation.Rect(0, 0, CuteBackgroundImage.ActualWidth, CuteBackgroundImage.ActualHeight));
+        return new XtermBackgroundLayout(
+            Math.Round(bounds.X / XtermLogWebView.ActualWidth, 6),
+            Math.Round(bounds.Y / XtermLogWebView.ActualHeight, 6),
+            Math.Round(bounds.Width / XtermLogWebView.ActualWidth, 6),
+            Math.Round(bounds.Height / XtermLogWebView.ActualHeight, 6));
+    }
+
+    private void BackgroundLayout_Updated(object? sender, object args)
+    {
+        if (!_isXtermReady || IsClosingOrClosed || !_viewModel.CuteBackgroundMode) return;
+        try
+        {
+            var layout = GetXtermBackgroundLayout();
+            if (layout is null || layout == _lastObservedBackgroundLayout) return;
+            _lastObservedBackgroundLayout = layout;
+            _backgroundLayoutSyncPending = true;
+            if (_backgroundLayoutSyncQueued) return;
+            _backgroundLayoutSyncQueued = DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    // One active update plus the latest layout, even if the
+                    // browser is busy while the window is being resized.
+                    while (_backgroundLayoutSyncPending && !IsClosingOrClosed)
+                    {
+                        _backgroundLayoutSyncPending = false;
+                        await SyncXtermBackgroundAsync();
+                    }
+                }
+                finally { _backgroundLayoutSyncQueued = false; }
+            });
+        }
+        catch (Exception ex)
+        {
+            if (!IsClosingOrClosed) _viewModel.RecordXtermLayoutError($"xterm background layout failed: {ex.Message}");
         }
     }
 
