@@ -88,8 +88,9 @@ Only pre-request connection probes are repeated; transmitted requests are never 
 & $cli configure --port COM7 --baud 115200 --byte-timeout-ms 40 --instance $instance
 ```
 
-The original settings are `--baud` (1..10000000 BPS) and `--byte-timeout-ms`
-(1..5000 ms). Custom baud rates are allowed if the device/driver supports them;
+The baud/timeout options are `--baud` (1..10000000 BPS) and `--byte-timeout-ms`
+(1..5000 ms). At least one supported setting is required; live framing options
+are described below. Custom baud rates are allowed if the device/driver supports them;
 an unsupported rate fails. The current `status` includes `baudRate` and
 `byteTimeoutMs`. Changing BPS updates the host's existing serial handle/session;
 it does not transmit a device configuration command. Use the documented product
@@ -100,7 +101,7 @@ it does not connect/reconnect. Use the GUI/profile to configure offline settings
 Configuration is exclusive and returns `busy` during capture, TX, sequences,
 bridge activity or another control operation. Let that work finish first.
 
-Byte timeout changes the live HEX display's idle-gap grouping (default 40 ms).
+Byte timeout changes the live HEX display's idle-gap grouping (automatic: 4 ms at 115200 bps, 6 ms at 9600 bps, 8N1).
 It does not set the total response wait; `--duration-ms`/step `captureMs` do that.
 Theoretical per-byte or RS485 gap calculations do not include Windows/USB adapter
 buffering and scheduling/processing jitter. Start with empirical slack and observe

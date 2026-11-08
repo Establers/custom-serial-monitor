@@ -88,8 +88,9 @@ Only pre-request connection probes are repeated; transmitted requests are never 
 & $cli configure --port COM7 --baud 115200 --byte-timeout-ms 40 --instance $instance
 ```
 
-Supply at least one of `--baud` (1..10000000 BPS) or `--byte-timeout-ms`
-(1..5000 ms). Custom baud rates are allowed if the device/driver supports them;
+The baud/timeout options are `--baud` (1..10000000 BPS) and `--byte-timeout-ms`
+(1..5000 ms). At least one supported setting is required; live framing options
+are described below. Custom baud rates are allowed if the device/driver supports them;
 an unsupported rate fails. The current `status` includes `baudRate` and
 `byteTimeoutMs`. Changing BPS updates the host's existing serial handle/session;
 it does not transmit a device configuration command. Use the documented product
@@ -340,3 +341,33 @@ Both GUI and CLI must be updated for this protection under ordinary connection
 saturation. Older GUIs use their existing pipe. Cancellation is still bounded;
 it can return `busy` or a connection timeout. Inspect the accepted run/capture
 instead of opening another endpoint or automatically resending a device command.
+
+
+## Control-line status and live framing
+
+`lines` reads DTR/RTS driver modes and CTS/DSR/DCD/RI input states without TX.
+Unavailable inputs are null, not OFF; these are snapshots and can miss pulses.
+Read the advertised capabilities first: this requires `serial-control-lines`.
+
+```powershell
+& $cli lines --instance $instance
+& $cli lines --dtr on --port COM7 --generation 123 --instance $instance
+& $cli lines --rts off --port COM7 --instance $instance
+& $cli lines --rts-toggle on --port COM7 --instance $instance
+& $cli configure --baud 57600 --data-bits 7 --parity even --stop-bits 2 --handshake none --instance $instance
+```
+
+Use actual port/instance/session values. Change one output per `lines` command.
+`--generation` is optional and pins the generation returned by `lines`/`status`.
+AUTO outputs belong to hardware handshake and cannot be changed manually; RTS
+TX Toggle owns RTS until disabled. A DTR/RTS transition can reset a wired board.
+After a failure or uncertain response, read the actual state before deciding on
+any retry. Direct terminal input stays enabled during these serialized changes.
+
+With `live-serial-framing`, `configure` also accepts `--data-bits` (5..8),
+`--parity` (none/odd/even/mark/space), `--stop-bits` (1/1.5/2) and `--handshake`
+(none/xon/rts/dtr/rtsxon/dtrxon/dtrrts/dtrrtsxon). At least one setting is required.
+The GUI has the same live setting controls. Driver changes are read back and
+rolled back on failure; an unverified restore faults the connection. Supported data/stop-bit combinations depend on the driver and are verified by
+readback rather than rejected through an extra application rule.
+Selecting RTS handshake disables TX Toggle. Coordinate settings with the peer.

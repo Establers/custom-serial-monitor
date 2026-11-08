@@ -25,7 +25,7 @@ running GUI.
 | `ports` | `serial_list_ports` | `instanceId` |
 | `commands` | `serial_list_commands` | `instanceId`, `offset`, `limit` (1..100); follow `nextOffset` while `hasMore` |
 | `connect` | `serial_connect` | `instanceId`, `port`, `baudRate` |
-| `configure` | `serial_configure` | `instanceId`, optional expected `port`, `baudRate`, `byteTimeoutMs`; at least one setting |
+| `configure` | `serial_configure` | `instanceId`, optional expected `port`, `baudRate`, `byteTimeoutMs`, `dataBits`, `parity`, `stopBits`, `handshake`; at least one setting |
 | `disconnect` | `serial_disconnect` | `instanceId` |
 | `request` | `serial_send_and_capture` | `instanceId`, `port`, `command`, `txMode`, `lineEnding`, `durationMs`, `previewBytes`, `format` |
 | `send` | `serial_send` | `instanceId`, `port`, `command`, `txMode`, `lineEnding`, `previewBytes`, `format` |
@@ -173,3 +173,5 @@ Stdio starts `serialctl mcp` as a local child; it still requires the GUI to be r
 An app needs a local MCP executor or local shell to use this Windows integration.
 Do not expose a local endpoint publicly, invent HTTP support, or treat cloud-hosted
 localhost as the user's Windows machine.
+
+`serial_get_control_lines` reads output modes, nullable input states and session generation without TX. `serial_set_control_line` changes one `line` (`dtr`, `rts`, `rts_toggle`) using boolean `enabled`, optional expected `port` and `sessionGeneration`. AUTO outputs cannot be overridden. Inspect state after an uncertain response before retrying; direct terminal input remains enabled. Discover exact schemas through capabilities.
