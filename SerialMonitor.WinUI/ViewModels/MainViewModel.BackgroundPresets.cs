@@ -25,6 +25,39 @@ public sealed partial class MainViewModel
 
     public long CuteBackgroundImageRevision => _cuteBackgroundImageRevision;
 
+    public double XtermBackgroundOpacity
+    {
+        get => _currentUiSettings.XtermBackgroundOpacity;
+        set
+        {
+            if (!double.IsFinite(value)) return;
+            var clamped = Math.Clamp(value, 0, 1);
+            if (Math.Abs(_currentUiSettings.XtermBackgroundOpacity - clamped) < 0.0001) return;
+
+            _currentUiSettings.EnsureBackgroundPresets();
+            _currentUiSettings.XtermBackgroundOpacity = clamped;
+            _currentUiSettings.BackgroundPresets![SelectedBackgroundPreset - 1].XtermOpacity = clamped;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(XtermBackgroundOpacityPercent));
+            OnPropertyChanged(nameof(XtermBackgroundTransparencyPercent));
+            RecordSettingsChange("xterm background opacity", SettingsApplyBehavior.Immediate,
+                $"{XtermBackgroundOpacityPercent}%");
+            RefreshStatusBar();
+        }
+    }
+
+    public int XtermBackgroundOpacityPercent
+    {
+        get => (int)Math.Round(XtermBackgroundOpacity * 100, MidpointRounding.AwayFromZero);
+        set => XtermBackgroundOpacity = Math.Clamp(value, 0, 100) / 100.0;
+    }
+
+    public int XtermBackgroundTransparencyPercent
+    {
+        get => 100 - XtermBackgroundOpacityPercent;
+        set => XtermBackgroundOpacityPercent = 100 - Math.Clamp(value, 0, 100);
+    }
+
     private async Task SelectBackgroundPresetAsync(object? parameter)
     {
         if (!CanEditBackgroundPresets || !int.TryParse(parameter?.ToString(), NumberStyles.None,
@@ -97,5 +130,9 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(CuteBackgroundImagePath));
         OnPropertyChanged(nameof(CuteBackgroundOpacity));
         OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
+        OnPropertyChanged(nameof(CuteBackgroundTransparencyPercent));
+        OnPropertyChanged(nameof(XtermBackgroundOpacity));
+        OnPropertyChanged(nameof(XtermBackgroundOpacityPercent));
+        OnPropertyChanged(nameof(XtermBackgroundTransparencyPercent));
     }
 }

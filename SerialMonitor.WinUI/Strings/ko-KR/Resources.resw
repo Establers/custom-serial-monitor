@@ -508,21 +508,28 @@
     <comment>The selected image is copied and saved immediately.</comment>
   </data>
   <data name="StaticUi183.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>0~100 사이의 정수를 입력하세요. 100을 넘으면 100으로 맞춥니다. 문자, 소수점, 음수는 입력할 수 없습니다. 0은 이미지를 숨기고, 100은 이미지를 완전히 표시합니다.</value>
-    <comment>English: Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image.</comment>
+    <value>앱 배경 이미지 투명도를 0~100 사이의 정수로 입력하세요. xterm 배경 투명도와 별개입니다. 0은 이미지를 완전히 표시하고, 100은 앱 배경을 숨깁니다. 100을 넘으면 100으로 맞춥니다.</value>
   </data>
   <data name="StaticUi184.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>즉시 적용됩니다. 로그가 빽빽할 때는 낮은 값을 권장합니다.</value>
-    <comment>English: Applies immediately. Keep the value subtle for dense logs.</comment>
+    <value>앱 배경에 즉시 적용되며 프리셋별로 저장됩니다.</value>
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
-    <value>배경 불투명도</value>
+    <value>앱 배경 투명도</value>
+  </data>
+  <data name="XtermBackgroundOpacityLabel.Text" xml:space="preserve">
+    <value>xterm 배경 투명도</value>
+  </data>
+  <data name="XtermBackgroundOpacityInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>xterm 안의 배경 이미지 투명도를 0~100으로 조절합니다. 글자 불투명도는 유지됩니다. 0은 이미지를 완전히 표시하고, 100은 xterm 이미지만 숨깁니다. 앱 배경 투명도와 별개입니다.</value>
+  </data>
+  <data name="XtermBackgroundOpacityHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>로그를 지우지 않고 즉시 적용되며 프리셋별로 저장됩니다. 고대비 모드에서는 xterm 이미지를 숨깁니다.</value>
   </data>
   <data name="BackgroundPresetsLabel.Text" xml:space="preserve">
     <value>배경 프리셋</value>
   </data>
   <data name="BackgroundPresetsHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>1~5번 배경 프리셋을 선택한 뒤 찾아보기로 이미지를 지정하세요. 이미지와 불투명도는 번호별로 저장됩니다. 비어 있는 프리셋은 내장 배경을 사용합니다.</value>
+    <value>1~5번 배경 프리셋을 선택한 뒤 찾아보기로 이미지를 지정하세요. 이미지, 앱 배경 투명도, xterm 배경 투명도가 번호별로 저장됩니다. 비어 있는 프리셋은 내장 배경을 사용합니다.</value>
   </data>
   <data name="BackgroundPresetSaved" xml:space="preserve">
     <value>배경 프리셋 {0}번을 저장했습니다. 원본 이미지를 지워도 유지됩니다.</value>

@@ -22,6 +22,7 @@ public sealed class BackgroundProfileTests : IDisposable
         var profile = service.CreateDefaultProfile();
         profile.UiSettings.CuteBackgroundMode = true;
         profile.UiSettings.CuteBackgroundOpacity = opacity;
+        profile.UiSettings.XtermBackgroundOpacity = 1 - opacity;
 
         await service.SaveAsync(ProfilePath, profile, CancellationToken.None);
         var restartedService = new ProfileService();
@@ -29,6 +30,7 @@ public sealed class BackgroundProfileTests : IDisposable
 
         Assert.True(loaded.UiSettings.CuteBackgroundMode);
         Assert.Equal(opacity, loaded.UiSettings.CuteBackgroundOpacity);
+        Assert.Equal(1 - opacity, loaded.UiSettings.XtermBackgroundOpacity);
         Assert.Null(restartedService.LastError);
     }
 
@@ -110,7 +112,10 @@ public sealed class BackgroundProfileTests : IDisposable
             var original = Path.Combine(_directory, $"original-{number}.png");
             await File.WriteAllBytesAsync(original, [(byte)number, 42, 99]);
             originals.Add(original);
-            profile.UiSettings.BackgroundPresets![number - 1] = new() { ImagePath = original, Opacity = number / 10.0 };
+            profile.UiSettings.BackgroundPresets![number - 1] = new()
+            {
+                ImagePath = original, Opacity = number / 10.0, XtermOpacity = number / 5.0
+            };
         }
         profile.UiSettings.SelectedBackgroundPreset = 4;
         await service.SaveAsync(ProfilePath, profile, CancellationToken.None);
@@ -120,6 +125,7 @@ public sealed class BackgroundProfileTests : IDisposable
 
         Assert.Equal(4, loaded.UiSettings.SelectedBackgroundPreset);
         Assert.Equal(0.4, loaded.UiSettings.CuteBackgroundOpacity);
+        Assert.Equal(0.8, loaded.UiSettings.XtermBackgroundOpacity);
         Assert.Equal(5, loaded.UiSettings.BackgroundPresets!.Count);
         Assert.Equal(5, loaded.UiSettings.BackgroundPresets.Select(preset => preset.ImagePath).Distinct().Count());
         for (var number = 1; number <= 5; number++)
@@ -127,6 +133,7 @@ public sealed class BackgroundProfileTests : IDisposable
             var preset = loaded.UiSettings.BackgroundPresets[number - 1];
             Assert.Equal(new byte[] { (byte)number, 42, 99 }, await File.ReadAllBytesAsync(preset.ImagePath));
             Assert.Equal(number / 10.0, preset.Opacity);
+            Assert.Equal(number / 5.0, preset.XtermOpacity);
         }
         Assert.Equal(loaded.UiSettings.BackgroundPresets[3].ImagePath, loaded.UiSettings.CuteBackgroundImagePath);
     }
@@ -201,7 +208,7 @@ public sealed class BackgroundProfileTests : IDisposable
         Directory.CreateDirectory(_directory);
         var profile = new ProfileService().CreateDefaultProfile();
         profile.UiSettings.SelectedBackgroundPreset = 99;
-        profile.UiSettings.BackgroundPresets = [null!, new() { ImagePath = "missing.png", Opacity = -1 }, new(), new(), new(), new()];
+        profile.UiSettings.BackgroundPresets = [null!, new() { ImagePath = "missing.png", Opacity = -1, XtermOpacity = 2 }, new(), new(), new(), new()];
         await File.WriteAllTextAsync(ProfilePath, JsonSerializer.Serialize(profile));
 
         var loaded = await new ProfileService().LoadAsync(ProfilePath, CancellationToken.None);
@@ -211,24 +218,72 @@ public sealed class BackgroundProfileTests : IDisposable
         Assert.Empty(loaded.UiSettings.BackgroundPresets[0].ImagePath);
         Assert.Equal("missing.png", loaded.UiSettings.BackgroundPresets[1].ImagePath);
         Assert.Equal(0.25, loaded.UiSettings.BackgroundPresets[1].Opacity);
+        Assert.Equal(BackgroundPreset.DefaultXtermOpacity, loaded.UiSettings.BackgroundPresets[1].XtermOpacity);
+    }
+
+    [Fact]
+    public async Task OldPresetJson_KeepsExistingAppOpacityAndDefaultsOnlyXtermOpacity()
+    {
+        Directory.CreateDirectory(_directory);
+        await File.WriteAllTextAsync(ProfilePath, """
+            { "UiSettings": {
+              "CuteBackgroundMode": true,
+              "SelectedBackgroundPreset": 2,
+              "BackgroundPresets": [ { "Opacity": 0.73 }, { "Opacity": 0.21 } ]
+            } }
+            """);
+
+        var service = new ProfileService();
+        var loaded = await service.LoadAsync(ProfilePath, CancellationToken.None);
+        Assert.Equal(0.21, loaded.UiSettings.CuteBackgroundOpacity);
+        Assert.Equal(0.73, loaded.UiSettings.BackgroundPresets![0].Opacity);
+        Assert.Equal(0.15, loaded.UiSettings.XtermBackgroundOpacity);
+        Assert.All(loaded.UiSettings.BackgroundPresets, preset => Assert.Equal(0.15, preset.XtermOpacity));
+
+        loaded.UiSettings.BackgroundPresets[1].XtermOpacity = 0;
+        await service.SaveAsync(ProfilePath, loaded, CancellationToken.None);
+        var restarted = await new ProfileService().LoadAsync(ProfilePath, CancellationToken.None);
+        Assert.Equal(0, restarted.UiSettings.XtermBackgroundOpacity);
+        Assert.Equal(0.21, restarted.UiSettings.CuteBackgroundOpacity);
+        Assert.Equal(0.15, restarted.UiSettings.BackgroundPresets![0].XtermOpacity);
+    }
+
+    [Theory]
+    [InlineData(-0.01)]
+    [InlineData(1.01)]
+    public async Task InvalidXtermOpacity_RestoresOnlyXtermDefault(double opacity)
+    {
+        Directory.CreateDirectory(_directory);
+        var profile = new ProfileService().CreateDefaultProfile();
+        profile.UiSettings.CuteBackgroundOpacity = 0.73;
+        profile.UiSettings.XtermBackgroundOpacity = opacity;
+        await File.WriteAllTextAsync(ProfilePath, JsonSerializer.Serialize(profile));
+
+        var loaded = await new ProfileService().LoadAsync(ProfilePath, CancellationToken.None);
+        Assert.Equal(BackgroundPreset.DefaultXtermOpacity, loaded.UiSettings.XtermBackgroundOpacity);
+        Assert.Equal(0.73, loaded.UiSettings.CuteBackgroundOpacity);
     }
 
     [Fact]
     public void Clone_DoesNotShareEditablePresetState()
     {
-        var settings = new UiSettings { CuteBackgroundImagePath = "legacy.png", CuteBackgroundOpacity = 0.6 };
+        var settings = new UiSettings { CuteBackgroundImagePath = "legacy.png", CuteBackgroundOpacity = 0.6, XtermBackgroundOpacity = 0.4 };
         settings.EnsureBackgroundPresets();
         var clone = settings.Clone();
         clone.BackgroundPresets![0].ImagePath = "replacement.png";
         clone.BackgroundPresets[0].Opacity = 0.1;
+        clone.BackgroundPresets[0].XtermOpacity = 0.8;
         clone.SelectedBackgroundPreset = 5;
         clone.ApplySelectedBackgroundPreset();
 
         Assert.Equal("legacy.png", settings.BackgroundPresets![0].ImagePath);
         Assert.Equal(0.6, settings.BackgroundPresets[0].Opacity);
+        Assert.Equal(0.4, settings.BackgroundPresets[0].XtermOpacity);
+        Assert.Equal(0.8, clone.BackgroundPresets[0].XtermOpacity);
         Assert.Equal(1, settings.SelectedBackgroundPreset);
         Assert.Empty(clone.CuteBackgroundImagePath);
         Assert.Equal(0.25, clone.CuteBackgroundOpacity);
+        Assert.Equal(BackgroundPreset.DefaultXtermOpacity, clone.XtermBackgroundOpacity);
     }
 
     public void Dispose()

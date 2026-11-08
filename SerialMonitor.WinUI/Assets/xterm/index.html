@@ -129,11 +129,26 @@
       inset: 0;
     }
 
+    #terminalBackground {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    :root[data-terminal-background="true"] {
+      --terminal-surface-background: transparent;
+    }
+
     #terminal {
       position: absolute;
       inset: 0;
+      z-index: 1;
       overflow: hidden;
-      background: var(--page-background);
+      background: var(--terminal-surface-background, var(--page-background));
     }
 
     .log-jump-target {
@@ -151,11 +166,11 @@
       height: 100%;
       box-sizing: border-box;
       overflow: hidden;
-      background: var(--page-background);
+      background: var(--terminal-surface-background, var(--page-background));
     }
 
     .xterm .xterm-viewport {
-      background-color: var(--page-background) !important;
+      background-color: var(--terminal-surface-background, var(--page-background)) !important;
       scrollbar-color: var(--scrollbar-thumb) var(--page-background);
       scrollbar-width: thin;
     }
@@ -308,6 +323,7 @@
   </style>
 </head>
 <body>
+  <img id="terminalBackground" alt="" aria-hidden="true" hidden>
   <div id="terminal"></div>
   <div id="restoreOverlay" aria-hidden="true">
     <div class="restore-card">
@@ -349,6 +365,7 @@
   <script src="./log-navigation.js"></script>
   <script src="./log-navigation-terminal.js"></script>
   <script src="./line-highlighting.js"></script>
+  <script src="./terminal-background.js"></script>
   <script>
     const darkTerminalTheme = {
       background: '#0c0d0e',
@@ -492,7 +509,10 @@
         return getHighContrastTerminalTheme();
       }
 
-      return document.documentElement.dataset.colorScheme === 'light' ? lightTerminalTheme : darkTerminalTheme;
+      const theme = document.documentElement.dataset.colorScheme === 'light' ? lightTerminalTheme : darkTerminalTheme;
+      return document.documentElement.dataset.terminalBackground === 'true'
+        ? { ...theme, background: '#00000000' }
+        : theme;
     };
 
     const bundledTerminalFontFamily = '"JetBrains Mono Bundled", Consolas, "Cascadia Mono", Menlo, monospace';
@@ -500,7 +520,8 @@
     let configuredTerminalFontFamily = fallbackTerminalFontFamily;
     let bundledTerminalFontReady = false;
     const terminal = new Terminal({
-      allowTransparency: false,
+      // Set before open; toggling an image must never recreate the terminal/buffer.
+      allowTransparency: true,
       convertEol: true,
       cursorBlink: false,
       disableStdin: true,
@@ -519,6 +540,15 @@
     terminal.loadAddon(searchAddon);
     terminal.open(document.getElementById('terminal'));
     fitAddon.fit();
+
+    const terminalBackground = new SerialMonitorTerminalBackground(
+      document.getElementById('terminalBackground'), forcedColorsQuery,
+      () => {
+        terminal.options.theme = getTerminalTheme();
+        terminal.refresh(0, Math.max(0, terminal.rows - 1));
+      },
+      () => window.chrome?.webview?.postMessage({ type: 'xtermBackgroundError' }));
+    window.serialMonitorSetBackground = settings => terminalBackground.set(settings);
 
     let directInputSessionId = 0;
     let directInputLocalEcho = true;
@@ -623,6 +653,7 @@
       document.documentElement.dataset.colorScheme = configuredColorScheme === 'light' || configuredColorScheme === 'dark'
         ? configuredColorScheme
         : colorSchemeQuery.matches ? 'light' : 'dark';
+      terminalBackground.refresh();
       terminal.options.theme = getTerminalTheme();
       terminal.refresh(0, Math.max(0, terminal.rows - 1));
     };

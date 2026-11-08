@@ -91,6 +91,8 @@ public sealed class UiSettings
 
     public double CuteBackgroundOpacity { get; set; } = 0.25;
 
+    public double XtermBackgroundOpacity { get; set; } = BackgroundPreset.DefaultXtermOpacity;
+
     public const int BackgroundPresetCount = 5;
 
     public int SelectedBackgroundPreset { get; set; } = 1;
@@ -102,7 +104,7 @@ public sealed class UiSettings
     {
         if (BackgroundPresets is null || BackgroundPresets.Count == 0)
         {
-            BackgroundPresets = [new() { ImagePath = CuteBackgroundImagePath, Opacity = CuteBackgroundOpacity }];
+            BackgroundPresets = [new() { ImagePath = CuteBackgroundImagePath, Opacity = CuteBackgroundOpacity, XtermOpacity = XtermBackgroundOpacity }];
             SelectedBackgroundPreset = 1;
         }
 
@@ -118,6 +120,7 @@ public sealed class UiSettings
         var preset = BackgroundPresets![SelectedBackgroundPreset - 1];
         CuteBackgroundImagePath = preset.ImagePath;
         CuteBackgroundOpacity = preset.Opacity;
+        XtermBackgroundOpacity = preset.XtermOpacity;
     }
 
     public bool SearchCaseSensitive { get; set; }
@@ -168,6 +171,7 @@ public sealed class UiSettings
             CuteBackgroundMode = CuteBackgroundMode,
             CuteBackgroundImagePath = CuteBackgroundImagePath,
             CuteBackgroundOpacity = CuteBackgroundOpacity,
+            XtermBackgroundOpacity = XtermBackgroundOpacity,
             SelectedBackgroundPreset = SelectedBackgroundPreset,
             BackgroundPresets = BackgroundPresets?.Select(preset => preset?.Clone() ?? new BackgroundPreset()).ToList(),
             SearchCaseSensitive = SearchCaseSensitive,

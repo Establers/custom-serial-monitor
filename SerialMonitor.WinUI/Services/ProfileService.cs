@@ -1124,6 +1124,12 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Cute background opacity was invalid.");
         }
 
+        if (!double.IsFinite(settings.XtermBackgroundOpacity) || settings.XtermBackgroundOpacity is < 0 or > 1)
+        {
+            settings.XtermBackgroundOpacity = defaults.XtermBackgroundOpacity;
+            warnings.Add("xterm background opacity was invalid.");
+        }
+
         settings.EnsureBackgroundPresets();
         foreach (var preset in settings.BackgroundPresets!)
         {
@@ -1132,6 +1138,11 @@ public sealed class ProfileService : IProfileService
             {
                 preset.Opacity = defaults.CuteBackgroundOpacity;
                 warnings.Add("Background preset opacity was invalid.");
+            }
+            if (!double.IsFinite(preset.XtermOpacity) || preset.XtermOpacity is < 0 or > 1)
+            {
+                preset.XtermOpacity = defaults.XtermBackgroundOpacity;
+                warnings.Add("Background preset xterm opacity was invalid.");
             }
         }
         settings.ApplySelectedBackgroundPreset();

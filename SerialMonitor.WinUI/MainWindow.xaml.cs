@@ -62,6 +62,7 @@ public sealed partial class MainWindow : Window
     private readonly object _xtermLiveAppendQueueGate = new();
     private readonly LinkedList<(LogTextBatch Batch, long Generation)> _xtermLiveAppendQueue = new();
     private readonly XtermClearBarrier _xtermClearBarrier = new();
+    private readonly XtermBackgroundBridge _xtermBackground = new();
     private readonly object _xtermAppendAckGate = new();
     private readonly Dictionary<long, TaskCompletionSource<bool>> _xtermAppendAcknowledgements = new();
     private bool _xtermLiveAppendPumpRunning;
@@ -2538,9 +2539,11 @@ public sealed partial class MainWindow : Window
         }
 
         _isXtermReady = true;
+        _xtermBackground.Reset();
         _viewModel.SetXtermReady(true);
         UpdateLogNavigationActivity();
         await SyncXtermColorSchemeAsync();
+        await SyncXtermBackgroundAsync();
         await SyncXtermScrollbackSizeAsync();
         await SyncXtermFontAsync();
         await SyncXtermHexSelectionHintModeAsync();
@@ -2696,6 +2699,29 @@ public sealed partial class MainWindow : Window
             args.PropertyName == nameof(MainViewModel.CuteBackgroundOpacity))
         {
             UpdateCuteBackgroundImage();
+        }
+
+        if (args.PropertyName is nameof(MainViewModel.CuteBackgroundImageRevision) or
+            nameof(MainViewModel.CuteBackgroundMode) or nameof(MainViewModel.CuteBackgroundImagePath) or
+            nameof(MainViewModel.XtermBackgroundOpacity))
+        {
+            _ = SyncXtermBackgroundAsync();
+        }
+    }
+
+    private async Task SyncXtermBackgroundAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || XtermLogWebView.CoreWebView2 is not { } webView) return;
+        try
+        {
+            using var timeout = new CancellationTokenSource(XtermScriptExecutionTimeout);
+            await _xtermBackground.ApplyAsync(webView,
+                _viewModel.CuteBackgroundMode ? _lastAppliedCuteBackgroundPath ?? string.Empty : string.Empty,
+                _viewModel.XtermBackgroundOpacity, _viewModel.CuteBackgroundImageRevision, timeout.Token);
+        }
+        catch (Exception ex)
+        {
+            if (!IsClosingOrClosed) _viewModel.RecordXtermLayoutError($"xterm background update failed: {ex.Message}");
         }
     }
 
@@ -2954,6 +2980,12 @@ public sealed partial class MainWindow : Window
             }
 
             var messageType = typeElement.GetString();
+            if (string.Equals(messageType, "xtermBackgroundError", StringComparison.Ordinal))
+            {
+                if (args.Source.StartsWith("https://serialmonitor.local/", StringComparison.OrdinalIgnoreCase))
+                    _viewModel.RecordXtermLayoutError("xterm background image could not be loaded; using the plain background.");
+                return;
+            }
             if (string.Equals(messageType, "terminalInputEchoError", StringComparison.Ordinal))
             {
                 HandleXtermDirectEchoError(root);

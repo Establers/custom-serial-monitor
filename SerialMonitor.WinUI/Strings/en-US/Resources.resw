@@ -508,21 +508,30 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi183.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image.</value>
+    <value>App background image transparency from 0 to 100, independent of xterm. 0 shows the full image; 100 hides it. Enter a whole number; values above 100 become 100.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi184.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Applies immediately. Keep the value subtle for dense logs.</value>
+    <value>Applies immediately to the app background. Saved separately for each preset.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="BackgroundOpacityLabel.Text" xml:space="preserve">
-    <value>Bg opacity</value>
+    <value>App bg transp.</value>
+  </data>
+  <data name="XtermBackgroundOpacityLabel.Text" xml:space="preserve">
+    <value>xterm transp.</value>
+  </data>
+  <data name="XtermBackgroundOpacityInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Background image transparency inside xterm, from 0 to 100. Text stays fully opaque. 0 shows the full image; 100 hides only the xterm image. App background transparency is independent.</value>
+  </data>
+  <data name="XtermBackgroundOpacityHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Applies immediately without clearing logs. Saved separately for each preset. High contrast hides the xterm image.</value>
   </data>
   <data name="BackgroundPresetsLabel.Text" xml:space="preserve">
     <value>Bg presets</value>
   </data>
   <data name="BackgroundPresetsHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Select background preset 1–5, then browse to set its image. Images and opacity are saved separately. Empty presets use the bundled background.</value>
+    <value>Select background preset 1–5, then browse to set its image. Each preset saves its image, app background transparency and xterm background transparency separately. Empty presets use the bundled background.</value>
   </data>
   <data name="BackgroundPresetSaved" xml:space="preserve">
     <value>Background preset {0} saved. The original image can be deleted.</value>

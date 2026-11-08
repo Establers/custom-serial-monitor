@@ -2890,6 +2890,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(CuteBackgroundLayerOpacity));
             OnPropertyChanged(nameof(CuteBackgroundOpacity));
             OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
+            OnPropertyChanged(nameof(CuteBackgroundTransparencyPercent));
             RecordSettingsChange("Cute background mode", SettingsApplyBehavior.Immediate, value ? "enabled" : "disabled");
             RefreshStatusBar();
         }
@@ -2941,6 +2942,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             _currentUiSettings.BackgroundPresets![_currentUiSettings.SelectedBackgroundPreset - 1].Opacity = clamped;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CuteBackgroundOpacityPercent));
+            OnPropertyChanged(nameof(CuteBackgroundTransparencyPercent));
             RecordSettingsChange(
                 "Cute background opacity",
                 SettingsApplyBehavior.Immediate,
@@ -2953,6 +2955,12 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         get => (int)Math.Round(CuteBackgroundOpacity * 100.0, MidpointRounding.AwayFromZero);
         set => CuteBackgroundOpacity = Math.Clamp(value, 0, 100) / 100.0;
+    }
+
+    public int CuteBackgroundTransparencyPercent
+    {
+        get => 100 - CuteBackgroundOpacityPercent;
+        set => CuteBackgroundOpacityPercent = 100 - Math.Clamp(value, 0, 100);
     }
 
     public bool CuteBackgroundFileExists => _cuteBackgroundFileExists;
@@ -12152,6 +12160,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         uiSettings.CuteBackgroundMode = CuteBackgroundMode;
         uiSettings.CuteBackgroundImagePath = CuteBackgroundImagePath;
         uiSettings.CuteBackgroundOpacity = CuteBackgroundOpacity;
+        uiSettings.XtermBackgroundOpacity = XtermBackgroundOpacity;
         uiSettings.MockStressLinesPerSecond = SelectedMockStressLinesPerSecond;
         uiSettings.MockStressBurstSize = SelectedMockStressBurstSize;
         uiSettings.MockStressEventInjectionEnabled = IsMockStressEventInjectionEnabled;

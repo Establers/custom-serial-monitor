@@ -3673,7 +3673,7 @@
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundPresetsLabel" Text="Bg presets" Style="{StaticResource FormLabelTextStyle}" />
                                             <StackPanel x:Uid="BackgroundPresetsHelp" Grid.Column="1" Orientation="Horizontal" Spacing="3"
-                                                        infra:AppToolTipService.ToolTip="Select background preset 1–5, then browse to set its image. Images and opacity are saved separately. Empty presets use the bundled background.">
+                                                        infra:AppToolTipService.ToolTip="Select background preset 1–5, then browse to set its image. Each preset saves its image, app background transparency and xterm background transparency separately. Empty presets use the bundled background.">
                                                 <StackPanel.Resources>
                                                     <Style x:Key="BackgroundPresetButtonStyle" TargetType="RadioButton">
                                                         <Setter Property="Width" Value="26" />
@@ -3792,16 +3792,16 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundOpacityLabel"
-                                                       Text="Bg opacity"
+                                                       Text="App bg transp."
                                                        Style="{StaticResource FormLabelTextStyle}" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                                                 <infra:PercentageTextBox x:Uid="StaticUi183"
-                                                                         Value="{Binding CuteBackgroundOpacityPercent, Mode=TwoWay}"
+                                                                         Value="{Binding CuteBackgroundTransparencyPercent, Mode=TwoWay}"
                                                                          Style="{StaticResource FormTextBoxStyle}"
                                                                          InputScope="Number"
                                                                          IsSpellCheckEnabled="False"
                                                                          IsTextPredictionEnabled="False"
-                                                                         infra:AppToolTipService.ToolTip="Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image."
+                                                                         infra:AppToolTipService.ToolTip="App background image transparency from 0 to 100, independent of xterm. 0 shows the full image; 100 hides it. Enter a whole number; values above 100 become 100."
                                                                          Width="64" />
                                                 <TextBlock Text="%" FontSize="11" VerticalAlignment="Center" />
                                             </StackPanel>
@@ -3809,7 +3809,28 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       infra:AppToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately to the app background. Saved separately for each preset." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
+                                            <TextBlock x:Uid="XtermBackgroundOpacityLabel"
+                                                       Text="xterm transp."
+                                                       Style="{StaticResource FormLabelTextStyle}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                <infra:PercentageTextBox x:Uid="XtermBackgroundOpacityInput"
+                                                                         Value="{Binding XtermBackgroundTransparencyPercent, Mode=TwoWay}"
+                                                                         Style="{StaticResource FormTextBoxStyle}"
+                                                                         InputScope="Number"
+                                                                         IsSpellCheckEnabled="False"
+                                                                         IsTextPredictionEnabled="False"
+                                                                         infra:AppToolTipService.ToolTip="Background image transparency inside xterm, from 0 to 100. Text stays fully opaque. 0 shows the full image; 100 hides only the xterm image. App background transparency is independent."
+                                                                         Width="64" />
+                                                <TextBlock Text="%" FontSize="11" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <TextBlock x:Uid="XtermBackgroundOpacityHelp"
+                                                       Grid.Column="2"
+                                                       Text="Now"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       infra:AppToolTipService.ToolTip="Applies immediately without clearing logs. Saved separately for each preset. High contrast hides the xterm image." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
