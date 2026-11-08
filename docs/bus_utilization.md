@@ -1,8 +1,8 @@
 # HEX RX Bus Utilization
 
 The compact meter to the right of the `HEX <timeout> ms` indicator estimates how
-much of the recent receive-side serial line time was occupied by successfully
-observed RX characters.
+much of the recent receive-side serial line time was unavailable when allowing
+one complete UART character of quiet time before declaring idle.
 
 ## Display
 
@@ -25,9 +25,8 @@ RX BUSY 71.0% · IDLE 29.0% · PEAK 93.0% · 1m
   shown as `--`.
 
 Local TX is intentionally not added. An adapter that echoes transmitted bytes
-can still make those bytes reappear as RX. Therefore `IDLE` means "not occupied
-by successfully observed RX characters," not a hardware measurement proving
-that the physical bus was electrically idle.
+can still make those bytes reappear as RX. `IDLE` is usable silence after the
+RX idle qualification interval, rather than proof of electrical bus idle.
 
 ## Calculation
 
@@ -41,25 +40,59 @@ bits per character = 1 start bit
                    + configured stop bits (1, 1.5, or 2)
 ```
 
-For example, `9600 bps, 8N1` uses 10 bits per character. Receiving 480 bytes in
-one second is therefore estimated as:
+The complete character duration sets both the estimated on-wire time and the
+minimum idle qualification interval:
 
 ```text
-busy time    = 480 bytes × 10 bits ÷ 9600 bits/second = 0.5 seconds
-RX BUSY      = 0.5 ÷ 1.0 × 100 = 50%
-IDLE         = 100% - 50% = 50%
+character time = bits per character ÷ baud
+busy interval  = estimated start of an RX burst .. end + one character time
+RX BUSY        = duration of the union of busy intervals ÷ observed time × 100
+IDLE           = 100% - RX BUSY
 ```
 
-Every second the UI reads the serial service's cumulative RX byte counter. It
-stores only enough counter samples for a bounded 60-second sliding window. It
-does not add work to the serial receive callback and does not retain packet
-payloads.
+For `115200 bps, 8N1`, one complete character takes approximately **86.806 µs**.
+Gaps shorter than that stay busy. For a longer gap, its first 86.806 µs qualifies
+the idle state; only the remaining silence contributes to IDLE. This threshold
+is independent of the HEX display grouping timeout. It is an operational
+definition of usable idle space, not a claim that UART requires an extra
+character gap to decode consecutive bytes: frames can follow immediately after
+the preceding stop bit, as described in the
+[Microchip USART framing documentation](https://onlinedocs.microchip.com/oxy/GUID-A52628F4-6F6F-4C77-80CB-113A0C62DB75-en-US-10/GUID-55EAB72C-60B7-4EDA-AAD1-A65D7344E8BC.html).
+
+For example, at `1000 bps, 8N1`, each byte occupies 10 ms:
+
+| Traffic during one second | Byte-only occupancy | RX BUSY with idle qualification |
+| --- | --- | --- |
+| 50 contiguous bytes, then silence | 50% | 51% (one trailing 10 ms qualification) |
+| 50 single bytes with 10 ms gaps | 50% | 100% (no silence remains after qualification) |
+| 25 single bytes with 30 ms gaps | 25% | 50% (10 ms qualification, then 20 ms idle per gap) |
+
+The receive observer queues only timestamps, lengths and native idle-boundary
+metadata. No payloads are retained. Contiguous wire intervals coalesce in O(1)
+without redistributing bytes across gaps or overlaps. The UI status batch drains
+a double-buffered queue bounded to 4096 intervals per buffer. Any portion after
+the sample timestamp remains in a separate bounded queue for the next sample;
+byte counts split in the same proportion as the wire duration. The receive path
+does not parse logs, write files or update controls for this meter.
+
+BUSY retains the exact union of up to 65536 disjoint spans in the rolling minute.
+An interval delivered late can fill earlier idle space without counting an
+existing overlap twice, even inside one millisecond. UI sample cadence does not
+change that union. Byte-count history uses 1 ms buckets with fractional values;
+only partial byte-count buckets at window boundaries require interpolation.
+If a timing queue saturates, its final intervals merge conservatively. If the
+busy history saturates, its oldest quarter merges into a conservative envelope.
+The tooltip reports that some gaps were counted as busy. Queue and history
+memory remain bounded even if the UI stops sampling temporarily.
+
+A native idle-terminated read completes after the configured idle timeout.
+That known wait is subtracted from its completion timestamp before estimating
+the wire interval, so driver timeout silence is not added to busy time.
 
 Once a complete minute is available, `PEAK` divides that rolling minute into 60
-fixed one-second buckets. Cumulative byte counts at exact bucket boundaries are
-interpolated between neighboring timer samples. This prevents a short first
-sample immediately after Connect, HEX entry, or Clear from being treated as a
-full one-second peak.
+fixed one-second buckets using the same busy timeline. A short first sample
+immediately after Connect, HEX entry, or Clear cannot become a false full-second
+peak, and a delayed UI timer does not spread traffic uniformly across seconds.
 
 During the first minute, the denominator is the actual elapsed observation time
 so the result does not incorrectly treat the time before connection as idle.
@@ -86,14 +119,13 @@ app does not wait for a full minute for those averages. Until 60 seconds have
 elapsed, they describe only the displayed warm-up duration and PEAK remains
 `--`.
 
-If an observed rate exceeds the theoretical configured line rate, `RX BUSY` is
-clamped to 100%. This can occur with the MOCK generator or unusual driver and
-timestamp behavior.
+Overlapping inferred busy intervals count only once; `RX BUSY` stays within
+0–100%, including with MOCK traffic or unusual driver/timestamp behavior.
 
 ## Measurement Limits
 
 - Windows serial APIs do not expose a continuous electrical busy/idle signal.
-  This is a byte-count-based estimate, not an oscilloscope measurement.
+  This is a receive-timing estimate, not an oscilloscope measurement.
 - RS-485 specifies the electrical physical layer but does not standardize a bus
   utilization averaging window. The app's 60-second average plus rolling
   approximately one-second peak is an operational convention chosen for stable
@@ -104,9 +136,10 @@ timestamp behavior.
 - Bytes lost because of collisions, framing errors, parity errors, driver
   overruns, or hardware buffering cannot be reconstructed and can make the
   estimate lower than actual wire activity.
-- USB-UART and Windows driver buffering can move a byte-count increase between
-  adjacent one-second samples. The rolling one-minute result is less sensitive
-  to that short-term batching.
+- USB-UART and Windows driver buffering can hide individual byte times and gaps
+  inside a delivered chunk. A chunk's wire start is estimated from its length
+  and framing; unseen internal gaps cannot be reconstructed. Short-gap handling
+  applies to the timing boundaries the driver actually exposes.
 - Handshake pauses do not count as busy time unless RX characters are actually
   observed.
 

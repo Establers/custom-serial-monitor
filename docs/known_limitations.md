@@ -56,7 +56,7 @@ This file tracks current intentional limits and validation gaps.
 
 ## HEX RX Bus Utilization
 
-- The top `RX BUSY / IDLE` meter is a rolling byte-count-based estimate and is
+- The top `RX BUSY / IDLE` meter is a rolling receive-timing estimate and is
   visible only in HEX mode.
 - `PEAK` is the highest fixed one-second bucket inside the same rolling
   60-second window, not an all-time maximum. It is unavailable during the first
@@ -65,9 +65,13 @@ This file tracks current intentional limits and validation gaps.
   application's monitoring convention.
 - It uses the applied baud, data bits, parity, and stop bits. It does not inspect
   or decode the proprietary packet protocol.
+- Busy includes one complete character of silence after each observed RX burst;
+  only subsequent silence counts as IDLE. This threshold is independent of the
+  HEX display grouping timeout. USB/driver batching can hide gaps inside a chunk.
 - Local TX is intentionally not added, although adapter echo can reappear as RX.
-  `IDLE` therefore means no successfully observed RX character time rather than
-  proven electrical bus idle.
+  `IDLE` means usable silence after RX idle qualification, rather than proven
+  electrical bus idle. Exceeding timing queue or history limits merges gaps
+  conservatively and is reported in the meter tooltip.
 - Collisions, framing/parity errors, overruns, and bytes lost below the Windows
   API can make the estimate lower than actual physical wire activity.
 - Clearing the visible log in HEX mode intentionally restarts the measurement

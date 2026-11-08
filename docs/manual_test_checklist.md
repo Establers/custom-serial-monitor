@@ -211,8 +211,15 @@ real hardware when available.
   state and start a new warm-up window. Confirm file logging continues normally.
 - [ ] Confirm the bus meter disappears in Terminal mode and restarts its warm-up
   window when switching back to HEX mode.
-- [ ] With known continuous RX traffic, confirm the BUSY estimate is consistent
-  with `RX bytes × framing bits ÷ baud ÷ observed seconds`.
+- [ ] With known continuous RX traffic, confirm BUSY includes framing time and
+  one trailing character of idle qualification, without adding a guard per
+  driver chunk in a contiguous stream.
+- [ ] With individually timestamped bytes and gaps shorter than one character,
+  confirm those gaps stay BUSY; with longer gaps, only silence after the first
+  character of quiet time becomes IDLE. Confirm the tooltip shows the applied
+  character duration (about 86.806 µs at 115200/8N1).
+- [ ] Change the HEX group timeout and confirm it does not change the idle
+  qualification duration. Confirm native timeout silence is not counted as RX.
 - [ ] Send local TX traffic without RX echo and confirm it does not increase the
   RX BUSY estimate.
 - [ ] Send a harmless command.

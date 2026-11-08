@@ -904,6 +904,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventDetector.StatusChanged += OnEventDetectorStatusChanged;
         _serialService.RawBytesReceived += OnRawBytesReceived;
         _serialService.CaptureBytesReceived += OnTerminalBytesReceived;
+        _serialService.CaptureBytesReceived += OnBusUtilizationBytesReceived;
         _bridgeService.Error += OnBackgroundError;
         _bridgeService.StatusChanged += OnBridgeStatusChanged;
         _bridgeService.ManualTxStateChanged += OnManualTxStateChanged;
@@ -1808,7 +1809,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             }
 
             const string limitation =
-                "RX-only estimate; local TX is not added, although adapter echo can reappear as RX. Driver buffering and bytes lost to line errors cannot be measured as wire activity.";
+                "RX timing estimate; local TX is not added, although adapter echo can reappear as RX. USB/driver batching hides gaps within a received chunk; line errors can hide wire activity.";
             if (!IsConnected)
             {
                 return $"Connect in HEX mode to measure the rolling 60-second RX bus utilization. {limitation}";
@@ -1829,8 +1830,13 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 ? FormattableString.Invariant(
                     $"Highest fixed one-second bucket in this window: {_serialBusUtilizationSnapshot.PeakBusyPercent:0.0}%.")
                 : "PEAK becomes available after a complete 60-second window.";
+            var characterMicroseconds = _serialBusUtilizationSnapshot.BitsPerCharacter /
+                _serialBusUtilizationSnapshot.BaudRate * 1_000_000d;
+            var coalescedText = _serialBusUtilizationSnapshot.HasCoalescedTiming
+                ? " Timing storage saturated: some gaps were conservatively counted as busy."
+                : string.Empty;
             return FormattableString.Invariant(
-                $"{windowText}: average RX busy {_serialBusUtilizationSnapshot.BusyPercent:0.0}%. {peakText} {_serialBusUtilizationSnapshot.ReceivedBytes:0} RX bytes × {_serialBusUtilizationSnapshot.BitsPerCharacter:0.#} bits/character ÷ {_serialBusUtilizationSnapshot.BaudRate:N0} bps. Started {_serialBusMeasurementStartedAt?.LocalDateTime:HH:mm:ss}; reset reason: {_lastSerialBusMeasurementResetReason}. {_serialBusFrameFormatText} {limitation}");
+                $"{windowText}: average RX busy {_serialBusUtilizationSnapshot.BusyPercent:0.0}%. {peakText} {_serialBusUtilizationSnapshot.ReceivedBytes:0} RX bytes. Busy includes serial framing and one character of quiet time after each observed burst; only subsequent silence is IDLE. Idle qualification: {characterMicroseconds:0.###} µs ({_serialBusUtilizationSnapshot.BitsPerCharacter:0.#} bits ÷ {_serialBusUtilizationSnapshot.BaudRate:N0} bps), independent of HEX group timeout. Started {_serialBusMeasurementStartedAt?.LocalDateTime:HH:mm:ss}; reset reason: {_lastSerialBusMeasurementResetReason}. {_serialBusFrameFormatText} {limitation}{coalescedText}");
         }
     }
 
@@ -4386,6 +4392,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _eventDetector.StatusChanged -= OnEventDetectorStatusChanged;
         _serialService.RawBytesReceived -= OnRawBytesReceived;
         _serialService.CaptureBytesReceived -= OnTerminalBytesReceived;
+        _serialService.CaptureBytesReceived -= OnBusUtilizationBytesReceived;
         _bridgeService.Error -= OnBackgroundError;
         _bridgeService.StatusChanged -= OnBridgeStatusChanged;
         _bridgeService.ManualTxStateChanged -= OnManualTxStateChanged;
@@ -12933,6 +12940,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _bridgeService.TryEnqueueDeviceChunk(chunk);
     }
 
+    private void OnBusUtilizationBytesReceived(long generation, ReceivedByteChunk chunk) =>
+        _serialBusUtilizationMeter.Offer(
+            generation,
+            chunk.ReceivedTimestamp / (double)Stopwatch.Frequency,
+            chunk.Bytes.Length,
+            chunk.EndsAtNativeIdleBoundary,
+            _serialService.AppliedReceiveIdleTimeoutMs);
+
     private async Task ObserveBridgeProcessedLogsAsync(CancellationToken cancellationToken)
     {
         try
@@ -13001,7 +13016,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             var settings = (_lastSuccessfulSerialSettings ?? CreateCurrentSettings()).Clone();
             _serialBusUtilizationMeter.Start(
                 GetMonotonicSeconds(),
-                _serialService.ReceivedByteCount,
+                _serialService.ReceiveSessionGeneration,
                 settings.BaudRate,
                 settings.DataBits,
                 settings.Parity,
@@ -13038,9 +13053,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        _serialBusUtilizationSnapshot = _serialBusUtilizationMeter.Sample(
-            GetMonotonicSeconds(),
-            _serialService.ReceivedByteCount);
+        _serialBusUtilizationSnapshot = _serialBusUtilizationMeter.Sample(GetMonotonicSeconds());
         NotifySerialBusUtilizationChanged();
     }
 

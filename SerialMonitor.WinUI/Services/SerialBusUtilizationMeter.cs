@@ -12,21 +12,23 @@ internal readonly record struct SerialBusUtilizationSnapshot(
     double ReceivedBytes,
     int BaudRate,
     double BitsPerCharacter,
-    bool IsFullWindow);
+    bool IsFullWindow,
+    bool HasCoalescedTiming);
 
 internal sealed class SerialBusUtilizationMeter
 {
     internal const double WindowSeconds = 60d;
+    internal const int MaximumPendingIntervals = 4_096;
 
-    private readonly List<CounterSample> _samples = new(64);
-    private int _baudRate;
-    private double _bitsPerCharacter;
+    private Measurement? _measurement;
 
-    public bool IsActive { get; private set; }
+    public bool IsActive => Volatile.Read(ref _measurement) is not null;
 
+    // Start, Stop and Sample belong to the UI snapshot consumer. Offer is the
+    // RX producer: it only queues timing metadata, never bytes or UI work.
     public void Start(
         double observedAtSeconds,
-        long cumulativeReceivedBytes,
+        long receiveSessionGeneration,
         int baudRate,
         int dataBits,
         SerialParityMode parity,
@@ -37,87 +39,120 @@ internal sealed class SerialBusUtilizationMeter
             throw new ArgumentOutOfRangeException(nameof(observedAtSeconds));
         }
 
-        if (baudRate <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(baudRate));
-        }
-
-        if (dataBits <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(dataBits));
-        }
-
-        _baudRate = baudRate;
-        _bitsPerCharacter = CalculateBitsPerCharacter(dataBits, parity, stopBits);
-        _samples.Clear();
-        _samples.Add(new CounterSample(observedAtSeconds, Math.Max(0, cumulativeReceivedBytes)));
-        IsActive = true;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(baudRate);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(dataBits);
+        Volatile.Write(ref _measurement, new Measurement(
+            observedAtSeconds, receiveSessionGeneration, baudRate,
+            CalculateBitsPerCharacter(dataBits, parity, stopBits)));
     }
 
-    public void Stop()
+    public void Stop() => Volatile.Write(ref _measurement, null);
+
+    public void Offer(
+        long receiveSessionGeneration,
+        double receivedAtSeconds,
+        int byteCount,
+        bool endsAtNativeIdleBoundary = false,
+        int appliedIdleTimeoutMs = 0)
     {
-        IsActive = false;
-        _samples.Clear();
-        _baudRate = 0;
-        _bitsPerCharacter = 0;
+        var measurement = Volatile.Read(ref _measurement);
+        if (measurement is null || measurement.Generation != receiveSessionGeneration ||
+            byteCount <= 0 || !double.IsFinite(receivedAtSeconds) ||
+            receivedAtSeconds < measurement.StartSeconds)
+        {
+            return;
+        }
+
+        // A native idle-terminated completion is timestamped AFTER its timeout.
+        // That known silence must not be mistaken for the end of wire activity.
+        var wireEnd = receivedAtSeconds - (endsAtNativeIdleBoundary
+            ? Math.Max(0, appliedIdleTimeoutMs) / 1_000d
+            : 0d);
+        var wireStart = wireEnd - byteCount * measurement.CharacterSeconds;
+        if (wireEnd <= measurement.StartSeconds)
+        {
+            return;
+        }
+
+        var visibleFraction = (wireEnd - Math.Max(wireStart, measurement.StartSeconds)) /
+            (wireEnd - wireStart);
+        var interval = new ReceiveInterval(
+            Math.Max(wireStart, measurement.StartSeconds), wireEnd,
+            byteCount * visibleFraction, false);
+
+        lock (measurement.PendingGate)
+        {
+            EnqueueInterval(measurement.Pending, interval);
+        }
     }
 
-    public SerialBusUtilizationSnapshot Sample(double observedAtSeconds, long cumulativeReceivedBytes)
+    public SerialBusUtilizationSnapshot Sample(double observedAtSeconds)
     {
-        if (!IsActive || _samples.Count == 0 || !double.IsFinite(observedAtSeconds))
+        var measurement = Volatile.Read(ref _measurement);
+        if (measurement is null || !double.IsFinite(observedAtSeconds) ||
+            observedAtSeconds <= measurement.StartSeconds ||
+            observedAtSeconds < measurement.LastSampleSeconds)
         {
             return default;
         }
 
-        var normalizedByteCount = Math.Max(0, cumulativeReceivedBytes);
-        var lastSample = _samples[^1];
-        if (observedAtSeconds < lastSample.ObservedAtSeconds ||
-            normalizedByteCount < lastSample.CumulativeReceivedBytes)
+        lock (measurement.PendingGate)
         {
-            _samples.Clear();
-            _samples.Add(new CounterSample(observedAtSeconds, normalizedByteCount));
-            return default;
+            (measurement.Pending, measurement.Processing) = (measurement.Processing, measurement.Pending);
         }
 
-        if (observedAtSeconds == lastSample.ObservedAtSeconds)
+        // Bounded work once per UI status batch. The producer can immediately
+        // keep filling the other queue while the timeline is updated.
+        var windowStart = Math.Max(measurement.StartSeconds, observedAtSeconds - WindowSeconds);
+        measurement.Timeline.TrimBefore(windowStart);
+        var retainedCount = 0;
+        for (var index = 0; index < measurement.Deferred.Count; index++)
         {
-            _samples[^1] = new CounterSample(observedAtSeconds, normalizedByteCount);
+            var remaining = ConsumeInterval(measurement, measurement.Deferred[index], observedAtSeconds, windowStart);
+            if (remaining.HasValue)
+            {
+                measurement.Deferred[retainedCount++] = remaining.Value;
+            }
         }
-        else
+        measurement.Deferred.RemoveRange(retainedCount, measurement.Deferred.Count - retainedCount);
+        foreach (var interval in measurement.Processing)
         {
-            _samples.Add(new CounterSample(observedAtSeconds, normalizedByteCount));
+            var remaining = ConsumeInterval(measurement, interval, observedAtSeconds, windowStart);
+            if (remaining.HasValue)
+            {
+                EnqueueInterval(measurement.Deferred, remaining.Value);
+            }
         }
+        measurement.Processing.Clear();
 
-        var measurementStart = Math.Max(_samples[0].ObservedAtSeconds, observedAtSeconds - WindowSeconds);
-        TrimSamplesBefore(measurementStart);
-        measurementStart = Math.Max(_samples[0].ObservedAtSeconds, observedAtSeconds - WindowSeconds);
-
-        var observationSeconds = observedAtSeconds - measurementStart;
-        if (observationSeconds <= 0d)
+        // Complete a qualification interval that crossed the previous sample.
+        if (measurement.LastWireEndSeconds > double.NegativeInfinity)
         {
-            return default;
+            measurement.Timeline.AddBusy(measurement.LastWireEndSeconds,
+                Math.Min(observedAtSeconds, measurement.LastWireEndSeconds + measurement.CharacterSeconds),
+                windowStart);
         }
+        measurement.LastSampleSeconds = observedAtSeconds;
 
-        var baselineByteCount = EstimateByteCountAt(measurementStart);
-        var receivedBytes = Math.Max(0d, normalizedByteCount - baselineByteCount);
-        var busySeconds = receivedBytes * _bitsPerCharacter / _baudRate;
-        var busyPercent = Math.Clamp(busySeconds / observationSeconds * 100d, 0d, 100d);
+        var observationSeconds = observedAtSeconds - windowStart;
+        var totals = measurement.Timeline.Read(windowStart, observedAtSeconds, observedAtSeconds);
+        var busyPercent = Math.Clamp(totals.BusySeconds / observationSeconds * 100d, 0d, 100d);
         var isFullWindow = observationSeconds >= WindowSeconds;
-        var peakBusyPercent = isFullWindow
-            ? CalculatePeakBusyPercent(measurementStart, observedAtSeconds)
-            : 0d;
+        var peakBusyPercent = 0d;
+        if (isFullWindow)
+        {
+            for (var second = 0; second < (int)WindowSeconds; second++)
+            {
+                var bucket = measurement.Timeline.Read(windowStart + second, windowStart + second + 1d, observedAtSeconds);
+                peakBusyPercent = Math.Max(peakBusyPercent, Math.Clamp(bucket.BusySeconds * 100d, 0d, 100d));
+            }
+        }
 
         return new SerialBusUtilizationSnapshot(
-            IsAvailable: true,
-            BusyPercent: busyPercent,
-            IdlePercent: 100d - busyPercent,
-            PeakBusyPercent: peakBusyPercent,
-            IsPeakAvailable: isFullWindow,
-            ObservationSeconds: observationSeconds,
-            ReceivedBytes: receivedBytes,
-            BaudRate: _baudRate,
-            BitsPerCharacter: _bitsPerCharacter,
-            IsFullWindow: isFullWindow);
+            true, busyPercent, 100d - busyPercent, peakBusyPercent, isFullWindow,
+            observationSeconds, totals.ReceivedBytes, measurement.BaudRate,
+            measurement.BitsPerCharacter, isFullWindow,
+            Math.Max(measurement.LastCoalescedSeconds, measurement.Timeline.LastCoalescedSeconds) >= windowStart);
     }
 
     internal static double CalculateBitsPerCharacter(
@@ -136,73 +171,78 @@ internal sealed class SerialBusUtilizationMeter
         return 1d + dataBits + parityBits + stopBitCount;
     }
 
-    private void TrimSamplesBefore(double measurementStart)
+    private static ReceiveInterval? ConsumeInterval(
+        Measurement measurement, ReceiveInterval interval, double observedAtSeconds, double windowStart)
     {
-        while (_samples.Count > 2 && _samples[1].ObservedAtSeconds <= measurementStart)
+        if (interval.StartSeconds >= observedAtSeconds)
         {
-            _samples.RemoveAt(0);
+            return interval;
         }
+
+        var wireEnd = Math.Min(interval.WireEndSeconds, observedAtSeconds);
+        var receivedBytes = interval.ByteCount *
+            ((wireEnd - interval.StartSeconds) / (interval.WireEndSeconds - interval.StartSeconds));
+        measurement.Timeline.AddBytes(interval.StartSeconds, wireEnd, receivedBytes, windowStart);
+        var isComplete = wireEnd == interval.WireEndSeconds;
+        measurement.Timeline.AddBusy(interval.StartSeconds,
+            isComplete ? Math.Min(wireEnd + measurement.CharacterSeconds, observedAtSeconds) : wireEnd,
+            windowStart);
+        if (isComplete)
+        {
+            measurement.LastWireEndSeconds = Math.Max(measurement.LastWireEndSeconds, wireEnd);
+        }
+        if (interval.Coalesced)
+        {
+            measurement.LastCoalescedSeconds = Math.Max(measurement.LastCoalescedSeconds, wireEnd);
+        }
+
+        // A producer can enqueue after the UI has read its sample timestamp.
+        // Preserve both the future wire span and its proportional byte count.
+        // Idle qualification starts only after the real end, never the cutoff.
+        return isComplete ? null : new ReceiveInterval(
+            wireEnd, interval.WireEndSeconds, interval.ByteCount - receivedBytes, interval.Coalesced);
     }
 
-    private double EstimateByteCountAt(double observedAtSeconds)
+    private static void EnqueueInterval(List<ReceiveInterval> queue, ReceiveInterval interval)
     {
-        if (observedAtSeconds <= _samples[0].ObservedAtSeconds)
+        if (queue.Count > 0)
         {
-            return _samples[0].CumulativeReceivedBytes;
+            var previous = queue[^1];
+            // Only truly contiguous wire spans have the same byte density as
+            // their envelope. Merging a short gap or overlapping spans would
+            // redistribute bytes differently depending on UI sample cadence.
+            var contiguous = previous.WireEndSeconds == interval.StartSeconds;
+            if (contiguous || queue.Count == MaximumPendingIntervals)
+            {
+                queue[^1] = new ReceiveInterval(
+                    Math.Min(previous.StartSeconds, interval.StartSeconds),
+                    Math.Max(previous.WireEndSeconds, interval.WireEndSeconds),
+                    previous.ByteCount + interval.ByteCount,
+                    previous.Coalesced || interval.Coalesced || !contiguous);
+                return;
+            }
         }
 
-        for (var index = 1; index < _samples.Count; index++)
-        {
-            var after = _samples[index];
-            if (after.ObservedAtSeconds < observedAtSeconds)
-            {
-                continue;
-            }
-
-            var before = _samples[index - 1];
-            var sampleDuration = after.ObservedAtSeconds - before.ObservedAtSeconds;
-            if (sampleDuration <= 0d)
-            {
-                return after.CumulativeReceivedBytes;
-            }
-
-            var fraction = (observedAtSeconds - before.ObservedAtSeconds) / sampleDuration;
-            return before.CumulativeReceivedBytes +
-                ((after.CumulativeReceivedBytes - before.CumulativeReceivedBytes) * fraction);
-        }
-
-        return _samples[^1].CumulativeReceivedBytes;
+        queue.Add(interval);
     }
 
-    private double CalculatePeakBusyPercent(double measurementStart, double measurementEnd)
+    private readonly record struct ReceiveInterval(
+        double StartSeconds, double WireEndSeconds, double ByteCount, bool Coalesced);
+
+    private sealed class Measurement(double startSeconds, long generation, int baudRate, double bitsPerCharacter)
     {
-        var peakBusyPercent = 0d;
-        for (var bucketIndex = 0; bucketIndex < (int)WindowSeconds; bucketIndex++)
-        {
-            var bucketStart = measurementStart + bucketIndex;
-            var bucketEnd = bucketIndex == (int)WindowSeconds - 1
-                ? measurementEnd
-                : bucketStart + 1d;
-            if (bucketEnd > measurementEnd)
-            {
-                break;
-            }
-
-            var bucketBytes = Math.Max(
-                0d,
-                EstimateByteCountAt(bucketEnd) - EstimateByteCountAt(bucketStart));
-            var bucketBusySeconds = bucketBytes * _bitsPerCharacter / _baudRate;
-            var bucketBusyPercent = Math.Clamp(
-                bucketBusySeconds * 100d,
-                0d,
-                100d);
-            peakBusyPercent = Math.Max(peakBusyPercent, bucketBusyPercent);
-        }
-
-        return peakBusyPercent;
+        public double StartSeconds { get; } = startSeconds;
+        public long Generation { get; } = generation;
+        public int BaudRate { get; } = baudRate;
+        public double BitsPerCharacter { get; } = bitsPerCharacter;
+        public double CharacterSeconds { get; } = bitsPerCharacter / baudRate;
+        public SerialBusActivityTimeline Timeline { get; } = new(startSeconds);
+        public object PendingGate { get; } = new();
+        public List<ReceiveInterval> Pending { get; set; } = new(64);
+        public List<ReceiveInterval> Processing { get; set; } = new(64);
+        public List<ReceiveInterval> Deferred { get; } = new(64);
+        public double LastSampleSeconds { get; set; } = startSeconds;
+        public double LastWireEndSeconds { get; set; } = double.NegativeInfinity;
+        public double LastCoalescedSeconds { get; set; } = double.NegativeInfinity;
     }
-
-    private readonly record struct CounterSample(
-        double ObservedAtSeconds,
-        long CumulativeReceivedBytes);
 }
