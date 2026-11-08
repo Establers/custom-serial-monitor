@@ -54,7 +54,7 @@ public interface IFileLogWriter : IAsyncDisposable
 
     Task StartAsync(string directory, CancellationToken cancellationToken);
 
-    void UpdateLogFileName(string? exactLogFileName, bool requestNewFile);
+    void UpdateLogFileName(string? exactLogFileName, bool requestNewFile, string? defaultFileNamePrefix = null);
 
     bool TryEnqueue(LogLine line);
 

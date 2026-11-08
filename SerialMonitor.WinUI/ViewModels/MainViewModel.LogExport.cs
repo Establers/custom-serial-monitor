@@ -38,7 +38,7 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            var suggestedName = LogHistoryExportFileName.Create(snapshot[0].Timestamp, capturedAt);
+            var suggestedName = LogHistoryExportFileName.Create(snapshot[0].Timestamp, capturedAt, WindowAlias);
             var path = await selectPath(suggestedName);
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(path)) return;

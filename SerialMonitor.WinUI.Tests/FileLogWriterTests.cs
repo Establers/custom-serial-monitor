@@ -260,11 +260,46 @@ public sealed class FileLogWriterTests
     }
 
     [Fact]
+    public async Task AutomaticLogFileName_KeepsWindowNameFirstThroughCollisionsAndRotation()
+    {
+        using var directory = new TemporaryDirectory();
+        string? existingPath = null;
+        await using var writer = new FileLogWriter((path, mode) =>
+        {
+            if (existingPath is null)
+            {
+                existingPath = path;
+                File.WriteAllText(path, "keep existing file");
+            }
+            return new FileStream(path, mode, FileAccess.Write, FileShare.Read);
+        }) { MaximumFileSizeBytes = 1 };
+        writer.UpdateLogFileName(null, requestNewFile: false, defaultFileNamePrefix: "메인:보드");
+
+        await writer.StartAsync(directory.Path, CancellationToken.None);
+        Assert.EndsWith("_dup001.log", writer.CurrentLogFilePath);
+        Assert.True(writer.TryEnqueue(LogLine.System("first record")));
+        Assert.True(writer.TryEnqueue(LogLine.System("second record")));
+        await writer.StopAsync(CancellationToken.None);
+
+        Assert.Equal("keep existing file", await File.ReadAllTextAsync(existingPath!));
+        var files = Directory.GetFiles(directory.Path);
+        Assert.Equal(3, files.Length);
+        Assert.All(files, path => Assert.Matches(
+            @"^메인_보드_\d{4}-\d{2}-\d{2}_\d{6}_serial(?:_\d{3})?(?:_dup\d{3})?\.log$",
+            Path.GetFileName(path)));
+        Assert.Equal(2, writer.WrittenLineCount);
+        var contents = string.Join(Environment.NewLine,
+            await Task.WhenAll(files.Where(path => path != existingPath).Select(path => File.ReadAllTextAsync(path))));
+        Assert.Contains("first record", contents, StringComparison.Ordinal);
+        Assert.Contains("second record", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExplicitLogFileName_IsUsedExactlyWithoutAutomaticPrefixOrSuffix()
     {
         using var directory = new TemporaryDirectory();
         await using var writer = new FileLogWriter();
-        writer.UpdateLogFileName("bench (A) #1.txt", requestNewFile: false);
+        writer.UpdateLogFileName("bench (A) #1.txt", requestNewFile: false, defaultFileNamePrefix: "메인 보드");
         await writer.StartAsync(directory.Path, CancellationToken.None);
         Assert.True(writer.TryEnqueue(LogLine.Mark("exact name")));
         await writer.StopAsync(CancellationToken.None);

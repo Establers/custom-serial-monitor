@@ -11600,7 +11600,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var logFileName = ActiveLogFileName;
             var isActive = !string.IsNullOrWhiteSpace(logFileName);
-            _fileLogWriter.UpdateLogFileName(logFileName, requestNewFile);
+            _fileLogWriter.UpdateLogFileName(logFileName, requestNewFile, WindowAlias);
 
             _lastSessionFileAction = isActive
                 ? $"Exact log file name active: {logFileName}"

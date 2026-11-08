@@ -34,6 +34,7 @@ public sealed partial class MainWindow
     private void UpdateWindowTitle()
     {
         Title = _portAlias.WindowTitle;
+        _viewModel.WindowAlias = _portAlias.Alias;
 #if DEBUG
         if (Environment.GetCommandLineArgs().Any(a => a.StartsWith("--update-preview=", StringComparison.Ordinal)))
             Title += " - Update preview";

@@ -54,7 +54,7 @@ public sealed class FileLogWriter : IFileLogWriter
     private long _fileIoTimeoutCount;
     private long _maximumFileSizeBytes;
     private string _lastLifecycleAction = "File logging has not started.";
-    private string _logFileName = string.Empty;
+    private LogFileNamingSnapshot _logFileNaming = new(string.Empty, string.Empty);
     private string _logRunTimeText = string.Empty;
     private bool _rotationRequested;
     private bool _disposed;
@@ -202,10 +202,10 @@ public sealed class FileLogWriter : IFileLogWriter
         set => Interlocked.Exchange(ref _maximumFileSizeBytes, Math.Max(0, value));
     }
 
-    public void UpdateLogFileName(string? exactLogFileName, bool requestNewFile)
+    public void UpdateLogFileName(string? exactLogFileName, bool requestNewFile, string? defaultFileNamePrefix = null)
     {
         var normalizedLogFileName = LogFileNamePolicy.Validate(exactLogFileName);
-        var naming = new LogFileNamingSnapshot(normalizedLogFileName);
+        var naming = new LogFileNamingSnapshot(normalizedLogFileName, defaultFileNamePrefix ?? string.Empty);
 
         if (requestNewFile && TryQueueNamingChange(naming))
         {
@@ -217,7 +217,7 @@ public sealed class FileLogWriter : IFileLogWriter
 
         lock (_stateGate)
         {
-            _logFileName = naming.LogFileName;
+            _logFileNaming = naming;
             if (requestNewFile && IsRunning)
             {
                 _rotationRequested = true;
@@ -948,21 +948,19 @@ public sealed class FileLogWriter : IFileLogWriter
         var rotationPart = rotationIndex == 0 ? string.Empty : $"_{rotationIndex:D3}";
         var duplicatePart = duplicateIndex == 0 ? string.Empty : $"_dup{duplicateIndex:D3}";
         var fileName = $"{dateText}_{runTimeText}_serial{rotationPart}{duplicatePart}.log";
-        return Path.Combine(directory, fileName);
+        return Path.Combine(directory, LogFileNamePolicy.AddDefaultPrefix(fileName, naming.DefaultFileNamePrefix));
     }
 
     private static string CreateLogFileIdentity(LogFileNamingSnapshot naming)
     {
-        return string.IsNullOrWhiteSpace(naming.LogFileName)
-            ? "automatic"
-            : $"explicit|{naming.LogFileName}";
+        return naming.Identity;
     }
 
     private LogFileNamingSnapshot GetLogFileNamingSnapshot()
     {
         lock (_stateGate)
         {
-            return new LogFileNamingSnapshot(_logFileName);
+            return _logFileNaming;
         }
     }
 
@@ -1020,7 +1018,7 @@ public sealed class FileLogWriter : IFileLogWriter
     {
         lock (_stateGate)
         {
-            _logFileName = naming.LogFileName;
+            _logFileNaming = naming;
         }
     }
 
@@ -1512,7 +1510,13 @@ public sealed class FileLogWriter : IFileLogWriter
         }
     }
 
-    private readonly record struct LogFileNamingSnapshot(string LogFileName);
+    private readonly record struct LogFileNamingSnapshot(string LogFileName, string DefaultFileNamePrefix)
+    {
+        // Reused for every RX record; compose the identity only when naming changes.
+        public string Identity { get; } = string.IsNullOrWhiteSpace(LogFileName)
+            ? $"automatic|{DefaultFileNamePrefix}"
+            : $"explicit|{LogFileName}";
+    }
 
     private readonly record struct FileLogWriteRequest(
         LogLine? Line,

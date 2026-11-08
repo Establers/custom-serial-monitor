@@ -29,6 +29,19 @@ public static class LogFileNamePolicy
         "LPT9"
     };
 
+    public static string AddDefaultPrefix(string fileName, string? windowName)
+    {
+        if (string.IsNullOrWhiteSpace(windowName)) return fileName;
+
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var prefix = new string(windowName.Trim().Select(character =>
+            char.IsControl(character) || invalidCharacters.Contains(character) ? '_' : character).ToArray());
+        var result = $"{prefix}_{fileName}";
+        // An alias such as CON.board is valid in a window title, but its first
+        // dot-delimited component is still a reserved Windows device name.
+        return ReservedWindowsNames.Contains(result.Split('.', 2)[0]) ? $"_{result}" : result;
+    }
+
     public static bool TryValidate(string? value, out string fileName, out string error)
     {
         fileName = value ?? string.Empty;

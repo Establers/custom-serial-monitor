@@ -4,6 +4,9 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed partial class MainViewModel
 {
+    // The saved alias of this window's selected port, supplied by the naming UI.
+    internal string WindowAlias { get; set; } = string.Empty;
+
     private readonly LogDirectoryValidator _logDirectoryValidator = new();
     private readonly CancellationTokenSource _settingsValidationCancellation = new();
     private readonly HashSet<string> _pendingLogStartSettings = new(StringComparer.Ordinal);
