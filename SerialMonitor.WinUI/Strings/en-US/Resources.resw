@@ -521,6 +521,12 @@
   <data name="XtermBackgroundOpacityLabel.Text" xml:space="preserve">
     <value>xterm transp.</value>
   </data>
+  <data name="AppBackgroundTransparencyRangeHint.Text" xml:space="preserve">
+    <value>0% full · 100% hidden</value>
+  </data>
+  <data name="XtermBackgroundTransparencyRangeHint.Text" xml:space="preserve">
+    <value>0% full · 100% hidden</value>
+  </data>
   <data name="XtermBackgroundOpacityInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Background image transparency inside xterm, from 0 to 100. Text stays fully opaque. 0 shows the full image; 100 hides only the xterm image. App background transparency is independent.</value>
   </data>

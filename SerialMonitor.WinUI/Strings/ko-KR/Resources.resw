@@ -519,6 +519,12 @@
   <data name="XtermBackgroundOpacityLabel.Text" xml:space="preserve">
     <value>xterm 배경 투명도</value>
   </data>
+  <data name="AppBackgroundTransparencyRangeHint.Text" xml:space="preserve">
+    <value>0% 진하게 · 100% 숨김</value>
+  </data>
+  <data name="XtermBackgroundTransparencyRangeHint.Text" xml:space="preserve">
+    <value>0% 진하게 · 100% 숨김</value>
+  </data>
   <data name="XtermBackgroundOpacityInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>xterm 안의 배경 이미지 투명도를 0~100으로 조절합니다. 글자 불투명도는 유지됩니다. 0은 이미지를 완전히 표시하고, 100은 xterm 이미지만 숨깁니다. 앱 배경 투명도와 별개입니다.</value>
   </data>
