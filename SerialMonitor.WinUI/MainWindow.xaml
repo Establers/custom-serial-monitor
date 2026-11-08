@@ -24,7 +24,7 @@
             <infra:DisplayModeToolTipConverter x:Key="DisplayModeToolTipConverter" />
             <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
                 <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}"
-                           ToolTipService.ToolTip="{Binding Converter={StaticResource DisplayModeToolTipConverter}}" />
+                           infra:AppToolTipService.ToolTip="{Binding Converter={StaticResource DisplayModeToolTipConverter}}" />
             </DataTemplate>
 
             <x:Double x:Key="CompactCheckBoxSize">14</x:Double>
@@ -1187,13 +1187,13 @@
                       ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                       Style="{StaticResource CompactComboBoxStyle}"
                       Width="96"
-                      ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
+                      infra:AppToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
             <Button x:Uid="StaticUi002" x:Name="ConnectionToolbarScrollBackButton"
                     Grid.Column="1"
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
                     Click="ToolbarScrollBackButton_Click"
-                    ToolTipService.ToolTip="Scroll connection controls left">
+                    infra:AppToolTipService.ToolTip="Scroll connection controls left">
                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                           FontSize="12"
                           UseLayoutRounding="False"
@@ -1248,7 +1248,7 @@
                             Command="{Binding ToggleFileLoggingCommand}"
                             AutomationProperties.Name="{Binding FileLoggingToggleText}"
                             Style="{StaticResource RuleActionButtonStyle}"
-                            ToolTipService.ToolTip="{Binding FileLoggingToolbarToolTip}">
+                            infra:AppToolTipService.ToolTip="{Binding FileLoggingToolbarToolTip}">
                         <Button.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem x:Uid="SaveLogHistoryMenuItem"
@@ -1278,7 +1278,7 @@
                             Click="SaveLogHistory_Click"
                             IsEnabled="{Binding CanExportLogHistory}"
                             AutomationProperties.Name="Export logs"
-                            ToolTipService.ToolTip="Save all retained logs to a separate file, including filtered records. Available while live file logging continues.">
+                            infra:AppToolTipService.ToolTip="Save all retained logs to a separate file, including filtered records. Available while live file logging continues.">
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12" Glyph="&#xE74E;" />
@@ -1302,7 +1302,7 @@
                                MaxLines="1"
                                TextAlignment="Left"
                                HorizontalAlignment="Left"
-                               ToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
+                               infra:AppToolTipService.ToolTip="{Binding CompactConnectionStatusText}" />
                     <TextBlock Grid.Column="1"
                                Text="{Binding BridgeIndicatorText}"
                                Foreground="{ThemeResource WarningTextBrush}"
@@ -1310,7 +1310,7 @@
                                Style="{StaticResource CompactLabelTextStyle}"
                                MaxWidth="170"
                                MaxLines="1"
-                               ToolTipService.ToolTip="{Binding BridgeStatusText}" />
+                               infra:AppToolTipService.ToolTip="{Binding BridgeStatusText}" />
                     <TextBlock x:Uid="StaticUi261"
                                Grid.Column="2"
                                Text="{Binding HexGroupTimeoutHeaderText}"
@@ -1318,14 +1318,14 @@
                                MinWidth="{Binding HexGroupTimeoutHeaderMinWidth}"
                                MaxLines="1"
                                TextTrimming="None"
-                               ToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
+                               infra:AppToolTipService.ToolTip="Currently applied HEX idle-grouping timeout. Change it in Settings > Serial." />
                     <TextBlock Grid.Column="3"
                                Text="{Binding SerialBusUtilizationHeaderText}"
                                Style="{StaticResource CompactLabelTextStyle}"
                                MinWidth="{Binding SerialBusUtilizationHeaderMinWidth}"
                                MaxLines="1"
                                TextTrimming="None"
-                               ToolTipService.ToolTip="{Binding SerialBusUtilizationToolTip}" />
+                               infra:AppToolTipService.ToolTip="{Binding SerialBusUtilizationToolTip}" />
                 </Grid>
             </Grid>
             </ScrollViewer>
@@ -1334,7 +1334,7 @@
                     Style="{StaticResource NavigationIconButtonStyle}"
                     Visibility="Collapsed"
                     Click="ToolbarScrollForwardButton_Click"
-                    ToolTipService.ToolTip="Scroll connection controls right">
+                    infra:AppToolTipService.ToolTip="Scroll connection controls right">
                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                           FontSize="12"
                           UseLayoutRounding="False"
@@ -1346,7 +1346,7 @@
                     MinWidth="80"
                     MaxWidth="160"
                     IsEnabled="{Binding CanEdit}"
-                    ToolTipService.ToolTip="{Binding ToolTip}"
+                    infra:AppToolTipService.ToolTip="{Binding ToolTip}"
                     AutomationProperties.Name="{Binding ToolTip}">
                 <Button.Content>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
@@ -1428,13 +1428,13 @@
                                       VerticalAlignment="Center"
                                       IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                       AutomationProperties.Name="Follow latest logs"
-                                      ToolTipService.ToolTip="{Binding AutoScrollToolTip}">
+                                      infra:AppToolTipService.ToolTip="{Binding AutoScrollToolTip}">
                             <PathIcon Width="16" Height="16"
                                       Data="M 0,0 L 8,0 8,1.5 0,1.5 Z M 0,4 L 8,4 8,5.5 0,5.5 Z M 0,8 L 5,8 5,9.5 0,9.5 Z M 11,2 L 12.5,2 12.5,12 15,9.5 16,10.5 11.75,14.75 7.5,10.5 8.5,9.5 11,12 Z" />
                         </ToggleButton>
                         <Button Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ToggleLogRenderingPauseCommand}"
-                                ToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
+                                infra:AppToolTipService.ToolTip="{Binding PauseRenderingToolTip}">
                             <Grid>
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="12"
@@ -1453,7 +1453,7 @@
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding ClearScreenCommand}"
                                 AutomationProperties.Name="Clear screen"
-                                ToolTipService.ToolTip="Clear screen: clear visible logs. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
+                                infra:AppToolTipService.ToolTip="Clear screen: clear visible logs. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="14"
                                       UseLayoutRounding="False"
@@ -1462,7 +1462,7 @@
                         <Button x:Uid="LogNavigateButton" x:Name="LogNavigateButton"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 AutomationProperties.Name="Go to time"
-                                ToolTipService.ToolTip="Go to time (Ctrl+G)"
+                                infra:AppToolTipService.ToolTip="Go to time (Ctrl+G)"
                                 Click="LogNavigateButton_Click">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="14"
@@ -1475,7 +1475,7 @@
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollBackButton_Click"
-                            ToolTipService.ToolTip="Scroll log controls left">
+                            infra:AppToolTipService.ToolTip="Scroll log controls left">
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                   FontSize="12"
                                   UseLayoutRounding="False"
@@ -1503,13 +1503,13 @@
                                      MaxWidth="495"
                                      VerticalAlignment="Center"
                                      KeyDown="SearchTextBox_KeyDown"
-                                     ToolTipService.ToolTip="Search visible log (click Search or press Enter to refresh and move next; Up/Down history)" />
+                                     infra:AppToolTipService.ToolTip="Search visible log (click Search or press Enter to refresh and move next; Up/Down history)" />
                             <Button x:Uid="SearchVisibleLogButton"
                                     Grid.Column="1"
                                     Style="{StaticResource NavigationIconButtonStyle}"
                                     Command="{Binding SearchVisibleLogCommand}"
                                     AutomationProperties.Name="Search"
-                                    ToolTipService.ToolTip="Search with current options and move to the next match (Enter)">
+                                    infra:AppToolTipService.ToolTip="Search with current options and move to the next match (Enter)">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="12"
                                           UseLayoutRounding="False"
@@ -1519,7 +1519,7 @@
                         <Button x:Uid="StaticUi008" Grid.Column="1"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindPreviousCommand}"
-                                ToolTipService.ToolTip="Previous result from the last search (Shift+F3 or F4)">
+                                infra:AppToolTipService.ToolTip="Previous result from the last search (Shift+F3 or F4)">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       UseLayoutRounding="False"
@@ -1528,7 +1528,7 @@
                         <Button x:Uid="StaticUi009" Grid.Column="2"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Command="{Binding FindNextCommand}"
-                                ToolTipService.ToolTip="Next result from the last search (F3)">
+                                infra:AppToolTipService.ToolTip="Next result from the last search (F3)">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       UseLayoutRounding="False"
@@ -1539,19 +1539,19 @@
                                   AutomationProperties.Name="대소문자 구분"
                                   IsChecked="{Binding IsSearchCaseSensitive, Mode=TwoWay}"
                                   Style="{StaticResource SearchOptionToggleStyle}"
-                                  ToolTipService.ToolTip="대소문자 구분 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+C)" />
+                                  infra:AppToolTipService.ToolTip="대소문자 구분 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+C)" />
                         <ToggleButton Grid.Column="4"
                                   Content="|ab|"
                                   AutomationProperties.Name="단어 전체 일치"
                                   IsChecked="{Binding IsSearchWholeWord, Mode=TwoWay}"
                                   Style="{StaticResource SearchOptionToggleStyle}"
-                                  ToolTipService.ToolTip="단어 전체 일치 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+W)" />
+                                  infra:AppToolTipService.ToolTip="단어 전체 일치 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+W)" />
                         <ToggleButton Grid.Column="5"
                                   Content=".*"
                                   AutomationProperties.Name="정규식"
                                   IsChecked="{Binding IsSearchRegularExpression, Mode=TwoWay}"
                                   Style="{StaticResource SearchOptionToggleStyle}"
-                                  ToolTipService.ToolTip="정규식 사용 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+R)" />
+                                  infra:AppToolTipService.ToolTip="정규식 사용 · 다른 옵션과 함께 사용 가능 (검색창에서 Alt+R)" />
                         <TextBlock Grid.Column="6"
                                    Text="{Binding SearchSummaryText}"
                                    FontWeight="SemiBold"
@@ -1567,7 +1567,7 @@
                                 Style="{StaticResource ToolbarIconButtonStyle}"
                                 Width="96"
                                 HorizontalContentAlignment="Stretch"
-                                ToolTipService.ToolTip="{Binding CurrentVisibleFilterToolTip}"
+                                infra:AppToolTipService.ToolTip="{Binding CurrentVisibleFilterToolTip}"
                                 AutomationProperties.Name="Select visible log filters">
                             <Button.Content>
                                 <Grid ColumnDefinitions="*,Auto"
@@ -1616,7 +1616,7 @@
                                                       FontWeight="SemiBold"
                                                       Style="{StaticResource FilterFlyoutCheckBoxStyle}"
                                                       IsChecked="{Binding AllVisibleLogFilterOption.IsChecked, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show all retained and incoming logs" />
+                                                      infra:AppToolTipService.ToolTip="Show all retained and incoming logs" />
                                             <Border Height="1"
                                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="4,0,4,0">
@@ -1639,7 +1639,7 @@
                                                                       ContentTemplate="{StaticResource FilterFlyoutRuleContentTemplate}"
                                                                       Style="{StaticResource FilterFlyoutCheckBoxStyle}"
                                                                       IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                      ToolTipService.ToolTip="{Binding DisplayName}" />
+                                                                      infra:AppToolTipService.ToolTip="{Binding DisplayName}" />
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
@@ -1677,7 +1677,7 @@
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollForwardButton_Click"
-                            ToolTipService.ToolTip="Scroll log controls right">
+                            infra:AppToolTipService.ToolTip="Scroll log controls right">
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                   FontSize="12"
                                   UseLayoutRounding="False"
@@ -1689,7 +1689,7 @@
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Visibility="{Binding TerminalDirectInputVisibility}"
                                 AutomationProperties.Name="Direct terminal input menu"
-                                ToolTipService.ToolTip="{Binding TerminalDirectInputMenuToolTip}">
+                                infra:AppToolTipService.ToolTip="{Binding TerminalDirectInputMenuToolTip}">
                             <FontIcon x:Name="TerminalDirectInputMenuIcon" FontSize="14" Glyph="&#xE756;" />
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight" Opening="TerminalDirectInputMenu_Opening" Closed="TerminalDirectInputMenu_Closed">
@@ -1706,7 +1706,7 @@
                                     <ToggleMenuFlyoutItem x:Uid="TerminalDirectInputLocalEchoMenuItem"
                                                          Text="Local echo"
                                                          IsChecked="{Binding TerminalDirectInputLocalEcho, Mode=TwoWay}"
-                                                         ToolTipService.ToolTip="Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input." />
+                                                         infra:AppToolTipService.ToolTip="Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input." />
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
@@ -1819,7 +1819,7 @@
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollBackButton_Click"
-                            ToolTipService.ToolTip="Scroll TX controls left">
+                            infra:AppToolTipService.ToolTip="Scroll TX controls left">
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                   FontSize="12"
                                   UseLayoutRounding="False"
@@ -1855,12 +1855,12 @@
                                   ItemsSource="{Binding TxLineEndingModes}"
                                   SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
                                   IsEnabled="{Binding IsTxLineEndingEffective}"
-                                  ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
+                                  infra:AppToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
                                   MinWidth="78" />
                         <Button x:Uid="CommandSendButton" Grid.Column="4"
                                 Style="{StaticResource ToolbarIconButtonStyle}"
                                 AutomationProperties.Name="Send command"
-                                ToolTipService.ToolTip="Send command"
+                                infra:AppToolTipService.ToolTip="Send command"
                                 Command="{Binding SendCommand}">
                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="14"
@@ -1869,7 +1869,7 @@
                         <Button x:Uid="StaticUi247" Grid.Column="5"
                                 Style="{StaticResource ToolbarIconButtonStyle}"
                                 AutomationProperties.Name="Command history"
-                                ToolTipService.ToolTip="Command history">
+                                infra:AppToolTipService.ToolTip="Command history">
                             <Button.Content>
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="14"
@@ -1918,13 +1918,13 @@
                                                             <TextBlock Text="{Binding CommandText}"
                                                                        FontFamily="Consolas"
                                                                        Style="{StaticResource CompactCellTextStyle}">
-                                                                <ToolTipService.ToolTip>
+                                                                <infra:AppToolTipService.ToolTip>
                                                                     <ToolTip MaxWidth="600">
                                                                         <TextBlock Text="{Binding CommandText}"
                                                                                    TextWrapping="Wrap"
                                                                                    FontFamily="Consolas" />
                                                                     </ToolTip>
-                                                                </ToolTipService.ToolTip>
+                                                                </infra:AppToolTipService.ToolTip>
                                                             </TextBlock>
                                                             <TextBlock Grid.Column="1"
                                                                        Text="{Binding LastSentTimeText}"
@@ -1950,7 +1950,7 @@
                             Style="{StaticResource NavigationIconButtonStyle}"
                             Visibility="Collapsed"
                             Click="ToolbarScrollForwardButton_Click"
-                            ToolTipService.ToolTip="Scroll TX controls right">
+                            infra:AppToolTipService.ToolTip="Scroll TX controls right">
                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                   FontSize="12"
                                   UseLayoutRounding="False"
@@ -1973,7 +1973,7 @@
                                 Style="{StaticResource ToolbarIconButtonStyle}"
                                 Click="AddSavedCommand_Click"
                                 AutomationProperties.Name="Add quick command"
-                                ToolTipService.ToolTip="Add quick command" />
+                                infra:AppToolTipService.ToolTip="Add quick command" />
 
                         <Border Grid.Column="2"
                                 Width="1"
@@ -1987,7 +1987,7 @@
                                     Style="{StaticResource NavigationIconButtonStyle}"
                                     Visibility="Collapsed"
                                     Click="ToolbarScrollBackButton_Click"
-                                    ToolTipService.ToolTip="Scroll quick commands left">
+                                    infra:AppToolTipService.ToolTip="Scroll quick commands left">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="12"
                                           UseLayoutRounding="False"
@@ -2020,7 +2020,7 @@
                                                             Style="{StaticResource SavedCommandChipButtonStyle}"
                                                             Command="{Binding DataContext.SendSavedCommandCommand, ElementName=Root}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTipService.ToolTip="{Binding SendToolTip}" />
+                                                            infra:AppToolTipService.ToolTip="{Binding SendToolTip}" />
                                                 </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -2032,7 +2032,7 @@
                                     Style="{StaticResource NavigationIconButtonStyle}"
                                     Visibility="Collapsed"
                                     Click="ToolbarScrollForwardButton_Click"
-                                    ToolTipService.ToolTip="Scroll quick commands right">
+                                    infra:AppToolTipService.ToolTip="Scroll quick commands right">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="12"
                                           UseLayoutRounding="False"
@@ -2119,7 +2119,7 @@
                     </TabView.Resources>
                     <TabViewItem x:Uid="StaticUi020" Header="Events"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Review log events detected by enabled rules. Double-click an event to jump to its original log.">
+                                 infra:AppToolTipService.ToolTip="Review log events detected by enabled rules. Double-click an event to jump to its original log.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -2136,12 +2136,12 @@
                                     <CheckBox x:Uid="StaticUi022" Grid.Column="1"
                                               Content="Auto"
                                               IsChecked="{Binding IsEventAutoScrollEnabled, Mode=TwoWay}"
-                                              ToolTipService.ToolTip="Auto-scroll events"
+                                              infra:AppToolTipService.ToolTip="Auto-scroll events"
                                               VerticalAlignment="Center" />
                                     <Button x:Uid="StaticUi023" Grid.Column="2"
                                             Content="Latest"
                                             Style="{StaticResource RuleActionButtonStyle}"
-                                            ToolTipService.ToolTip="Select latest event"
+                                            infra:AppToolTipService.ToolTip="Select latest event"
                                             Click="SelectLatestEvent_Click" />
                                     <Button x:Uid="EventContextButton" Grid.Column="3" Content="Context"
                                             IsEnabled="{Binding SelectedEventContextAvailable}"
@@ -2186,7 +2186,7 @@
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Center"
                                                           IsHitTestVisible="False"
-                                                          ToolTipService.ToolTip="{Binding MessagePreview}"
+                                                          infra:AppToolTipService.ToolTip="{Binding MessagePreview}"
                                                           AutomationProperties.Name="{Binding MessagePreview}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
@@ -2218,7 +2218,7 @@
                     </TabViewItem>
                     <TabViewItem x:Uid="StaticUi027" Header="Search"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result or press Enter to jump to it.">
+                                 infra:AppToolTipService.ToolTip="Review matches from the retained in-memory log. Double-click a result or press Enter to jump to it.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinWidth="0"
                               RowDefinitions="Auto,*">
@@ -2234,17 +2234,17 @@
                                             Content="Refresh"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding RefreshSearchResultsCommand}"
-                                            ToolTipService.ToolTip="Refresh search results" />
+                                            infra:AppToolTipService.ToolTip="Refresh search results" />
                                     <Button x:Uid="StaticUi030" Grid.Column="2"
                                             Content="Prev"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding PreviousSearchResultsPageCommand}"
-                                            ToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
+                                            infra:AppToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
                                     <Button x:Uid="StaticUi031" Grid.Column="3"
                                             Content="Next"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding NextSearchResultsPageCommand}"
-                                            ToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
+                                            infra:AppToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
                                     <TextBlock Grid.Column="4"
                                                Text="{Binding SearchSummaryText}"
                                                Style="{StaticResource CompactCellTextStyle}" />
@@ -2294,7 +2294,7 @@
                                                        infra:SearchTextHighlightBehavior.Segments="{Binding MessageSegments}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding MessagePreview}"
+                                                       infra:AppToolTipService.ToolTip="{Binding MessagePreview}"
                                                        AutomationProperties.Name="{Binding MessagePreview}" />
                                         </Grid>
                                     </DataTemplate>
@@ -2306,7 +2306,7 @@
 
                     <TabViewItem x:Uid="StaticUi032" Header="Sequences"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Create and run ordered command sequences with per-step delays.">
+                                 infra:AppToolTipService.ToolTip="Create and run ordered command sequences with per-step delays.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               VerticalAlignment="Stretch"
@@ -2324,7 +2324,7 @@
                                               SelectedItem="{Binding SelectedCommandSequence, Mode=TwoWay}"
                                               DisplayMemberPath="Name"
                                               Style="{StaticResource CompactComboBoxStyle}"
-                                              ToolTipService.ToolTip="{Binding SequenceStatusText}" />
+                                              infra:AppToolTipService.ToolTip="{Binding SequenceStatusText}" />
                                     <TextBox x:Uid="StaticUi034" x:Name="SequenceRepeatCountTextBox"
                                              Grid.Column="4"
                                              Width="48"
@@ -2336,7 +2336,7 @@
                                              BeforeTextChanging="SequenceRepeatCountTextBox_BeforeTextChanging"
                                              TextChanged="SequenceRepeatCountTextBox_TextChanged"
                                              LostFocus="SequenceRepeatCountTextBox_LostFocus"
-                                             ToolTipService.ToolTip="Repeat the selected sequence 1 to 9,999 times" />
+                                             infra:AppToolTipService.ToolTip="Repeat the selected sequence 1 to 9,999 times" />
                                     <TextBlock Grid.Column="5"
                                                Text="times"
                                                VerticalAlignment="Center"
@@ -2353,14 +2353,14 @@
                                                 <MenuFlyoutItem x:Uid="SequenceLoad" Text="Load JSON files…"
                                                                 Click="LoadCommandSequences_Click"
                                                                 IsEnabled="{Binding CanEditCommandSequences}"
-                                                                ToolTipService.ToolTip="Load one or more sequence JSON files (all must be valid)">
+                                                                infra:AppToolTipService.ToolTip="Load one or more sequence JSON files (all must be valid)">
                                                     <MenuFlyoutItem.Icon><SymbolIcon Symbol="OpenFile" /></MenuFlyoutItem.Icon>
                                                 </MenuFlyoutItem>
                                                 <MenuFlyoutSeparator />
                                                 <MenuFlyoutItem x:Uid="SequenceExport" Text="Export selected sequence…"
                                                                 Click="ExportCommandSequence_Click"
                                                                 IsEnabled="{Binding CanEditSelectedCommandSequence}"
-                                                                ToolTipService.ToolTip="Export selected sequence with an embedded authoring manual">
+                                                                infra:AppToolTipService.ToolTip="Export selected sequence with an embedded authoring manual">
                                                     <MenuFlyoutItem.Icon><SymbolIcon Symbol="Save" /></MenuFlyoutItem.Icon>
                                                 </MenuFlyoutItem>
                                                 <MenuFlyoutItem x:Uid="SequenceEditMenu" Text="Edit selected sequence…"
@@ -2391,7 +2391,7 @@
                                             Command="{Binding ToggleCommandSequenceCommand}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             AutomationProperties.Name="{Binding SequenceRunButtonToolTip}"
-                                            ToolTipService.ToolTip="{Binding SequenceRunButtonToolTip}">
+                                            infra:AppToolTipService.ToolTip="{Binding SequenceRunButtonToolTip}">
                                         <FontIcon Glyph="{Binding SequenceRunButtonGlyph}" FontSize="14" />
                                     </Button>
                                     <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="4">
@@ -2399,7 +2399,7 @@
                                             Command="{Binding StopCommandSequenceCommand}"
                                             Style="{StaticResource ToolbarIconButtonStyle}"
                                             AutomationProperties.Name="Stop running sequence"
-                                            ToolTipService.ToolTip="Stop the running sequence, regardless of dropdown selection">
+                                            infra:AppToolTipService.ToolTip="Stop the running sequence, regardless of dropdown selection">
                                         <FontIcon Glyph="&#xE71A;" FontSize="14" />
                                     </Button>
                                     <Button Content="실행 결과" Style="{StaticResource RuleActionButtonStyle}"
@@ -2418,23 +2418,23 @@
                                              FontWeight="SemiBold" Foreground="{ThemeResource FileLoggingDisabledTextBrush}" />
                                         <Run Text=" | " />
                                         <Run Text="{Binding SequenceTxActivityText}" />
-                                        <ToolTipService.ToolTip>
+                                        <infra:AppToolTipService.ToolTip>
                                             <ToolTip>
                                                 <TextBlock Text="{Binding SequenceTxActivityToolTip}"
                                                            MaxWidth="520" TextWrapping="Wrap" />
                                             </ToolTip>
-                                        </ToolTipService.ToolTip>
+                                        </infra:AppToolTipService.ToolTip>
                                     </TextBlock>
                                     <TextBlock x:Uid="StaticUi041" Grid.Column="2"
                                                Text="{Binding SelectedCommandSequenceStepCountText}"
                                                FontFamily="Consolas"
                                                Style="{StaticResource CompactCellTextStyle}"
-                                               ToolTipService.ToolTip="Selected sequence step count" />
+                                               infra:AppToolTipService.ToolTip="Selected sequence step count" />
                                     <Button x:Uid="SequenceAddStep" Grid.Column="3"
                                             Content="+ Step"
                                             IsEnabled="{Binding CanEditSelectedCommandSequence}"
                                             Style="{StaticResource RuleActionButtonStyle}"
-                                            ToolTipService.ToolTip="Add TX or RX Check step">
+                                            infra:AppToolTipService.ToolTip="Add TX or RX Check step">
                                         <Button.Flyout>
                                             <MenuFlyout>
                                                 <MenuFlyoutItem Text="TX" Click="AddCommandSequenceStep_Click" />
@@ -2448,13 +2448,13 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="DuplicateCommandSequenceStep_Click"
                                             AutomationProperties.Name="Duplicate selected sequence step"
-                                            ToolTipService.ToolTip="Duplicate the selected step directly below it" />
+                                            infra:AppToolTipService.ToolTip="Duplicate the selected step directly below it" />
                                     <Button x:Uid="StaticUi045" Grid.Column="6"
                                             IsEnabled="{Binding CanEditSelectedCommandSequenceStep}"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepUp_Click"
                                             AutomationProperties.Name="Move step up"
-                                            ToolTipService.ToolTip="Move step up">
+                                            infra:AppToolTipService.ToolTip="Move step up">
                                         <FontIcon Glyph="&#xE74A;" FontSize="12" />
                                     </Button>
                                     <Button x:Uid="StaticUi046" Grid.Column="7"
@@ -2462,7 +2462,7 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="MoveCommandSequenceStepDown_Click"
                                             AutomationProperties.Name="Move step down"
-                                            ToolTipService.ToolTip="Move step down">
+                                            infra:AppToolTipService.ToolTip="Move step down">
                                         <FontIcon Glyph="&#xE74B;" FontSize="12" />
                                     </Button>
                                 </Grid>
@@ -2479,7 +2479,7 @@
                                           ColumnDefinitions="28,20,58,*,44,40,60,54">
                                         <TextBlock x:Uid="SequenceEnabledHeader" Text="On"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}"
-                                                   ToolTipService.ToolTip="Unchecked steps are skipped during execution" />
+                                                   infra:AppToolTipService.ToolTip="Unchecked steps are skipped during execution" />
                                         <TextBlock Grid.Column="1" Text="#"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}" />
                                         <TextBlock Grid.Column="2" Text="유형" Style="{StaticResource InspectorTableHeaderTextStyle}" />
@@ -2492,7 +2492,7 @@
                                         <TextBlock x:Uid="StaticUi048" Grid.Column="5"
                                                    Text="Ending"
                                                    Style="{StaticResource InspectorTableHeaderTextStyle}"
-                                                   ToolTipService.ToolTip="Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n" />
+                                                   infra:AppToolTipService.ToolTip="Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n" />
                                         <TextBlock Grid.Column="6"
                                                    Text="ms"
                                                    HorizontalAlignment="Right"
@@ -2527,18 +2527,18 @@
                                                 <Grid ColumnSpacing="4"
                                                       MinHeight="24"
                                                       ColumnDefinitions="28,20,58,*,44,40,60,54">
-                                                    <ToolTipService.ToolTip>
+                                                    <infra:AppToolTipService.ToolTip>
                                                         <ToolTip>
                                                             <TextBlock Text="{Binding RowToolTip}"
                                                                        MaxWidth="520" TextWrapping="Wrap" />
                                                         </ToolTip>
-                                                    </ToolTipService.ToolTip>
+                                                    </infra:AppToolTipService.ToolTip>
                                                     <CheckBox x:Uid="SequenceStepEnabled"
                                                               MinWidth="0" MinHeight="24" Padding="0"
                                                               IsChecked="{Binding IsEnabled, Mode=TwoWay}"
                                                               Click="CommandSequenceStepEnabled_Click"
                                                               AutomationProperties.Name="Enable this sequence step"
-                                                              ToolTipService.ToolTip="Unchecked steps are kept here but skipped during execution" />
+                                                              infra:AppToolTipService.ToolTip="Unchecked steps are kept here but skipped during execution" />
                                                     <TextBlock Grid.Column="1" Text="{Binding StepNumberText}"
                                                                FontFamily="Consolas"
                                                                Style="{StaticResource CompactCellTextStyle}" />
@@ -2555,7 +2555,7 @@
                                                     <TextBlock Grid.Column="5"
                                                                Text="{Binding LineEndingText}"
                                                                Style="{StaticResource CompactCellTextStyle}"
-                                                               ToolTipService.ToolTip="{Binding LineEndingHelpText}" />
+                                                               infra:AppToolTipService.ToolTip="{Binding LineEndingHelpText}" />
                                                     <TextBlock Grid.Column="6"
                                                                Text="{Binding DelayText}"
                                                                HorizontalAlignment="Right"
@@ -2568,14 +2568,14 @@
                                                                 AutomationProperties.Name="Edit this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="EditCommandSequenceStepRow_Click"
-                                                                ToolTipService.ToolTip="Edit step">
+                                                                infra:AppToolTipService.ToolTip="Edit step">
                                                             <FontIcon Glyph="&#xE70F;" FontSize="12" />
                                                         </Button>
                                                         <Button x:Uid="StaticUi052"
                                                                 AutomationProperties.Name="Delete this command"
                                                                 Style="{StaticResource RuleActionButtonStyle}"
                                                                 Click="DeleteCommandSequenceStepRow_Click"
-                                                                ToolTipService.ToolTip="Delete step">
+                                                                infra:AppToolTipService.ToolTip="Delete step">
                                                             <FontIcon Glyph="&#xE74D;" FontSize="12" />
                                                         </Button>
                                                     </StackPanel>
@@ -2591,7 +2591,7 @@
                     <TabViewItem x:Uid="StaticUi053" x:Name="RulesTabViewItem"
                                  Header="Rules"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
+                                 infra:AppToolTipService.ToolTip="Create matching rules for events, highlights, filters, and optional notifications.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               MinHeight="0"
                               VerticalAlignment="Stretch"
@@ -2606,14 +2606,14 @@
                                             Content="Add rule"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="AddLogRule_Click"
-                                            ToolTipService.ToolTip="Add log rule" />
+                                            infra:AppToolTipService.ToolTip="Add log rule" />
                                     <TextBlock x:Uid="StaticUi055" Grid.Column="2"
                                                Text="Events/highlights: new logs"
                                                Style="{StaticResource SettingApplyHintTextStyle}"
                                                HorizontalAlignment="Right"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="Events and highlights apply to new incoming logs. View filters also apply to retained logs; ALL restores hidden logs within the retention limit." />
+                                               infra:AppToolTipService.ToolTip="Events and highlights apply to new incoming logs. View filters also apply to retained logs; ALL restores hidden logs within the retention limit." />
                                 </Grid>
                             </Border>
 
@@ -2718,19 +2718,19 @@
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Event"
                                                                   Click="LogRuleInlineClicked"
-                                                                  ToolTipService.ToolTip="Event: add matching lines to Events" />
+                                                                  infra:AppToolTipService.ToolTip="Event: add matching lines to Events" />
                                                         <CheckBox x:Uid="StaticUi069" Grid.Column="2"
                                                                   IsChecked="{Binding UseForHighlight, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Highlight"
                                                                   Click="LogRuleInlineClicked"
-                                                                  ToolTipService.ToolTip="Highlight: color matching lines in the log view" />
+                                                                  infra:AppToolTipService.ToolTip="Highlight: color matching lines in the log view" />
                                                         <CheckBox x:Uid="StaticUi070" Grid.Column="3"
                                                                   IsChecked="{Binding UseAsViewFilter, Mode=TwoWay}"
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Filter"
                                                                   Click="LogRuleInlineClicked"
-                                                                  ToolTipService.ToolTip="Filter: make this rule available in the Filter dropdown" />
+                                                                  infra:AppToolTipService.ToolTip="Filter: make this rule available in the Filter dropdown" />
                                                         <TextBlock Grid.Column="4"
                                                                    Text="{Binding Name}"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
@@ -2741,7 +2741,7 @@
                                                         <TextBlock x:Uid="StaticUi071" Grid.Column="6"
                                                                    Text="{Binding Mode, Converter={StaticResource DisplayModeNameConverter}}"
                                                                    Style="{StaticResource RuleCellTextStyle}"
-                                                                   ToolTipService.ToolTip="The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes." />
+                                                                   infra:AppToolTipService.ToolTip="The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes." />
                                                         <TextBlock Grid.Column="7"
                                                                    Text="{Binding MatchDirection}"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
@@ -2750,7 +2750,7 @@
                                                                   Style="{StaticResource RuleCheckBoxStyle}"
                                                                   Tag="Case"
                                                                   Click="LogRuleInlineClicked"
-                                                                  ToolTipService.ToolTip="Case-sensitive Terminal matching. Ignored for HEX rules." />
+                                                                  infra:AppToolTipService.ToolTip="Case-sensitive Terminal matching. Ignored for HEX rules." />
                                                         <Button x:Uid="StaticUi073" Grid.Column="9"
                                                                 Width="56"
                                                                 Height="22"
@@ -2758,7 +2758,7 @@
                                                                 Padding="3,0"
                                                                 HorizontalAlignment="Left"
                                                                 Click="LogRuleColorButton_Click"
-                                                                ToolTipService.ToolTip="Color used when Highlight is enabled.">
+                                                                infra:AppToolTipService.ToolTip="Color used when Highlight is enabled.">
                                                             <Grid ColumnSpacing="3"
                                                                   VerticalAlignment="Center">
                                                                 <Grid.ColumnDefinitions>
@@ -2784,7 +2784,7 @@
                                                                 HorizontalAlignment="Left"
                                                                 Tag="Background"
                                                                 Click="LogRuleColorButton_Click"
-                                                                ToolTipService.ToolTip="Change the highlight background color. Choose (none) to remove it.">
+                                                                infra:AppToolTipService.ToolTip="Change the highlight background color. Choose (none) to remove it.">
                                                             <Grid ColumnSpacing="3" VerticalAlignment="Center" ColumnDefinitions="10,*">
                                                                 <Border Width="10" Height="10" CornerRadius="2"
                                                                         BorderThickness="1"
@@ -2804,11 +2804,11 @@
                                                             <Button x:Uid="StaticUi074" Content="Edit"
                                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                                     Click="EditLogRuleRow_Click"
-                                                                    ToolTipService.ToolTip="Edit log rule" />
+                                                                    infra:AppToolTipService.ToolTip="Edit log rule" />
                                                             <Button x:Uid="StaticUi075" Content="Del"
                                                                     Style="{StaticResource RuleActionButtonStyle}"
                                                                     Click="DeleteLogRuleRow_Click"
-                                                                    ToolTipService.ToolTip="Delete log rule" />
+                                                                    infra:AppToolTipService.ToolTip="Delete log rule" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
@@ -2823,7 +2823,7 @@
                     <TabViewItem x:Uid="StaticUi076"
                                  Header="Bridge"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
+                                 infra:AppToolTipService.ToolTip="Forward raw bytes bidirectionally between the connected device and a virtual COM port.">
                         <ScrollViewer x:Name="BridgeFormScrollViewer"
                                       Padding="0"
                                       HorizontalScrollMode="Enabled"
@@ -2847,7 +2847,7 @@
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
                                                    MaxLines="1"
-                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                                                   infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
                                         <TextBlock Grid.Column="2"
                                                    Text="{Binding BridgeStateText}"
                                                    Foreground="{ThemeResource WarningTextBrush}"
@@ -2862,7 +2862,7 @@
                                         <TextBlock Text="Connection" Style="{StaticResource FormCardTitleTextStyle}" />
                                         <TextBlock Text="{Binding BridgeStatusText}"
                                                    TextWrapping="Wrap"
-                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Style="{StaticResource FormValueTextStyle}" />
                                         <Grid ColumnDefinitions="96,220,Auto"
                                               RowDefinitions="Auto,Auto"
@@ -2873,7 +2873,7 @@
                                                        Text="Port"
                                                        Grid.Column="0"
                                                        Style="{StaticResource FormLabelTextStyle}"
-                                                       ToolTipService.ToolTip="Virtual app-side COM port opened by Serial Monitor" />
+                                                       infra:AppToolTipService.ToolTip="Virtual app-side COM port opened by Serial Monitor" />
                                             <ComboBox Grid.Column="1"
                                                       ItemsSource="{Binding BridgePortNames}"
                                                       SelectedItem="{Binding SelectedBridgePort, Mode=TwoWay}"
@@ -2885,7 +2885,7 @@
                                                     Command="{Binding RefreshBridgePortsCommand}"
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     HorizontalAlignment="Left"
-                                                    ToolTipService.ToolTip="Refresh available virtual COM port candidates." />
+                                                    infra:AppToolTipService.ToolTip="Refresh available virtual COM port candidates." />
                                             <StackPanel Grid.Row="1"
                                                         Grid.Column="1"
                                                         Grid.ColumnSpan="2"
@@ -2906,13 +2906,13 @@
                                         <TextBlock x:Uid="StaticUi083"
                                                    Text="Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair."
                                                    TextWrapping="Wrap"
-                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Opacity="0.82"
                                                    Style="{StaticResource FormValueTextStyle}" />
                                         <TextBlock Text="{Binding ManualTxStateText}"
                                                    Foreground="{ThemeResource WarningTextBrush}"
                                                    TextWrapping="Wrap"
-                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Style="{StaticResource FormValueTextStyle}" />
                                     </StackPanel>
                                 </Border>
@@ -3010,16 +3010,16 @@
                                         <TextBlock Text="{Binding BridgeLastError}"
                                                    Foreground="{ThemeResource ErrorTextBrush}"
                                                    TextWrapping="Wrap"
-                                                   ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                   infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                         <TextBlock x:Uid="StaticUi092"
                                                    Text="{Binding BridgeVisualLogStatusText}"
-                                                   ToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
+                                                   infra:AppToolTipService.ToolTip="UI-only drops do not affect device ↔ virtual COM transport."
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                         <TextBlock x:Uid="StaticUi093"
                                                    Text="{Binding BridgePriorityPipelineStatusText}"
                                                    TextWrapping="Wrap"
-                                                   ToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
+                                                   infra:AppToolTipService.ToolTip="Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding."
                                                    Style="{StaticResource CompactCellTextStyle}" />
                                     </StackPanel>
                                 </Border>
@@ -3031,7 +3031,7 @@
                                     <TextBlock x:Uid="StaticUi094"
                                                Text="Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets."
                                                TextWrapping="Wrap"
-                                               ToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                               infra:AppToolTipService.ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                Style="{StaticResource FormHintTextStyle}" />
                                 </Expander>
                             </StackPanel>
@@ -3042,7 +3042,7 @@
                                  x:Name="LogTabViewItem"
                                  Header="Log"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
+                                 infra:AppToolTipService.ToolTip="Configure file logging, log paths, file names, and rotation.">
                         <ScrollViewer x:Name="LogFormScrollViewer"
                                       Padding="0"
                                       HorizontalScrollMode="Enabled"
@@ -3064,7 +3064,7 @@
                                                     AutomationProperties.Name="{Binding FileLoggingToggleText}"
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     HorizontalAlignment="Left"
-                                                    ToolTipService.ToolTip="{Binding FileLoggingToolTip}">
+                                                    infra:AppToolTipService.ToolTip="{Binding FileLoggingToolTip}">
                                                 <TextBlock x:Name="FileLoggingSettingsToggleTextBlock"
                                                            Text="{Binding FileLoggingToggleText}" />
                                             </Button>
@@ -3072,7 +3072,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately. OFF keeps the terminal and event detection live without saving serial logs." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="View pause" Style="{StaticResource FormLabelTextStyle}" />
@@ -3081,7 +3081,7 @@
                                                       Content="Keep saving file log"
                                                       IsChecked="{Binding FileLoggingWhileViewPaused, Mode=TwoWay}"
                                                       VerticalAlignment="Center"
-                                                      ToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file."
+                                                      infra:AppToolTipService.ToolTip="When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3090,7 +3090,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately, including during an active view pause." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately, including during an active view pause." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Actions" Style="{StaticResource FormLabelTextStyle}" />
@@ -3103,36 +3103,36 @@
                                                             Click="SaveLogHistory_Click"
                                                             IsEnabled="{Binding CanExportLogHistory}"
                                                             Style="{StaticResource FormActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Save all records still in memory, including filtered records. Logs removed by the retention limit, Clear, or view pause cannot be recovered." />
+                                                            infra:AppToolTipService.ToolTip="Save all records still in memory, including filtered records. Logs removed by the retention limit, Clear, or view pause cannot be recovered." />
                                                     <Button x:Uid="StaticUi099"
                                                             Content="Open"
                                                             Command="{Binding OpenCurrentSerialLogCommand}"
                                                             Style="{StaticResource FormActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open the active or most recently completed log file" />
+                                                            infra:AppToolTipService.ToolTip="Open the active or most recently completed log file" />
                                                     <Button x:Uid="StaticUi100"
                                                             Content="Folder"
                                                             Command="{Binding OpenLogFolderCommand}"
                                                             Style="{StaticResource FormActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
+                                                            infra:AppToolTipService.ToolTip="Open the configured Save dir folder (available while LOG is OFF or ON)" />
                                                     <Button x:Uid="StaticUi101"
                                                             Content="Copy path"
                                                             Command="{Binding CopySerialLogPathCommand}"
                                                             Style="{StaticResource FormActionButtonStyle}"
-                                                            ToolTipService.ToolTip="Copy the active or most recently completed log file path" />
+                                                            infra:AppToolTipService.ToolTip="Copy the active or most recently completed log file path" />
                                                 </StackPanel>
                                             </ScrollViewer>
                                             <TextBlock x:Uid="StaticUi102"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
+                                                       infra:AppToolTipService.ToolTip="Open/copy actions run immediately and do not stop logging." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Last action" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastLogFileActionStatus}"
                                                        Style="{StaticResource FormValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
+                                                       infra:AppToolTipService.ToolTip="{Binding LastLogFileActionStatus}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}" />
@@ -3151,20 +3151,20 @@
                                                          Style="{StaticResource FormTextBoxStyle}"
                                                          IsEnabled="{Binding CanEditLogSaveDirectory}"
                                                          HorizontalAlignment="Stretch"
-                                                         ToolTipService.ToolTip="{Binding LogSaveDirectory}" />
+                                                         infra:AppToolTipService.ToolTip="{Binding LogSaveDirectory}" />
                                                 <Button x:Uid="StaticUi109"
                                                         Grid.Column="1"
                                                         Content="Browse"
                                                         Click="BrowseLogFolder_Click"
                                                         IsEnabled="{Binding CanEditLogSaveDirectory}"
                                                         Style="{StaticResource FormActionButtonStyle}"
-                                                        ToolTipService.ToolTip="Browse log folder" />
+                                                        infra:AppToolTipService.ToolTip="Browse log folder" />
                                             </Grid>
                                             <TextBlock x:Uid="StaticUi110"
                                                        Grid.Column="2"
                                                        Text="OFF only"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Change the folder while logging is OFF. It applies when logging next starts, without reconnecting." />
+                                                       infra:AppToolTipService.ToolTip="Change the folder while logging is OFF. It applies when logging next starts, without reconnecting." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Log file name" Style="{StaticResource FormLabelTextStyle}" />
@@ -3179,7 +3179,7 @@
                                                          HorizontalAlignment="Stretch"
                                                          IsEnabled="{Binding CanEditLogFileName}"
                                                          PlaceholderText="empty = auto"
-                                                         ToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name."
+                                                         infra:AppToolTipService.ToolTip="When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name."
                                                          Grid.ColumnSpan="2" />
                                                 <TextBlock Grid.Column="0"
                                                            Text="Current:"
@@ -3189,14 +3189,14 @@
                                                            Text="{Binding ConfiguredLogFileNameDisplayText}"
                                                            Style="{StaticResource FormValueTextStyle}"
                                                            TextTrimming="None"
-                                                           ToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}"
+                                                           infra:AppToolTipService.ToolTip="{Binding ConfiguredLogFileNameDisplayText}"
                                                            Grid.Row="1" />
                                             </Grid>
                                             <TextBlock x:Uid="StaticUi114"
                                                        Grid.Column="2"
                                                        Text="OFF only"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
+                                                       infra:AppToolTipService.ToolTip="The log file name can be changed only while LOG is OFF." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -3211,12 +3211,12 @@
                                                        Grid.Column="1"
                                                        Text="New file each time saving starts; no date-based split"
                                                        Style="{StaticResource FormValueTextStyle}"
-                                                       ToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled." />
+                                                       infra:AppToolTipService.ToolTip="An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled." />
                                             <TextBlock x:Uid="StaticUi117"
                                                        Grid.Column="2"
                                                        Text="Always"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Starting log saving creates a new file instead of appending to an earlier run." />
+                                                       infra:AppToolTipService.ToolTip="Starting log saving creates a new file instead of appending to an earlier run." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Size"
@@ -3249,7 +3249,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to future writes." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately to future writes." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -3260,7 +3260,7 @@
                     <TabViewItem x:Uid="StaticUi124"
                                  Header="Settings"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Configure serial, display, and profile options.">
+                                 infra:AppToolTipService.ToolTip="Configure serial, display, and profile options.">
                         <ScrollViewer x:Name="SettingsFormScrollViewer"
                                       Padding="0"
                                       HorizontalScrollMode="Enabled"
@@ -3275,9 +3275,9 @@
                                         <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
                                             <TextBlock Text="Serial" Style="{StaticResource FormCardTitleTextStyle}" />
                                             <TextBlock x:Uid="StaticUi126"
-                                                       Text="Port settings apply on reconnect. Mode, HEX timeout, TX ending, reconnect, and confirmation apply now."
+                                                       Text="Serial and line controls: live when enabled"
                                                        Style="{StaticResource FormHintTextStyle}"
-                                                       ToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, automatic reconnect, and disconnect confirmation apply immediately without disconnecting the active port."
+                                                       infra:AppToolTipService.ToolTip="Baud, data bits, parity, stop bits, handshake, manual DTR/RTS and RTS TX Toggle apply to the current connection when enabled. RX ending and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, automatic reconnect, and disconnect confirmation apply immediately."
                                                        Grid.Row="1" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3407,7 +3407,7 @@
                                                       ItemsSource="{Binding TxLineEndingModes}"
                                                       SelectedItem="{Binding SelectedTxLineEnding, Mode=TwoWay}"
                                                       IsEnabled="{Binding IsTxLineEndingEffective}"
-                                                      ToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
+                                                      infra:AppToolTipService.ToolTip="{Binding TxLineEndingToolTip}"
                                                       Style="{StaticResource FormComboBoxStyle}" />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220" ColumnSpacing="6" HorizontalAlignment="Left">
@@ -3427,12 +3427,12 @@
                                                       IsEnabled="{Binding CanChangeTerminalMode}"
                                                       ItemTemplate="{StaticResource DisplayModeComboBoxItemTemplate}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
+                                                      infra:AppToolTipService.ToolTip="Changes RX display and TX input together and clears visible logs and search results. Saved file logs are preserved; file logging continues. Terminal uses text; HEX displays and sends exact bytes." />
                                             <TextBlock x:Uid="StaticUi140"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately to RX display and the next TX send." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
                                             <TextBlock Text="HEX timeout" Style="{StaticResource FormLabelTextStyle}" />
@@ -3449,14 +3449,14 @@
                                                          IsEnabled="{Binding IsHexRxViewSelected}"
                                                          VerticalAlignment="Center"
                                                          KeyDown="HexGroupTimeoutTextBox_KeyDown"
-                                                         ToolTipService.ToolTip="Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set."
+                                                         infra:AppToolTipService.ToolTip="Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set."
                                                          Width="100" />
                                                 <TextBlock x:Uid="StaticUi143"
                                                            Grid.Column="1"
                                                            Text="ms"
                                                            FontSize="11"
                                                            VerticalAlignment="Center"
-                                                           ToolTipService.ToolTip="Milliseconds" />
+                                                           infra:AppToolTipService.ToolTip="Milliseconds" />
                                                 <Button x:Uid="StaticUi144"
                                                         Grid.Column="2"
                                                         Content="Set"
@@ -3464,7 +3464,7 @@
                                                         IsEnabled="{Binding IsHexRxViewSelected}"
                                                         VerticalAlignment="Center"
                                                         Click="ApplyHexGroupTimeout_Click"
-                                                        ToolTipService.ToolTip="Save and apply the entered timeout immediately without disconnecting the active port." />
+                                                        infra:AppToolTipService.ToolTip="Save and apply the entered timeout immediately without disconnecting the active port." />
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding HexGroupTimeoutAppliedText}"
                                                            Style="{StaticResource FormHintTextStyle}"
@@ -3477,7 +3477,7 @@
                                                            Style="{StaticResource FormHintTextStyle}"
                                                            TextWrapping="Wrap"
                                                            VerticalAlignment="Center"
-                                                           ToolTipService.ToolTip="Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile." />
+                                                           infra:AppToolTipService.ToolTip="Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile." />
                                             </Grid>
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
@@ -3486,14 +3486,14 @@
                                                        Text="Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout."
                                                        Style="{StaticResource FormHintTextStyle}"
                                                        TextWrapping="Wrap"
-                                                       ToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
+                                                       infra:AppToolTipService.ToolTip="A timeout that is too short splits one packet; a timeout that is too long merges neighboring packets. FTDI Latency Timer is a driver setting, not an app setting." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*" ColumnSpacing="6">
                                             <TextBlock Text="Reconnect" Style="{StaticResource FormLabelTextStyle}" />
                                             <StackPanel Grid.Column="1" Spacing="3">
                                                 <CheckBox Content="Automatically reconnect after an unexpected disconnect"
                                                           IsChecked="{Binding AutoReconnectEnabled, Mode=TwoWay}"
-                                                          ToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying."
+                                                          infra:AppToolTipService.ToolTip="Retries the same real COM port after an unexpected read or write failure. Delays are 1, 2, 5, then 10 seconds. Manual Disconnect and Cancel Reconnect stop retrying."
                                                           HorizontalAlignment="Stretch"
                                                           HorizontalContentAlignment="Stretch"
                                                           ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3509,7 +3509,7 @@
                                                       Grid.Column="1"
                                                       Content="Confirm before disconnect"
                                                       IsChecked="{Binding ConfirmBeforeDisconnect, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Ask before manual disconnecting an active serial connection."
+                                                      infra:AppToolTipService.ToolTip="Ask before manual disconnecting an active serial connection."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3531,7 +3531,7 @@
                                                       ItemsSource="{Binding AppThemeOptions}"
                                                       SelectedItem="{Binding SelectedAppTheme, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="System follows Windows. Dark and Light apply to the window and terminal immediately without clearing logs. Saved with the profile." />
+                                                      infra:AppToolTipService.ToolTip="System follows Windows. Dark and Light apply to the window and terminal immediately without clearing logs. Saved with the profile." />
                                             <TextBlock Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}" />
@@ -3543,12 +3543,12 @@
                                                       ItemsSource="{Binding XtermFontOptions}"
                                                       SelectedItem="{Binding SelectedXtermFontOption, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas." />
+                                                      infra:AppToolTipService.ToolTip="Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas." />
                                             <TextBlock x:Uid="StaticUi153"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately and is saved with the profile." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
                                             <TextBlock Text="Size (px)" Style="{StaticResource FormLabelTextStyle}" />
@@ -3557,12 +3557,12 @@
                                                       ItemsSource="{Binding XtermFontSizeOptions}"
                                                       SelectedItem="{Binding XtermFontSize, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns." />
+                                                      infra:AppToolTipService.ToolTip="xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns." />
                                             <TextBlock x:Uid="StaticUi156"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately and is saved with the profile." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately and is saved with the profile." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -3581,12 +3581,12 @@
                                                       ItemsSource="{Binding VisibleLogLineCapOptions}"
                                                       SelectedItem="{Binding MaxVisibleLogLines, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
+                                                      infra:AppToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
                                             <TextBlock x:Uid="StaticUi161"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Auto-scroll" Style="{StaticResource FormLabelTextStyle}" />
@@ -3594,7 +3594,7 @@
                                                       Grid.Column="1"
                                                       Content="xterm auto-scroll"
                                                       IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Applies immediately to xterm visual scrolling."
+                                                      infra:AppToolTipService.ToolTip="Applies immediately to xterm visual scrolling."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3603,7 +3603,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Timestamp" Style="{StaticResource FormLabelTextStyle}" />
@@ -3611,7 +3611,7 @@
                                                       Grid.Column="1"
                                                       Content="Show timestamp in log view"
                                                       IsChecked="{Binding ShowTimestampInLogView, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps."
+                                                      infra:AppToolTipService.ToolTip="Show or hide timestamps in the main xterm display. Log files still keep timestamps."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3620,7 +3620,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="RX/TX prefix" Style="{StaticResource FormLabelTextStyle}" />
@@ -3628,7 +3628,7 @@
                                                       Grid.Column="1"
                                                       Content="Show RX &lt; and TX &gt;"
                                                       IsChecked="{Binding ShowRxTxDirectionPrefixInLogView, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload."
+                                                      infra:AppToolTipService.ToolTip="Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3637,7 +3637,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,220,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
                                             <TextBlock Text="Time format" Style="{StaticResource FormLabelTextStyle}" />
@@ -3646,12 +3646,12 @@
                                                       ItemsSource="{Binding TimestampDisplayFormatOptions}"
                                                       SelectedItem="{Binding SelectedTimestampDisplayFormatOption, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      ToolTipService.ToolTip="Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format." />
+                                                      infra:AppToolTipService.ToolTip="Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format." />
                                             <TextBlock x:Uid="StaticUi173"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately and re-renders retained visible logs." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Fun" Style="{StaticResource FormLabelTextStyle}" />
@@ -3659,7 +3659,7 @@
                                                       Grid.Column="1"
                                                       Content="Cute background mode"
                                                       IsChecked="{Binding CuteBackgroundMode, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged."
+                                                      infra:AppToolTipService.ToolTip="Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged."
                                                       HorizontalAlignment="Stretch"
                                                       HorizontalContentAlignment="Stretch"
                                                       ContentTemplate="{StaticResource FormCheckBoxContentTemplate}"
@@ -3668,7 +3668,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. Visual only." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately. Visual only." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,Auto,Auto,58" ColumnSpacing="6">
                                             <TextBlock Text="Custom bg" Style="{StaticResource FormLabelTextStyle}" />
@@ -3677,18 +3677,18 @@
                                                      Text="{Binding CuteBackgroundImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                                      Style="{StaticResource FormTextBoxStyle}"
                                                      TextWrapping="NoWrap"
-                                                     ToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved." />
+                                                     infra:AppToolTipService.ToolTip="Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved." />
                                             <Button x:Uid="StaticUi179"
                                                     Grid.Column="2"
                                                     Content="..."
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     Click="BrowseCuteBackgroundImage_Click"
-                                                    ToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
+                                                    infra:AppToolTipService.ToolTip="Browse for an optional custom background image (.png, .jpg, .jpeg, .webp)." />
                                             <Button x:Uid="StaticUi180"
                                                     Grid.Column="3"
                                                     Style="{StaticResource FormActionButtonStyle}"
                                                     Command="{Binding ResetCuteBackgroundCommand}"
-                                                    ToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background."
+                                                    infra:AppToolTipService.ToolTip="Reset bg to default. Clears the custom path and uses the bundled background."
                                                     Width="26"
                                                     MinWidth="26"
                                                     Padding="0"
@@ -3699,7 +3699,7 @@
                                                        Grid.Column="4"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
+                                                       infra:AppToolTipService.ToolTip="Applies after the image path field loses focus or after Browse." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundOpacityLabel"
@@ -3712,7 +3712,7 @@
                                                                          InputScope="Number"
                                                                          IsSpellCheckEnabled="False"
                                                                          IsTextPredictionEnabled="False"
-                                                                         ToolTipService.ToolTip="Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image."
+                                                                         infra:AppToolTipService.ToolTip="Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image."
                                                                          Width="64" />
                                                 <TextBlock Text="%" FontSize="11" VerticalAlignment="Center" />
                                             </StackPanel>
@@ -3720,7 +3720,7 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately. Keep the value subtle for dense logs." />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -3750,14 +3750,14 @@
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Profile actions run immediately when enabled." />
+                                                       infra:AppToolTipService.ToolTip="Profile actions run immediately when enabled." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Path" Style="{StaticResource FormLabelTextStyle}" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding CurrentProfilePath}"
                                                        Style="{StaticResource FormValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding CurrentProfilePath}" />
+                                                       infra:AppToolTipService.ToolTip="{Binding CurrentProfilePath}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}" />
@@ -3776,7 +3776,7 @@
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastSettingsChange}"
                                                        Style="{StaticResource FormValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastSettingsChange}" />
+                                                       infra:AppToolTipService.ToolTip="{Binding LastSettingsChange}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}" />
@@ -3786,7 +3786,7 @@
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding LastSettingsApplyStatus}"
                                                        Style="{StaticResource FormValueTextStyle}"
-                                                       ToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
+                                                       infra:AppToolTipService.ToolTip="{Binding LastSettingsApplyStatus}" />
                                             <TextBlock Grid.Column="2"
                                                        Text="Info"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}" />
@@ -3818,7 +3818,7 @@
                     <TabViewItem x:Uid="StaticUi204" x:Name="TestTabViewItem"
                                  Header="Test"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
+                                 infra:AppToolTipService.ToolTip="Configure and run the built-in MOCK generator and stress tests.">
                         <ScrollViewer x:Name="TestFormScrollViewer" Padding="4" HorizontalScrollMode="Enabled"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
@@ -3833,7 +3833,7 @@
                                                        Text="Mock generator"
                                                        Style="{StaticResource SettingApplyHintTextStyle}"
                                                        HorizontalAlignment="Right"
-                                                       ToolTipService.ToolTip="Mock stress settings apply to the mock generator without touching real serial settings." />
+                                                       infra:AppToolTipService.ToolTip="Mock stress settings apply to the mock generator without touching real serial settings." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3842,11 +3842,11 @@
                                             <CheckBox x:Uid="StaticUi208" Grid.Column="1"
                                                       Content="Show MOCK test port"
                                                       IsChecked="{Binding ShowMockTestPort, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Show the built-in MOCK port for testing without hardware." />
+                                                      infra:AppToolTipService.ToolTip="Show the built-in MOCK port for testing without hardware." />
                                             <TextBlock x:Uid="StaticUi209" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Updates the port selector immediately. An active MOCK connection stays connected until disconnect." />
+                                                       infra:AppToolTipService.ToolTip="Updates the port selector immediately. An active MOCK connection stays connected until disconnect." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3855,12 +3855,12 @@
                                             <ComboBox x:Uid="StaticUi211" Grid.Column="1"
                                                       ItemsSource="{Binding MockGeneratorPatternOptions}"
                                                       SelectedItem="{Binding SelectedMockGeneratorPatternOption, Mode=TwoWay}"
-                                                      ToolTipService.ToolTip="Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms."
+                                                      infra:AppToolTipService.ToolTip="Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms."
                                                       Style="{StaticResource SettingComboBoxStyle}" />
                                             <TextBlock x:Uid="StaticUi212" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately to the MOCK generator." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately to the MOCK generator." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3873,7 +3873,7 @@
                                             <TextBlock x:Uid="StaticUi214" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3886,7 +3886,7 @@
                                             <TextBlock x:Uid="StaticUi216" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3903,7 +3903,7 @@
                                             <TextBlock x:Uid="StaticUi220" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Applies immediately." />
+                                                       infra:AppToolTipService.ToolTip="Applies immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3924,12 +3924,12 @@
                                                 <Button x:Uid="StaticUi225" Content="CRLF"
                                                         Command="{Binding SendMockCrlfCommand}"
                                                         Style="{StaticResource RuleActionButtonStyle}"
-                                                        ToolTipService.ToolTip="MOCK only: send CRLF to finish the current no-newline partial RX line." />
+                                                        infra:AppToolTipService.ToolTip="MOCK only: send CRLF to finish the current no-newline partial RX line." />
                                             </StackPanel>
                                             <TextBlock x:Uid="StaticUi226" Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource SettingApplyBadgeTextStyle}"
-                                                       ToolTipService.ToolTip="Runs immediately." />
+                                                       infra:AppToolTipService.ToolTip="Runs immediately." />
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58"
                                               ColumnSpacing="4">
@@ -3950,13 +3950,13 @@
 
                     <TabViewItem x:Uid="PluginTab" Header="Plugin"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내">
+                                 infra:AppToolTipService.ToolTip="AI 플러그인 설치·업데이트, 사용 예시와 문제 해결 안내">
                         <views:PluginGuideView />
                     </TabViewItem>
 
                     <TabViewItem x:Uid="StaticUi232" Header="Help"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="Essential shortcuts and quick instructions.">
+                                 infra:AppToolTipService.ToolTip="Essential shortcuts and quick instructions.">
                         <Grid Style="{StaticResource InspectorTabGridStyle}"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
@@ -3968,7 +3968,7 @@
                                             Content="Copy"
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Command="{Binding CopyHelpCommand}"
-                                            ToolTipService.ToolTip="Copy help text" />
+                                            infra:AppToolTipService.ToolTip="Copy help text" />
                                 </Grid>
                             </Border>
 
@@ -4034,7 +4034,7 @@
 
                     <TabViewItem x:Uid="StaticUi236" x:Name="AboutTabViewItem" Header="About"
                                  IsClosable="False"
-                                 ToolTipService.ToolTip="View the app version, updates, and GitHub repository.">
+                                 infra:AppToolTipService.ToolTip="View the app version, updates, and GitHub repository.">
                         <ScrollViewer x:Name="AboutScrollViewer" HorizontalContentAlignment="Stretch"
                                       HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                             <Grid x:Name="UpdateAboutPanel" HorizontalAlignment="Stretch"
@@ -4078,7 +4078,7 @@
                                                     Background="{ThemeResource AccentFillColorDefaultBrush}"
                                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                             <Button x:Uid="UpdateMore" Width="26" Height="26" MinHeight="26" Padding="0"
-                                                    AutomationProperties.Name="Update options" ToolTipService.ToolTip="Update options">
+                                                    AutomationProperties.Name="Update options" infra:AppToolTipService.ToolTip="Update options">
                                                 <FontIcon Glyph="&#xE712;" FontSize="12" />
                                                 <Button.Flyout>
                                                     <MenuFlyout>
@@ -4091,7 +4091,7 @@
                                 </Border>
                                 <TextBlock Grid.Row="2" Text="{Binding LastCheckedText}" FontSize="11" VerticalAlignment="Center"
                                            HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding LastCheckedText}" />
+                                           TextTrimming="CharacterEllipsis" infra:AppToolTipService.ToolTip="{Binding LastCheckedText}" />
                                 <Border Grid.Row="3" Background="{ThemeResource InspectorSectionBrush}"
                                         BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10,7">
                                     <StackPanel Spacing="4">
@@ -4145,7 +4145,7 @@
                                        PointerCaptureLost="InspectorResizeHandle_PointerCaptureLost"
                                        AutomationProperties.Name="Resize inspector panel"
                                        AutomationProperties.HelpText="Drag to resize. Double-click to collapse or restore."
-                                       ToolTipService.ToolTip="Drag to resize. Double-click to collapse or restore.">
+                                       infra:AppToolTipService.ToolTip="Drag to resize. Double-click to collapse or restore.">
                 <infra:ResizeHandleControl.Template>
                     <ControlTemplate TargetType="infra:ResizeHandleControl">
                         <Grid Background="Transparent">
@@ -4169,7 +4169,7 @@
                                FontSize="11"
                                TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis"
-                               ToolTipService.ToolTip="{Binding FooterStatusToolTipText}"
+                               infra:AppToolTipService.ToolTip="{Binding FooterStatusToolTipText}"
                                MaxLines="1">
                         <TextBlock.ContextFlyout>
                             <MenuFlyout>
@@ -4182,14 +4182,14 @@
                 </ScrollViewer>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <TextBlock x:Uid="AutomationStatus" Text="{Binding AutomationStatusText}" FontSize="11" VerticalAlignment="Center"
-                               MaxWidth="250" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view." />
+                               MaxWidth="250" TextTrimming="CharacterEllipsis" infra:AppToolTipService.ToolTip="Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view." />
                     <Button x:Uid="StopAutomation" Content="Stop AI" Command="{Binding CancelAutomationCommand}" Height="18" MinHeight="18"
-                            Padding="6,0" FontSize="11" ToolTipService.ToolTip="Stop RX capture. Already sent commands cannot be undone." />
+                            Padding="6,0" FontSize="11" infra:AppToolTipService.ToolTip="Stop RX capture. Already sent commands cannot be undone." />
                 </StackPanel>
                 <Button x:Name="UpdateStatusButton" Grid.Column="2" Visibility="{Binding NotificationVisibility}"
                         Click="UpdateStatusButton_Click" Height="18" MinHeight="18" Padding="6,0" FontSize="11"
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                        ToolTipService.ToolTip="{Binding Status}" AutomationProperties.Name="{Binding NotificationText}">
+                        infra:AppToolTipService.ToolTip="{Binding Status}" AutomationProperties.Name="{Binding NotificationText}">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <FontIcon Glyph="&#xE898;" FontSize="10" />
                         <TextBlock Text="{Binding NotificationText}" FontSize="11" />

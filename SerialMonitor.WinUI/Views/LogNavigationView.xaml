@@ -2,6 +2,7 @@
     x:Class="SerialMonitor.WinUI.Views.LogNavigationView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
     xmlns:views="using:SerialMonitor.WinUI.Views"
     Width="280" Height="208" IsTextScaleFactorEnabled="False">
     <UserControl.Resources>
@@ -117,7 +118,7 @@
             <Border x:Name="AvailableRange" Height="76" Padding="8" CornerRadius="4"
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
-                    ToolTipService.ToolTip="{Binding RangeText}">
+                    infra:AppToolTipService.ToolTip="{Binding RangeText}">
                 <Grid RowDefinitions="18,18,18" RowSpacing="2" ColumnDefinitions="Auto,*" ColumnSpacing="12">
                     <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
                         <TextBlock x:Name="RangeLabel" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

@@ -148,7 +148,7 @@
                                     </StackPanel>
                                 </Border>
                                 <TextBlock Grid.Column="5" Text="{Binding Command}" FontFamily="Consolas"
-                                           Style="{StaticResource ResultValueStyle}" ToolTipService.ToolTip="{Binding Command}" />
+                                           Style="{StaticResource ResultValueStyle}" infra:AppToolTipService.ToolTip="{Binding Command}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

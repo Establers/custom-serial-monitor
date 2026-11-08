@@ -62,7 +62,7 @@ public sealed partial class LogNavigationView : UserControl
             AutomationProperties.SetName(pickers[index], names[index]);
             var hint = korean ? $"{names[index]} · 숫자 입력, 방향키 또는 마우스 휠로 변경" : $"{names[index]} · type digits, use arrow keys or scroll to change";
             AutomationProperties.SetHelpText(pickers[index], hint);
-            ToolTipService.SetToolTip(pickers[index], hint);
+            AppToolTipService.SetToolTip(pickers[index], hint);
         }
     }
 
@@ -131,11 +131,11 @@ public sealed partial class LogNavigationView : UserControl
         AvailableRange.Visibility = hasError ? Visibility.Collapsed : Visibility.Visible;
         ErrorText.Visibility = hasError ? Visibility.Visible : Visibility.Collapsed;
         var range = model?.RangeText ?? string.Empty;
-        ToolTipService.SetToolTip(ErrorText, hasError ? $"{model!.ErrorText}\n{range}" : range);
+        AppToolTipService.SetToolTip(ErrorText, hasError ? $"{model!.ErrorText}\n{range}" : range);
         AutomationProperties.SetHelpText(NavigationRoot, range);
         foreach (var picker in new[] { YearPicker, MonthPicker, DayPicker, HourPicker, MinutePicker, SecondPicker })
         {
-            var wheelHint = ToolTipService.GetToolTip(picker) as string;
+            var wheelHint = AppToolTipService.GetToolTip(picker) as string;
             AutomationProperties.SetHelpText(picker, $"{wheelHint}. {range}");
         }
     }

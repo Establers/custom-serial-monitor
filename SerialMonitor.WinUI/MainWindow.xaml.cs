@@ -1067,7 +1067,7 @@ public sealed partial class MainWindow : Window
             ? Visibility.Collapsed
             : Visibility.Visible;
         InspectorPanel.MinHeight = 0;
-        ToolTipService.SetToolTip(
+        AppToolTipService.SetToolTip(
             InspectorResizeHandle,
             _isInspectorCollapsed
                 ? UiText.Get(
@@ -1131,7 +1131,7 @@ public sealed partial class MainWindow : Window
             Content = "Don't ask again",
             IsChecked = false
         };
-        ToolTipService.SetToolTip(
+        AppToolTipService.SetToolTip(
             dontAskAgainBox,
             UiText.Get(
                 "DisconnectDontAskAgainToolTip",
@@ -5548,13 +5548,13 @@ public sealed partial class MainWindow : Window
             RuleNotificationLimits.ClampCooldown(source.NotificationCooldownSeconds).ToString(CultureInfo.InvariantCulture),
             "30");
         var errorText = CreateDialogErrorText();
-        ToolTipService.SetToolTip(modeBox, UiText.Get(
+        AppToolTipService.SetToolTip(modeBox, UiText.Get(
             "RuleModeToolTip",
             "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
-        ToolTipService.SetToolTip(caseBox, UiText.Get(
+        AppToolTipService.SetToolTip(caseBox, UiText.Get(
             "RuleCaseToolTip",
             "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
-        ToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
+        AppToolTipService.SetToolTip(notificationCooldownBox, UiText.Get(
             "RuleNotificationCooldownToolTip",
             "Seconds between notifications for this rule (5-86400). Default: 30 seconds."));
 
@@ -5617,10 +5617,10 @@ public sealed partial class MainWindow : Window
         var enabledBox = new CheckBox { Content = "Enabled", IsChecked = source.Enabled };
         var caseBox = new CheckBox { Content = "Case sensitive", IsChecked = source.CaseSensitive };
         var filterBox = new CheckBox { Content = "View filter", IsChecked = source.UseAsViewFilter };
-        ToolTipService.SetToolTip(filterBox, UiText.Get(
+        AppToolTipService.SetToolTip(filterBox, UiText.Get(
             "RuleViewFilterToolTip",
             "Make this rule available in the xterm visible filter selector."));
-        ToolTipService.SetToolTip(caseBox, UiText.Get(
+        AppToolTipService.SetToolTip(caseBox, UiText.Get(
             "RuleCaseToolTip",
             "Case-sensitive Terminal matching. Ignored when Mode is HEX."));
         var foregroundBox = CreateStringComboBox(_viewModel.HighlightColorPresets, source.ForegroundColor);
@@ -5628,7 +5628,7 @@ public sealed partial class MainWindow : Window
         var backgroundBox = CreateStringComboBox(backgroundOptions, string.IsNullOrWhiteSpace(source.BackgroundColor) ? "(none)" : source.BackgroundColor);
         var priorityBox = CreateDialogTextBox(source.Priority.ToString(CultureInfo.InvariantCulture), "Priority");
         var modeBox = CreateLogRuleModeComboBox(source.Mode);
-        ToolTipService.SetToolTip(modeBox, UiText.Get(
+        AppToolTipService.SetToolTip(modeBox, UiText.Get(
             "RuleModeToolTip",
             "The rule runs only in the selected app mode. Terminal matches decoded text; HEX matches raw bytes."));
         var directionBox = CreateEnumComboBox(source.MatchDirection);
@@ -5684,7 +5684,7 @@ public sealed partial class MainWindow : Window
         var commandBox = CreateDialogTextBox(source.CommandText, "ls / settings get / 41 09 42");
         var endingOptions = new[] { "Global", "None", "CR", "LF", "CRLF" };
         var endingBox = CreateStringComboBox(endingOptions, source.LineEndingMode?.ToString() ?? "Global");
-        ToolTipService.SetToolTip(endingBox, LineEndingHelpText);
+        AppToolTipService.SetToolTip(endingBox, LineEndingHelpText);
         string? ValidateShortcut(string shortcut)
         {
             var conflict = _viewModel.GetSavedCommandShortcutConflict(shortcut, source);

@@ -16,31 +16,31 @@
     <value>Restoring log view...</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi002.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi002.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll connection controls left</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi005.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi005.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll connection controls right</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi006.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi006.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll log controls left</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi007.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi007.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Search visible log (click Search or press Enter to refresh and move next; Up/Down history)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi008.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi008.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Previous result from the last search (Shift+F3)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi009.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi009.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Next result from the last search (F3)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi012.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi012.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -72,11 +72,11 @@
   <data name="VisibleFilterMatchHint.Text" xml:space="preserve">
     <value>Match any rule</value>
   </data>
-  <data name="VisibleFilterAllCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="VisibleFilterAllCheckBox.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show all retained and incoming logs</value>
     <comment>Visible log ALL option tooltip.</comment>
   </data>
-  <data name="VisibleFilterRuleCheckBox.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="VisibleFilterRuleCheckBox.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Include lines matching this rule</value>
     <comment>Visible log rule option tooltip.</comment>
   </data>
@@ -115,18 +115,18 @@
   <data name="VisibleFilterApplyingStatus" xml:space="preserve">
     <value>Applying filter to retained logs...</value>
   </data>
-  <data name="StaticUi015.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi015.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Auto Scroll: follow newest log lines. Click the xterm log and press Enter to toggle. Enter in the TX box still sends.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi016.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi016.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Clear screen: clear visible logs. In HEX mode, this also restarts the RX BUSY/IDLE measurement window.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi016.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Clear screen</value>
   </data>
-  <data name="StaticUi018.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi018.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll log controls right</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -134,165 +134,165 @@
     <value>Preparing log view</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi020.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi020.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Review log events detected by enabled rules. Double-click an event to jump to its original log.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi022.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi022.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Auto-scroll events</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi023.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi023.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Select latest event</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi024.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi024.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Inspect the log lines before and after the selected event.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi026.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi026.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Copy event context</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi027.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi027.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Review matches from the retained in-memory log. Double-click a result or press Enter to jump to it.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi029.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi029.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Refresh search results</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi030.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi030.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show the previous 1,000 matching lines (older)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi031.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi031.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi032.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi032.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Create and run ordered command sequences with per-step delays.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi034.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi034.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Repeat the selected sequence 1 to 9,999 times</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi036.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi036.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Add sequence</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi037.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi037.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Edit sequence</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi038.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi038.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Delete sequence</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi039.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi039.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Run sequence</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi040.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi040.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Stop sequence</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi041.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi041.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Selected sequence step count</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi042.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi042.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Add step</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi043.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi043.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Edit step</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi044.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi044.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Delete step</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi045.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi045.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Move step up</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi045.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Move step up</value></data>
-  <data name="StaticUi046.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi046.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Move step down</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi046.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Move step down</value></data>
-  <data name="StaticUi048.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi048.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Global = use main TX ending; None = no ending; CR = \r; LF = \n; CRLF = \r\n</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi051.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi051.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Edit step</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi052.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi052.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Delete step</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi053.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi053.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Create matching rules for events, highlights, filters, and optional notifications.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi055.Text" xml:space="preserve">
     <value>Events/highlights: new logs</value>
   </data>
-  <data name="StaticUi055.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi055.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Events and highlights apply to new incoming logs. View filters also apply to retained logs; ALL restores hidden logs within the retention limit.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi056.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi056.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Add log rule</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi056.Content" xml:space="preserve"><value>Add rule</value></data>
-  <data name="StaticUi068.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi068.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Event: add matching lines to Events</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi069.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi069.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Highlight: color matching lines in the log view</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi070.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi070.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Filter: make this rule available in the Filter dropdown</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi071.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi071.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi072.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi072.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Case-sensitive Terminal matching. Ignored for HEX rules.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi073.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi073.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Color used when Highlight is enabled.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi074.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi074.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Edit log rule</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi075.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi075.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Delete log rule</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi076.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi076.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Forward raw bytes bidirectionally between the connected device and a virtual COM port.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi079.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi079.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Virtual app-side COM port opened by Serial Monitor</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi080.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi080.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Refresh available virtual COM port candidates.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -300,11 +300,11 @@
     <value>Select the port opened by Serial Monitor. The external controller/analyzer must open the opposite port in the com0com pair.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi092.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi092.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>UI-only drops do not affect device ↔ virtual COM transport.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi093.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi093.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Enabled only while the bridge is active. Parser/log overload cannot stall raw bridge forwarding.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -312,7 +312,7 @@
     <value>Raw bytes are forwarded unchanged in both directions. Virtual-to-device logs are received from the virtual port and shown as RX in the current app mode: Terminal uses the selected encoding and Terminal RX rules; HEX shows bytes and uses HEX RX rules. Logging, filters, highlighting, and line-ending settings never modify bridge packets.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi095.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi095.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Configure file logging, log paths, file names, and rotation.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -320,50 +320,50 @@
     <value>Actions and current paths</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi099.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi099.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Open the active or most recently completed log file</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi100.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi100.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Open the configured Save dir folder (available while LOG is OFF or ON)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi101.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi101.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Copy the active or most recently completed log file path</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi102.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi102.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Open/copy actions run immediately and do not stop logging.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi104.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi104.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately. OFF keeps the terminal and event detection live without saving serial logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi106.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi106.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>When checked, Pause View freezes only the screen. When cleared, records received during the pause are also omitted from the serial log file.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi107.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi107.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately, including during an active view pause.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi109.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi109.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Browse log folder</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi110.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi110.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Change the folder while logging is OFF. It applies when logging next starts, without reconnecting.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi110.Text" xml:space="preserve">
     <value>OFF only</value>
   </data>
-  <data name="StaticUi112.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi112.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>When entered, this exact file name is used. No date, time, _serial, or extension is added. Leave empty for an automatic timestamp name.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi114.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi114.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>The log file name can be changed only while LOG is OFF.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -371,51 +371,51 @@
     <value>New file each time saving starts; no date-based split</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi116.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi116.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>An empty name creates yyyy-MM-dd_HHmmss_serial.log. The same file remains active until saving stops unless optional size rotation is enabled.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi117.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi117.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Starting log saving creates a new file instead of appending to an earlier run.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi121.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi121.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately to future writes.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi124.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi124.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Configure serial, display, and profile options.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi126.Text" xml:space="preserve">
-    <value>Frame/handshake: reconnect · Line controls: live</value>
+    <value>Serial and line controls: live when enabled</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi126.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Baud, data bits, parity, stop bits, handshake, DTR, RTS, RX ending, and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately without disconnecting the active port.</value>
+  <data name="StaticUi126.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Baud, data bits, parity, stop bits, handshake, manual DTR/RTS and RTS TX Toggle apply to the current connection when enabled. RX ending and encoding apply on the next connection. Terminal / HEX mode, HEX timeout, TX ending, and disconnect confirmation apply immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi139.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi139.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Changes RX display and TX input together. Terminal uses text; HEX displays and sends exact bytes.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi140.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi140.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately to RX display and the next TX send.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi142.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi142.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Automatic: 3.5 character times + 2 ms, minimum 4 ms. Choose a value above the longest observed gap inside one packet and below the shortest gap between packets. Apply with Enter or Set.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi143.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi143.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Milliseconds</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi144.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi144.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Save and apply the entered timeout immediately without disconnecting the active port.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi145.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi145.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Until you press Set, the timeout follows baud rate, data bits, parity and stop bits. After Set, your custom value is retained in the profile.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -423,95 +423,95 @@
     <value>Automatic: 4 ms at 115200 bps, 6 ms at 9600 bps (8N1). If a packet splits, increase the timeout or set FTDI Latency Timer to 2 ms in Device Manager and reconnect. A driver still at 16 ms may need a longer timeout.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi148.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi148.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Ask before manual disconnecting an active serial connection.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi152.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi152.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately to the xterm log. If D2Coding or another optional font is not installed, xterm falls back to Consolas.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi153.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi153.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately and is saved with the profile.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi155.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi155.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>xterm font size from 10 to 15 pixels. Changing it also recalculates terminal rows and columns.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi156.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi156.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately and is saved with the profile.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi160.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi160.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi161.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi161.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi163.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi163.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately to xterm visual scrolling.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi164.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi164.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi166.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi166.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show or hide timestamps in the main xterm display. Log files still keep timestamps.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi167.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi167.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately and re-renders retained visible logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi169.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi169.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show or hide RX &lt; and TX &gt; in the main xterm display. Search, event detection, filtering, and saved log files still use the original direction and payload.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi170.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi170.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately and re-renders retained visible logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi172.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi172.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Timestamp format for the main xterm display. Saved log files keep the full yyyy-MM-dd HH:mm:ss.fff format.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi173.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi173.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately and re-renders retained visible logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi175.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi175.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Use the bundled cute background, or an optional custom image, while keeping the UI readable. Visual only; logs and serial data are unchanged.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi176.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi176.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately. Visual only.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi178.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi178.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Optional. Leave empty to use the bundled default background. Missing images temporarily use the default; your selected path is preserved.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi179.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi179.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Browse for an optional custom background image (.png, .jpg, .jpeg, .webp).</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi180.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi180.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Reset bg to default. Clears the custom path and uses the bundled background.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi181.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi181.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies after the image path field loses focus or after Browse.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi183.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi183.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Enter a whole number from 0 to 100. Values above 100 become 100. Letters, decimals and negative numbers are rejected. 0 hides the image; 100 shows the full image.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi184.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi184.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately. Keep the value subtle for dense logs.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -522,63 +522,63 @@
     <value>Load/reset disabled while connected</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi191.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi191.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Profile actions run immediately when enabled.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi204.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi204.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Configure and run the built-in MOCK generator and stress tests.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi206.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi206.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Mock stress settings apply to the mock generator without touching real serial settings.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi208.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi208.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Show the built-in MOCK port for testing without hardware.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi209.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi209.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Updates the port selector immediately. An active MOCK connection stays connected until disconnect.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi211.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi211.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Visual HEX packets use AA 55 + F1/F2/F3 + group/index/count/length/sequence + 55 AA. Short gaps are 3-5 ms; intended group gaps are 25-40 ms.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi212.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi212.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately to the MOCK generator.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi214.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi214.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi216.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi216.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi220.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi220.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Applies immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi225.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi225.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>MOCK only: send CRLF to finish the current no-newline partial RX line.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi226.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi226.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Runs immediately.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi232.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi232.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Essential shortcuts and quick instructions.</value>
     <comment>English essential help text.</comment>
   </data>
-  <data name="StaticUi234.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi234.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Copy help text</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi236.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi236.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>View the app version, author, and GitHub repository.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -594,23 +594,23 @@
     <value>Drag to resize. Double-click to collapse or restore.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi241.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi241.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Drag to resize. Double-click to collapse or restore.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi242.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi242.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll TX controls left</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi247.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi247.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Command history</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi249.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi249.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Send selected history command</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi250.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi250.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Clear command history</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -618,11 +618,11 @@
     <value>No command history.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi252.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi252.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll TX controls right</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi254.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi254.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Add quick command</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -632,15 +632,15 @@
   <data name="QuickCommandDeleteTitle" xml:space="preserve"><value>Delete quick command</value></data>
   <data name="QuickCommandEditMenuText" xml:space="preserve"><value>Edit…</value></data>
   <data name="QuickCommandDeleteMenuText" xml:space="preserve"><value>Delete…</value></data>
-  <data name="StaticUi257.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi257.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll quick commands left</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi259.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi259.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Scroll quick commands right</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
-  <data name="StaticUi261.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="StaticUi261.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Currently applied HEX idle-grouping timeout. Change it in Settings &gt; Serial.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
@@ -838,20 +838,20 @@ Elapsed {2} · Remaining {3}</value>
   <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Search</value>
   </data>
-  <data name="SearchVisibleLogButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="SearchVisibleLogButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Search with current options and move to the next match (Enter)</value>
   </data>
   <data name="SequenceLoad.Text" xml:space="preserve"><value>Load JSON files…</value></data>
   <data name="SequenceExport.Text" xml:space="preserve"><value>Export selected sequence…</value></data>
-  <data name="SequenceLoad.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Load one or more sequence JSON files; any error cancels the entire batch</value></data>
-  <data name="SequenceExport.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Export selected sequence with authoring manual in one JSON file</value></data>
+  <data name="SequenceLoad.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Load one or more sequence JSON files; any error cancels the entire batch</value></data>
+  <data name="SequenceExport.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Export selected sequence with authoring manual in one JSON file</value></data>
   <data name="SequenceManage.Content" xml:space="preserve"><value>Sequence options</value></data>
   <data name="SequenceEditMenu.Text" xml:space="preserve"><value>Edit selected sequence…</value></data>
   <data name="SequenceDeleteMenu.Text" xml:space="preserve"><value>Delete selected sequence…</value></data>
   <data name="SequenceAddStep.Content" xml:space="preserve"><value>+ Step</value></data>
-  <data name="SequenceStop.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop the running sequence, regardless of dropdown selection</value></data>
+  <data name="SequenceStop.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Stop the running sequence, regardless of dropdown selection</value></data>
   <data name="SequenceStop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Stop running sequence</value></data>
-  <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Add command to selected sequence</value></data>
+  <data name="SequenceAddStep.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Add command to selected sequence</value></data>
   <data name="SequenceAddStep.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add command to selected sequence</value></data>
   <data name="StaticUi051.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Edit this command</value></data>
   <data name="StaticUi052.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Delete this command</value></data>
@@ -878,7 +878,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="CommandHistorySearch.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Search command history</value></data>
   <data name="CommandHistoryNoResults.Text" xml:space="preserve"><value>No matching command history.</value></data>
   <data name="StaticUi247.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Command history</value></data>
-  <data name="CommandSendButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Send command</value></data>
+  <data name="CommandSendButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Send command</value></data>
   <data name="CommandSendButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Send command</value></data>
   <data name="FollowLatestLogButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Follow latest logs</value></data>
   <data name="FollowLatestLogOn" xml:space="preserve"><value>Follow latest logs: on. Click to stop following. Enter in the log also toggles this.</value></data>
@@ -905,7 +905,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="UpdateDownloadHint.Text" xml:space="preserve"><value>Release notes and downloads open in your browser.</value></data>
   <data name="UpdateViewRelease.Content" xml:space="preserve"><value>View release</value></data>
   <data name="UpdateMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Update options</value></data>
-  <data name="UpdateMore.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Update options</value></data>
+  <data name="UpdateMore.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Update options</value></data>
   <data name="UpdateSkip.Text" xml:space="preserve"><value>Skip this version</value></data>
   <data name="PortAliasAddName" xml:space="preserve"><value>Add name</value></data>
   <data name="PortAliasEditorTitle" xml:space="preserve"><value>Name for {0}</value></data>
@@ -923,9 +923,9 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="OpenCurrentLogLocationHint" xml:space="preserve"><value>Right-click to open the log file's folder.</value></data>
   <data name="AutomationReady" xml:space="preserve"><value>AI/CLI ready</value></data>
   <data name="AutomationActive" xml:space="preserve"><value>AI/CLI active — RX capture / control</value></data>
-  <data name="AutomationStatus.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view.</value></data>
+  <data name="AutomationStatus.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Local AI/CLI control uses this app's serial connection. RX captures are independent of the log view.</value></data>
   <data name="StopAutomation.Content" xml:space="preserve"><value>Stop AI</value></data>
-  <data name="StopAutomation.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop RX capture. Already sent commands cannot be undone.</value></data>
+  <data name="StopAutomation.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Stop RX capture. Already sent commands cannot be undone.</value></data>
   <data name="AgentPluginTitle.Text" xml:space="preserve"><value>Connect with the AI plugin</value></data>
   <data name="AgentPluginAboutBody.Text" xml:space="preserve"><value>Start AI device control with the plugin for Codex, Claude Code and GitHub Copilot. Open the Plugin tab for installation and updates.</value></data>
   <data name="AgentPluginRepositoryLink.Content" xml:space="preserve"><value>GitHub · Establers/custom-serial-monitor ↗</value></data>
@@ -933,7 +933,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="TerminalModeDescription" xml:space="preserve"><value>Terminal: Text logs and text commands with the selected line ending.</value></data>
   <data name="HexModeDescription" xml:space="preserve"><value>HEX: Display and send raw bytes in hexadecimal, without a line ending.</value></data>
   <data name="SaveLogHistoryButton.Content" xml:space="preserve"><value>Export logs...</value></data>
-  <data name="SaveLogHistoryButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Save all records retained at the button click, including filtered records. Records arriving while the save dialog is open are excluded. Logs removed by the retention limit, Clear, or view pause cannot be recovered.</value></data>
+  <data name="SaveLogHistoryButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Save all records retained at the button click, including filtered records. Records arriving while the save dialog is open are excluded. Logs removed by the retention limit, Clear, or view pause cannot be recovered.</value></data>
   <data name="SaveLogHistoryMenuItem.Text" xml:space="preserve"><value>Export logs...</value></data>
   <data name="LogHistoryContextHint" xml:space="preserve"><value>Right-click to export logs or open the log file&apos;s folder.</value></data>
   <data name="LogHistoryFileType" xml:space="preserve"><value>Serial log</value></data>
@@ -952,14 +952,14 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="LogHistoryCanceled" xml:space="preserve"><value>Log export was canceled.</value></data>
   <data name="SaveLogHistoryToolbarLabel.Text" xml:space="preserve"><value>Export logs...</value></data>
   <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Export logs</value></data>
-  <data name="SaveLogHistoryToolbarButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Save all logs retained at the button click to a separate file, including filtered records. Records arriving while the save dialog is open are excluded. Available while live file logging continues.</value></data>
+  <data name="SaveLogHistoryToolbarButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Save all logs retained at the button click to a separate file, including filtered records. Records arriving while the save dialog is open are excluded. Available while live file logging continues.</value></data>
   <data name="LogHistoryPickerTitle" xml:space="preserve"><value>Export logs</value></data>
   <data name="LogHistoryExportAction" xml:space="preserve"><value>Export</value></data>
   <data name="PluginTab.Header" xml:space="preserve"><value>Plugin</value></data>
-  <data name="PluginTab.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>AI plugin installation, updates, usage examples and troubleshooting.</value></data>
+  <data name="PluginTab.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>AI plugin installation, updates, usage examples and troubleshooting.</value></data>
   <data name="LogNavigationLanguage" xml:space="preserve"><value>en</value></data>
   <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to time</value></data>
-  <data name="LogNavigateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Go to time (Ctrl+G)</value></data>
+  <data name="LogNavigateButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Go to time (Ctrl+G)</value></data>
   <data name="NativeLogNavigationInputLabel" xml:space="preserve"><value>Time or position</value></data>
   <data name="NativeLogNavigationInputPlaceholder" xml:space="preserve"><value>14:32:10 · -5m · #500000 · 70%</value></data>
   <data name="NativeLogNavigationInputHint" xml:space="preserve"><value>HH:mm:ss · YYYY-MM-DD HH:mm:ss · ±5m · #line · %</value></data>
@@ -1003,17 +1003,17 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SequenceDuplicateMenu.Text" xml:space="preserve"><value>Duplicate selected sequence</value></data>
   <data name="SequenceDuplicateStep.Content" xml:space="preserve"><value>Copy step</value></data>
   <data name="SequenceDuplicateStep.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Duplicate selected sequence step</value></data>
-  <data name="SequenceDuplicateStep.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Duplicate the selected step directly below it</value></data>
+  <data name="SequenceDuplicateStep.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Duplicate the selected step directly below it</value></data>
   <data name="SequenceStartAction" xml:space="preserve"><value>Run sequence</value></data>
   <data name="SequencePauseAction" xml:space="preserve"><value>Pause after the current send and delay finish</value></data>
   <data name="SequenceResumeAction" xml:space="preserve"><value>Resume paused sequence</value></data>
   <data name="SequencePausePendingAction" xml:space="preserve"><value>Continue sequence (cancel pending pause)</value></data>
   <data name="SequenceEnabledHeader.Text" xml:space="preserve"><value>On</value></data>
-  <data name="SequenceEnabledHeader.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are skipped during execution</value></data>
+  <data name="SequenceEnabledHeader.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are skipped during execution</value></data>
   <data name="SequenceCommandHeader.Text" xml:space="preserve"><value>Content</value></data>
   <data name="SequenceModeHeader.Text" xml:space="preserve"><value>Mode</value></data>
   <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Enable this sequence step</value></data>
-  <data name="SequenceStepEnabled.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are kept here but skipped during execution</value></data>
+  <data name="SequenceStepEnabled.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Unchecked steps are kept here but skipped during execution</value></data>
   <data name="SequenceStepTxModeLabel" xml:space="preserve"><value>TX mode</value></data>
   <data name="SequenceStepTxModeHelp" xml:space="preserve"><value>Global uses the main TX mode captured at run start. Hex sends bytes as entered and ignores line ending.</value></data>
   <data name="SequenceStepResponseMetadataHelp" xml:space="preserve"><value>RX collection and response checks are preserved here. Change them in sequence JSON or through CLI/MCP.</value></data>
@@ -1048,6 +1048,20 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ShortcutActionRegex" xml:space="preserve"><value>regular-expression search</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>built-in log browser controls</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Open the menu to switch direct input or local echo.</value></data>
+  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input menu</value></data>
+  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Direct input ON</value></data>
+  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
+  <data name="TerminalDirectInputLocalEchoMenuItem.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input.</value></data>
+  <data name="SerialLinesInputs.Text" xml:space="preserve"><value>Input control lines</value></data>
+  <data name="SerialLinesRtsToggle.Content" xml:space="preserve"><value>RTS TX Toggle</value></data>
+  <data name="SerialLinesDisconnected" xml:space="preserve"><value>Disconnected; output settings apply on connection.</value></data>
+  <data name="SerialLinesApplying" xml:space="preserve"><value>Applying control-line change…</value></data>
+  <data name="SerialLinesMock" xml:space="preserve"><value>MOCK: output modes are simulated; physical inputs are unavailable.</value></data>
+  <data name="SerialLinesLive" xml:space="preserve"><value>Live driver status · AUTO/TX outputs are controlled by the driver.</value></data>
   <data name="ProtocolTitle" xml:space="preserve"><value>Protocol</value></data>
   <data name="ProtocolDisabled" xml:space="preserve"><value>Not in use</value></data>
   <data name="ProtocolClear" xml:space="preserve"><value>Clear results</value></data>
@@ -1077,14 +1091,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC OK {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC errors {0:N0}</value></data>
   <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>Incomplete {0:N0} · undecoded {1:N0} · exceptions {2:N0}</value></data>
-  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
-  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
-  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Open the menu to switch direct input or local echo.</value></data>
-  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input menu</value></data>
-  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Direct input ON</value></data>
-  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
-  <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
-  <data name="TerminalDirectInputLocalEchoMenuItem.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input.</value></data>
   <data name="ConnectDiagChecking" xml:space="preserve"><value>{0}: connection failed; checking details…</value></data>
   <data name="ConnectDiagOwnerSummary" xml:space="preserve"><value>{0}: connection failed; open in {1} (PID {2}).</value></data>
   <data name="ConnectDiagSummary" xml:space="preserve"><value>{0}: connection failed. {1}</value></data>
@@ -1171,12 +1177,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="StaticUi180.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Reset custom background</value>
   </data>
-  <data name="SerialLinesInputs.Text" xml:space="preserve"><value>Input control lines</value></data>
-  <data name="SerialLinesRtsToggle.Content" xml:space="preserve"><value>RTS TX Toggle</value></data>
-  <data name="SerialLinesDisconnected" xml:space="preserve"><value>Disconnected; output settings apply on connection.</value></data>
-  <data name="SerialLinesApplying" xml:space="preserve"><value>Applying control-line change…</value></data>
-  <data name="SerialLinesMock" xml:space="preserve"><value>MOCK: output modes are simulated; physical inputs are unavailable.</value></data>
-  <data name="SerialLinesLive" xml:space="preserve"><value>Live driver status · AUTO/TX outputs are controlled by the driver.</value></data>
   <data name="SerialLinesInputToolTip" xml:space="preserve"><value>PC input control-line states. ON: active; OFF: inactive; —: disconnected; N/A: unavailable. Sampled about every 250 ms; displayed about every second. Short pulses may be missed.</value></data>
   <data name="SerialLinesCtsToolTip" xml:space="preserve"><value>CTS (Clear To Send): permission for the PC to transmit; used by RTS/CTS flow control.</value></data>
   <data name="SerialLinesDsrToolTip" xml:space="preserve"><value>DSR (Data Set Ready): the peer’s ready signal; used by DTR/DSR flow control.</value></data>

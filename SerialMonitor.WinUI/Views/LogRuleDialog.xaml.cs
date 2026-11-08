@@ -151,5 +151,5 @@ public sealed partial class LogRuleDialog : ContentDialog
     }
 
     private static void SetToolTip(DependencyObject control, string key, string fallback) =>
-        ToolTipService.SetToolTip(control, UiText.Get(key, fallback));
+        AppToolTipService.SetToolTip(control, UiText.Get(key, fallback));
 }
