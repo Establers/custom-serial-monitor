@@ -211,6 +211,7 @@ $requiredAssets = @(
     "Views\PluginGuideView.xbf",
     "SerialMonitor.WinUI.pri",
     "Assets\xterm\index.html",
+    "Assets\xterm\terminal-background.js",
     "Assets\xterm\xterm.js",
     "Assets\xterm\compact-scrollback.js",
     "Assets\xterm\fonts\JetBrainsMono-Regular.woff2",

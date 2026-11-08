@@ -331,6 +331,10 @@ $passed++
 # exist and the plugin manifest still has the expected version.
 $payload = Join-Path $scratch 'release payload'
 New-Item -ItemType Directory -Force -Path $payload | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $payload 'Assets\FunBackgrounds') | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot 'SerialMonitor.WinUI\Assets\xterm') -Destination (Join-Path $payload 'Assets') -Recurse
+Copy-Item -LiteralPath (Join-Path $repoRoot 'SerialMonitor.WinUI\Assets\FunBackgrounds\default_cute_bg.jpg') `
+    -Destination (Join-Path $payload 'Assets\FunBackgrounds\default_cute_bg.jpg')
 Copy-Item -LiteralPath $package.StageDirectory -Destination (Join-Path $payload 'agent-plugin') -Recurse
 New-Item -ItemType Directory -Force -Path (Join-Path $payload 'docs') | Out-Null
 foreach ($guide in @('agent_plugins.md', 'ai_control.md')) {

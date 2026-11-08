@@ -193,7 +193,8 @@ instead.
 - [ ] A custom program location, such as `D:\Apps\SerialMonitor`, launches correctly.
 - [ ] `agent-plugin\.claude-plugin\marketplace.json` and the complete `agent-plugin\plugins\serial-monitor` source are installed.
 - [ ] `agent-plugin\.agents\plugins\marketplace.json` is also present for native Codex discovery.
-- [ ] `check_release_payload.ps1` passes before packaging, including with `build_installer.ps1 -SkipPublish`; old CLI/GUI binaries or stale plugin files must be rejected.
+- [ ] `check_release_payload.ps1` passes before packaging, including with `build_installer.ps1 -SkipPublish`; old CLI/GUI binaries, stale plugin files, missing/modified xterm assets or bundled background images must be rejected.
+- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test_release_background_payload.ps1` passes against the current portable output; it checks normal acceptance and rejection of missing/stale HTML, background JS and the default image using an isolated fixture.
 - [ ] Installation and upgrade leave AI client configuration/caches and separately installed legacy skills unchanged.
 - [ ] Upgrade closes an installed `serialctl mcp` process and replaces its EXE
       without a Windows restart; a CLI running from another folder stays running.

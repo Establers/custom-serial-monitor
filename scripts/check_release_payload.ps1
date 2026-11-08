@@ -10,12 +10,15 @@ function Get-ProjectVersion([string]$Relative) {
     $project = [xml][IO.File]::ReadAllText((Join-Path $repoRoot $Relative))
     return [version]([string]$project.Project.PropertyGroup.Version | Where-Object { $_ })
 }
-function Assert-SameFile([string]$Relative) {
+function Assert-SameFile([string]$Relative, [string]$PayloadRelative = '') {
     $source = Join-Path $repoRoot $Relative
-    $destination = Join-Path $payloadRoot $Relative
-    if ($Relative.StartsWith('plugins\') -or $Relative.StartsWith('.agents\') -or $Relative.StartsWith('.claude-plugin\')) {
-        $destination = Join-Path $payloadRoot ('agent-plugin\' + $Relative)
+    if (-not $PayloadRelative) {
+        $PayloadRelative = $Relative
+        if ($Relative.StartsWith('plugins\') -or $Relative.StartsWith('.agents\') -or $Relative.StartsWith('.claude-plugin\')) {
+            $PayloadRelative = 'agent-plugin\' + $Relative
+        }
     }
+    $destination = Join-Path $payloadRoot $PayloadRelative
     if (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or
         (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
         (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
@@ -30,6 +33,20 @@ $installerVersion = [regex]::Match($installerText, '(?m)^#define MyAppVersion "(
 if ($appVersion -ne $cliVersion -or $appVersion -ne [version]$installerVersion) {
     throw 'GUI, CLI and installer source versions must match.'
 }
+
+# Check the browser entry point and background module even with -SkipPublish.
+# A missing module can stop terminal initialization despite current EXE versions.
+$requiredUiAssets = @('Assets\xterm\index.html', 'Assets\xterm\terminal-background.js',
+    'Assets\FunBackgrounds\default_cute_bg.jpg')
+foreach ($relative in $requiredUiAssets) {
+    Assert-SameFile ('SerialMonitor.WinUI\' + $relative) $relative
+}
+$terminalAssetRoot = Join-Path $repoRoot 'SerialMonitor.WinUI\Assets\xterm'
+foreach ($file in @(Get-ChildItem -LiteralPath $terminalAssetRoot -Recurse -File)) {
+    $relative = 'Assets\xterm\' + $file.FullName.Substring($terminalAssetRoot.TrimEnd('\', '/').Length + 1)
+    if ($relative -notin $requiredUiAssets) { Assert-SameFile ('SerialMonitor.WinUI\' + $relative) $relative }
+}
+
 foreach ($relative in @('SerialMonitor.WinUI.exe', 'tools\serialctl.exe')) {
     $executable = Join-Path $payloadRoot $relative
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "Release executable is missing: $relative" }
