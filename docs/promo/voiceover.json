@@ -1,0 +1,40 @@
+{
+  "credit": "사용자가 제공한 한국어 내레이션 MP3 5개",
+  "fps": 30,
+  "sampleRate": 48000,
+  "speed": 1.12,
+  "targetLufs": -16,
+  "truePeakDb": -1.5,
+  "segments": [
+    {
+      "id": "intro", "frames": 70, "headMs": 80, "trimEnd": 2.46,
+      "source": "assets/voice/source/intro.mp3",
+      "sha256": "bfaf6363e8361b23c75040d267ab3d7872f7e099f45a72a3bd92d18ea985b707",
+      "text": "시리얼 디버깅, 반복은 줄이세요."
+    },
+    {
+      "id": "sequence", "frames": 153, "headMs": 0, "trimEnd": 5.6485625,
+      "source": "assets/voice/source/sequence.mp3",
+      "sha256": "34f4c59ec429cbaf76d8572db1b6d5861c291e2302f02e5d1c77429c7020b3c4",
+      "text": "명령 전송부터 응답 패턴 검사까지, 시퀀스로 한 번에. 시험 절차를 저장하고 반복하세요."
+    },
+    {
+      "id": "rules", "frames": 145, "headMs": 0, "trimEnd": 5.34,
+      "source": "assets/voice/source/rules.mp3",
+      "sha256": "b3224e062d1554323259d03afe15bdf3b01c6a95b066ab53781b8609bad994a4",
+      "text": "중요한 로그는 룰로 감지하고, 강조와 필터로 확인하세요. 필요한 순간에는 알림까지."
+    },
+    {
+      "id": "plugin", "frames": 120, "headMs": 0, "trimEnd": 4.41,
+      "source": "assets/voice/source/plugin.mp3",
+      "sha256": "72b625c1c7d409b1579a8478b8789759defec993760a0087b4d8d459d477dc88",
+      "text": "AI 플러그인으로 명령을 보내고, 실제 수신 응답을 모아 분석하세요."
+    },
+    {
+      "id": "outro", "frames": 112, "headMs": 0, "trimEnd": 3.97,
+      "source": "assets/voice/source/outro.mp3",
+      "sha256": "d348361d8d696173b1b05ed629842bceac0b551430fc06c6f786a4e544267dab",
+      "text": "반복 검증부터 AI 제어까지. 개발자를 위한 시리얼 모니터."
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 .hyperframes/
 .thumbnails/
+.waveform-cache/
 renders/
 node_modules/

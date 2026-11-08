@@ -1,12 +1,12 @@
 # Serial Monitor 20초 한국어 홍보영상
 
-[MP4](../media/serial-monitor-promo-ko.mp4) · [README GIF](../media/serial-monitor-promo-ko.gif)
+[MP4](../media/serial-monitor-promo-ko.mp4) · [README GIF](../media/serial-monitor-promo-ko.gif) · [내레이션 WAV](assets/voice/narration.wav)
 
 최신 공식 릴리스 **v1.6.4**의 실제 설정창에서 시퀀스·룰·플러그인 제어 부분만 발췌했다.
-큰 한글 문구와 작은 화면으로 내용을 전달하며, README에서 소리 없이 볼 수 있도록 MP4와 GIF 모두 무음이다.
+큰 한글 문구와 작은 화면으로 내용을 전달한다. MP4에는 사용자가 제공한 한국어 내레이션을 넣었으며, GIF는 무음 미리보기다.
 시퀀스는 설정 예시로, 촬영 중 실제 장치에 명령을 전송하지 않았다.
 
-- MP4: 1920×1080, 30 fps, 20초, H.264.
+- MP4: 1920×1080, 30 fps, 20초, H.264와 한국어 내레이션.
 - GIF: 960×540, 12 fps, 20초, 무한 반복.
 - 편집 원본: `index.html`, `compositions/`, `assets/style.css`.
 - 구성·검토: [스토리보드](STORYBOARD.md), [사양](SPEC.md), [검토 기록](REVIEW.md).
@@ -27,6 +27,14 @@ npm run gif
 화면·문구를 바꾸면 `npm run check`와 장면별 스냅샷 검토 후 다시 렌더링한다.
 번들 글꼴은 영상에 사용한 글자만 포함하므로 문구에 새 한글을 추가할 때 글꼴 서브셋도 갱신한다.
 GIF 변환기에 별도 FFmpeg 경로를 주려면 `FFMPEG_PATH`를 설정한다.
+
+## 내레이션 편집
+
+원본 MP3 다섯 개는 `assets/voice/source/`에 보관한다. [대본과 타이밍](voiceover.json)에 따라 도입·시퀀스·룰·플러그인·엔딩 순서로 이어 붙인 `assets/voice/narration.wav`를 렌더링한다.
+원본의 실제 길이 합계는 약 22초다. 앞뒤 무음만 소량 정리하고, 음높이를 유지하는 `atempo=1.12`와 구간별 2회 음량 보정을 적용해 20초로 맞췄다. 장면 전환도 각 문장 시작에 맞췄다.
+
+`npm run voice`로 합친 음성을 다시 만들 수 있다. FFmpeg·FFprobe가 필요하며, `FFMPEG_PATH`·`FFPROBE_PATH`로 각각 경로를 지정할 수 있다.
+이 명령은 원본 체크섬과 구간 여유를 검사하고, 말소리가 구간보다 길면 잘라내지 않고 실패한다. 새 파일로 교체할 때는 `voiceover.json`의 체크섬·대본·무음 범위·프레임 배분과 HTML 장면 시간을 함께 검토한다.
 
 ## 자산 출처
 

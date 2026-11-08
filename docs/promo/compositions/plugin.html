@@ -6,7 +6,7 @@
     .plugin-flow p { color: #123d36; font-size: 41px; line-height: 1.5; margin: 0 0 17px; font-weight: 600; }
     .plugin-tools { font-size: 32px; }
   </style>
-  <div id="root" data-composition-id="plugin" data-duration="4.6" data-width="1920" data-height="1080">
+  <div id="root" data-composition-id="plugin" data-duration="4" data-width="1920" data-height="1080">
     <div class="surface">
       <p class="chapter"><span class="number">03</span>AI 플러그인 제어</p>
       <h1 class="headline"><span class="line">AI에게 요청하고</span><span class="line accent">실제 RX로 확인</span></h1>
@@ -28,7 +28,7 @@
     tl.fromTo('#plugin-tx', { opacity: 0 }, { opacity: 1, duration: .25 }, 1);
     tl.fromTo('#plugin-rx', { opacity: 0 }, { opacity: 1, duration: .25 }, 1.8);
     tl.fromTo('#plugin-read', { opacity: 0 }, { opacity: 1, duration: .25 }, 2.6);
-    tl.fromTo('.rail-fill', { scaleX: .65 }, { scaleX: .88, duration: 4.59, ease: 'none' }, 0);
+    tl.fromTo('.rail-fill', { scaleX: 368 / 600 }, { scaleX: 488 / 600, duration: 119 / 30, ease: 'none' }, 0);
     window.__timelines.plugin = tl;
   </script>
 </template>

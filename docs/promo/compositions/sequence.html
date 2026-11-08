@@ -4,7 +4,7 @@
     .sequence-detail { width: 570px; margin-top: 34px; }
     .sequence-evidence { top: 234px; }
   </style>
-  <div id="root" data-composition-id="sequence" data-duration="5" data-width="1920" data-height="1080">
+  <div id="root" data-composition-id="sequence" data-duration="5.1" data-width="1920" data-height="1080">
     <div class="surface">
       <p class="chapter"><span class="number">01</span>시퀀스</p>
       <h1 class="headline"><span class="line">순서대로 보내고</span><span class="line accent">응답까지 확인</span></h1>
@@ -27,7 +27,7 @@
     tl.fromTo('.description', { opacity: 0 }, { opacity: 1, duration: .3 }, .65);
     tl.fromTo('.sequence-detail-label', { opacity: 0 }, { opacity: 1, duration: .3 }, 1.7);
     tl.fromTo('.sequence-rx', { scale: .96, opacity: 0 }, { scale: 1, opacity: 1, duration: .5, ease: 'power3.out' }, 1.8);
-    tl.fromTo('.rail-fill', { scaleX: .15 }, { scaleX: .4, duration: 4.99, ease: 'none' }, 0);
+    tl.fromTo('.rail-fill', { scaleX: 70 / 600 }, { scaleX: 223 / 600, duration: 152 / 30, ease: 'none' }, 0);
     window.__timelines.sequence = tl;
   </script>
 </template>
