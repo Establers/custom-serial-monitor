@@ -4,7 +4,15 @@ This plugin contains the shared `serial-monitor-control` skill and a local Windo
 MCP launcher. Install the Serial Monitor application separately (1.6.0 or later).
 Keep the GUI running while using its serial tools.
 
-Plugin 1.0.2 includes validation, cancellation under load, serial session binding,
+Plugin 1.0.3 adds shared Markdown product memory at
+`%LOCALAPPDATA%\SerialMonitor\Notes`. The skill directs the agent to read relevant
+notes before device work and maintain protocol/test knowledge with ordinary file
+tools. The GUI Plugin tab's **Open memory** button creates missing starter files
+and opens the folder. Existing notes and customized templates are preserved.
+Products are identified by model/code, aliases and distinguishing details;
+similar names alone never justify merging entries.
+
+Earlier updates include validation, cancellation under load, serial session binding,
 capture paging and multibyte sequence expectation guidance. Automation remains
 TX-only (`captureMs`/literal `expect`); GUI RX Check uses its separate import format.
 Application 1.6.2 or later is recommended for the corresponding runtime fixes.

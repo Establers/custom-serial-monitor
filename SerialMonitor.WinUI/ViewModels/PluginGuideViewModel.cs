@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
+using SerialMonitor.WinUI.Services;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
@@ -34,6 +35,7 @@ public sealed class PluginGuideViewModel : ViewModelBase
     }
 
     public string ActionStatus { get => _actionStatus; set => SetProperty(ref _actionStatus, value); }
+    public string MemoryPath => AgentMemoryStore.DefaultDirectory;
     public Visibility SetupVisibility => SelectedPageIndex != 2 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ToolPathVisibility => SelectedPageIndex == 3 || SelectedClientIndex == (int)PluginClient.CodexVsCode
         ? Visibility.Visible : Visibility.Collapsed;

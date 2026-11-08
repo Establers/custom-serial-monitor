@@ -12,6 +12,20 @@ the running GUI to use its existing COM connection and share the same TX/RX serv
 neither opens a second COM handle.
 Reply in the user's language.
 
+## Shared product memory
+
+Before device work or switching targets, read `%LOCALAPPDATA%\SerialMonitor\Notes\INDEX.md`
+with the host's file tools, then only the relevant product notes. Resolve the Windows
+user's LOCALAPPDATA; this location is shared across clones and app installations.
+If missing, copy only missing files from [memory assets](assets/memory/INDEX.md) and
+[the minimal product template](assets/memory/PRODUCT_TEMPLATE.md) into that directory.
+Group by actual product/model/code and record aliases and distinguishing details.
+Reuse a matching entry; never merge products on name similarity alone. Ask only if
+identity is ambiguous. Keep reusable protocol analysis, test packets and findings
+current with brief code/capture evidence, distinguishing verified facts from guesses.
+Use the minimal template as a starting point; organize and split notes as useful.
+Read and edit Markdown directly; no memory MCP tools or CLI calls are needed.
+
 ## Discover the installed capabilities
 
 Read the available `serial_get_capabilities` MCP tool or run `serialctl describe`

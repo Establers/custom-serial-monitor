@@ -1217,4 +1217,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="BackgroundAnchorCenter.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep center</value></data>
   <data name="BackgroundAnchorRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep right</value></data>
   <data name="BackgroundAnchorBottom.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep bottom</value></data>
+  <data name="AgentMemoryOpenButton.Content" xml:space="preserve"><value>Open memory</value></data>
+  <data name="AgentMemoryDescription.Text" xml:space="preserve"><value>Product protocol and test notes read and maintained directly by your AI agent. The plugin skill provides this location.</value></data>
+  <data name="AgentMemoryOpened" xml:space="preserve"><value>Opened the memory folder.</value></data>
+  <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>Could not open the memory folder. Check the displayed path and folder permissions.</value></data>
 </root>

@@ -1,7 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SerialMonitor.WinUI.Infrastructure;
+using SerialMonitor.WinUI.Services;
 using SerialMonitor.WinUI.ViewModels;
+using System.Diagnostics;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace SerialMonitor.WinUI.Views;
@@ -33,6 +35,31 @@ public sealed partial class PluginGuideView : UserControl
             RuntimeDiagnostics.RecordError("PluginGuide.Copy", ex);
             _model.ActionStatus = "복사하지 못했습니다. 본문을 선택해 Ctrl+C로 복사하세요.";
         }
+        ShowFeedback();
+    }
+
+    private async void OpenMemory_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try
+        {
+            var memory = new AgentMemoryStore();
+            await memory.InitializeAsync();
+            Process.Start(new ProcessStartInfo { FileName = memory.DirectoryPath, UseShellExecute = true });
+            _model.ActionStatus = UiText.Get("AgentMemoryOpened", "메모리 폴더를 열었습니다.");
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("PluginGuide.OpenMemory", ex);
+            _model.ActionStatus = UiText.Get("AgentMemoryOpenFailed", "메모리 폴더를 열지 못했습니다. 표시된 경로와 폴더 권한을 확인하세요.");
+        }
+        finally { button.IsEnabled = true; }
+        ShowFeedback();
+    }
+
+    private void ShowFeedback()
+    {
         CopyFeedback.Visibility = Visibility.Visible;
         if (_feedbackTimer is null)
         {

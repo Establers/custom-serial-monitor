@@ -76,6 +76,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SerialMonitor.WinUI.Tests" />
     <EmbeddedResource Include="Assets\xterm\app-shortcuts.json.js" LogicalName="SerialMonitor.AppShortcuts" />
+    <EmbeddedResource Include="..\skills\serial-monitor-control\assets\memory\INDEX.md" LogicalName="SerialMonitor.AgentMemory.Index" />
+    <EmbeddedResource Include="..\skills\serial-monitor-control\assets\memory\PRODUCT_TEMPLATE.md" LogicalName="SerialMonitor.AgentMemory.ProductTemplate" />
   </ItemGroup>
 
   <ItemGroup>

@@ -12,6 +12,11 @@ GUI의 **Plugin** 탭에서 Codex·Claude Code·Copilot별 설치 명령을 확�
 안내합니다. GUI의 Terminal/HEX 모드 조회·변경도 지원합니다. 제품의 성공/실패 판단은 실제
 RX를 읽은 AI가 수행합니다.
 
+공용 제품 메모리는 `%LOCALAPPDATA%\SerialMonitor\Notes`의 Markdown 파일입니다.
+skill이 이 위치를 안내하며, AI가 관련 노트를 직접 읽고 프로토콜·테스트 지식을 갱신합니다.
+제품명만 비슷하다는 이유로 합치지 않고 모델/제품 코드와 구분 정보를 확인합니다.
+노트용 MCP는 필요하지 않으며 자세한 사용법은 [공용 제품 메모리](https://github.com/Establers/custom-serial-monitor/blob/main/docs/agent_plugins.md#공용-제품-메모리)를 참고하세요.
+
 ## 스킬 ZIP만 다운로드하고 설치하기
 
 이 안내는 **프로그램은 이미 설치했고 스킬만 추가하는 경우**를 기준으로 합니다.

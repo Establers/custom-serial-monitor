@@ -1215,4 +1215,8 @@
   <data name="BackgroundAnchorCenter.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>가운데 기준</value></data>
   <data name="BackgroundAnchorRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>오른쪽 기준</value></data>
   <data name="BackgroundAnchorBottom.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>아래 기준</value></data>
+  <data name="AgentMemoryOpenButton.Content" xml:space="preserve"><value>메모리 열기</value></data>
+  <data name="AgentMemoryDescription.Text" xml:space="preserve"><value>AI가 직접 읽고 정리하는 제품별 프로토콜·테스트 노트입니다. 플러그인 skill이 이 위치를 안내합니다.</value></data>
+  <data name="AgentMemoryOpened" xml:space="preserve"><value>메모리 폴더를 열었습니다.</value></data>
+  <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>메모리 폴더를 열지 못했습니다. 표시된 경로와 폴더 권한을 확인하세요.</value></data>
 </root>
