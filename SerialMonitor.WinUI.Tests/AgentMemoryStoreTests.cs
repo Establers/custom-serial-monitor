@@ -40,6 +40,29 @@ public sealed class AgentMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task FailedTemplatePublicationPreservesNotesAndCanBeRetried()
+    {
+        Directory.CreateDirectory(_directory);
+        var index = Path.Combine(_directory, "INDEX.md");
+        var product = Path.Combine(_directory, "device.md");
+        await File.WriteAllTextAsync(index, "User product registry");
+        await File.WriteAllTextAsync(product, "Verified protocol evidence");
+        var blockedTemplate = Path.Combine(_directory, "PRODUCT_TEMPLATE.md");
+        Directory.CreateDirectory(blockedTemplate);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => new AgentMemoryStore(_directory).InitializeAsync());
+
+        Assert.Equal("User product registry", await File.ReadAllTextAsync(index));
+        Assert.Equal("Verified protocol evidence", await File.ReadAllTextAsync(product));
+        Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
+        Directory.Delete(blockedTemplate);
+        await new AgentMemoryStore(_directory).InitializeAsync();
+        Assert.NotEmpty(await File.ReadAllTextAsync(blockedTemplate));
+        Assert.Equal("User product registry", await File.ReadAllTextAsync(index));
+        Assert.Equal("Verified protocol evidence", await File.ReadAllTextAsync(product));
+    }
+
+    [Fact]
     public async Task CanceledInitializationLeavesExistingNotesUnchanged()
     {
         Directory.CreateDirectory(_directory);
