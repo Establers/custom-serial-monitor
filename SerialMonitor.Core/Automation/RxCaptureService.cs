@@ -7,13 +7,13 @@ namespace SerialMonitor.Core.Automation;
 
 public sealed record CaptureConnection(bool Connected, long Generation, long SerialErrorCount);
 public sealed record CaptureOptions(int DurationMs = 2000, string? Command = null, string TxMode = "text", string LineEnding = "crlf",
-    string? PreviewFormat = null);
+    string? PreviewFormat = null, string? RequestId = null);
 public sealed record CaptureResult(
     string CaptureId, string CaptureStatus, string SendStatus, string? Command, string Port,
     long SessionGeneration, DateTimeOffset StartedAt, DateTimeOffset EndedAt,
     int RequestedDurationMs, long ReceivedBytes, long StoredBytes, long DroppedBytes,
     long SerialErrors, bool RxGapDetected, string? Error, string RawFile, string TextFile,
-    string TxMode = "text", string LineEnding = "crlf", string? PreviewFormat = null);
+    string TxMode = "text", string LineEnding = "crlf", string? PreviewFormat = null, string? RequestId = null);
 public sealed record CapturePage(string CaptureId, string Format, long Offset, long NextOffset,
     long TotalBytes, bool HasMore, string Text);
 
@@ -111,6 +111,8 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
     {
         if (options.DurationMs is < 0 or > 60000)
             throw new AutomationException("invalid_argument", "durationMs must be between 0 and 60000.");
+        if (options.RequestId is not null && (string.IsNullOrWhiteSpace(options.RequestId) || options.RequestId.Length > 128))
+            throw new AutomationException("invalid_argument", "requestId must contain 1..128 characters.");
         var initial = getConnection();
         cancellationToken.ThrowIfCancellationRequested();
         if (!initial.Connected) throw new AutomationException("disconnected", "Connect a device first.");
@@ -173,10 +175,15 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             initial.Generation, session.StartedAt, session.EndedAt, options.DurationMs,
             session.ReceivedBytes, session.StoredBytes, session.DroppedBytes, serialErrors,
             session.DroppedBytes > 0 || serialErrors > 0 || session.WriteError is not null, error, rawPath, textPath,
-            options.TxMode, options.LineEnding, options.PreviewFormat);
+            options.TxMode, options.LineEnding, options.PreviewFormat, options.RequestId);
+        var metadataPath = MetadataPath(id);
+        var temporaryPath = Path.Combine(DirectoryPath, id + ".tmp");
         try
         {
-            await File.WriteAllBytesAsync(MetadataPath(id), CaptureResultStorage.Serialize(result, DirectoryPath), CancellationToken.None).ConfigureAwait(false);
+            // A concurrent recovery query must see a complete result or no
+            // result yet, never a partially written metadata document.
+            await File.WriteAllBytesAsync(temporaryPath, CaptureResultStorage.Serialize(result, DirectoryPath), CancellationToken.None).ConfigureAwait(false);
+            lock (_storageGate) File.Move(temporaryPath, metadataPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -184,7 +191,27 @@ public sealed class RxCaptureService(string directory) : IAsyncDisposable
             // metadata. The caller must not mistake this for an unsent command.
             result = result with { CaptureStatus = "write_error", Error = "Capture metadata: " + ex.Message };
         }
+        finally
+        {
+            try { File.Delete(temporaryPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
         return result;
+    }
+
+    public Task<CaptureListPage> ListAsync(int offset = 0, int limit = 10, string? requestId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (offset < 0 || limit is < 1 or > 100 || requestId is not null &&
+            (string.IsNullOrWhiteSpace(requestId) || requestId.Length > 128))
+            throw new AutomationException("invalid_argument", "Use a nonnegative offset, limit 1..100 and requestId of 1..128 characters.");
+        return Task.Run(() =>
+        {
+            bool inProgress;
+            lock (_gate) inProgress = _operationStop is not null;
+            lock (_storageGate)
+                return CaptureCatalog.Read(DirectoryPath, offset, limit, requestId, inProgress, cancellationToken);
+        }, cancellationToken);
     }
 
     public CaptureResult GetResult(string id)

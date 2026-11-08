@@ -250,7 +250,7 @@ public sealed class CompactResultStorageTests : IDisposable
         var item = new CaptureResult(id, failure ? "write_error" : "completed", "sent", "PING 준비", "COM3", long.MaxValue,
             Origin, Origin.AddTicks(123456789).ToUniversalTime(), 700, 1234, failure ? 123 : 1234,
             failure ? 1111 : 0, failure ? 2 : 0, failure, failure ? "쓰기에 실패" : null,
-            Path.Combine(_root, id + ".bin"), Path.Combine(_root, id + ".txt"), "hex", "none", "hex");
+            Path.Combine(_root, id + ".bin"), Path.Combine(_root, id + ".txt"), "hex", "none", "hex", "capture-준비");
         var compact = CaptureResultStorage.Serialize(item, _root);
         var verbose = JsonSerializer.SerializeToUtf8Bytes(item, AutomationJson.Options);
         using var compactJson = JsonDocument.Parse(compact);

@@ -18,6 +18,7 @@ internal static class CliUsage
     serialctl request --text-file command.txt [--ending none] [--duration-ms 2000] [--preview-bytes 4096]
     serialctl send --text "status" [--ending crlf] [--instance INSTANCE_ID]
     serialctl capture [--duration-ms 2000] [--format text|hex] [--instance INSTANCE_ID]
+    serialctl captures [--request-id ID] [--offset 0] [--limit 10] [--instance INSTANCE_ID]
     serialctl read --capture CAPTURE_ID [--offset 0] [--limit 16384] [--format text|hex] [--instance INSTANCE_ID]
     serialctl cancel [--instance INSTANCE_ID]
     serialctl sequence list [--offset 0] [--limit 100] [--instance INSTANCE_ID]
@@ -33,6 +34,11 @@ internal static class CliUsage
     Read stdout while the CLI runs or redirect it to a file. Output has a 5-second deadline; failures never replay TX.
     Captures include ALL new RX, without matching, from before TX until duration-ms after TX.
     Large results have page.hasMore=true; keep reading with page.nextOffset.
+    send/request/capture accept --request-id ID (1..128 characters) to correlate saved results after a lost reply.
+    captures lists retained summaries newest first, including captureId, requestId and TX/capture outcomes, without sending.
+    Follow captures.nextOffset while hasMore=true; read complete RX by captureId. commandPreview is bounded and explicitly marked when truncated.
+    captureInProgress means a result may still be saving; skippedCount reports unreadable metadata. Empty history does not prove no TX occurred.
+    Request IDs are correlation labels, not idempotency keys. Use a unique ID for each intended operation and never replay uncertain TX.
     commands returns bounded pages: follow nextOffset while hasMore=true, even if a page contains fewer entries than --limit.
     read defaults to the initial capture preview format. When switching --format, restart at --offset 0 and keep that format on subsequent reads.
     Capture/send commands accept --preview-bytes 4..65536 (default 16384); this limits only the first returned page.

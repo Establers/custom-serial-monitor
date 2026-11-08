@@ -23,7 +23,7 @@ internal static class ControlCapabilities
         features = new[]
         {
             "terminal-and-hex", "live-serial-configuration", "bounded-rx-capture",
-            "saved-sequences", "background-sequence-runs", "serial-control-lines", "live-serial-framing"
+            "saved-sequences", "background-sequence-runs", "serial-control-lines", "live-serial-framing", "capture-recovery"
         },
         tools = StdioMcpServer.DescribeTools(),
         cliHelp = CliUsage.Text,

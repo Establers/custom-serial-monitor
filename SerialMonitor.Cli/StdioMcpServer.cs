@@ -44,7 +44,7 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
         ["serial_sequence_start"] = "sequence_start", ["serial_sequence_status"] = "sequence_status",
         ["serial_sequence_cancel"] = "sequence_cancel",
         ["serial_send"] = "send", ["serial_send_and_capture"] = "send_and_capture", ["serial_capture_rx"] = "capture_rx",
-        ["serial_read_capture"] = "read_capture", ["serial_cancel_capture"] = "cancel_capture"
+        ["serial_read_capture"] = "read_capture", ["serial_list_captures"] = "list_captures", ["serial_cancel_capture"] = "cancel_capture"
     };
 
     public async Task RunAsync(TextReader input, TextWriter output, CancellationToken cancellationToken)
@@ -362,10 +362,10 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             Property("mode", "string", "terminal (text terminal) or hex (raw byte view). Changing mode clears visible logs and changes GUI manual TX interpretation. Per-call txMode remains independent.", true);
             ((Dictionary<string, object>)properties["mode"])["enum"] = new[] { "terminal", "hex" };
         }
-        if (pair.Value is "sequence_list" or "list_commands")
+        if (pair.Value is "sequence_list" or "list_commands" or "list_captures")
         {
             Property("offset", "integer", "Metadata list offset; default 0. Follow returned nextOffset when hasMore is true.", minimum: 0);
-            Property("limit", "integer", "Metadata entries per page; default 100.", minimum: 1, maximum: 100);
+            Property("limit", "integer", pair.Value == "list_captures" ? "Capture summaries per page; default 10." : "Metadata entries per page; default 100.", minimum: 1, maximum: 100);
         }
         if (pair.Value is "sequence_get" or "sequence_delete" or "sequence_start")
         {
@@ -398,6 +398,12 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             Property("previewBytes", "integer", "First returned page size only; all RX is saved. Default 16384. Follow nextOffset when hasMore=true.", minimum: 4, maximum: 65536);
             Property("format", "string", "RX preview format: hex preserves original bytes; text uses the decoded capture. Default hex for HEX TX, otherwise text. Does not change TX or GUI mode.");
             ((Dictionary<string, object>)properties["format"])["enum"] = new[] { "text", "hex" };
+        }
+        if (pair.Value is "send" or "send_and_capture" or "capture_rx" or "list_captures")
+        {
+            Property("requestId", "string", "Optional caller-generated unique correlation ID (1..128 characters). Set before TX, then filter serial_list_captures after losing a reply. Not an idempotency key; never resend an uncertain TX.");
+            ((Dictionary<string, object>)properties["requestId"])["minLength"] = 1;
+            ((Dictionary<string, object>)properties["requestId"])["maxLength"] = 128;
         }
         if (pair.Value is "capture_rx" or "send_and_capture") Property("durationMs", "integer", "Collect ALL new RX for this many milliseconds after TX; default 2000, maximum 60000.", minimum: 0, maximum: 60000);
         if (pair.Value == "read_capture")
@@ -432,6 +438,7 @@ public sealed class StdioMcpServer(string? defaultInstance = null, bool fullTool
             "send_and_capture" => "Send once, then return ALL actual RX for a bounded time, including interleaved printf output. No pattern match. Inspect captureStatus, rxGapDetected and page.hasMore. Product success must be inferred from RX, not captureStatus.",
             "capture_rx" => "Collect ALL new RX without sending a command. Independent of GUI pause/filter/display mode.",
             "read_capture" => "Read the complete saved RX in bounded pages; follow nextOffset until hasMore=false. Hex preserves original bytes.",
+            "list_captures" => "List retained persisted capture summaries newest first, optionally filtered by exact requestId, without connecting or sending to the device. Works while disconnected or busy. Default limit 10; summaries contain commandPreview/commandTruncated, never RX payloads. Use captureId with serial_read_capture for complete evidence. captureInProgress means persistence may still be pending; skippedCount reports unreadable metadata. Empty results never prove TX was unsent: captures may be pending, pruned, or unavailable. Offset pages can shift as captures finish or expire. Never retry an uncertain TX.",
             _ => "Stop the current capture and release GUI TX control. Already transmitted commands cannot be undone."
         };
         var inputSchema = new Dictionary<string, object>

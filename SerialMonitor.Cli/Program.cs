@@ -62,7 +62,7 @@ try
     var operation = command switch
     {
         "instances" => "list_instances", "commands" => "list_commands", "request" or "send-and-capture" => "send_and_capture",
-        "capture" => "capture_rx", "read" => "read_capture", "cancel" => "cancel_capture",
+        "capture" => "capture_rx", "captures" => "list_captures", "read" => "read_capture", "cancel" => "cancel_capture",
         "mode" => flags.ContainsKey("set") ? "set_mode" : "status", _ => command
     };
     var arguments = new Dictionary<string, object?>();
@@ -71,6 +71,7 @@ try
         if (flags.TryGetValue(flag, out var value)) arguments[name] = integer ? int.Parse(value) : value;
     }
     Add("instance", "instanceId"); Add("port", "port"); Add("baud", "baudRate", true);
+    Add("request-id", "requestId");
     Add("byte-timeout-ms", "byteTimeoutMs", true);
     Add("data-bits", "dataBits", true); Add("parity", "parity");
     Add("stop-bits", "stopBits"); Add("handshake", "handshake");

@@ -33,6 +33,7 @@ internal static class CaptureResultStorage
             if (result.TxMode != "text") writer.WriteString("mode", result.TxMode);
             if (result.LineEnding != "crlf") writer.WriteString("ending", result.LineEnding);
             if (result.PreviewFormat is not null) writer.WriteString("preview", result.PreviewFormat);
+            if (result.RequestId is not null) writer.WriteString("request", result.RequestId);
             if (result.StartedAt.Offset != TimeSpan.Zero) writer.WriteNumber("offset", (int)result.StartedAt.Offset.TotalMinutes);
             if (result.EndedAt.Offset != result.StartedAt.Offset) writer.WriteNumber("endOffset", (int)result.EndedAt.Offset.TotalMinutes);
             if (result.RawFile != Path.Combine(directory, result.CaptureId + ".bin")) writer.WriteString("raw", result.RawFile);
@@ -60,7 +61,8 @@ internal static class CaptureResultStorage
             received, Value(extra, "stored", received), Value(extra, "dropped", 0L), Value(extra, "errors", 0L),
             Value(extra, "gap", false), Value<string?>(extra, "error", null),
             Value(extra, "raw", Path.Combine(directory, id + ".bin")), Value(extra, "text", Path.Combine(directory, id + ".txt")),
-            Value(extra, "mode", "text"), Value(extra, "ending", "crlf"), Value<string?>(extra, "preview", null));
+            Value(extra, "mode", "text"), Value(extra, "ending", "crlf"), Value<string?>(extra, "preview", null),
+            Value<string?>(extra, "request", null));
     }
 
     private static T Value<T>(JsonElement obj, string key, T fallback) =>

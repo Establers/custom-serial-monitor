@@ -17,6 +17,7 @@ $cli = powershell -NoProfile -ExecutionPolicy Bypass -File '<skill-directory>/sc
 & $cli request --port COM7 --instance $instance --text 'status' --ending crlf --duration-ms 2000 --preview-bytes 4096
 & $cli request --port COM7 --instance $instance --hex 'AA 01 FF' --duration-ms 1000 --preview-bytes 4096 --format hex
 & $cli capture --port COM7 --instance $instance --duration-ms 1000 --preview-bytes 4096
+& $cli captures --instance $instance --limit 10
 & $cli read --instance $instance --capture $captureId --offset $nextOffset --limit 4096
 & $cli read --instance $instance --capture $captureId --offset 0 --limit 4096 --format hex
 ```
@@ -78,6 +79,31 @@ protection under connection saturation requires both GUI and CLI updates. The bo
 control endpoint can itself saturate; this is not an unlimited admission guarantee.
 Use that GUI's AI/sequence stop if remote cancellation cannot be admitted.
 Only pre-request connection probes are repeated; transmitted requests are never retried.
+
+## Recover a lost capture reply
+
+Before an intended `send`, `request` or `capture`, generate a unique correlation
+label and pass `--request-id ID` (1..128 characters). If its response is lost, query
+`captures --instance INSTANCE_ID --request-id ID` instead of sending again.
+Without an ID, `captures` still lists retained metadata newest first. Use port,
+session generation, timestamps and command preview to distinguish candidates;
+do not assume the latest capture belongs to the current task.
+
+`data.captures` contains bounded summaries with `captureId`, `requestId`,
+TX/capture outcomes, byte counts and `commandPreview` (at most 160 characters,
+with `commandTruncated:true` when shortened). Read the selected capture with
+`read --capture CAPTURE_ID` for the complete metadata, command and RX pages.
+`--offset`/`--limit` default to 0/10; limit is 1..100. Follow `nextOffset` while
+`hasMore`, remembering that completing/pruned captures can shift offset pages.
+
+Queries do not reserve/control the serial connection and work while busy or
+disconnected. `captureInProgress:true` means persistence may still be pending.
+Only fully published metadata is listed; `skippedCount` reports unreadable records.
+Existing bounded retention applies (normally 32 recent captures, with size limits
+and pinned-file exceptions). No matches never prove that TX was unsent: the result
+may be pending, pruned, unavailable, or on another GUI. Request IDs are correlation
+labels, not idempotency keys; reusing an ID does not prevent a second TX. Never
+replay an uncertain command. Both CLI and GUI must support capture recovery.
 
 ## Live baud rate and byte timeout
 

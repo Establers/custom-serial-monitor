@@ -39,6 +39,7 @@ CLI의 `connect`를 사용합니다. 포터블/설치 배포에는 `tools\serial
 .\tools\serialctl.exe request --hex "AA 01 FF" --duration-ms 3000 --format hex
 .\tools\serialctl.exe request --text-file command.txt --ending none --duration-ms 2000 --preview-bytes 4096
 .\tools\serialctl.exe capture --duration-ms 1000
+.\tools\serialctl.exe captures --limit 10
 .\tools\serialctl.exe cancel
 ```
 
@@ -70,6 +71,36 @@ UTF-8 BOM은 허용하지만 UTF-16/32 파일과 잘못된 인코딩 입력은 �
 MCP의 대응 인자는 `previewBytes`입니다. 생략 시 기존 기본값 16384를 사용합니다.
 `send`·`request`·`capture`에는 `--format text|hex`로 첫 페이지 형식을 지정할 수 있습니다.
 HEX TX는 기본적으로 HEX 페이지를 반환하고, 나머지는 text가 기본입니다.
+
+## 응답 유실 후 캡처 복구
+
+`send`·`request`·`capture`에 호출 전에 정한 `--request-id`(1..128자)를 붙이면 저장된
+캡처에도 같은 `requestId`가 남습니다. 응답을 잃어 `captureId`를 모를 때는 같은 GUI의
+`captures --request-id` 또는 MCP `serial_list_captures`로 찾습니다. 조회는 장치에
+송신하거나 연결을 바꾸지 않으며 수집 중·연결 해제 상태에서도 사용할 수 있습니다.
+
+```powershell
+$requestId = [guid]::NewGuid().ToString('N')
+.\tools\serialctl.exe request --instance INSTANCE_ID --port COM7 --text "status" --request-id $requestId
+# 위 요청의 응답을 잃었다면 전송을 반복하지 않고 저장 결과부터 조회합니다.
+.\tools\serialctl.exe captures --instance INSTANCE_ID --request-id $requestId
+.\tools\serialctl.exe read --instance INSTANCE_ID --capture CAPTURE_ID --format hex
+```
+
+ID를 지정하지 않은 기존 캡처도 `captures`로 최근 목록을 볼 수 있습니다. 결과의
+`captures`에는 ID·포트·연결 세대·시간·TX/수집 상태·바이트 수와 명령 미리보기가
+들어갑니다. `commandPreview`는 최대 160자이며 잘리면 `commandTruncated:true`입니다.
+전체 명령·RX 증거는 `read`로 확인합니다. 최신 시작 시간 순이며 `--offset`/`--limit`
+(기본 10, 최대 100)으로 나눕니다. `hasMore:true`이면 `nextOffset`으로 이어서 조회합니다.
+새 캡처 완료·보관 만료 사이에는 목록 위치가 바뀔 수 있으므로 복구 시 정확한
+`requestId`로 범위를 좁히세요.
+
+`captureInProgress:true`이면 캡처 또는 저장이 아직 진행 중일 수 있습니다. 캡처 메타데이터는
+저장이 끝난 뒤 목록에 나타납니다. `skippedCount`는 손상되거나 읽지 못한 메타데이터 수입니다.
+보관은 기존 정책(통상 최근 32개, 용량 제한·열린 파일 예외 적용)을 따릅니다. 빈 결과는
+미전송의 증거가 아닙니다. 진행 중·보관 만료·저장 실패·다른 GUI 선택도 확인하세요.
+`requestId`는 요청 식별용이며 중복 실행을 막는 키가 아닙니다. 의도한 요청마다 새 ID를 쓰고,
+결과가 불확실한 TX를 자동으로 재시도하지 마세요. 이 기능은 GUI와 CLI 모두 새 빌드가 필요합니다.
 
 ## 연결 중 BPS / byte timeout 변경
 

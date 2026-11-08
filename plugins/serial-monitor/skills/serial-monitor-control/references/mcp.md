@@ -30,6 +30,7 @@ running GUI.
 | `request` | `serial_send_and_capture` | `instanceId`, `port`, `command`, `txMode`, `lineEnding`, `durationMs`, `previewBytes`, `format` |
 | `send` | `serial_send` | `instanceId`, `port`, `command`, `txMode`, `lineEnding`, `previewBytes`, `format` |
 | `capture` | `serial_capture_rx` | `instanceId`, `port`, `durationMs`, `previewBytes`, `format` |
+| `captures` | `serial_list_captures` | `instanceId`, optional exact `requestId`, `offset`, `limit` (1..100; default 10) |
 | `read` | `serial_read_capture` | `instanceId`, `captureId`, `offset`, `limit`, `format` |
 | `cancel` | `serial_cancel_capture` | `instanceId` |
 | `sequence list` | `serial_sequence_list` | `instanceId`, `offset`, `limit` (1..100) |
@@ -67,6 +68,18 @@ switching format, restart at offset 0 and pass the chosen format on later reads.
 Unknown/duplicate arguments and invalid types (including `instanceId:null`) are
 rejected before control; use exact schema names such as `txMode`.
 Errors after capture still include available TX/capture evidence in `data`.
+
+`serial_send`, `serial_send_and_capture` and `serial_capture_rx` accept an optional
+caller-generated `requestId` (1..128 characters). Set a unique label before the
+operation; after a lost reply, use `serial_list_captures` with that exact ID to
+recover the persisted outcome and `captureId` without resending. Then read actual
+RX via `serial_read_capture`. The list is newest first and contains bounded
+command previews, not RX payloads. Follow `nextOffset` while `hasMore`; pages may
+shift as captures finish or expire. `captureInProgress` indicates unfinished capture
+or saving, and `skippedCount` reports unreadable metadata. Queries work while busy
+or disconnected. Empty results do not prove that TX was unsent. Existing retention
+applies, and request IDs are correlation labels, not idempotency keys. Never replay
+an uncertain TX. See the CLI reference's recovery section for full result semantics.
 
 The stdio session admits up to eight ordinary tool calls and one separate explicit
 capture/sequence cancellation call. Excess valid calls return JSON-RPC `-32600`

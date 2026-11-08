@@ -15,6 +15,7 @@ public static class AutomationArguments
             "get_control_lines" => "instanceId port",
             "set_control_line" => "instanceId port line enabled sessionGeneration",
             "list_commands" or "sequence_list" => "instanceId offset limit",
+            "list_captures" => "instanceId offset limit requestId",
             "connect" => "instanceId port baudRate",
             "configure" => "instanceId port baudRate byteTimeoutMs dataBits parity stopBits handshake",
             "set_mode" => "instanceId mode",
@@ -22,9 +23,9 @@ public static class AutomationArguments
             "sequence_save" => "instanceId sequence overwrite",
             "sequence_start" => "instanceId name port",
             "sequence_status" or "sequence_cancel" => "instanceId runId",
-            "send" => "instanceId command txMode lineEnding port previewBytes format",
-            "send_and_capture" => "instanceId command txMode lineEnding port previewBytes format durationMs",
-            "capture_rx" => "instanceId port previewBytes format durationMs",
+            "send" => "instanceId command txMode lineEnding port previewBytes format requestId",
+            "send_and_capture" => "instanceId command txMode lineEnding port previewBytes format durationMs requestId",
+            "capture_rx" => "instanceId port previewBytes format durationMs requestId",
             "read_capture" => "instanceId captureId offset limit format",
             _ => throw new AutomationException("unknown_operation", "Unknown operation: " + operation)
         };
@@ -50,7 +51,7 @@ public static class AutomationArguments
                 var value = field.Value.GetString()!;
                 var max = field.Name == "command" ? 16384 : 128;
                 if (value.Length == 0 || value.Length > max ||
-                    (field.Name is "instanceId" or "port" or "name" or "runId" or "captureId" && string.IsNullOrWhiteSpace(value)))
+                    (field.Name is "instanceId" or "port" or "name" or "runId" or "captureId" or "requestId" && string.IsNullOrWhiteSpace(value)))
                     Invalid(field.Name + " must contain 1.." + max + " characters.");
             }
         }
@@ -78,8 +79,8 @@ public static class AutomationArguments
         CheckRange(args, "durationMs", 0, 60000);
         CheckRange(args, "previewBytes", 4, 65536);
         CheckRange(args, "offset", 0, int.MaxValue);
-        CheckRange(args, "limit", operation is "sequence_list" or "list_commands" ? 1 : 4,
-            operation is "sequence_list" or "list_commands" ? 100 : 65536);
+        CheckRange(args, "limit", operation is "sequence_list" or "list_commands" or "list_captures" ? 1 : 4,
+            operation is "sequence_list" or "list_commands" or "list_captures" ? 100 : 65536);
     }
 
     private static void CheckChoice(JsonElement args, string field, params string[] choices)

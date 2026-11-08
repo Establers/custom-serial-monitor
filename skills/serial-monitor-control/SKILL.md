@@ -169,6 +169,14 @@ during this window," and report transport gaps separately from product failure.
 Choose subsequent documented commands from what the actual response establishes,
 within the user's task and a bounded observation/retry budget.
 
+When the installed GUI/CLI supports capture recovery, assign a unique `requestId`
+(`--request-id` on CLI) before each intended send/capture. After a lost reply, use
+`serial_list_captures` / `captures` on the same instance with that ID, then read the
+chosen `captureId`. Without a label, distinguish recent records by port, session,
+time and command preview; never assume the newest belongs to this task. A pending,
+expired or unreadable result can produce an empty list. IDs correlate evidence;
+they do not make TX idempotent or authorize replay. Read the CLI recovery section.
+
 Report the target port/baud/byte timeout, command and ending/mode, observed window, relevant RX
 evidence, capture ID and outcome (normal, failed, or uncertain). Include truncation,
 unread pages or gaps when present, and name any registered sequence; do not dump a

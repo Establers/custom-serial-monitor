@@ -10,13 +10,14 @@ public static class CliOptions
             "mcp" => "instance tool-content",
             "status" or "ports" or "disconnect" or "cancel" => "instance",
             "commands" => "instance offset limit",
+            "captures" => "instance offset limit request-id",
             "connect" => "instance port baud",
             "configure" => "instance port baud byte-timeout-ms data-bits parity stop-bits handshake",
             "lines" => "instance port dtr rts rts-toggle generation",
             "mode" => "instance set",
-            "send" => "instance port text text-file hex ending preview-bytes format",
-            "request" or "send-and-capture" => "instance port text text-file hex ending preview-bytes format duration-ms",
-            "capture" => "instance port duration-ms preview-bytes format",
+            "send" => "instance port text text-file hex ending preview-bytes format request-id",
+            "request" or "send-and-capture" => "instance port text text-file hex ending preview-bytes format duration-ms request-id",
+            "capture" => "instance port duration-ms preview-bytes format request-id",
             "read" => "instance capture offset limit format",
             _ => throw new ArgumentException("Unknown command: " + command)
         };

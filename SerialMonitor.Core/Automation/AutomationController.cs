@@ -99,6 +99,10 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
                     };
                     break;
                 }
+                case "list_captures":
+                    data = await captures.ListAsync(request.Arguments.Integer("offset", 0),
+                        request.Arguments.Integer("limit", 10), request.Arguments.String("requestId"), cancellationToken).ConfigureAwait(false);
+                    break;
                 case "cancel_capture":
                     data = new { canceled = _sequences.CancelCaptureWhenIdle() };
                     break;
@@ -154,7 +158,7 @@ public sealed class AutomationController(IAutomationDevice device, RxCaptureServ
         var format = args.String("format", options.TxMode == "hex" ? "hex" : "text");
         if (format is not ("text" or "hex"))
             throw new AutomationException("invalid_argument", "format must be text or hex.");
-        options = options with { PreviewFormat = format };
+        options = options with { PreviewFormat = format, RequestId = args.String("requestId") };
         if (options.DurationMs is < 0 or > 60000 || options.TxMode is not ("text" or "hex") ||
             options.LineEnding is not ("none" or "cr" or "lf" or "crlf") ||
             (isSend && (string.IsNullOrEmpty(options.Command) || options.Command.Length > 16384)))
