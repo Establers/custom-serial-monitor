@@ -40,3 +40,25 @@
 보관하세요. 현재 이미지 경로는 절대 경로이므로 다른 위치로 옮긴 경우 각
 번호에서 보관한 이미지를 다시 선택해야 합니다. 앱만 제거하거나 재설치해도
 기본 사용자 데이터 폴더의 프로필과 이미지 사본은 유지됩니다.
+
+## 개발 검증
+
+WebView2의 [가상 호스트 등록 제약](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.setvirtualhostnametofoldermapping#remarks)에 따라
+이미지 호스트는 페이지 탐색 **전에** 등록합니다. 내장 배경과
+프로필의 `.backgrounds` 폴더를 각각 고정 호스트로 등록하고, 이미지 전환 시에는
+URL만 바꿉니다. 페이지가 열린 후에 새 호스트를 추가하면 이미지가 로드되지 않을
+수 있으므로 브라우저의 모의 네트워크 검사만으로 이 경로를 검증하지 않습니다.
+
+PowerShell 7과 일반 대비 모드의 Windows 데스크톱에서 실제 WinUI 빌드를 검사합니다.
+앱을 한 번 실행해 기본 프로필이 생성되어 있어야 합니다.
+
+```powershell
+pwsh -NoProfile -File scripts/test_xterm_background_native.ps1 -AppPath artifacts/build/Release/SerialMonitor.WinUI.exe
+```
+
+검사 도구는 별도 검증용 앱을 잠시 실행하고 .NET 시작 훅으로 해당 프로세스만
+제어합니다. 장비에 연결하거나 데이터를 전송하지 않고 프로필을 저장하지 않습니다.
+페이지 로드 후에 한글·공백·`#`가 포함된 임시 이미지를 만들어 전환하고,
+내장/사용자 이미지, 투명도 0·50·100%, 배경 끄기, 표시 로그 보존을 검사합니다.
+종료 시 임시 이미지와 검증 프로세스를 정리하고 프로필 해시가 그대로인지 확인합니다.
+상태 JSON과 실제 WebView2 PNG 캡처는 `artifacts/native-background-smoke` 아래에 남깁니다.

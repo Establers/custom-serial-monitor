@@ -2482,6 +2482,17 @@ public sealed partial class MainWindow : Window
                     loadingAssetDirectory,
                     CoreWebView2HostResourceAccessKind.Allow);
             }
+            try
+            {
+                await _xtermBackground.InitializeAsync(XtermLogWebView.CoreWebView2, _viewModel.CurrentProfilePath,
+                    Path.GetDirectoryName(BundledCuteBackgroundPath)!, _xtermSearchCancellation.Token);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Background setup failure must not prevent the log view loading.
+                _viewModel.RecordXtermLayoutError($"xterm background initialization failed: {ex.Message}");
+            }
+            if (IsClosingOrClosed) return;
             XtermLogWebView.NavigationCompleted += OnXtermNavigationCompleted;
             XtermLogWebView.Source = new Uri($"https://serialmonitor.local/index.html?colorScheme={XtermColorScheme}");
         }

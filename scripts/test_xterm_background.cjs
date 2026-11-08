@@ -6,6 +6,7 @@ const { chromium } = require('playwright');
 const { PNG } = require('pngjs');
 
 const imageHost = 'https://serialmonitor-background.local/';
+const bundledImageHost = 'https://serialmonitor-background-bundled.local/';
 function solidImage(color) {
   const image = new PNG({ width: 8, height: 8 });
   for (let offset = 0; offset < image.data.length; offset += 4) image.data.set([...color, 255], offset);
@@ -23,7 +24,7 @@ function solidImage(color) {
     let releaseSlow;
     const slow = new Promise(resolve => { releaseSlow = resolve; });
     page.on('pageerror', error => errors.push(error.message));
-    await page.route(`${imageHost}**`, async route => {
+    await page.route(/^https:\/\/serialmonitor-background(?:-bundled)?\.local\//, async route => {
       const name = new URL(route.request().url()).pathname;
       requests.push(route.request().url());
       if (name === '/missing.png') return route.fulfill({ status: 404, body: '' });
@@ -54,8 +55,8 @@ function solidImage(color) {
       length: terminal.buffer.active.length, foreground: terminal.options.theme.foreground
     }));
 
-    const set = async (source, opacity) => assert.equal(await page.evaluate(
-      settings => window.serialMonitorSetBackground(settings), { source: source ? imageHost + source : '', opacity }), true);
+    const set = async (source, opacity, host = imageHost) => assert.equal(await page.evaluate(
+      settings => window.serialMonitorSetBackground(settings), { source: source ? host + source : '', opacity }), true);
     const visible = async expected => page.waitForFunction(value =>
       document.documentElement.dataset.terminalBackground === String(value), expected);
     const assertPixel = async (color, opacity, base = [12, 13, 14]) => {
@@ -110,6 +111,12 @@ function solidImage(color) {
     await visible(true);
     await assertPixel(red, 0.15, [255, 255, 255]);
     await page.evaluate(() => window.serialMonitorSetColorScheme('dark'));
+    await assertLogsIntact();
+
+    // Bundled images use their own root, registered before WebView navigation.
+    await set('default.png', 0.35, bundledImageHost);
+    await visible(true);
+    await assertPixel(red, 0.35);
     await assertLogsIntact();
 
     // A stale image load must not overwrite a newer preset.

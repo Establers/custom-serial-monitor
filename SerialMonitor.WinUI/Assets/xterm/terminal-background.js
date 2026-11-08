@@ -22,7 +22,7 @@
       if (settings.source) {
         try {
           const url = new URL(settings.source);
-          if (url.protocol !== 'https:' || url.hostname !== 'serialmonitor-background.local') return false;
+          if (url.protocol !== 'https:' || !['serialmonitor-background.local', 'serialmonitor-background-bundled.local'].includes(url.hostname)) return false;
         } catch { return false; }
       }
 
