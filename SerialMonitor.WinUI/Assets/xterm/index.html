@@ -361,6 +361,7 @@
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
   <script src="./local-echo.js"></script>
+  <script src="./direct-search.js"></script>
   <script src="./compact-scrollback.js"></script>
   <script src="./log-navigation.js"></script>
   <script src="./log-navigation-terminal.js"></script>
@@ -552,7 +553,15 @@
 
     let directInputSessionId = 0;
     let directInputLocalEcho = true;
+    let directInputLocked = false;
     const directInputEcho = new SerialMonitorLocalEcho(terminal);
+    const directSearch = new SerialMonitorDirectSearch(terminal, selectPayloadSearchMatch,
+      message => window.chrome?.webview?.postMessage(message));
+    window.addEventListener('unload', () => directSearch.dispose());
+    window.serialMonitorCaptureDirectSearch = sessionId => {
+      try { return directSearch.capture(sessionId); }
+      catch (error) { return { ok: false, error: String(error) }; }
+    };
     let pendingLocalEchoChunks = 0;
     function resetDirectEchoRange() {
       directInputEcho.reset();
@@ -562,7 +571,7 @@
       directInputLocalEcho = false;
       window.chrome?.webview?.postMessage({ type: 'terminalInputEchoError', sessionId: directInputSessionId, error: String(error) });
     }
-    window.serialMonitorSetDirectInput = (enabled, sessionId, localEcho = directInputLocalEcho) => {
+    window.serialMonitorSetDirectInput = (enabled, sessionId, localEcho = directInputLocalEcho, locked = false) => {
       if (enabled && (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !window.chrome?.webview)) return false;
       if (directInputSessionId !== (enabled ? sessionId : 0)) {
         resetDirectEchoRange();
@@ -573,11 +582,20 @@
         if (enabled) terminal.write('\x18\x1b[0m');
       }
       directInputSessionId = enabled ? sessionId : 0;
+      directSearch.setSession(directInputSessionId);
       directInputLocalEcho = !!localEcho;
-      terminal.options.disableStdin = !enabled;
-      terminal.options.cursorBlink = !!enabled;
+      directInputLocked = !!locked;
+      terminal.options.disableStdin = !enabled || directInputLocked;
+      terminal.options.cursorBlink = !!enabled && !directInputLocked;
       terminal.options.convertEol = !enabled;
       if (enabled) terminal.focus();
+      return true;
+    };
+    window.serialMonitorSetDirectInputLocked = (sessionId, locked) => {
+      if (!directInputSessionId || sessionId !== directInputSessionId) return false;
+      directInputLocked = !!locked;
+      terminal.options.disableStdin = directInputLocked;
+      terminal.options.cursorBlink = !directInputLocked;
       return true;
     };
     window.serialMonitorFocusDirectInput = sessionId => {
@@ -591,7 +609,7 @@
       return true;
     };
     terminal.onData(data => {
-      if (directInputSessionId && data) {
+      if (directInputSessionId && !directInputLocked && data) {
         window.chrome?.webview?.postMessage({ type: 'terminalInput', sessionId: directInputSessionId, data });
         if (directInputLocalEcho && data.length <= 16_384) {
           if (pendingLocalEchoChunks >= 32) reportDirectEchoError('Local echo display queue is full.');
@@ -2165,6 +2183,12 @@
         }
 
         searchAddon.clearDecorations();
+        if (directInputSessionId || request?.terminalSessionId) {
+          const found = directSearch.select(request);
+          if (found) window.serialMonitorSetAutoScrollEnabled(false);
+          else terminal.clearSelection();
+          return { ok: true, found };
+        }
         const targetLineId = String(request?.targetLineId ?? '');
         if (targetLineId &&
             Number.isInteger(request?.targetPayloadStart) &&

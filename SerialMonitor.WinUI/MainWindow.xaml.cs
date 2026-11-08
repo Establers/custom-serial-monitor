@@ -209,6 +209,7 @@ public sealed partial class MainWindow : Window
         _viewModel.Log.TextCleared += OnLogTextCleared;
         _viewModel.Log.TextRebuilt += OnLogTextRebuilt;
         _viewModel.XtermSearchRequested += OnXtermSearchRequested;
+        _viewModel.CaptureTerminalSearchContentAsync = CaptureXtermDirectSearchAsync;
         _viewModel.ConnectFailureDialogRequested += OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested += OnEventNotificationRequested;
         _viewModel.TxSent += OnTxSent;
@@ -375,6 +376,7 @@ public sealed partial class MainWindow : Window
         _viewModel.Log.TextCleared -= OnLogTextCleared;
         _viewModel.Log.TextRebuilt -= OnLogTextRebuilt;
         _viewModel.XtermSearchRequested -= OnXtermSearchRequested;
+        _viewModel.CaptureTerminalSearchContentAsync = null;
         _viewModel.ConnectFailureDialogRequested -= OnConnectFailureDialogRequested;
         _viewModel.EventNotificationRequested -= OnEventNotificationRequested;
         _viewModel.TxSent -= OnTxSent;
@@ -2568,6 +2570,8 @@ public sealed partial class MainWindow : Window
             UpdateTerminalDirectInputIcon();
             _ = SyncXtermDirectInputAsync();
         }
+        if (args.PropertyName == nameof(MainViewModel.IsTerminalDirectInputLocked))
+            _ = SyncXtermDirectInputLockAsync();
         if (args.PropertyName == nameof(MainViewModel.TerminalDirectInputLocalEcho))
             _ = SyncXtermDirectInputLocalEchoAsync();
         if (args.PropertyName is nameof(MainViewModel.SelectedRxLineEnding) or
@@ -2984,6 +2988,13 @@ public sealed partial class MainWindow : Window
             {
                 if (args.Source.StartsWith("https://serialmonitor.local/", StringComparison.OrdinalIgnoreCase))
                     _viewModel.RecordXtermLayoutError("xterm background image could not be loaded; using the plain background.");
+                return;
+            }
+            if (string.Equals(messageType, "terminalSearchChanged", StringComparison.Ordinal))
+            {
+                if (root.TryGetProperty("sessionId", out var session) && session.TryGetInt64(out var sessionId) &&
+                    root.TryGetProperty("revision", out var revision) && revision.TryGetInt64(out var value))
+                    _viewModel.TerminalScreenSearchChanged(sessionId, value);
                 return;
             }
             if (string.Equals(messageType, "terminalInputEchoError", StringComparison.Ordinal))
@@ -4316,7 +4327,9 @@ public sealed partial class MainWindow : Window
                 expectedText = request.ExpectedText,
                 occurrenceInLine = request.OccurrenceInLine,
                 tabsBeforeMatch = request.TabsBeforeMatch,
-                tabsBeforeMatchEnd = request.TabsBeforeMatchEnd
+                tabsBeforeMatchEnd = request.TabsBeforeMatchEnd,
+                terminalSessionId = request.TerminalSessionId,
+                terminalSnapshotId = request.TerminalSnapshotId
             });
             var searchStopwatch = Stopwatch.StartNew();
             var resultJson = await XtermLogWebView.ExecuteScriptAsync(

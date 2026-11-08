@@ -174,12 +174,16 @@ This file tracks current intentional limits and validation gaps.
   rewrites TX. It retains at most 16,384 characters and 32 pending echo chunks;
   overflow or an uneditable span stops direct input with a visible error.
 - Local echo edits only the display. Backspace/DEL, Tab and ANSI arrow bytes
-  still go to the device; a line-only parser can reject them. The serial lab
-  board rejects the entire line with `ERR LINE_TOO_LONG_OR_CONTROL max=511`.
+  still go to the device; a line-only parser can reject them. Older serial-lab
+  firmware rejects the entire line with `ERR LINE_TOO_LONG_OR_CONTROL max=511`.
+  Updated firmware handles BS/DEL, Ctrl+C and command/fixed-argument Tab completion
+  in LAB text mode. Send `CONSOLE ON` and disable app local echo for remote editing.
   Use the TX editor when editing commands for such a device; a fresh uppercase
   `STOP` plus Enter is accepted, while lowercase `stop` is not a command.
-- Direct input turns off on disconnect, HEX mode, view pause, sequence execution
-  or an unavailable terminal. It is unavailable during a bridge or automation
+- Direct input turns off on disconnect, HEX mode, view pause or an unavailable terminal.
+  GUI sequences keep ON and raw RX history; typing/paste is locked only while running.
+  Accepted input drains before sequence TX. Finish/cancel an unfinished terminal command
+  first so a sequence cannot append to it. It is unavailable during a bridge or automation
   reservation. Turn it off before starting an AI/CLI operation or a bridge.
 - TX and direct input share the remote shell's current line. Finish or cancel a
   partially typed command before sending a command from the TX editor.
@@ -189,8 +193,15 @@ This file tracks current intentional limits and validation gaps.
 - Direct RX display queues at most 1 MiB / 1,024 chunks and decodes at most
   32 KiB per UI batch, with one acknowledged xterm write in flight. Overflow
   stops direct input and restores normal logs without dropping parser/file RX.
-- Direct TX records still reach asynchronous file logging and event detection,
-  but do not insert displayed TX rows per key or populate command history.
+- Direct TX records still reach asynchronous file logging and event detection.
+  Successful keys are coalesced into bounded retained TX records on Enter/size limit/OFF,
+  including unsubmitted text. Controls are escaped to preserve actual transmitted evidence.
+  These records return on OFF without injecting per-key rows into the ON screen.
+  They do not populate saved-command history.
+- ON search counts and selects rendered xterm screen/scrollback contents using the same
+  case/word/regex matcher as OFF. Results are manual snapshots; refresh after screen
+  changes. Changed/evicted matches are not redirected to a duplicate. A screen capture
+  over 16 Mi characters reports an error instead of returning partial counts.
 
 ## Profiles
 

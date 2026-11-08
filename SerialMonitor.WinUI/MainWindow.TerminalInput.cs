@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI;
 
@@ -30,7 +31,7 @@ public sealed partial class MainWindow
                 sessionId != _viewModel.TerminalDirectInputSessionId) return;
             restoreLog = !enabled && _displayedDirectInputSessionId != 0;
             var result = await ExecuteXtermScriptAsync(
-                $"window.serialMonitorSetDirectInput && window.serialMonitorSetDirectInput({(enabled ? "true" : "false")}, {sessionId}, {(_viewModel.TerminalDirectInputLocalEcho ? "true" : "false")});");
+                $"window.serialMonitorSetDirectInput && window.serialMonitorSetDirectInput({(enabled ? "true" : "false")}, {sessionId}, {(_viewModel.TerminalDirectInputLocalEcho ? "true" : "false")}, {(_viewModel.IsTerminalDirectInputLocked ? "true" : "false")});");
             if (TryParseScriptBoolean(result) != true)
                 throw new InvalidOperationException("xterm rejected the direct input state.");
             _displayedDirectInputSessionId = enabled ? sessionId : 0;
@@ -56,6 +57,17 @@ public sealed partial class MainWindow
         }
         finally { _xtermAppendGate.Release(); }
         if (restoreLog) QueueFullXtermRerender("Direct input ended", debounce: false);
+    }
+
+    private async Task SyncXtermDirectInputLockAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed || !_viewModel.IsTerminalDirectInputEnabled) return;
+        try
+        {
+            await ExecuteXtermScriptAsync(
+                $"window.serialMonitorSetDirectInputLocked && window.serialMonitorSetDirectInputLocked({_viewModel.TerminalDirectInputSessionId}, {(_viewModel.IsTerminalDirectInputLocked ? "true" : "false")});");
+        }
+        catch (Exception ex) { _viewModel.RecordXtermLayoutError($"Direct input lock failed: {ex.Message}"); }
     }
 
     private async Task FocusXtermDirectInputAsync()
@@ -145,6 +157,30 @@ public sealed partial class MainWindow
             }
         }
         finally { _terminalOutputPumpRunning = false; }
+    }
+
+    private async Task<TerminalSearchContent> CaptureXtermDirectSearchAsync(long sessionId, CancellationToken token)
+    {
+        if (!_isXtermReady || IsClosingOrClosed || IsXtermVisualAppendSuspended())
+            throw new InvalidOperationException("The terminal display is unavailable.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(XtermSearchTimeout);
+        await _xtermAppendGate.WaitAsync(timeout.Token);
+        try
+        {
+            if (!_viewModel.IsTerminalDirectInputEnabled || sessionId != _displayedDirectInputSessionId)
+                throw new InvalidOperationException("The terminal input session changed before search.");
+            var pending = _viewModel.DrainTerminalOutput(sessionId);
+            if (pending.Length > 0 && !await ExecuteXtermAppendChunksAsync([new XtermAppendChunk(pending, 0)],
+                _viewModel.IsEffectiveXtermAutoScrollEnabled, directInputSessionId: sessionId))
+                throw new InvalidOperationException("The terminal did not finish its received text before search.");
+            if (!await WaitForXtermAppendQueueIdleAsync(TimeSpan.FromSeconds(5)).WaitAsync(timeout.Token))
+                throw new InvalidOperationException("The terminal is still rendering. Retry search.");
+            var json = await XtermLogWebView.ExecuteScriptAsync(
+                $"window.serialMonitorCaptureDirectSearch({sessionId});").AsTask(timeout.Token);
+            return await Task.Run(() => TerminalSearchContent.Parse(json, sessionId), timeout.Token);
+        }
+        finally { _xtermAppendGate.Release(); }
     }
 
     private void HandleXtermDirectInput(JsonElement root)

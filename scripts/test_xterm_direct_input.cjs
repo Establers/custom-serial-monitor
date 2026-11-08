@@ -17,7 +17,7 @@ const { chromium } = require('playwright');
       window.chrome.webview = { postMessage: message => window.messages.push(message) };
       terminal.focus();
     });
-    const take = () => page.evaluate(() => window.messages.splice(0));
+    const take = () => page.evaluate(() => window.messages.splice(0).filter(message => message.type !== 'terminalSearchChanged'));
     await page.keyboard.type('off');
     assert.deepEqual(await take(), [], 'Direct input defaults to OFF');
     await page.evaluate(() => window.serialMonitorAppendLog('existing log\r\n', true, 10));

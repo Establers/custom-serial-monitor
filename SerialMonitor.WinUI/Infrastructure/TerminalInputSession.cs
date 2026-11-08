@@ -19,6 +19,7 @@ internal sealed class TerminalInputSession : IAsyncDisposable
     private readonly Action<string> _reportError;
     private readonly Task _worker;
     private int _stopped;
+    private int _inputLocked;
 
     internal TerminalInputSession(
         Func<string, byte[], CancellationToken, Task> send,
@@ -38,7 +39,7 @@ internal sealed class TerminalInputSession : IAsyncDisposable
 
     internal bool TryEnqueue(string text)
     {
-        if (Volatile.Read(ref _stopped) != 0 || text.Length == 0) return false;
+        if (Volatile.Read(ref _stopped) != 0 || Volatile.Read(ref _inputLocked) != 0 || text.Length == 0) return false;
         try
         {
             if (text.Length > MaxInputCharacters)
@@ -53,6 +54,8 @@ internal sealed class TerminalInputSession : IAsyncDisposable
             return false;
         }
     }
+
+    internal void SetInputLocked(bool locked) => Volatile.Write(ref _inputLocked, locked ? 1 : 0);
 
     // Driver changes join the keystroke queue, not merely its downstream write
     // semaphore: otherwise a change can overtake the tail of an earlier paste.

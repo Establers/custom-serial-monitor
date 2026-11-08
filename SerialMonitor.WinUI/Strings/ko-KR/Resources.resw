@@ -1207,4 +1207,5 @@
   <data name="SerialLinesDtrToolTip" xml:space="preserve"><value>DTR 출력입니다. ON/OFF는 수동 모드, AUTO는 하드웨어 흐름 제어입니다. 현재 연결에 적용되며 배선에 따라 보드가 리셋될 수 있습니다.</value></data>
   <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS 출력입니다. ON/OFF는 수동, AUTO는 하드웨어 흐름 제어, TX는 송신 자동 제어입니다. 수동 변경은 ON/OFF 모드에서 가능합니다. 표시는 드라이버 모드이며 전압 실측값이 아닙니다.</value></data>
   <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>드라이버가 송신에 맞춰 RTS를 제어합니다. 끄면 이전 수동 RTS 설정으로 돌아갑니다. RS-485 사용 가능 여부는 어댑터 지원과 배선에 따라 달라지며, 극성·전환 지연 조절은 제공하지 않습니다.</value></data>
+  <data name="TerminalDirectInputSequenceLocked" xml:space="preserve"><value>직접 입력 ON · 시퀀스 실행 중에는 키 입력을 잠급니다.</value></data>
 </root>

@@ -28,7 +28,9 @@ public sealed class XtermSearchRequest
         string? expectedText = null,
         int? occurrenceInLine = null,
         int? tabsBeforeMatch = null,
-        int? tabsBeforeMatchEnd = null)
+        int? tabsBeforeMatchEnd = null,
+        long? terminalSessionId = null,
+        long? terminalSnapshotId = null)
     {
         RequestId = requestId;
         SearchText = searchText;
@@ -43,7 +45,13 @@ public sealed class XtermSearchRequest
         OccurrenceInLine = occurrenceInLine;
         TabsBeforeMatch = tabsBeforeMatch;
         TabsBeforeMatchEnd = tabsBeforeMatchEnd;
+        TerminalSessionId = terminalSessionId;
+        TerminalSnapshotId = terminalSnapshotId;
     }
+
+    public long? TerminalSessionId { get; }
+
+    public long? TerminalSnapshotId { get; }
 
     public long RequestId { get; }
 
@@ -5379,7 +5387,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Interlocked.Increment(ref _searchGeneration);
             Interlocked.Increment(ref _searchResultBuildGeneration);
             CancelActiveSearch();
+            _terminalSearchContent = null;
             CommitEmptySearchResults();
+            XtermSearchRequested?.Invoke(this, new XtermSearchRequest(
+                Interlocked.Read(ref _xtermSearchRequestId), string.Empty, false, "next"));
             NotifySearchCommandStates();
             return VisibleSearchApplyResult.Applied;
         }
@@ -5397,7 +5408,16 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             var previousPayloadOffset = _currentSearchPosition?.PayloadOffset;
             var searchText = SearchText;
             var captureStopwatch = Stopwatch.StartNew();
-            var searchLines = Log.GetVisibleSearchContentSnapshot();
+            var terminalSession = IsTerminalDirectInputEnabled ? TerminalDirectInputSessionId : 0;
+            TerminalSearchContent? terminalContent = null;
+            if (terminalSession != 0)
+            {
+                var capture = CaptureTerminalSearchContentAsync ??
+                    throw new InvalidOperationException("Terminal screen search is not available.");
+                terminalContent = await capture(terminalSession, cancellation.Token);
+            }
+            cancellation.Token.ThrowIfCancellationRequested();
+            var searchLines = terminalContent?.Lines ?? Log.GetVisibleSearchContentSnapshot();
             var contentRevision = _searchContentRevision;
             captureStopwatch.Stop();
             Volatile.Write(ref _lastSearchSnapshotLineCount, searchLines.Count);
@@ -5461,12 +5481,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 return VisibleSearchApplyResult.Canceled;
             }
 
+            _terminalSearchContent = terminalContent;
             CommitFreshSearchResults(
                 snapshot,
                 pending.Page,
                 pending.Results,
                 pending.SelectedPosition,
-                snapshotIsFresh: contentRevision == _searchContentRevision);
+                snapshotIsFresh: contentRevision == _searchContentRevision &&
+                    (terminalContent is null || _terminalScreenRevision <= terminalContent.Revision));
 
             if (snapshot.TotalMatchCount == 0)
             {
@@ -5810,7 +5832,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                     expectedText: expectedText,
                     occurrenceInLine: position.OccurrenceInLine,
                     tabsBeforeMatch: position.TabsBeforeMatch,
-                    tabsBeforeMatchEnd: position.TabsBeforeMatchEnd));
+                    tabsBeforeMatchEnd: position.TabsBeforeMatchEnd,
+                    terminalSessionId: _terminalSearchContent?.SessionId,
+                    terminalSnapshotId: _terminalSearchContent?.SnapshotId));
         }
         catch (Exception ex)
         {
@@ -7999,6 +8023,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         string? resultError = null;
         try
         {
+            await PrepareTerminalInputForSequenceAsync(cancellationToken);
             ICommandSequenceObserver? observer = null;
             // Plain TX sequences retain their original path: no RX collection,
             // result files or storage waits before/between sends.
