@@ -55,7 +55,7 @@
 
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="Transparent" />
-                    <StaticResource x:Key="AppSurfaceBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                    <SolidColorBrush x:Key="AppSurfaceBorderBrush" Color="#30000000" />
                     <StaticResource x:Key="CompactButtonBackgroundBrush" ResourceKey="SubtleFillColorTransparentBrush" />
                     <SolidColorBrush x:Key="CompactButtonBorderBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="AppAccentTintBrush" Color="#160067C0" />
@@ -71,17 +71,18 @@
                     <SolidColorBrush x:Key="NavigationButtonForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonInteractionForegroundBrush" Color="#E4000000" />
                     <SolidColorBrush x:Key="NavigationButtonDisabledForegroundBrush" Color="#61000000" />
-                    <StaticResource x:Key="CompactSurfaceBrush" ResourceKey="LayerFillColorDefaultBrush" />
-                    <StaticResource x:Key="InspectorSectionBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
-                    <StaticResource x:Key="InspectorHeaderBrush" ResourceKey="LayerFillColorDefaultBrush" />
-                    <StaticResource x:Key="InspectorBodyBrush" ResourceKey="LayerFillColorAltBrush" />
+                    <!-- Keep native menu surfaces thin so stacked cards do not wash out the wallpaper. -->
+                    <SolidColorBrush x:Key="CompactSurfaceBrush" Color="#30FFFFFF" />
+                    <SolidColorBrush x:Key="InspectorSectionBrush" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="InspectorHeaderBrush" Color="#38FFFFFF" />
+                    <SolidColorBrush x:Key="InspectorBodyBrush" Color="#14FFFFFF" />
                     <SolidColorBrush x:Key="BackgroundImageOverlayBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="LogRestoreBackdropBrush" Color="#E6F3F3F3" />
                     <SolidColorBrush x:Key="LogRestoreCardBrush" Color="#FAFFFFFF" />
                     <SolidColorBrush x:Key="LogRestoreCardBorderBrush" Color="#33000000" />
                     <SolidColorBrush x:Key="LogRestorePrimaryTextBrush" Color="#FF1B1B1B" />
                     <SolidColorBrush x:Key="LogRestoreSecondaryTextBrush" Color="#FF5D5D5D" />
-                    <StaticResource x:Key="InspectorBackdropBrush" ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                    <SolidColorBrush x:Key="InspectorBackdropBrush" Color="#08FFFFFF" />
                     <SolidColorBrush x:Key="ColorPreviewBorderBrush" Color="#FF707070" />
                     <SolidColorBrush x:Key="WarningTextBrush" Color="#FF8A4F00" />
                     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFB3261E" />

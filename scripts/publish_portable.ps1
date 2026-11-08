@@ -2,7 +2,8 @@
 param(
     [switch]$StopRunning,
     [switch]$NoZip,
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [string]$PortableDirectory
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,7 +111,11 @@ $repoRoot = Resolve-FullPath (Join-Path $scriptRoot "..")
 $projectPath = Join-Path $repoRoot "SerialMonitor.WinUI\SerialMonitor.WinUI.csproj"
 $licensePath = Join-Path $repoRoot "LICENSE"
 $releaseRoot = Join-Path $repoRoot "release"
-$portableDir = Join-Path $releaseRoot "SerialMonitorPortable"
+$portableDir = if ([string]::IsNullOrWhiteSpace($PortableDirectory)) {
+    Join-Path $releaseRoot "SerialMonitorPortable"
+} else {
+    $PortableDirectory
+}
 $appProcessName = "SerialMonitor.WinUI"
 $exeName = "SerialMonitor.WinUI.exe"
 
@@ -263,7 +268,7 @@ This is a no-install portable build of Serial Monitor.
 
 How to run
 ----------
-1. Unzip the full SerialMonitorPortable folder.
+1. Unzip the full $(Split-Path -Leaf $portableDirFull) folder.
 2. Run SerialMonitor.WinUI.exe.
 3. Keep all files in this folder together.
 4. Do not run the app from inside the zip file.

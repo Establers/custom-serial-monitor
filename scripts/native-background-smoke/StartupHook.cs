@@ -250,6 +250,22 @@ public static class StartupHook
             positionPicker.GetType().GetMethod("StartBringIntoView", Type.EmptyTypes)!.Invoke(positionPicker, null);
             await Task.Delay(500);
             await CaptureElementAsync(Field(window, "SettingsFormScrollViewer"), Output + ".settings.png");
+            // Render native menus over the real wallpaper in both themes.
+            // Root captures supplement the separate WebView screenshots above.
+            appWindow.GetType().GetMethod("Resize")!.Invoke(appWindow, [new SizeInt32(1000, 900)]);
+            var theme = vm.GetType().GetProperty("SelectedAppTheme")!;
+            foreach (var name in new[] { "Light", "Dark" })
+            {
+                theme.SetValue(vm, Enum.Parse(theme.PropertyType, name));
+                await Task.Delay(500);
+                positionPicker.GetType().GetMethod("StartBringIntoView", Type.EmptyTypes)!.Invoke(positionPicker, null);
+                await Task.Delay(250);
+                await CaptureElementAsync(Field(window, "Root"), Output + "." + name.ToLowerInvariant() + "-menus.png");
+            }
+            theme.SetValue(vm, Enum.Parse(theme.PropertyType, "Light"));
+            vm.GetType().GetProperty("CuteBackgroundMode")!.SetValue(vm, false);
+            await Task.Delay(500);
+            await CaptureElementAsync(Field(window, "Root"), Output + ".light-no-background.png");
             await File.WriteAllTextAsync(Output, "Completed without serial connection or profile save.");
             Environment.Exit(0);
         }

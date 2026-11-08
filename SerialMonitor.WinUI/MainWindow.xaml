@@ -2158,15 +2158,15 @@
                                     <StaticResource x:Key="TabViewBackground"
                                                     ResourceKey="SubtleFillColorTransparentBrush" />
                                     <StaticResource x:Key="TabViewItemHeaderBackgroundSelected"
-                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                                    ResourceKey="InspectorHeaderBrush" />
                                     <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver"
-                                                    ResourceKey="LayerOnMicaBaseAltFillColorSecondaryBrush" />
+                                                    ResourceKey="CompactSurfaceBrush" />
                                     <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"
-                                                    ResourceKey="LayerOnMicaBaseAltFillColorDefaultBrush" />
+                                                    ResourceKey="InspectorHeaderBrush" />
                                     <SolidColorBrush x:Key="TabViewItemSeparator"
                                                      Color="Transparent" />
                                     <StaticResource x:Key="TabViewSelectedItemBorderBrush"
-                                                    ResourceKey="CardStrokeColorDefaultBrush" />
+                                                    ResourceKey="AppSurfaceBorderBrush" />
                                     <Thickness x:Key="TabViewSelectedItemBorderThickness">1</Thickness>
                                 </ResourceDictionary>
                                 <ResourceDictionary x:Key="HighContrast">
