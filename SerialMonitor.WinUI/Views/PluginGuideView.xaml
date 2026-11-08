@@ -107,17 +107,6 @@
                     <TextBlock Text="{Binding PageDescription}" Style="{StaticResource GuideBody}" Margin="0,0,0,6"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                    <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6">
-                        <StackPanel Spacing="4">
-                            <Button x:Uid="AgentMemoryOpenButton" Content="메모리 열기" Click="OpenMemory_Click"
-                                    FontSize="11" MinHeight="26" Padding="8,2" HorizontalAlignment="Left" />
-                            <TextBlock x:Uid="AgentMemoryDescription" Style="{StaticResource GuideBody}"
-                                       Text="AI가 직접 읽고 정리하는 제품별 프로토콜·테스트 노트입니다. 플러그인 skill이 이 위치를 안내합니다." />
-                            <TextBlock Text="{Binding MemoryPath}" Style="{StaticResource GuideBody}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                    </Border>
-
                     <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6" Visibility="{Binding PluginIntroVisibility}">
                         <HyperlinkButton x:Uid="AgentPluginRepositoryLink" Content="GitHub · Establers/custom-serial-monitor ↗"
                                          NavigateUri="https://github.com/Establers/custom-serial-monitor"
@@ -162,6 +151,17 @@
                         <HyperlinkButton Content="선택한 클라이언트의 공식 연결 문서 ↗" NavigateUri="{Binding SourceUri}"
                                          FontSize="11" Padding="0,2" HorizontalAlignment="Left" />
                     </StackPanel>
+
+                    <Border Style="{StaticResource GuideCard}" Margin="0,0,0,6" Visibility="{Binding PluginIntroVisibility}">
+                        <StackPanel Spacing="4">
+                            <Button x:Uid="AgentMemoryOpenButton" Content="메모리 열기" Click="OpenMemory_Click"
+                                    FontSize="11" MinHeight="26" Padding="8,2" HorizontalAlignment="Left" />
+                            <TextBlock x:Uid="AgentMemoryDescription" Style="{StaticResource GuideBody}"
+                                       Text="AI가 직접 읽고 정리하는 제품별 프로토콜·테스트 노트입니다. 플러그인 skill이 이 위치를 안내합니다." />
+                            <TextBlock Text="{Binding MemoryPath}" Style="{StaticResource GuideBody}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
