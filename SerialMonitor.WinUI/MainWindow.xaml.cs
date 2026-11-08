@@ -2726,7 +2726,7 @@ public sealed partial class MainWindow : Window
             _ = SyncXtermBackgroundAsync();
         }
 
-        if (args.PropertyName is nameof(MainViewModel.BackgroundFit) or nameof(MainViewModel.BackgroundPosition))
+        if (args.PropertyName == nameof(MainViewModel.BackgroundPosition))
             UpdateCuteBackgroundLayout();
     }
 

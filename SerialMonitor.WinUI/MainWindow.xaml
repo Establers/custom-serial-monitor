@@ -3807,24 +3807,11 @@
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="The selected image is copied and saved immediately." />
                                         </Grid>
-                                        <Grid ColumnDefinitions="112,*,58" ColumnSpacing="6">
-                                            <TextBlock x:Uid="BackgroundFitLabel" Text="Image fit" Style="{StaticResource FormLabelTextStyle}" />
-                                            <ComboBox x:Name="BackgroundFitComboBox" x:Uid="BackgroundFitPicker" Grid.Column="1"
-                                                      SelectedIndex="{Binding SelectedBackgroundFitIndex, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanEditBackgroundPresets}"
-                                                      HorizontalAlignment="Left" MinWidth="160"
-                                                      Style="{StaticResource FormComboBoxStyle}"
-                                                      AutomationProperties.Name="Background image fit"
-                                                      infra:AppToolTipService.ToolTip="Saved for this preset. Cover fills the window and crops edges. Show entire image preserves the whole image with empty space. Both keep the aspect ratio.">
-                                                <ComboBoxItem x:Uid="BackgroundFitCover" Content="Cover" />
-                                                <ComboBoxItem x:Uid="BackgroundFitContain" Content="Show entire image" />
-                                            </ComboBox>
-                                        </Grid>
                                         <Grid ColumnDefinitions="112,Auto,*" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundAnchorLabel" Text="Crop position" Style="{StaticResource FormLabelTextStyle}" />
                                             <ContentControl x:Name="BackgroundAnchorPicker" x:Uid="BackgroundAnchorHelp" Grid.Column="1"
-                                                            IsEnabled="{Binding CanEditBackgroundPosition}" IsTabStop="False"
-                                                            infra:AppToolTipService.ToolTip="Left/right apply when the image is cropped horizontally; top/bottom apply when cropped vertically. Show entire image is always centered. Saved separately for each preset.">
+                                                            IsEnabled="{Binding CanEditBackgroundPresets}" IsTabStop="False"
+                                                            infra:AppToolTipService.ToolTip="The image always fills the window while preserving its aspect ratio. Left/right apply when cropped horizontally; top/bottom apply when cropped vertically. Saved separately for each preset.">
                                               <StackPanel Orientation="Horizontal" Spacing="3">
                                                 <RadioButton x:Uid="BackgroundAnchorLeft" Content="←" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
                                                              IsChecked="{Binding IsBackgroundLeftSelected, Mode=TwoWay}"

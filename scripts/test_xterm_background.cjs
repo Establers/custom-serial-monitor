@@ -145,11 +145,6 @@ function patternImage() {
     layout = { left: -50 / 800, top: -80 / 520, width: 1400 / 800, height: 768 / 520 };
     await set('pattern.png', 1, imageHost, layout);
     await assertAligned(layout, { width: 800, height: 520 });
-    // The host also sends the actual contain rectangle; its solid margins
-    // must stay empty instead of stretching or repeating the image.
-    layout = { left: 200 / 800, top: 110 / 520, width: 400 / 800, height: 300 / 520 };
-    await set('pattern.png', 1, imageHost, layout);
-    await assertAligned(layout, { width: 800, height: 520 });
     assert.equal(requests.length, layoutLoads, 'Layout changes must reuse the image');
     await page.setViewportSize({ width: 1000, height: 650 });
     await set('red.png?v=1', 1);

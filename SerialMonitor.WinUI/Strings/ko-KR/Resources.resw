@@ -1208,13 +1208,8 @@
   <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS 출력입니다. ON/OFF는 수동, AUTO는 하드웨어 흐름 제어, TX는 송신 자동 제어입니다. 수동 변경은 ON/OFF 모드에서 가능합니다. 표시는 드라이버 모드이며 전압 실측값이 아닙니다.</value></data>
   <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>드라이버가 송신에 맞춰 RTS를 제어합니다. 끄면 이전 수동 RTS 설정으로 돌아갑니다. RS-485 사용 가능 여부는 어댑터 지원과 배선에 따라 달라지며, 극성·전환 지연 조절은 제공하지 않습니다.</value></data>
   <data name="TerminalDirectInputSequenceLocked" xml:space="preserve"><value>직접 입력 ON · 시퀀스 실행 중에는 키 입력을 잠급니다.</value></data>
-  <data name="BackgroundFitLabel.Text" xml:space="preserve"><value>표시 방식</value></data>
-  <data name="BackgroundFitCover.Content" xml:space="preserve"><value>채우기</value></data>
-  <data name="BackgroundFitContain.Content" xml:space="preserve"><value>전체 보기</value></data>
-  <data name="BackgroundFitPicker.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>배경 표시 방식</value></data>
-  <data name="BackgroundFitPicker.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>프리셋별로 저장합니다. 채우기는 비율을 유지하며 창을 채우고 가장자리를 자릅니다. 전체 보기는 비율을 유지하며 그림 전체를 표시하고 남는 부분은 여백으로 둡니다.</value></data>
   <data name="BackgroundAnchorLabel.Text" xml:space="preserve"><value>기준 위치</value></data>
-  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>좌우가 잘리면 ←·→, 위아래가 잘리면 ↑·↓로 우선 보여줄 쪽을 선택합니다. 전체 보기는 가운데로 고정됩니다. 기준 위치는 프리셋별로 저장합니다.</value></data>
+  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>이미지 비율을 유지하며 창을 채웁니다. 좌우가 잘리면 ←·→, 위아래가 잘리면 ↑·↓로 우선 보여줄 쪽을 선택합니다. 기준 위치는 프리셋별로 저장합니다.</value></data>
   <data name="BackgroundAnchorTop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>위 기준</value></data>
   <data name="BackgroundAnchorLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>왼쪽 기준</value></data>
   <data name="BackgroundAnchorCenter.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>가운데 기준</value></data>

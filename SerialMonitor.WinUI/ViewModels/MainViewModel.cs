@@ -850,7 +850,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             () => !IsBusy && !IsConnected && !IsAutoReconnectRunning && !IsAutomationBusy && !_isProfileSaveActive);
         ResetCuteBackgroundCommand = new AsyncRelayCommand(ResetCuteBackgroundAsync, () => CanEditBackgroundPresets);
         SelectBackgroundPresetCommand = new AsyncRelayCommand(SelectBackgroundPresetAsync, _ => CanEditBackgroundPresets);
-        SelectBackgroundAnchorCommand = new AsyncRelayCommand(SelectBackgroundAnchorAsync, _ => CanEditBackgroundPosition);
+        SelectBackgroundAnchorCommand = new AsyncRelayCommand(SelectBackgroundAnchorAsync, _ => CanEditBackgroundPresets);
         FindNextCommand = new AsyncRelayCommand(FindNextSearchMatchAsync, CanNavigateSearchSnapshot);
         FindPreviousCommand = new AsyncRelayCommand(FindPreviousSearchMatchAsync, CanNavigateSearchSnapshot);
         SearchVisibleLogCommand = new AsyncRelayCommand(
@@ -13674,7 +13674,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(CanEditBackgroundPresets));
         SelectBackgroundPresetCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(CanEditBackgroundPosition));
         SelectBackgroundAnchorCommand.NotifyCanExecuteChanged();
         ResetCuteBackgroundCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanEditSerialParameters));

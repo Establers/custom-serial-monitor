@@ -1210,13 +1210,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS output: ON/OFF is manual, AUTO is hardware flow control, TX follows transmission. Manual changes require ON/OFF mode. These are driver modes, not measured voltages.</value></data>
   <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>The driver controls RTS during transmission. Disabling restores the previous manual RTS choice. Adapter support and wiring determine RS-485 suitability; no polarity or turnaround-delay adjustment is provided.</value></data>
   <data name="TerminalDirectInputSequenceLocked" xml:space="preserve"><value>Direct input: ON. Keyboard input is locked while the sequence runs.</value></data>
-  <data name="BackgroundFitLabel.Text" xml:space="preserve"><value>Image fit</value></data>
-  <data name="BackgroundFitCover.Content" xml:space="preserve"><value>Cover</value></data>
-  <data name="BackgroundFitContain.Content" xml:space="preserve"><value>Show entire image</value></data>
-  <data name="BackgroundFitPicker.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Background image fit</value></data>
-  <data name="BackgroundFitPicker.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Saved for this preset. Cover fills the window and crops edges. Show entire image preserves the whole image with empty space. Both keep the aspect ratio.</value></data>
   <data name="BackgroundAnchorLabel.Text" xml:space="preserve"><value>Crop position</value></data>
-  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Left/right apply when the image is cropped horizontally; top/bottom apply when cropped vertically. Show entire image is always centered. Saved separately for each preset.</value></data>
+  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>The image always fills the window while preserving its aspect ratio. Left/right apply when cropped horizontally; top/bottom apply when cropped vertically. Saved separately for each preset.</value></data>
   <data name="BackgroundAnchorTop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep top</value></data>
   <data name="BackgroundAnchorLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep left</value></data>
   <data name="BackgroundAnchorCenter.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep center</value></data>

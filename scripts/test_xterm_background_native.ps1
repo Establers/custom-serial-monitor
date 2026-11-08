@@ -50,7 +50,6 @@ try {
         foreach ($position in @(3, 1, 4, 7, 5)) {
             $expected["alignment-cover-$shape-$position"] = @('true', '1', 'serialmonitor-background-bundled.local')
         }
-        $expected["alignment-contain-$shape"] = @('true', '1', 'serialmonitor-background-bundled.local')
     }
     foreach ($case in $expected.Keys) {
         $snapshot = Get-Content -LiteralPath ($result + '.' + $case + '.json') -Raw | ConvertFrom-Json

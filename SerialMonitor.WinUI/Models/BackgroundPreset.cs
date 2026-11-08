@@ -1,7 +1,5 @@
 namespace SerialMonitor.WinUI.Models;
 
-public enum BackgroundFitMode { Cover, Contain }
-
 // Values are retained for profiles written with the original 3 x 3 picker.
 public enum BackgroundAnchor { TopLeft, Top, TopRight, Left, Center, Right, BottomLeft, Bottom, BottomRight }
 
@@ -14,8 +12,6 @@ public sealed class BackgroundPreset
     public double Opacity { get; set; } = 0.25;
 
     public double XtermOpacity { get; set; } = DefaultXtermOpacity;
-
-    public BackgroundFitMode FitMode { get; set; } = BackgroundFitMode.Cover;
 
     public BackgroundAnchor Anchor { get; set; } = BackgroundAnchor.Center;
 
@@ -33,6 +29,6 @@ public sealed class BackgroundPreset
     public BackgroundPreset Clone() => new()
     {
         ImagePath = ImagePath, Opacity = Opacity, XtermOpacity = XtermOpacity,
-        FitMode = FitMode, Anchor = Anchor
+        Anchor = Anchor
     };
 }

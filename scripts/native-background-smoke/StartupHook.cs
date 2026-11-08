@@ -106,7 +106,7 @@ public static class StartupHook
         {
             var localX = (x + 0.5) / width * viewportWidth - bounds.X;
             var localY = (y + 0.5) / height * viewportHeight - bounds.Y;
-            // Contain intentionally leaves solid margins outside the image.
+            // Stay inside the rendered image when sampling edge pixels.
             if (localX < 1 || localY < 1 || localX >= bounds.Width - 1 || localY >= bounds.Height - 1) continue;
             var rx = (int)Math.Clamp(localX / bounds.Width * referenceWidth, 0, referenceWidth - 1);
             var ry = (int)Math.Clamp(localY / bounds.Height * referenceHeight, 0, referenceHeight - 1);
@@ -128,13 +128,11 @@ public static class StartupHook
         var bytes = Convert.FromBase64String(JsonDocument.Parse(screenshot).RootElement.GetProperty("data").GetString()!);
         await File.WriteAllBytesAsync(Output + "." + name + ".png", bytes);
         double? alignmentError = alignment ? await MeasureAlignmentAsync(window, bytes) : null;
-        var fit = (int)vm.GetType().GetProperty("SelectedBackgroundFitIndex")!.GetValue(vm)!;
         var picker = Field(window, "BackgroundAnchorPicker");
         var position = Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm));
-        if ((int)Field(window, "BackgroundFitComboBox").GetType().GetProperty("SelectedIndex")!.GetValue(Field(window, "BackgroundFitComboBox"))! != fit)
-            throw new InvalidOperationException("Fit control did not follow the selected preset.");
         var enabled = (bool)picker.GetType().GetProperty("IsEnabled")!.GetValue(picker)!;
-        if (enabled != (fit == 0)) throw new InvalidOperationException("Position picker enabled state did not follow fit mode.");
+        if (enabled != (bool)vm.GetType().GetProperty("CanEditBackgroundPresets")!.GetValue(vm)!)
+            throw new InvalidOperationException("Position picker enabled state did not follow preset editing.");
         var grid = picker.GetType().GetProperty("Content")!.GetValue(picker)!;
         var children = (System.Collections.IEnumerable)grid.GetType().GetProperty("Children")!.GetValue(grid)!;
         var buttons = children.Cast<object>().ToArray();
@@ -147,7 +145,7 @@ public static class StartupHook
             state = JsonSerializer.Deserialize<string>(state),
             path = window.GetType().GetField("_lastAppliedCuteBackgroundPath", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window),
             error = vm.GetType().GetProperty("LastXtermLayoutError")!.GetValue(vm),
-            alignmentError, fit, position, positionPickerEnabled = enabled
+            alignmentError, position, positionPickerEnabled = enabled
         }));
     }
 
@@ -171,8 +169,6 @@ public static class StartupHook
             await Task.Delay(250);
             vm.GetType().GetProperty("CuteBackgroundMode")!.SetValue(vm, true);
             vm.GetType().GetProperty("CuteBackgroundImagePath")!.SetValue(vm, "");
-            var fitPicker = Field(window, "BackgroundFitComboBox");
-            void SetFit(int value) => fitPicker.GetType().GetProperty("SelectedIndex")!.SetValue(fitPicker, value);
             void SetPosition(int value)
             {
                 var picker = Field(window, "BackgroundAnchorPicker");
@@ -193,7 +189,6 @@ public static class StartupHook
                     command.GetType().GetMethod("Execute")!.Invoke(command, [value.ToString()]);
                 }
             }
-            SetFit(0);
             SetPosition(4);
             vm.GetType().GetProperty("XtermBackgroundTransparencyPercent")!.SetValue(vm, 50);
             // Put the test line in the real retained model, so an outstanding
@@ -242,24 +237,15 @@ public static class StartupHook
             foreach (var (shape, size) in new[] { ("portrait", new SizeInt32(1000, 1200)), ("wide", new SizeInt32(1700, 800)) })
             {
                 appWindow.GetType().GetMethod("Resize")!.Invoke(appWindow, [size]);
-                SetFit(0);
                 foreach (var position in new[] { 3, 1, 4, 7, 5 })
                 {
                     SetPosition(position);
                     await SnapshotAsync(core, window, vm, $"alignment-cover-{shape}-{position}", alignment: true);
                 }
-                SetFit(1);
-                SetPosition(4); // Disabled commands must preserve the saved position (Right).
-                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 5)
-                    throw new InvalidOperationException("Contain erased the saved cover position.");
-                await SnapshotAsync(core, window, vm, $"alignment-contain-{shape}", alignment: true);
-                SetFit(0);
-                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 5)
-                    throw new InvalidOperationException("Returning to cover lost the saved position.");
             }
             if ((long)reloads.GetValue(vm)! != beforeReloads || await Script(core,
                 "window.nativeBackgroundReference === document.getElementById('terminalBackground')") != "true")
-                throw new InvalidOperationException("Fit, anchor or resize reloaded the background image.");
+                throw new InvalidOperationException("Position or resize reloaded the background image.");
             var positionPicker = Field(window, "BackgroundAnchorPicker");
             positionPicker.GetType().GetMethod("StartBringIntoView", Type.EmptyTypes)!.Invoke(positionPicker, null);
             await Task.Delay(500);

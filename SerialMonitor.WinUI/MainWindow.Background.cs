@@ -20,7 +20,7 @@ public sealed partial class MainWindow
         CuteBackgroundClip.Rect = new Rect(0, 0, CuteBackgroundCanvas.ActualWidth, CuteBackgroundCanvas.ActualHeight);
         var source = CuteBackgroundImage.Source as BitmapSource;
         var layout = BackgroundImageLayout.Calculate(CuteBackgroundCanvas.ActualWidth, CuteBackgroundCanvas.ActualHeight,
-            source?.PixelWidth ?? 0, source?.PixelHeight ?? 0, _viewModel.BackgroundFit, _viewModel.BackgroundPosition);
+            source?.PixelWidth ?? 0, source?.PixelHeight ?? 0, _viewModel.BackgroundPosition);
         if (layout == _lastAppliedBackgroundImageLayout) return;
         _lastAppliedBackgroundImageLayout = layout;
         Canvas.SetLeft(CuteBackgroundImage, layout?.Left ?? 0);

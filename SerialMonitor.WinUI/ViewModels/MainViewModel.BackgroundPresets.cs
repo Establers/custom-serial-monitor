@@ -30,24 +30,7 @@ public sealed partial class MainViewModel
     private BackgroundPreset? CurrentBackgroundPreset =>
         _currentUiSettings.BackgroundPresets?.ElementAtOrDefault(SelectedBackgroundPreset - 1);
 
-    public BackgroundFitMode BackgroundFit => CurrentBackgroundPreset?.FitMode ?? BackgroundFitMode.Cover;
-
     public BackgroundAnchor BackgroundPosition => BackgroundPreset.NormalizeAnchor(CurrentBackgroundPreset?.Anchor ?? BackgroundAnchor.Center);
-
-    public int SelectedBackgroundFitIndex
-    {
-        get => (int)BackgroundFit;
-        set
-        {
-            if (!CanEditBackgroundPresets || !Enum.IsDefined((BackgroundFitMode)value) || value == (int)BackgroundFit) return;
-            _currentUiSettings.EnsureBackgroundPresets();
-            CurrentBackgroundPreset!.FitMode = (BackgroundFitMode)value;
-            NotifyBackgroundPlacementPropertiesChanged();
-            RecordSettingsChange("Background fit", SettingsApplyBehavior.Immediate, BackgroundFit.ToString());
-        }
-    }
-
-    public bool CanEditBackgroundPosition => CanEditBackgroundPresets && BackgroundFit == BackgroundFitMode.Cover;
 
     public bool IsBackgroundTopSelected { get => BackgroundPosition == BackgroundAnchor.Top; set => SetBackgroundPosition(value, BackgroundAnchor.Top); }
     public bool IsBackgroundLeftSelected { get => BackgroundPosition == BackgroundAnchor.Left; set => SetBackgroundPosition(value, BackgroundAnchor.Left); }
@@ -64,7 +47,7 @@ public sealed partial class MainViewModel
 
     private void SetBackgroundPosition(bool selected, BackgroundAnchor position)
     {
-        if (!selected || !CanEditBackgroundPosition || BackgroundPreset.NormalizeAnchor(position) != position || position == BackgroundPosition) return;
+        if (!selected || !CanEditBackgroundPresets || BackgroundPreset.NormalizeAnchor(position) != position || position == BackgroundPosition) return;
         _currentUiSettings.EnsureBackgroundPresets();
         CurrentBackgroundPreset!.Anchor = position;
         NotifyBackgroundPlacementPropertiesChanged();
@@ -73,10 +56,7 @@ public sealed partial class MainViewModel
 
     private void NotifyBackgroundPlacementPropertiesChanged()
     {
-        OnPropertyChanged(nameof(SelectedBackgroundFitIndex));
-        OnPropertyChanged(nameof(BackgroundFit));
         OnPropertyChanged(nameof(BackgroundPosition));
-        OnPropertyChanged(nameof(CanEditBackgroundPosition));
         OnPropertyChanged(nameof(IsBackgroundTopSelected));
         OnPropertyChanged(nameof(IsBackgroundLeftSelected));
         OnPropertyChanged(nameof(IsBackgroundCenterSelected));
