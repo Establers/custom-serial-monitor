@@ -114,7 +114,9 @@ public sealed class BackgroundProfileTests : IDisposable
             originals.Add(original);
             profile.UiSettings.BackgroundPresets![number - 1] = new()
             {
-                ImagePath = original, Opacity = number / 10.0, XtermOpacity = number / 5.0
+                ImagePath = original, Opacity = number / 10.0, XtermOpacity = number / 5.0,
+                FitMode = number % 2 == 0 ? BackgroundFitMode.Contain : BackgroundFitMode.Cover,
+                Anchor = (BackgroundAnchor)(number + 2)
             };
         }
         profile.UiSettings.SelectedBackgroundPreset = 4;
@@ -134,6 +136,8 @@ public sealed class BackgroundProfileTests : IDisposable
             Assert.Equal(new byte[] { (byte)number, 42, 99 }, await File.ReadAllBytesAsync(preset.ImagePath));
             Assert.Equal(number / 10.0, preset.Opacity);
             Assert.Equal(number / 5.0, preset.XtermOpacity);
+            Assert.Equal(number % 2 == 0 ? BackgroundFitMode.Contain : BackgroundFitMode.Cover, preset.FitMode);
+            Assert.Equal((BackgroundAnchor)(number + 2), preset.Anchor);
         }
         Assert.Equal(loaded.UiSettings.BackgroundPresets[3].ImagePath, loaded.UiSettings.CuteBackgroundImagePath);
     }
@@ -208,7 +212,8 @@ public sealed class BackgroundProfileTests : IDisposable
         Directory.CreateDirectory(_directory);
         var profile = new ProfileService().CreateDefaultProfile();
         profile.UiSettings.SelectedBackgroundPreset = 99;
-        profile.UiSettings.BackgroundPresets = [null!, new() { ImagePath = "missing.png", Opacity = -1, XtermOpacity = 2 }, new(), new(), new(), new()];
+        profile.UiSettings.BackgroundPresets = [null!, new() { ImagePath = "missing.png", Opacity = -1, XtermOpacity = 2,
+            FitMode = (BackgroundFitMode)99, Anchor = (BackgroundAnchor)(-1) }, new(), new(), new(), new()];
         await File.WriteAllTextAsync(ProfilePath, JsonSerializer.Serialize(profile));
 
         var loaded = await new ProfileService().LoadAsync(ProfilePath, CancellationToken.None);
@@ -219,6 +224,8 @@ public sealed class BackgroundProfileTests : IDisposable
         Assert.Equal("missing.png", loaded.UiSettings.BackgroundPresets[1].ImagePath);
         Assert.Equal(0.25, loaded.UiSettings.BackgroundPresets[1].Opacity);
         Assert.Equal(BackgroundPreset.DefaultXtermOpacity, loaded.UiSettings.BackgroundPresets[1].XtermOpacity);
+        Assert.Equal(BackgroundFitMode.Cover, loaded.UiSettings.BackgroundPresets[1].FitMode);
+        Assert.Equal(BackgroundAnchor.Center, loaded.UiSettings.BackgroundPresets[1].Anchor);
     }
 
     [Fact]
@@ -239,6 +246,11 @@ public sealed class BackgroundProfileTests : IDisposable
         Assert.Equal(0.73, loaded.UiSettings.BackgroundPresets![0].Opacity);
         Assert.Equal(0.15, loaded.UiSettings.XtermBackgroundOpacity);
         Assert.All(loaded.UiSettings.BackgroundPresets, preset => Assert.Equal(0.15, preset.XtermOpacity));
+        Assert.All(loaded.UiSettings.BackgroundPresets, preset =>
+        {
+            Assert.Equal(BackgroundFitMode.Cover, preset.FitMode);
+            Assert.Equal(BackgroundAnchor.Center, preset.Anchor);
+        });
 
         loaded.UiSettings.BackgroundPresets[1].XtermOpacity = 0;
         await service.SaveAsync(ProfilePath, loaded, CancellationToken.None);
@@ -273,12 +285,18 @@ public sealed class BackgroundProfileTests : IDisposable
         clone.BackgroundPresets![0].ImagePath = "replacement.png";
         clone.BackgroundPresets[0].Opacity = 0.1;
         clone.BackgroundPresets[0].XtermOpacity = 0.8;
+        clone.BackgroundPresets[0].FitMode = BackgroundFitMode.Contain;
+        clone.BackgroundPresets[0].Anchor = BackgroundAnchor.Right;
         clone.SelectedBackgroundPreset = 5;
         clone.ApplySelectedBackgroundPreset();
 
         Assert.Equal("legacy.png", settings.BackgroundPresets![0].ImagePath);
         Assert.Equal(0.6, settings.BackgroundPresets[0].Opacity);
         Assert.Equal(0.4, settings.BackgroundPresets[0].XtermOpacity);
+        Assert.Equal(BackgroundFitMode.Cover, settings.BackgroundPresets[0].FitMode);
+        Assert.Equal(BackgroundAnchor.Center, settings.BackgroundPresets[0].Anchor);
+        Assert.Equal(BackgroundFitMode.Contain, clone.BackgroundPresets[0].FitMode);
+        Assert.Equal(BackgroundAnchor.Right, clone.BackgroundPresets[0].Anchor);
         Assert.Equal(0.8, clone.BackgroundPresets[0].XtermOpacity);
         Assert.Equal(1, settings.SelectedBackgroundPreset);
         Assert.Empty(clone.CuteBackgroundImagePath);

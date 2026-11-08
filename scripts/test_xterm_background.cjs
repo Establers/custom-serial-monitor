@@ -126,7 +126,8 @@ function patternImage() {
       for (const [x, y] of [[400, 250], [viewport.width - 100, viewport.height - 80]]) {
         const sx = (x + 0.5 - rect.left + (1200 * scale - rect.width) / 2) / scale;
         const sy = (y + 0.5 - rect.top + (900 * scale - rect.height) / 2) / scale;
-        const expected = [20 + sx / 1199 * 200, 30 + sy / 899 * 180, 60];
+        const inside = x >= rect.left && y >= rect.top && x < rect.left + rect.width && y < rect.top + rect.height;
+        const expected = inside ? [20 + sx / 1199 * 200, 30 + sy / 899 * 180, 60] : [12, 13, 14];
         const offset = (y * png.width + x) * 4;
         for (let channel = 0; channel < 3; channel++)
           assert.ok(Math.abs(png.data[offset + channel] - expected[channel]) < 3,
@@ -142,6 +143,11 @@ function patternImage() {
     await page.setViewportSize({ width: 800, height: 520 });
     await assertAligned(layout, { width: 800, height: 520 });
     layout = { left: -50 / 800, top: -80 / 520, width: 1400 / 800, height: 768 / 520 };
+    await set('pattern.png', 1, imageHost, layout);
+    await assertAligned(layout, { width: 800, height: 520 });
+    // The host also sends the actual contain rectangle; its solid margins
+    // must stay empty instead of stretching or repeating the image.
+    layout = { left: 200 / 800, top: 110 / 520, width: 400 / 800, height: 300 / 520 };
     await set('pattern.png', 1, imageHost, layout);
     await assertAligned(layout, { width: 800, height: 520 });
     assert.equal(requests.length, layoutLoads, 'Layout changes must reuse the image');

@@ -2725,6 +2725,9 @@ public sealed partial class MainWindow : Window
         {
             _ = SyncXtermBackgroundAsync();
         }
+
+        if (args.PropertyName is nameof(MainViewModel.BackgroundFit) or nameof(MainViewModel.BackgroundPosition))
+            UpdateCuteBackgroundLayout();
     }
 
     private async Task SyncXtermBackgroundAsync()
@@ -2983,6 +2986,7 @@ public sealed partial class MainWindow : Window
             if (!ReferenceEquals(CuteBackgroundImage.Source, _cachedCuteBackgroundImage))
             {
                 CuteBackgroundImage.Source = _cachedCuteBackgroundImage;
+                UpdateCuteBackgroundLayout();
             }
 
             _viewModel.RecordCuteBackgroundApplyResult(

@@ -13,6 +13,8 @@ public sealed partial class MainViewModel
 
     public AsyncRelayCommand SelectBackgroundPresetCommand { get; private set; } = null!;
 
+    public AsyncRelayCommand SelectBackgroundAnchorCommand { get; private set; } = null!;
+
     public int SelectedBackgroundPreset => _currentUiSettings.SelectedBackgroundPreset;
 
     public bool IsBackgroundPreset1Selected => SelectedBackgroundPreset == 1;
@@ -24,6 +26,72 @@ public sealed partial class MainViewModel
     public bool CanEditBackgroundPresets => !IsBusy && !_isProfileSaveActive && !IsAutomationBusy && !IsShuttingDown;
 
     public long CuteBackgroundImageRevision => _cuteBackgroundImageRevision;
+
+    private BackgroundPreset? CurrentBackgroundPreset =>
+        _currentUiSettings.BackgroundPresets?.ElementAtOrDefault(SelectedBackgroundPreset - 1);
+
+    public BackgroundFitMode BackgroundFit => CurrentBackgroundPreset?.FitMode ?? BackgroundFitMode.Cover;
+
+    public BackgroundAnchor BackgroundPosition => CurrentBackgroundPreset?.Anchor ?? BackgroundAnchor.Center;
+
+    public int SelectedBackgroundFitIndex
+    {
+        get => (int)BackgroundFit;
+        set
+        {
+            if (!CanEditBackgroundPresets || !Enum.IsDefined((BackgroundFitMode)value) || value == (int)BackgroundFit) return;
+            _currentUiSettings.EnsureBackgroundPresets();
+            CurrentBackgroundPreset!.FitMode = (BackgroundFitMode)value;
+            NotifyBackgroundPlacementPropertiesChanged();
+            RecordSettingsChange("Background fit", SettingsApplyBehavior.Immediate, BackgroundFit.ToString());
+        }
+    }
+
+    public bool CanEditBackgroundPosition => CanEditBackgroundPresets && BackgroundFit == BackgroundFitMode.Cover;
+
+    public bool IsBackgroundTopLeftSelected { get => BackgroundPosition == BackgroundAnchor.TopLeft; set => SetBackgroundPosition(value, BackgroundAnchor.TopLeft); }
+    public bool IsBackgroundTopSelected { get => BackgroundPosition == BackgroundAnchor.Top; set => SetBackgroundPosition(value, BackgroundAnchor.Top); }
+    public bool IsBackgroundTopRightSelected { get => BackgroundPosition == BackgroundAnchor.TopRight; set => SetBackgroundPosition(value, BackgroundAnchor.TopRight); }
+    public bool IsBackgroundLeftSelected { get => BackgroundPosition == BackgroundAnchor.Left; set => SetBackgroundPosition(value, BackgroundAnchor.Left); }
+    public bool IsBackgroundCenterSelected { get => BackgroundPosition == BackgroundAnchor.Center; set => SetBackgroundPosition(value, BackgroundAnchor.Center); }
+    public bool IsBackgroundRightSelected { get => BackgroundPosition == BackgroundAnchor.Right; set => SetBackgroundPosition(value, BackgroundAnchor.Right); }
+    public bool IsBackgroundBottomLeftSelected { get => BackgroundPosition == BackgroundAnchor.BottomLeft; set => SetBackgroundPosition(value, BackgroundAnchor.BottomLeft); }
+    public bool IsBackgroundBottomSelected { get => BackgroundPosition == BackgroundAnchor.Bottom; set => SetBackgroundPosition(value, BackgroundAnchor.Bottom); }
+    public bool IsBackgroundBottomRightSelected { get => BackgroundPosition == BackgroundAnchor.BottomRight; set => SetBackgroundPosition(value, BackgroundAnchor.BottomRight); }
+
+    private Task SelectBackgroundAnchorAsync(object? parameter)
+    {
+        if (int.TryParse(parameter?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var index))
+            SetBackgroundPosition(true, (BackgroundAnchor)index);
+        return Task.CompletedTask;
+    }
+
+    private void SetBackgroundPosition(bool selected, BackgroundAnchor position)
+    {
+        if (!selected || !CanEditBackgroundPosition || !Enum.IsDefined(position) || position == BackgroundPosition) return;
+        _currentUiSettings.EnsureBackgroundPresets();
+        CurrentBackgroundPreset!.Anchor = position;
+        NotifyBackgroundPlacementPropertiesChanged();
+        RecordSettingsChange("Background position", SettingsApplyBehavior.Immediate, BackgroundPosition.ToString());
+    }
+
+    private void NotifyBackgroundPlacementPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedBackgroundFitIndex));
+        OnPropertyChanged(nameof(BackgroundFit));
+        OnPropertyChanged(nameof(BackgroundPosition));
+        OnPropertyChanged(nameof(CanEditBackgroundPosition));
+        OnPropertyChanged(nameof(IsBackgroundTopLeftSelected));
+        OnPropertyChanged(nameof(IsBackgroundTopSelected));
+        OnPropertyChanged(nameof(IsBackgroundTopRightSelected));
+        OnPropertyChanged(nameof(IsBackgroundLeftSelected));
+        OnPropertyChanged(nameof(IsBackgroundCenterSelected));
+        OnPropertyChanged(nameof(IsBackgroundRightSelected));
+        OnPropertyChanged(nameof(IsBackgroundBottomLeftSelected));
+        OnPropertyChanged(nameof(IsBackgroundBottomSelected));
+        OnPropertyChanged(nameof(IsBackgroundBottomRightSelected));
+        SelectBackgroundAnchorCommand.NotifyCanExecuteChanged();
+    }
 
     public double XtermBackgroundOpacity
     {
@@ -121,6 +189,7 @@ public sealed partial class MainViewModel
 
     private void NotifyBackgroundPresetPropertiesChanged()
     {
+        NotifyBackgroundPlacementPropertiesChanged();
         OnPropertyChanged(nameof(SelectedBackgroundPreset));
         OnPropertyChanged(nameof(IsBackgroundPreset1Selected));
         OnPropertyChanged(nameof(IsBackgroundPreset2Selected));

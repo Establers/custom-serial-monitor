@@ -23,6 +23,70 @@
             <infra:EventTextSegmentBrushConverter x:Key="EventTextSegmentBrushConverter" />
             <infra:DisplayModeNameConverter x:Key="DisplayModeNameConverter" />
             <infra:DisplayModeToolTipConverter x:Key="DisplayModeToolTipConverter" />
+            <Style x:Key="BackgroundPresetButtonStyle" TargetType="RadioButton">
+                <Setter Property="Width" Value="26" />
+                <Setter Property="MinWidth" Value="26" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Background" Value="{ThemeResource CompactButtonBackgroundBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CompactButtonBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="FocusVisualMargin" Value="0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <ContentPresenter x:Name="PresetContent"
+                                              Content="{TemplateBinding Content}"
+                                              Background="{TemplateBinding Background}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              BorderBrush="{TemplateBinding BorderBrush}"
+                                              BorderThickness="{TemplateBinding BorderThickness}"
+                                              CornerRadius="{TemplateBinding CornerRadius}"
+                                              FontSize="{TemplateBinding FontSize}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Control.IsTemplateFocusTarget="True">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="PresetContent.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="PresetContent.Opacity" Value="0.8" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="PresetContent.Opacity" Value="0.4" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="CheckStates">
+                                        <VisualState x:Name="Unchecked" />
+                                        <VisualState x:Name="Checked">
+                                            <VisualState.Setters>
+                                                <Setter Target="PresetContent.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                <Setter Target="PresetContent.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </ContentPresenter>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <DataTemplate x:Key="DisplayModeComboBoxItemTemplate">
                 <TextBlock Text="{Binding Converter={StaticResource DisplayModeNameConverter}}"
                            infra:AppToolTipService.ToolTip="{Binding Converter={StaticResource DisplayModeToolTipConverter}}" />
@@ -1166,16 +1230,22 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.RowSpan="3"
-              Margin="-4"
-              IsHitTestVisible="False"
-              Opacity="{Binding CuteBackgroundLayerOpacity}">
+        <Canvas x:Name="CuteBackgroundCanvas"
+                Grid.RowSpan="3"
+                Margin="-4"
+                IsHitTestVisible="False"
+                SizeChanged="CuteBackgroundCanvas_SizeChanged"
+                Opacity="{Binding CuteBackgroundLayerOpacity}">
+            <Canvas.Clip>
+                <RectangleGeometry x:Name="CuteBackgroundClip" />
+            </Canvas.Clip>
             <Image x:Name="CuteBackgroundImage"
-                   Stretch="UniformToFill"
-                   HorizontalAlignment="Stretch"
-                   VerticalAlignment="Stretch"
+                   Stretch="Fill"
+                   Width="0"
+                   Height="0"
+                   ImageOpened="CuteBackgroundImage_Opened"
                    Opacity="{Binding CuteBackgroundOpacity}" />
-        </Grid>
+        </Canvas>
 
         <Border Style="{StaticResource CompactSurfaceBorderStyle}">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
@@ -3687,72 +3757,6 @@
                                             <TextBlock x:Uid="BackgroundPresetsLabel" Text="Bg presets" Style="{StaticResource FormLabelTextStyle}" />
                                             <StackPanel x:Uid="BackgroundPresetsHelp" Grid.Column="1" Orientation="Horizontal" Spacing="3"
                                                         infra:AppToolTipService.ToolTip="Select background preset 1–5, then browse to set its image. Each preset saves its image, app background transparency and xterm background transparency separately. Empty presets use the bundled background.">
-                                                <StackPanel.Resources>
-                                                    <Style x:Key="BackgroundPresetButtonStyle" TargetType="RadioButton">
-                                                        <Setter Property="Width" Value="26" />
-                                                        <Setter Property="MinWidth" Value="26" />
-                                                        <Setter Property="Height" Value="24" />
-                                                        <Setter Property="MinHeight" Value="24" />
-                                                        <Setter Property="Padding" Value="0" />
-                                                        <Setter Property="CornerRadius" Value="4" />
-                                                        <Setter Property="FontSize" Value="11" />
-                                                        <Setter Property="Background" Value="{ThemeResource CompactButtonBackgroundBrush}" />
-                                                        <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
-                                                        <Setter Property="BorderBrush" Value="{ThemeResource CompactButtonBorderBrush}" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                        <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
-                                                        <Setter Property="UseSystemFocusVisuals" Value="True" />
-                                                        <Setter Property="FocusVisualMargin" Value="0" />
-                                                        <Setter Property="Template">
-                                                            <Setter.Value>
-                                                                <ControlTemplate TargetType="RadioButton">
-                                                                    <ContentPresenter x:Name="PresetContent"
-                                                                                      Content="{TemplateBinding Content}"
-                                                                                      Background="{TemplateBinding Background}"
-                                                                                      Foreground="{TemplateBinding Foreground}"
-                                                                                      BorderBrush="{TemplateBinding BorderBrush}"
-                                                                                      BorderThickness="{TemplateBinding BorderThickness}"
-                                                                                      CornerRadius="{TemplateBinding CornerRadius}"
-                                                                                      FontSize="{TemplateBinding FontSize}"
-                                                                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                                                      Control.IsTemplateFocusTarget="True">
-                                                                        <VisualStateManager.VisualStateGroups>
-                                                                            <VisualStateGroup x:Name="CommonStates">
-                                                                                <VisualState x:Name="Normal" />
-                                                                                <VisualState x:Name="PointerOver">
-                                                                                    <VisualState.Setters>
-                                                                                        <Setter Target="PresetContent.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
-                                                                                    </VisualState.Setters>
-                                                                                </VisualState>
-                                                                                <VisualState x:Name="Pressed">
-                                                                                    <VisualState.Setters>
-                                                                                        <Setter Target="PresetContent.Opacity" Value="0.8" />
-                                                                                    </VisualState.Setters>
-                                                                                </VisualState>
-                                                                                <VisualState x:Name="Disabled">
-                                                                                    <VisualState.Setters>
-                                                                                        <Setter Target="PresetContent.Opacity" Value="0.4" />
-                                                                                    </VisualState.Setters>
-                                                                                </VisualState>
-                                                                            </VisualStateGroup>
-                                                                            <VisualStateGroup x:Name="CheckStates">
-                                                                                <VisualState x:Name="Unchecked" />
-                                                                                <VisualState x:Name="Checked">
-                                                                                    <VisualState.Setters>
-                                                                                        <Setter Target="PresetContent.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                                                                        <Setter Target="PresetContent.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                                                                                    </VisualState.Setters>
-                                                                                </VisualState>
-                                                                            </VisualStateGroup>
-                                                                        </VisualStateManager.VisualStateGroups>
-                                                                    </ContentPresenter>
-                                                                </ControlTemplate>
-                                                            </Setter.Value>
-                                                        </Setter>
-                                                    </Style>
-                                                </StackPanel.Resources>
                                                 <RadioButton Content="1" GroupName="BackgroundPresets" Style="{StaticResource BackgroundPresetButtonStyle}"
                                                               IsChecked="{Binding IsBackgroundPreset1Selected, Mode=OneWay}"
                                                               Command="{Binding SelectBackgroundPresetCommand}" CommandParameter="1" AutomationProperties.Name="Background preset 1" />
@@ -3802,6 +3806,55 @@
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="The selected image is copied and saved immediately." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="112,*,58" ColumnSpacing="6">
+                                            <TextBlock x:Uid="BackgroundFitLabel" Text="Image fit" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ComboBox x:Name="BackgroundFitComboBox" x:Uid="BackgroundFitPicker" Grid.Column="1"
+                                                      SelectedIndex="{Binding SelectedBackgroundFitIndex, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanEditBackgroundPresets}"
+                                                      HorizontalAlignment="Left" MinWidth="160"
+                                                      Style="{StaticResource FormComboBoxStyle}"
+                                                      AutomationProperties.Name="Background image fit"
+                                                      infra:AppToolTipService.ToolTip="Saved for this preset. Cover fills the window and crops edges. Show entire image preserves the whole image with empty space. Both keep the aspect ratio.">
+                                                <ComboBoxItem x:Uid="BackgroundFitCover" Content="Cover" />
+                                                <ComboBoxItem x:Uid="BackgroundFitContain" Content="Show entire image" />
+                                            </ComboBox>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="112,Auto,*" ColumnSpacing="6">
+                                            <TextBlock x:Uid="BackgroundAnchorLabel" Text="Crop position" Style="{StaticResource FormLabelTextStyle}" />
+                                            <ContentControl x:Name="BackgroundAnchorPicker" x:Uid="BackgroundAnchorHelp" Grid.Column="1"
+                                                            IsEnabled="{Binding CanEditBackgroundPosition}" IsTabStop="False"
+                                                            infra:AppToolTipService.ToolTip="Choose which part to keep when Cover crops the image. Show entire image is always centered. Saved separately for each preset.">
+                                              <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,Auto,Auto" RowSpacing="3" ColumnSpacing="3">
+                                                <RadioButton x:Uid="BackgroundAnchorTopLeft" Content="↖" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundTopLeftSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="0" AutomationProperties.Name="Keep top left" />
+                                                <RadioButton x:Uid="BackgroundAnchorTop" Grid.Column="1" Content="↑" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundTopSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="1" AutomationProperties.Name="Keep top" />
+                                                <RadioButton x:Uid="BackgroundAnchorTopRight" Grid.Column="2" Content="↗" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundTopRightSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="2" AutomationProperties.Name="Keep top right" />
+                                                <RadioButton x:Uid="BackgroundAnchorLeft" Grid.Row="1" Content="←" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundLeftSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="3" AutomationProperties.Name="Keep left" />
+                                                <RadioButton x:Uid="BackgroundAnchorCenter" Grid.Row="1" Grid.Column="1" Content="●" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundCenterSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="4" AutomationProperties.Name="Keep center" />
+                                                <RadioButton x:Uid="BackgroundAnchorRight" Grid.Row="1" Grid.Column="2" Content="→" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundRightSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="5" AutomationProperties.Name="Keep right" />
+                                                <RadioButton x:Uid="BackgroundAnchorBottomLeft" Grid.Row="2" Content="↙" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundBottomLeftSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="6" AutomationProperties.Name="Keep bottom left" />
+                                                <RadioButton x:Uid="BackgroundAnchorBottom" Grid.Row="2" Grid.Column="1" Content="↓" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundBottomSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="7" AutomationProperties.Name="Keep bottom" />
+                                                <RadioButton x:Uid="BackgroundAnchorBottomRight" Grid.Row="2" Grid.Column="2" Content="↘" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundBottomRightSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="8" AutomationProperties.Name="Keep bottom right" />
+                                              </Grid>
+                                            </ContentControl>
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58" ColumnSpacing="6">
                                             <TextBlock x:Uid="BackgroundOpacityLabel"

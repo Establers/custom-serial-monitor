@@ -1144,6 +1144,16 @@ public sealed class ProfileService : IProfileService
                 preset.XtermOpacity = defaults.XtermBackgroundOpacity;
                 warnings.Add("Background preset xterm opacity was invalid.");
             }
+            if (!Enum.IsDefined(preset.FitMode))
+            {
+                preset.FitMode = BackgroundFitMode.Cover;
+                warnings.Add("Background preset fit mode was invalid.");
+            }
+            if (!Enum.IsDefined(preset.Anchor))
+            {
+                preset.Anchor = BackgroundAnchor.Center;
+                warnings.Add("Background preset anchor was invalid.");
+            }
         }
         settings.ApplySelectedBackgroundPreset();
 

@@ -32,7 +32,7 @@ $start.Environment['SERIAL_BG_NATIVE_CUSTOM_SOURCE'] = $source
 $process = $null
 try {
     $process = [Diagnostics.Process]::Start($start)
-    if (-not $process.WaitForExit(45000)) { throw 'Native background test timed out.' }
+    if (-not $process.WaitForExit(60000)) { throw 'Native background test timed out.' }
     if ($process.ExitCode -ne 0) { throw (Get-Content -LiteralPath $result -Raw) }
     $expected = @{
         'bundled-50' = @('true', '0.5', 'serialmonitor-background-bundled.local')
@@ -45,6 +45,12 @@ try {
         'alignment-narrow' = @('true', '1', 'serialmonitor-background-bundled.local')
         'alignment-wide' = @('true', '1', 'serialmonitor-background-bundled.local')
         'alignment-collapsed' = @('true', '1', 'serialmonitor-background-bundled.local')
+    }
+    foreach ($shape in @('portrait', 'wide')) {
+        foreach ($position in 0..8) {
+            $expected["alignment-cover-$shape-$position"] = @('true', '1', 'serialmonitor-background-bundled.local')
+        }
+        $expected["alignment-contain-$shape"] = @('true', '1', 'serialmonitor-background-bundled.local')
     }
     foreach ($case in $expected.Keys) {
         $snapshot = Get-Content -LiteralPath ($result + '.' + $case + '.json') -Raw | ConvertFrom-Json
