@@ -1154,6 +1154,7 @@ public sealed class ProfileService : IProfileService
                 preset.Anchor = BackgroundAnchor.Center;
                 warnings.Add("Background preset anchor was invalid.");
             }
+            preset.Anchor = BackgroundPreset.NormalizeAnchor(preset.Anchor);
         }
         settings.ApplySelectedBackgroundPreset();
 

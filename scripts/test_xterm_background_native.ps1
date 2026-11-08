@@ -47,7 +47,7 @@ try {
         'alignment-collapsed' = @('true', '1', 'serialmonitor-background-bundled.local')
     }
     foreach ($shape in @('portrait', 'wide')) {
-        foreach ($position in 0..8) {
+        foreach ($position in @(3, 1, 4, 7, 5)) {
             $expected["alignment-cover-$shape-$position"] = @('true', '1', 'serialmonitor-background-bundled.local')
         }
         $expected["alignment-contain-$shape"] = @('true', '1', 'serialmonitor-background-bundled.local')

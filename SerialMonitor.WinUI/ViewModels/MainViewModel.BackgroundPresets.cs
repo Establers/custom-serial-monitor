@@ -32,7 +32,7 @@ public sealed partial class MainViewModel
 
     public BackgroundFitMode BackgroundFit => CurrentBackgroundPreset?.FitMode ?? BackgroundFitMode.Cover;
 
-    public BackgroundAnchor BackgroundPosition => CurrentBackgroundPreset?.Anchor ?? BackgroundAnchor.Center;
+    public BackgroundAnchor BackgroundPosition => BackgroundPreset.NormalizeAnchor(CurrentBackgroundPreset?.Anchor ?? BackgroundAnchor.Center);
 
     public int SelectedBackgroundFitIndex
     {
@@ -49,15 +49,11 @@ public sealed partial class MainViewModel
 
     public bool CanEditBackgroundPosition => CanEditBackgroundPresets && BackgroundFit == BackgroundFitMode.Cover;
 
-    public bool IsBackgroundTopLeftSelected { get => BackgroundPosition == BackgroundAnchor.TopLeft; set => SetBackgroundPosition(value, BackgroundAnchor.TopLeft); }
     public bool IsBackgroundTopSelected { get => BackgroundPosition == BackgroundAnchor.Top; set => SetBackgroundPosition(value, BackgroundAnchor.Top); }
-    public bool IsBackgroundTopRightSelected { get => BackgroundPosition == BackgroundAnchor.TopRight; set => SetBackgroundPosition(value, BackgroundAnchor.TopRight); }
     public bool IsBackgroundLeftSelected { get => BackgroundPosition == BackgroundAnchor.Left; set => SetBackgroundPosition(value, BackgroundAnchor.Left); }
     public bool IsBackgroundCenterSelected { get => BackgroundPosition == BackgroundAnchor.Center; set => SetBackgroundPosition(value, BackgroundAnchor.Center); }
     public bool IsBackgroundRightSelected { get => BackgroundPosition == BackgroundAnchor.Right; set => SetBackgroundPosition(value, BackgroundAnchor.Right); }
-    public bool IsBackgroundBottomLeftSelected { get => BackgroundPosition == BackgroundAnchor.BottomLeft; set => SetBackgroundPosition(value, BackgroundAnchor.BottomLeft); }
     public bool IsBackgroundBottomSelected { get => BackgroundPosition == BackgroundAnchor.Bottom; set => SetBackgroundPosition(value, BackgroundAnchor.Bottom); }
-    public bool IsBackgroundBottomRightSelected { get => BackgroundPosition == BackgroundAnchor.BottomRight; set => SetBackgroundPosition(value, BackgroundAnchor.BottomRight); }
 
     private Task SelectBackgroundAnchorAsync(object? parameter)
     {
@@ -68,7 +64,7 @@ public sealed partial class MainViewModel
 
     private void SetBackgroundPosition(bool selected, BackgroundAnchor position)
     {
-        if (!selected || !CanEditBackgroundPosition || !Enum.IsDefined(position) || position == BackgroundPosition) return;
+        if (!selected || !CanEditBackgroundPosition || BackgroundPreset.NormalizeAnchor(position) != position || position == BackgroundPosition) return;
         _currentUiSettings.EnsureBackgroundPresets();
         CurrentBackgroundPreset!.Anchor = position;
         NotifyBackgroundPlacementPropertiesChanged();
@@ -81,15 +77,11 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(BackgroundFit));
         OnPropertyChanged(nameof(BackgroundPosition));
         OnPropertyChanged(nameof(CanEditBackgroundPosition));
-        OnPropertyChanged(nameof(IsBackgroundTopLeftSelected));
         OnPropertyChanged(nameof(IsBackgroundTopSelected));
-        OnPropertyChanged(nameof(IsBackgroundTopRightSelected));
         OnPropertyChanged(nameof(IsBackgroundLeftSelected));
         OnPropertyChanged(nameof(IsBackgroundCenterSelected));
         OnPropertyChanged(nameof(IsBackgroundRightSelected));
-        OnPropertyChanged(nameof(IsBackgroundBottomLeftSelected));
         OnPropertyChanged(nameof(IsBackgroundBottomSelected));
-        OnPropertyChanged(nameof(IsBackgroundBottomRightSelected));
         SelectBackgroundAnchorCommand.NotifyCanExecuteChanged();
     }
 

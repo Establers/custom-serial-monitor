@@ -3824,36 +3824,24 @@
                                             <TextBlock x:Uid="BackgroundAnchorLabel" Text="Crop position" Style="{StaticResource FormLabelTextStyle}" />
                                             <ContentControl x:Name="BackgroundAnchorPicker" x:Uid="BackgroundAnchorHelp" Grid.Column="1"
                                                             IsEnabled="{Binding CanEditBackgroundPosition}" IsTabStop="False"
-                                                            infra:AppToolTipService.ToolTip="Choose which part to keep when Cover crops the image. Show entire image is always centered. Saved separately for each preset.">
-                                              <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,Auto,Auto" RowSpacing="3" ColumnSpacing="3">
-                                                <RadioButton x:Uid="BackgroundAnchorTopLeft" Content="↖" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundTopLeftSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="0" AutomationProperties.Name="Keep top left" />
-                                                <RadioButton x:Uid="BackgroundAnchorTop" Grid.Column="1" Content="↑" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundTopSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="1" AutomationProperties.Name="Keep top" />
-                                                <RadioButton x:Uid="BackgroundAnchorTopRight" Grid.Column="2" Content="↗" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundTopRightSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="2" AutomationProperties.Name="Keep top right" />
-                                                <RadioButton x:Uid="BackgroundAnchorLeft" Grid.Row="1" Content="←" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                            infra:AppToolTipService.ToolTip="Left/right apply when the image is cropped horizontally; top/bottom apply when cropped vertically. Show entire image is always centered. Saved separately for each preset.">
+                                              <StackPanel Orientation="Horizontal" Spacing="3">
+                                                <RadioButton x:Uid="BackgroundAnchorLeft" Content="←" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
                                                              IsChecked="{Binding IsBackgroundLeftSelected, Mode=TwoWay}"
                                                              Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="3" AutomationProperties.Name="Keep left" />
-                                                <RadioButton x:Uid="BackgroundAnchorCenter" Grid.Row="1" Grid.Column="1" Content="●" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                <RadioButton x:Uid="BackgroundAnchorTop" Content="↑" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundTopSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="1" AutomationProperties.Name="Keep top" />
+                                                <RadioButton x:Uid="BackgroundAnchorCenter" Content="●" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
                                                              IsChecked="{Binding IsBackgroundCenterSelected, Mode=TwoWay}"
                                                              Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="4" AutomationProperties.Name="Keep center" />
-                                                <RadioButton x:Uid="BackgroundAnchorRight" Grid.Row="1" Grid.Column="2" Content="→" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundRightSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="5" AutomationProperties.Name="Keep right" />
-                                                <RadioButton x:Uid="BackgroundAnchorBottomLeft" Grid.Row="2" Content="↙" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundBottomLeftSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="6" AutomationProperties.Name="Keep bottom left" />
-                                                <RadioButton x:Uid="BackgroundAnchorBottom" Grid.Row="2" Grid.Column="1" Content="↓" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                <RadioButton x:Uid="BackgroundAnchorBottom" Content="↓" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
                                                              IsChecked="{Binding IsBackgroundBottomSelected, Mode=TwoWay}"
                                                              Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="7" AutomationProperties.Name="Keep bottom" />
-                                                <RadioButton x:Uid="BackgroundAnchorBottomRight" Grid.Row="2" Grid.Column="2" Content="↘" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
-                                                             IsChecked="{Binding IsBackgroundBottomRightSelected, Mode=TwoWay}"
-                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="8" AutomationProperties.Name="Keep bottom right" />
-                                              </Grid>
+                                                <RadioButton x:Uid="BackgroundAnchorRight" Content="→" GroupName="BackgroundAnchors" Style="{StaticResource BackgroundPresetButtonStyle}"
+                                                             IsChecked="{Binding IsBackgroundRightSelected, Mode=TwoWay}"
+                                                             Command="{Binding SelectBackgroundAnchorCommand}" CommandParameter="5" AutomationProperties.Name="Keep right" />
+                                              </StackPanel>
                                             </ContentControl>
                                         </Grid>
                                         <Grid ColumnDefinitions="112,*,58" ColumnSpacing="6">

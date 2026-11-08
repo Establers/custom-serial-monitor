@@ -1216,14 +1216,10 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="BackgroundFitPicker.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Background image fit</value></data>
   <data name="BackgroundFitPicker.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Saved for this preset. Cover fills the window and crops edges. Show entire image preserves the whole image with empty space. Both keep the aspect ratio.</value></data>
   <data name="BackgroundAnchorLabel.Text" xml:space="preserve"><value>Crop position</value></data>
-  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Choose which part to keep when Cover crops the image. Show entire image is always centered. Saved separately for each preset.</value></data>
-  <data name="BackgroundAnchorTopLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep top left</value></data>
+  <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Left/right apply when the image is cropped horizontally; top/bottom apply when cropped vertically. Show entire image is always centered. Saved separately for each preset.</value></data>
   <data name="BackgroundAnchorTop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep top</value></data>
-  <data name="BackgroundAnchorTopRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep top right</value></data>
   <data name="BackgroundAnchorLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep left</value></data>
   <data name="BackgroundAnchorCenter.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep center</value></data>
   <data name="BackgroundAnchorRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep right</value></data>
-  <data name="BackgroundAnchorBottomLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep bottom left</value></data>
   <data name="BackgroundAnchorBottom.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep bottom</value></data>
-  <data name="BackgroundAnchorBottomRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep bottom right</value></data>
 </root>

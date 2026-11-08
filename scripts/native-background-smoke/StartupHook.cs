@@ -137,7 +137,10 @@ public static class StartupHook
         if (enabled != (fit == 0)) throw new InvalidOperationException("Position picker enabled state did not follow fit mode.");
         var grid = picker.GetType().GetProperty("Content")!.GetValue(picker)!;
         var children = (System.Collections.IEnumerable)grid.GetType().GetProperty("Children")!.GetValue(grid)!;
-        var selected = children.Cast<object>().Where(child => (bool?)child.GetType().GetProperty("IsChecked")!.GetValue(child) == true).ToArray();
+        var buttons = children.Cast<object>().ToArray();
+        if (buttons.Length != 5 || (double)picker.GetType().GetProperty("ActualHeight")!.GetValue(picker)! > 28)
+            throw new InvalidOperationException("The position picker must contain five buttons in a single row.");
+        var selected = buttons.Where(child => (bool?)child.GetType().GetProperty("IsChecked")!.GetValue(child) == true).ToArray();
         if (selected.Length != 1 || selected[0].GetType().GetProperty("CommandParameter")!.GetValue(selected[0])!.ToString() != position.ToString())
             throw new InvalidOperationException($"Position radio buttons did not follow the selected preset: expected {position}, checked {selected.Length}, values {string.Join(',', selected.Select(child => child.GetType().GetProperty("CommandParameter")!.GetValue(child)))}.");
         await File.WriteAllTextAsync(Output + "." + name + ".json", JsonSerializer.Serialize(new {
@@ -240,18 +243,18 @@ public static class StartupHook
             {
                 appWindow.GetType().GetMethod("Resize")!.Invoke(appWindow, [size]);
                 SetFit(0);
-                for (var position = 0; position < 9; position++)
+                foreach (var position in new[] { 3, 1, 4, 7, 5 })
                 {
                     SetPosition(position);
                     await SnapshotAsync(core, window, vm, $"alignment-cover-{shape}-{position}", alignment: true);
                 }
                 SetFit(1);
-                SetPosition(4); // Disabled commands must preserve the saved position (8).
-                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 8)
+                SetPosition(4); // Disabled commands must preserve the saved position (Right).
+                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 5)
                     throw new InvalidOperationException("Contain erased the saved cover position.");
                 await SnapshotAsync(core, window, vm, $"alignment-contain-{shape}", alignment: true);
                 SetFit(0);
-                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 8)
+                if (Convert.ToInt32(vm.GetType().GetProperty("BackgroundPosition")!.GetValue(vm)) != 5)
                     throw new InvalidOperationException("Returning to cover lost the saved position.");
             }
             if ((long)reloads.GetValue(vm)! != beforeReloads || await Script(core,

@@ -107,6 +107,7 @@ public sealed class BackgroundProfileTests : IDisposable
         var profile = service.CreateDefaultProfile();
         profile.UiSettings.EnsureBackgroundPresets();
         var originals = new List<string>();
+        BackgroundAnchor[] anchors = [BackgroundAnchor.Left, BackgroundAnchor.Top, BackgroundAnchor.Center, BackgroundAnchor.Bottom, BackgroundAnchor.Right];
         for (var number = 1; number <= 5; number++)
         {
             var original = Path.Combine(_directory, $"original-{number}.png");
@@ -116,7 +117,7 @@ public sealed class BackgroundProfileTests : IDisposable
             {
                 ImagePath = original, Opacity = number / 10.0, XtermOpacity = number / 5.0,
                 FitMode = number % 2 == 0 ? BackgroundFitMode.Contain : BackgroundFitMode.Cover,
-                Anchor = (BackgroundAnchor)(number + 2)
+                Anchor = anchors[number - 1]
             };
         }
         profile.UiSettings.SelectedBackgroundPreset = 4;
@@ -137,7 +138,7 @@ public sealed class BackgroundProfileTests : IDisposable
             Assert.Equal(number / 10.0, preset.Opacity);
             Assert.Equal(number / 5.0, preset.XtermOpacity);
             Assert.Equal(number % 2 == 0 ? BackgroundFitMode.Contain : BackgroundFitMode.Cover, preset.FitMode);
-            Assert.Equal((BackgroundAnchor)(number + 2), preset.Anchor);
+            Assert.Equal(anchors[number - 1], preset.Anchor);
         }
         Assert.Equal(loaded.UiSettings.BackgroundPresets[3].ImagePath, loaded.UiSettings.CuteBackgroundImagePath);
     }
@@ -302,6 +303,29 @@ public sealed class BackgroundProfileTests : IDisposable
         Assert.Empty(clone.CuteBackgroundImagePath);
         Assert.Equal(0.25, clone.CuteBackgroundOpacity);
         Assert.Equal(BackgroundPreset.DefaultXtermOpacity, clone.XtermBackgroundOpacity);
+    }
+
+    [Theory]
+    [InlineData(BackgroundAnchor.TopLeft, BackgroundAnchor.Left)]
+    [InlineData(BackgroundAnchor.BottomLeft, BackgroundAnchor.Left)]
+    [InlineData(BackgroundAnchor.TopRight, BackgroundAnchor.Right)]
+    [InlineData(BackgroundAnchor.BottomRight, BackgroundAnchor.Right)]
+    public async Task OlderCornerAnchors_KeepHorizontalPreferenceInSingleRowPicker(BackgroundAnchor old, BackgroundAnchor expected)
+    {
+        Directory.CreateDirectory(_directory);
+        var service = new ProfileService();
+        var profile = service.CreateDefaultProfile();
+        profile.UiSettings.EnsureBackgroundPresets();
+        profile.UiSettings.BackgroundPresets![0].Anchor = old;
+        profile.UiSettings.BackgroundPresets[0].Opacity = 0.7;
+        await File.WriteAllTextAsync(ProfilePath, JsonSerializer.Serialize(profile));
+
+        var loaded = await service.LoadAsync(ProfilePath, CancellationToken.None);
+        Assert.Equal(expected, loaded.UiSettings.BackgroundPresets![0].Anchor);
+        Assert.Equal(0.7, loaded.UiSettings.BackgroundPresets[0].Opacity);
+        await service.SaveAsync(ProfilePath, loaded, CancellationToken.None);
+        var restarted = await new ProfileService().LoadAsync(ProfilePath, CancellationToken.None);
+        Assert.Equal(expected, restarted.UiSettings.BackgroundPresets![0].Anchor);
     }
 
     public void Dispose()
