@@ -51,6 +51,7 @@ public sealed class LogPipeline : ILogPipeline
     private int _lastPartialFinalizedByNewline;
     private string _lastPartialRxFlushTimeText = "(none)";
     private readonly List<byte> _hexPendingBytes = new();
+    private DateTimeOffset? _hexGroupReceivedAt;
     private int _configuredRxDisplayMode = (int)RxDisplayMode.Terminal;
     private int _hexGroupTimeoutMs = 10;
     private int _hexPendingByteCount;
@@ -159,6 +160,7 @@ public sealed class LogPipeline : ILogPipeline
             _lineParser.Clear();
             _nextRxStreamOffset = 0;
             _hexPendingBytes.Clear();
+            _hexGroupReceivedAt = null;
             Volatile.Write(ref _hexPendingByteCount, 0);
             Volatile.Write(ref _hexCurrentGroupByteCount, 0);
             Volatile.Write(ref _lastHexGroupByteCount, 0);
@@ -586,6 +588,7 @@ public sealed class LogPipeline : ILogPipeline
                 await FlushHexGroupAsync(settings, cancellationToken);
             }
 
+            if (Volatile.Read(ref _hexGroupOpen) == 0) _hexGroupReceivedAt = chunk.ReceivedAt;
             _hexPendingBytes.AddRange(bytes);
             Interlocked.Add(ref _processedRxByteCount, bytes.Length);
             Interlocked.Add(ref _hexAcceptedByteCount, bytes.Length);
@@ -649,7 +652,8 @@ public sealed class LogPipeline : ILogPipeline
                 sequenceNumber,
                 isPartialRxSegment: true,
                 displayText: hexDisplay.Text,
-                contentMode: LogRuleMatchMode.Hex),
+                contentMode: LogRuleMatchMode.Hex,
+                timestamp: _hexGroupReceivedAt),
             cancellationToken);
         Interlocked.Add(ref _hexEmittedByteCount, bytes.Length);
         AddParsedLine();
@@ -668,6 +672,7 @@ public sealed class LogPipeline : ILogPipeline
         Volatile.Write(ref _lastHexGroupByteCount, Volatile.Read(ref _hexCurrentGroupByteCount));
         Volatile.Write(ref _hexCurrentGroupByteCount, 0);
         Volatile.Write(ref _hexGroupOpen, 0);
+        _hexGroupReceivedAt = null;
         Interlocked.Increment(ref _hexGroupFlushCount);
         Interlocked.Exchange(
             ref _lastHexGroupFlushTimeText,

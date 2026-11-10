@@ -8,10 +8,16 @@ public sealed class ReceivedByteChunk
         byte[] bytes,
         long receivedTimestamp,
         bool endsAtNativeIdleBoundary = false,
-        long? streamOffset = null)
+        long? streamOffset = null,
+        DateTimeOffset? receivedAt = null)
     {
         Bytes = bytes ?? throw new ArgumentNullException(nameof(bytes));
         ReceivedTimestamp = receivedTimestamp;
+        // Convert once so raw observers and the delayed log pipeline use the
+        // exact same wall-clock observation time, including queued native RX.
+        ReceivedAt = receivedAt ?? (receivedTimestamp > 0
+            ? DateTimeOffset.Now - Stopwatch.GetElapsedTime(receivedTimestamp)
+            : DateTimeOffset.Now);
         EndsAtNativeIdleBoundary = endsAtNativeIdleBoundary;
         StreamOffset = streamOffset;
     }
@@ -19,6 +25,8 @@ public sealed class ReceivedByteChunk
     public byte[] Bytes { get; }
 
     public long ReceivedTimestamp { get; }
+
+    public DateTimeOffset ReceivedAt { get; }
 
     // Parser-only position in this transport session, including omitted bytes.
     // Raw capture/bridge observers receive the original chunk unchanged.

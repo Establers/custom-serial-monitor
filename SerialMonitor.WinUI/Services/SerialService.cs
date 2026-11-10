@@ -1203,7 +1203,7 @@ public sealed partial class SerialService : ISerialService
 
             var bytes = receivedChunk.Bytes;
             var parserChunk = new ReceivedByteChunk(bytes, receivedChunk.ReceivedTimestamp,
-                receivedChunk.EndsAtNativeIdleBoundary, session.PublishedBytes);
+                receivedChunk.EndsAtNativeIdleBoundary, session.PublishedBytes, receivedChunk.ReceivedAt);
             session.PublishedBytes += bytes.LongLength;
             // Publish in every receive mode, before parser/bridge routing. An
             // observer must only offer to its own bounded queue.

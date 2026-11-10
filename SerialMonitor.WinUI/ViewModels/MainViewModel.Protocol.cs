@@ -1,6 +1,5 @@
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.Models;
-using System.Diagnostics;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
@@ -21,10 +20,7 @@ public sealed partial class MainViewModel
             var settings = _lastSuccessfulSerialSettings ?? _currentSerialSettings;
             var stopBits = settings.StopBits == SerialStopBitsMode.Two ? 2d : settings.StopBits == SerialStopBitsMode.OnePointFive ? 1.5 : 1;
             var bits = 1 + settings.DataBits + (settings.Parity == SerialParityMode.None ? 0 : 1) + stopBits;
-            var receivedAt = DateTimeOffset.Now;
-            if (chunk.ReceivedTimestamp > 0)
-                receivedAt -= Stopwatch.GetElapsedTime(chunk.ReceivedTimestamp);
-            analyzer.TryEnqueue(chunk.Bytes, ProtocolDirection.Rx, session, receivedAt,
+            analyzer.TryEnqueue(chunk.Bytes, ProtocolDirection.Rx, session, chunk.ReceivedAt,
                 new ProtocolInputTiming(chunk.ReceivedTimestamp, chunk.EndsAtNativeIdleBoundary,
                     _serialService.AppliedReceiveIdleTimeoutMs,
                     ProtocolInputTiming.FrameGapMilliseconds(_serialService.AppliedBaudRate, bits)));

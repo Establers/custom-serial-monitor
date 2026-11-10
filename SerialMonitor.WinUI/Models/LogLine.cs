@@ -107,9 +107,10 @@ public sealed class LogLine
         bool isPartialRxSegment = false,
         string? displayText = null,
         LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal,
-        string? fileText = null) =>
+        string? fileText = null,
+        DateTimeOffset? timestamp = null) =>
         new(
-            DateTimeOffset.Now,
+            timestamp ?? DateTimeOffset.Now,
             LogDirection.Rx,
             text,
             rawBytes,

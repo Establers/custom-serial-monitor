@@ -258,12 +258,19 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
     private void UpdateRows(bool force)
     {
-        var packets = _filter.ActiveCount == 0 ? _displaySource : _displaySource.Where(_filter.Matches).ToArray();
-        var firstId = packets.Count == 0 ? long.MaxValue : packets[0].Id;
+        // RX/TX assemblers can finish out of order. Frame IDs track completion
+        // and retention, while the list follows each frame's observation time.
+        var packets = _displaySource.Where(frame => _filter.ActiveCount == 0 || _filter.Matches(frame))
+            .OrderBy(frame => frame.Timestamp).ThenBy(frame => frame.Id).ToArray();
+        var firstId = _displaySource.Count == 0 ? long.MaxValue : _displaySource[0].Id;
         var removed = Frames.TakeWhile(row => row.Id < firstId).Count();
-        var lastId = Frames.Count == 0 ? -1 : Frames[^1].Id;
+        var lastId = Frames.Count == 0 ? -1 : Frames.Max(row => row.Id);
         var added = packets.Count(frame => frame.Id > lastId);
-        if (force || removed + added > 100)
+        var retained = Frames.Count - removed;
+        var canAppend = retained + added == packets.Length;
+        for (var i = 0; canAppend && i < retained; i++)
+            canAppend = Frames[removed + i].Id == packets[i].Id;
+        if (force || !canAppend || removed + added > 100)
         {
             var existing = Frames.ToDictionary(row => row.Id);
             Frames.ReplaceAll(packets.Select(frame => existing.TryGetValue(frame.Id, out var row) ? row : new ProtocolFrameRow(frame)));
