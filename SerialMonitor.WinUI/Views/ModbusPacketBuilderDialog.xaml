@@ -72,9 +72,17 @@
 
                 <Grid x:Name="SingleCoilRow" Visibility="{Binding CoilVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
                     <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" VerticalAlignment="Top" />
                     <ToggleSwitch Grid.Column="1" Header="{Binding CoilLabel}" IsOn="{Binding CoilOn, Mode=TwoWay}"
-                                  OffContent="OFF · 0x0000" OnContent="ON · 0xFF00" VerticalAlignment="Bottom" />
+                                  HeaderTemplate="{StaticResource CompactFieldHeader}" FontSize="13"
+                                  OffContent="OFF · 0x0000" OnContent="ON · 0xFF00"
+                                  VerticalAlignment="Top" VerticalContentAlignment="Center">
+                        <ToggleSwitch.Resources>
+                            <Thickness x:Key="ToggleSwitchTopHeaderMargin">0,0,0,8</Thickness>
+                            <x:Double x:Key="ToggleSwitchPreContentMargin">5</x:Double>
+                            <x:Double x:Key="ToggleSwitchPostContentMargin">5</x:Double>
+                        </ToggleSwitch.Resources>
+                    </ToggleSwitch>
                 </Grid>
                 <Grid x:Name="SingleRegisterRow" Visibility="{Binding SingleRegisterVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
                     <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
