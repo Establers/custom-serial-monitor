@@ -112,11 +112,14 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
         ValuesText = string.Join(Environment.NewLine, result.Values.Select(value =>
         {
             var position = value.RegisterCount == 1 ? $"+{value.RegisterOffset}" : $"+{value.RegisterOffset}–+{value.RegisterOffset + 1}";
+            // Preserve the original Single when unscaled, and the full Double
+            // result after scaling. G7/G15 can make distinct values look equal.
+            var rawText = type == ModbusValueType.Float32
+                ? ((float)value.RawValue).ToString("G9", CultureInfo.CurrentCulture)
+                : value.RawValue.ToString("G17", CultureInfo.CurrentCulture);
             var display = value.ScalingOverflow ? UiText.Get("ModbusValuesOverflow", "Scaling overflow")
-                : value.Value.ToString(type == ModbusValueType.Float32 ? "G7" : "G15", CultureInfo.CurrentCulture);
-            var raw = scale == 1 ? string.Empty : UiText.Format("ModbusValuesRawFormat", " (raw {0})",
-                type == ModbusValueType.Float32 ? ((float)value.RawValue).ToString("G", CultureInfo.CurrentCulture)
-                : value.RawValue.ToString("G", CultureInfo.CurrentCulture));
+                : scale == 1 ? rawText : value.Value.ToString("G17", CultureInfo.CurrentCulture);
+            var raw = scale == 1 ? string.Empty : UiText.Format("ModbusValuesRawFormat", " (raw {0})", rawText);
             return $"{position}: {display}{raw}";
         }));
         if (result.TrailingRegisters > 0)

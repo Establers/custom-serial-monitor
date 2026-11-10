@@ -61,6 +61,61 @@ public sealed class ModbusValueInterpreterViewModelTests
         Assert.Contains(": 25", model.ValuesText);
     }
 
+    [Theory]
+    [InlineData("4B7FFFFF")]
+    [InlineData("3F800000")]
+    [InlineData("3F800001")]
+    [InlineData("BF800001")]
+    [InlineData("00000001")]
+    [InlineData("007FFFFF")]
+    [InlineData("00800000")]
+    [InlineData("7F7FFFFF")]
+    [InlineData("80000000")]
+    [InlineData("3DCCCCCD")]
+    public void UnscaledFloat32DisplayRoundTripsToTheOriginalRegisterBits(string data)
+    {
+        var model = new ModbusValueInterpreterViewModel { FormatIndex = 4 };
+        model.SetFrame(Response(data));
+        var displayed = model.ValuesText.Split(": ", 2)[1];
+        var parsed = float.Parse(displayed, NumberStyles.Float, CultureInfo.CurrentCulture);
+        Assert.Equal(Convert.ToUInt32(data, 16), unchecked((uint)BitConverter.SingleToInt32Bits(parsed)));
+    }
+
+    [Fact]
+    public void AdjacentFloat32ValuesRemainDifferentAndTheLargestExact24BitIntegerIsNotRounded()
+    {
+        var model = new ModbusValueInterpreterViewModel { FormatIndex = 4 };
+        model.SetFrame(Response("3F800000"));
+        var first = model.ValuesText;
+        model.SetFrame(Response("3F800001"));
+        Assert.NotEqual(first, model.ValuesText);
+        model.SetFrame(Response("4B7FFFFF"));
+        Assert.Equal("+0–+1: 16777215", model.ValuesText);
+        model.ScaleText = "0.1";
+        Assert.Equal("+0–+1: 1677721.5 (raw 16777215)", model.ValuesText);
+    }
+
+    [Theory]
+    [InlineData(4, "4B7FFFFF", "0.1", 1677721.5, "en-US")]
+    [InlineData(4, "4B7FFFFF", "0,1", 1677721.5, "de-DE")]
+    [InlineData(4, "3F800000", "1.0000000000000002", 1.0000000000000002, "ko-KR")]
+    [InlineData(0, "0001", "1.2345678901234567", 1.2345678901234567, "en-US")]
+    [InlineData(3, "80000001", "1.0000000000000002", -2147483647.0000005, "en-US")]
+    public void ScaledValuesPreserveTheDoubleResultWhenParsedBack(int format, string data, string scale, double expected, string culture)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            var model = new ModbusValueInterpreterViewModel { FormatIndex = format, ScaleText = scale };
+            model.SetFrame(Response(data));
+            var displayed = model.ValuesText.Split(": ", 2)[1].Split(" (", 2)[0];
+            var parsed = double.Parse(displayed, NumberStyles.Float, CultureInfo.CurrentCulture);
+            Assert.Equal(BitConverter.DoubleToInt64Bits(expected), BitConverter.DoubleToInt64Bits(parsed));
+        }
+        finally { CultureInfo.CurrentCulture = previous; }
+    }
+
     [Fact]
     public void OddRegisterCountsAreExplicitAndSixteenBitTypesDisableWordSwap()
     {
