@@ -21,8 +21,7 @@ public sealed class ModbusValueInterpreterViewModelTests
         model.SwapBytes = model.SwapWords = true;
         Assert.Equal("+0–+1: 25", model.ValuesText);
         model.ScaleText = "0.1";
-        model.UnitText = "°C";
-        Assert.Contains("2.5 °C", model.ValuesText);
+        Assert.Contains(": 2.5", model.ValuesText);
         Assert.Contains("raw 25", model.ValuesText);
         Assert.Equal(original, frame.Bytes.ToArray());
         model.SetFrame(null);
@@ -30,7 +29,7 @@ public sealed class ModbusValueInterpreterViewModelTests
         Assert.Equal(Visibility.Collapsed, model.Visibility);
         model.SetFrame(frame);
         Assert.Equal(4, model.FormatIndex);
-        Assert.Contains("2.5 °C", model.ValuesText);
+        Assert.Contains(": 2.5", model.ValuesText);
     }
 
     [Fact]
@@ -52,13 +51,13 @@ public sealed class ModbusValueInterpreterViewModelTests
         Assert.NotEmpty(model.ValidationError);
         model.OffsetText = "1";
         Assert.StartsWith("+1: ", model.ValuesText);
-        model.UnitText = new string('x', 33);
-        Assert.Equal(33, model.UnitText.Length);
+        model.OffsetText = new string('9', 40);
+        Assert.Equal(40, model.OffsetText.Length);
         Assert.Empty(model.ValuesText);
         Assert.NotEmpty(model.ValidationError);
-        model.UnitText = "rpm";
+        model.OffsetText = "0";
         Assert.Empty(model.ValidationError);
-        Assert.Contains("rpm", model.ValuesText);
+        Assert.Contains(": 25", model.ValuesText);
     }
 
     [Fact]
@@ -150,7 +149,7 @@ public sealed class ModbusValueInterpreterViewModelTests
         {
             var resources = XDocument.Load(Path.Combine(root, "SerialMonitor.WinUI", "Strings", locale, "Resources.resw"));
             var entries = resources.Descendants("data").Where(entry => ((string?)entry.Attribute("name"))?.StartsWith("ModbusValues", StringComparison.Ordinal) == true).ToArray();
-            Assert.Equal(17, entries.Length);
+            Assert.Equal(15, entries.Length);
             Assert.All(entries, entry => Assert.False(string.IsNullOrWhiteSpace((string?)entry.Element("value"))));
         }
     }

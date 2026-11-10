@@ -9,11 +9,12 @@ public sealed partial class ModbusValueInterpreterView : UserControl
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        // Keep all four fields on one line when space permits, and retain
+        // Keep the three fields on one line when space permits, and retain
         // usable input widths in the narrow split-pane Inspector.
-        var narrow = args.NewSize.Width < 360;
+        var narrow = args.NewSize.Width < 285;
         Grid.SetColumn(ScaleFields, narrow ? 0 : 1);
         Grid.SetRow(ScaleFields, narrow ? 1 : 0);
+        FieldsGrid.ColumnDefinitions[0].Width = narrow ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
         FieldsGrid.ColumnDefinitions[1].Width = new GridLength(narrow ? 0 : 1, GridUnitType.Star);
         FieldsGrid.RowSpacing = narrow ? 3 : 0;
     }

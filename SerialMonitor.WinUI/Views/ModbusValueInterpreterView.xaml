@@ -27,21 +27,19 @@
         </Expander.HeaderTemplate>
         <StackPanel Spacing="3">
             <StackPanel Visibility="{Binding EditorVisibility}" Spacing="3">
-                <Grid x:Name="FieldsGrid" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6">
-                    <Grid ColumnDefinitions="*,Auto,58" ColumnSpacing="4">
+                <Grid x:Name="FieldsGrid" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="6">
+                    <Grid ColumnDefinitions="Auto,Auto,64" ColumnSpacing="4">
                         <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
                                   AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding FormatLabel}"
-                                  HorizontalAlignment="Stretch" MinWidth="0" MinHeight="26" Height="26" Padding="5,0,24,0" FontSize="11" />
+                                  Width="88" HorizontalAlignment="Left" MinWidth="0" MinHeight="26" Height="26" Padding="5,0,24,0" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="+" VerticalAlignment="Center" FontSize="11" ToolTipService.ToolTip="{Binding OffsetLabel}" />
                         <TextBox Grid.Column="2" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="{Binding OffsetLabel}" ToolTipService.ToolTip="{Binding OffsetLabel}" />
                     </Grid>
-                    <Grid x:Name="ScaleFields" Grid.Column="1" ColumnDefinitions="Auto,*,*" ColumnSpacing="4">
+                    <Grid x:Name="ScaleFields" Grid.Column="1" ColumnDefinitions="Auto,76" ColumnSpacing="4" HorizontalAlignment="Left">
                         <TextBlock Text="×" VerticalAlignment="Center" FontSize="12" ToolTipService.ToolTip="{Binding ScaleLabel}" />
                         <TextBox Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="{Binding ScaleLabel}" ToolTipService.ToolTip="{Binding ScaleLabel}" />
-                        <TextBox Grid.Column="2" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 PlaceholderText="{Binding UnitLabel}" AutomationProperties.Name="{Binding UnitLabel}" ToolTipService.ToolTip="{Binding UnitLabel}" />
                     </Grid>
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="12">

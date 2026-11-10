@@ -10,7 +10,7 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     private ModbusRtuFrame? _frame;
     private bool _canInterpret, _swapBytes, _swapWords;
     private int _formatIndex;
-    private string _offsetText = "0", _scaleText = "1", _unitText = string.Empty;
+    private string _offsetText = "0", _scaleText = "1";
     private string _valuesText = string.Empty, _validationError = string.Empty, _remainderText = string.Empty;
 
     public IReadOnlyList<string> Formats { get; } = ["UInt16", "Int16", "UInt32", "Int32", "Float32"];
@@ -18,7 +18,6 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     public string FormatLabel => UiText.Get("ModbusValuesFormat", "Data type");
     public string OffsetLabel => UiText.Get("ModbusValuesOffset", "Offset (+)");
     public string ScaleLabel => UiText.Get("ModbusValuesScale", "Multiplier");
-    public string UnitLabel => UiText.Get("ModbusValuesUnit", "Unit");
     public string SwapBytesLabel => UiText.Get("ModbusValuesSwapBytes", "Swap bytes");
     public string SwapWordsLabel => UiText.Get("ModbusValuesSwapWords", "Swap words");
     public string SwapBytesHelp => UiText.Get("ModbusValuesSwapBytesHelp", "Swap bytes within each register: AB CD → BA DC.");
@@ -57,7 +56,6 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     public bool SwapWords { get => _swapWords; set { if (SetProperty(ref _swapWords, value)) Rebuild(); } }
     public string OffsetText { get => _offsetText; set { if (SetProperty(ref _offsetText, value)) Rebuild(); } }
     public string ScaleText { get => _scaleText; set { if (SetProperty(ref _scaleText, value)) Rebuild(); } }
-    public string UnitText { get => _unitText; set { if (SetProperty(ref _unitText, value)) Rebuild(); } }
 
     public void SetFrame(ModbusRtuFrame? frame)
     {
@@ -84,15 +82,8 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
             ValidationError = UiText.Get("ModbusValuesScaleError", "Enter a finite multiplier, e.g. 1, 0.1 or -1.");
             return;
         }
-        var unit = UnitText.Trim();
-        if (unit.Length > 32 || unit.Any(char.IsControl))
-        {
-            ValidationError = UiText.Get("ModbusValuesUnitError", "Use a unit of at most 32 characters, without line breaks or control characters.");
-            return;
-        }
         var type = (ModbusValueType)FormatIndex;
         var result = ModbusRegisterInterpreter.Interpret(_frame, type, offset, SwapBytes, SwapWords && IsWordSwapEnabled, scale);
-        var suffix = unit.Length == 0 ? string.Empty : $" {unit}";
         ValuesText = string.Join(Environment.NewLine, result.Values.Select(value =>
         {
             var position = value.RegisterCount == 1 ? $"+{value.RegisterOffset}" : $"+{value.RegisterOffset}–+{value.RegisterOffset + 1}";
@@ -101,7 +92,7 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
             var raw = scale == 1 ? string.Empty : UiText.Format("ModbusValuesRawFormat", " (raw {0})",
                 type == ModbusValueType.Float32 ? ((float)value.RawValue).ToString("G", CultureInfo.CurrentCulture)
                 : value.RawValue.ToString("G", CultureInfo.CurrentCulture));
-            return $"{position}: {display}{suffix}{raw}";
+            return $"{position}: {display}{raw}";
         }));
         if (result.TrailingRegisters > 0)
             RemainderText = UiText.Format("ModbusValuesRemainder", "Register +{0} has no partner for a 32-bit value; it was not interpreted.", registerCount - 1);

@@ -1227,7 +1227,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusValuesFormat" xml:space="preserve"><value>Data type</value></data>
   <data name="ModbusValuesOffset" xml:space="preserve"><value>Offset (+)</value></data>
   <data name="ModbusValuesScale" xml:space="preserve"><value>Multiplier</value></data>
-  <data name="ModbusValuesUnit" xml:space="preserve"><value>Unit</value></data>
   <data name="ModbusValuesSwapBytes" xml:space="preserve"><value>Swap bytes</value></data>
   <data name="ModbusValuesSwapWords" xml:space="preserve"><value>Swap words</value></data>
   <data name="ModbusValuesSwapBytesHelp" xml:space="preserve"><value>Swap bytes within each register: AB CD → BA DC.</value></data>
@@ -1236,7 +1235,6 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusValuesUnsupported" xml:space="preserve"><value>Select a CRC-valid FC03, FC04 or FC17 register read response to interpret values.</value></data>
   <data name="ModbusValuesOffsetError" xml:space="preserve"><value>Enter a register offset from 0 to {0}.</value></data>
   <data name="ModbusValuesScaleError" xml:space="preserve"><value>Enter a finite multiplier, e.g. 1, 0.1 or -1.</value></data>
-  <data name="ModbusValuesUnitError" xml:space="preserve"><value>Use a unit of at most 32 characters, without line breaks or control characters.</value></data>
   <data name="ModbusValuesOverflow" xml:space="preserve"><value>Scaling overflow</value></data>
   <data name="ModbusValuesRawFormat" xml:space="preserve"><value> (raw {0})</value></data>
   <data name="ModbusValuesRemainder" xml:space="preserve"><value>Register +{0} has no partner for a 32-bit value; it was not interpreted.</value></data>
