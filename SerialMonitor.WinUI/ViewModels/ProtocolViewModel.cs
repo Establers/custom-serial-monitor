@@ -31,6 +31,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     private string _details = SelectionPrompt;
 
     public IProtocolAnalyzer Analyzer { get; } = analyzer;
+    public ModbusValueInterpreterViewModel ValueInterpreter { get; } = new();
     public BulkObservableCollection<ProtocolFrameRow> Frames { get; } = new();
     public event EventHandler? LatestRequested;
     private static string SelectionPrompt => UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
@@ -293,6 +294,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
     private void NotifyPresentationState()
     {
+        ValueInterpreter.SetFrame(SelectedProtocolIndex == 1 ? _selectedFrame?.Frame as ModbusRtuFrame : null);
         OnPropertyChanged(nameof(HasFrames));
         OnPropertyChanged(nameof(EmptyStateVisibility));
         OnPropertyChanged(nameof(DetailsVisibility));

@@ -1223,6 +1223,23 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>Could not open the memory folder. Check the displayed path and folder permissions.</value></data>
   <data name="ModbusBuilderButton" xml:space="preserve"><value>Build packet</value></data>
   <data name="ModbusBuilderButtonHelp" xml:space="preserve"><value>Build a Modbus RTU request with automatic CRC and copy its HEX.</value></data>
+  <data name="ModbusValuesTitle" xml:space="preserve"><value>Value interpretation</value></data>
+  <data name="ModbusValuesFormat" xml:space="preserve"><value>Data type</value></data>
+  <data name="ModbusValuesOffset" xml:space="preserve"><value>Offset (+)</value></data>
+  <data name="ModbusValuesScale" xml:space="preserve"><value>Multiplier</value></data>
+  <data name="ModbusValuesUnit" xml:space="preserve"><value>Unit</value></data>
+  <data name="ModbusValuesSwapBytes" xml:space="preserve"><value>Swap bytes</value></data>
+  <data name="ModbusValuesSwapWords" xml:space="preserve"><value>Swap words</value></data>
+  <data name="ModbusValuesSwapBytesHelp" xml:space="preserve"><value>Swap bytes within each register: AB CD → BA DC.</value></data>
+  <data name="ModbusValuesSwapWordsHelp" xml:space="preserve"><value>Swap the two registers of each 32-bit value: AB CD → CD AB.</value></data>
+  <data name="ModbusValuesHelp" xml:space="preserve"><value>+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.</value></data>
+  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>Select a CRC-valid FC03, FC04 or FC17 register read response to interpret values.</value></data>
+  <data name="ModbusValuesOffsetError" xml:space="preserve"><value>Enter a register offset from 0 to {0}.</value></data>
+  <data name="ModbusValuesScaleError" xml:space="preserve"><value>Enter a finite multiplier, e.g. 1, 0.1 or -1.</value></data>
+  <data name="ModbusValuesUnitError" xml:space="preserve"><value>Use a unit of at most 32 characters, without line breaks or control characters.</value></data>
+  <data name="ModbusValuesOverflow" xml:space="preserve"><value>Scaling overflow</value></data>
+  <data name="ModbusValuesRawFormat" xml:space="preserve"><value> (raw {0})</value></data>
+  <data name="ModbusValuesRemainder" xml:space="preserve"><value>Register +{0} has no partner for a 32-bit value; it was not interpreted.</value></data>
   <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU packet builder</value></data>
   <data name="ModbusBuilderCopy" xml:space="preserve"><value>Copy HEX</value></data>
   <data name="ModbusBuilderClose" xml:space="preserve"><value>Close</value></data>

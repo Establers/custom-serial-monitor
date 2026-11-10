@@ -1,0 +1,35 @@
+<UserControl
+    x:Class="SerialMonitor.WinUI.Views.ModbusValueInterpreterView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalContentAlignment="Stretch">
+    <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+        <StackPanel Spacing="6">
+            <StackPanel Visibility="{Binding EditorVisibility}" Spacing="6">
+                <Grid ColumnDefinitions="*,88" ColumnSpacing="8">
+                    <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" FontSize="12" />
+                    <TextBox Grid.Column="1" Header="{Binding OffsetLabel}" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}"
+                              ToolTipService.ToolTip="{Binding SwapBytesHelp}" FontSize="12" MinWidth="0" />
+                    <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}"
+                              IsEnabled="{Binding IsWordSwapEnabled}" ToolTipService.ToolTip="{Binding SwapWordsHelp}" FontSize="12" MinWidth="0" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <TextBox Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
+                    <TextBox Grid.Column="1" Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
+                </Grid>
+                <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock Text="{Binding ValuesText}" IsTextSelectionEnabled="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" Margin="0,0,16,0" />
+                </ScrollViewer>
+                <TextBlock Text="{Binding RemainderText}" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+            <TextBlock Text="{Binding Help}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+    </Expander>
+</UserControl>

@@ -1221,6 +1221,23 @@
   <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>메모리 폴더를 열지 못했습니다. 표시된 경로와 폴더 권한을 확인하세요.</value></data>
   <data name="ModbusBuilderButton" xml:space="preserve"><value>패킷 만들기</value></data>
   <data name="ModbusBuilderButtonHelp" xml:space="preserve"><value>CRC를 포함한 Modbus RTU 요청을 만들고 HEX를 복사합니다.</value></data>
+  <data name="ModbusValuesTitle" xml:space="preserve"><value>값 해석</value></data>
+  <data name="ModbusValuesFormat" xml:space="preserve"><value>데이터 형식</value></data>
+  <data name="ModbusValuesOffset" xml:space="preserve"><value>시작 위치 (+)</value></data>
+  <data name="ModbusValuesScale" xml:space="preserve"><value>배율</value></data>
+  <data name="ModbusValuesUnit" xml:space="preserve"><value>단위</value></data>
+  <data name="ModbusValuesSwapBytes" xml:space="preserve"><value>바이트 교환</value></data>
+  <data name="ModbusValuesSwapWords" xml:space="preserve"><value>워드 교환</value></data>
+  <data name="ModbusValuesSwapBytesHelp" xml:space="preserve"><value>각 레지스터 안의 바이트를 교환합니다: AB CD → BA DC.</value></data>
+  <data name="ModbusValuesSwapWordsHelp" xml:space="preserve"><value>32비트 값을 구성하는 두 레지스터를 교환합니다: AB CD → CD AB.</value></data>
+  <data name="ModbusValuesHelp" xml:space="preserve"><value>+0은 이 응답의 첫 레지스터이며 장치 주소가 아닙니다. 표시값 = 해석값 × 배율입니다.</value></data>
+  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>CRC가 정상인 FC03·04·17 레지스터 읽기 응답을 선택하면 값을 해석할 수 있습니다.</value></data>
+  <data name="ModbusValuesOffsetError" xml:space="preserve"><value>시작 위치는 0부터 {0}까지의 레지스터 위치로 입력하세요.</value></data>
+  <data name="ModbusValuesScaleError" xml:space="preserve"><value>1, 0.1, -1처럼 유한한 배율을 입력하세요.</value></data>
+  <data name="ModbusValuesUnitError" xml:space="preserve"><value>단위는 줄바꿈·제어 문자 없이 32자 이내로 입력하세요.</value></data>
+  <data name="ModbusValuesOverflow" xml:space="preserve"><value>배율 적용 범위 초과</value></data>
+  <data name="ModbusValuesRawFormat" xml:space="preserve"><value> (원래 값 {0})</value></data>
+  <data name="ModbusValuesRemainder" xml:space="preserve"><value>+{0} 레지스터는 32비트 값을 구성할 짝이 없어 해석하지 않았습니다.</value></data>
   <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU 패킷 만들기</value></data>
   <data name="ModbusBuilderCopy" xml:space="preserve"><value>HEX 복사</value></data>
   <data name="ModbusBuilderClose" xml:space="preserve"><value>닫기</value></data>
