@@ -2,34 +2,63 @@
     x:Class="SerialMonitor.WinUI.Views.ModbusValueInterpreterView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
+    SizeChanged="View_SizeChanged"
     HorizontalContentAlignment="Stretch">
+    <UserControl.Resources>
+        <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
+        <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
+        <x:Double x:Key="ExpanderChevronButtonSize">20</x:Double>
+        <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
+        </Style>
+    </UserControl.Resources>
     <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
-              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-        <StackPanel Spacing="6">
-            <StackPanel Visibility="{Binding EditorVisibility}" Spacing="6">
-                <Grid ColumnDefinitions="*,88" ColumnSpacing="8">
-                    <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
-                              HorizontalAlignment="Stretch" FontSize="12" />
-                    <TextBox Grid.Column="1" Header="{Binding OffsetLabel}" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
+              MinWidth="0" MinHeight="24" Padding="6,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+        <Expander.HeaderTemplate>
+            <DataTemplate><TextBlock Text="{Binding}" FontSize="11" /></DataTemplate>
+        </Expander.HeaderTemplate>
+        <StackPanel Spacing="3">
+            <StackPanel Visibility="{Binding EditorVisibility}" Spacing="3">
+                <Grid x:Name="FieldsGrid" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6">
+                    <Grid ColumnDefinitions="*,Auto,58" ColumnSpacing="4">
+                        <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
+                                  AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding FormatLabel}"
+                                  HorizontalAlignment="Stretch" MinWidth="0" MinHeight="26" Height="26" Padding="5,0,24,0" FontSize="11" />
+                        <TextBlock Grid.Column="1" Text="+" VerticalAlignment="Center" FontSize="11" ToolTipService.ToolTip="{Binding OffsetLabel}" />
+                        <TextBox Grid.Column="2" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="{Binding OffsetLabel}" ToolTipService.ToolTip="{Binding OffsetLabel}" />
+                    </Grid>
+                    <Grid x:Name="ScaleFields" Grid.Column="1" ColumnDefinitions="Auto,*,*" ColumnSpacing="4">
+                        <TextBlock Text="×" VerticalAlignment="Center" FontSize="12" ToolTipService.ToolTip="{Binding ScaleLabel}" />
+                        <TextBox Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="{Binding ScaleLabel}" ToolTipService.ToolTip="{Binding ScaleLabel}" />
+                        <TextBox Grid.Column="2" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PlaceholderText="{Binding UnitLabel}" AutomationProperties.Name="{Binding UnitLabel}" ToolTipService.ToolTip="{Binding UnitLabel}" />
+                    </Grid>
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="12">
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}"
-                              ToolTipService.ToolTip="{Binding SwapBytesHelp}" FontSize="12" MinWidth="0" />
-                    <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}"
-                              IsEnabled="{Binding IsWordSwapEnabled}" ToolTipService.ToolTip="{Binding SwapWordsHelp}" FontSize="12" MinWidth="0" />
-                </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
-                    <TextBox Grid.Column="1" Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" />
-                </Grid>
+                              ToolTipService.ToolTip="{Binding SwapBytesHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" />
+                    <CheckBox Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}"
+                              IsEnabled="{Binding IsWordSwapEnabled}" ToolTipService.ToolTip="{Binding SwapWordsHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" />
+                </StackPanel>
                 <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <TextBlock Text="{Binding ValuesText}" IsTextSelectionEnabled="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" Margin="0,0,16,0" />
+                <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock Text="{Binding ValuesText}" IsTextSelectionEnabled="True" FontFamily="Consolas" FontSize="11" LineHeight="14" TextWrapping="Wrap" Margin="0,0,16,0" />
                 </ScrollViewer>
-                <TextBlock Text="{Binding RemainderText}" FontSize="11" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding RemainderText}" Visibility="{Binding RemainderVisibility}" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
-            <TextBlock Text="{Binding Help}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock Text="{Binding Help}" ToolTipService.ToolTip="{Binding Help}" FontSize="10" MaxLines="1" TextTrimming="CharacterEllipsis"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
     </Expander>
 </UserControl>

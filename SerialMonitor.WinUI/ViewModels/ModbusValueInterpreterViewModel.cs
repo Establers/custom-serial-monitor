@@ -29,9 +29,14 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     public Visibility Visibility => _frame is null ? Visibility.Collapsed : Visibility.Visible;
     public Visibility EditorVisibility => _canInterpret ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => string.IsNullOrEmpty(ValidationError) ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility RemainderVisibility => string.IsNullOrEmpty(RemainderText) ? Visibility.Collapsed : Visibility.Visible;
     public bool IsWordSwapEnabled => FormatIndex >= 2;
     public string ValuesText { get => _valuesText; private set => SetProperty(ref _valuesText, value); }
-    public string RemainderText { get => _remainderText; private set => SetProperty(ref _remainderText, value); }
+    public string RemainderText
+    {
+        get => _remainderText;
+        private set { if (SetProperty(ref _remainderText, value)) OnPropertyChanged(nameof(RemainderVisibility)); }
+    }
     public string ValidationError
     {
         get => _validationError;
