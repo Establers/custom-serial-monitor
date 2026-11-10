@@ -1245,4 +1245,39 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusBuilderCopied" xml:space="preserve"><value>HEX copied.</value></data>
   <data name="ModbusBuilderCopyFailed" xml:space="preserve"><value>Could not copy HEX. Select and copy the preview text.</value></data>
   <data name="ModbusBuilderOpenFailed" xml:space="preserve"><value>Could not open the packet builder. See Health diagnostics.</value></data>
+  <data name="ModbusBuilderCustom" xml:space="preserve"><value>Custom · Function + raw data</value></data>
+  <data name="ModbusBuilderReadAddress" xml:space="preserve"><value>Read start address (base 0)</value></data>
+  <data name="ModbusBuilderFifoAddress" xml:space="preserve"><value>FIFO pointer address (base 0)</value></data>
+  <data name="ModbusBuilderReadQuantity" xml:space="preserve"><value>Read quantity</value></data>
+  <data name="ModbusBuilderUnicastHelp" xml:space="preserve"><value>This request requires Unit ID 1–247. Device support depends on the model.</value></data>
+  <data name="ModbusBuilderRegisterValuesHelp" xml:space="preserve"><value>Enter 1–{0} register values, separated by spaces or commas. Write quantity and byte count are automatic.</value></data>
+  <data name="ModbusBuilderPacketSummary" xml:space="preserve"><value>{0} bytes · CRC (low first) {1:X2} {2:X2}</value></data>
+  <data name="ModbusBuilderReadHelp" xml:space="preserve"><value>Set quantity above 1 to read multiple consecutive coils, inputs or registers in one request.</value></data>
+  <data name="ModbusBuilderReadWriteHelp" xml:space="preserve"><value>Writes the supplied registers first, then reads a separate register range in the same transaction.</value></data>
+  <data name="ModbusBuilderFileHelp" xml:space="preserve"><value>One line per group. Multiple file/record groups can share a request; request and response sizes are checked.</value></data>
+  <data name="ModbusBuilderDiagnosticHelp" xml:space="preserve"><value>Diagnostic support is device-specific. Restart, clear counters and listen-only options change the device state when sent.</value></data>
+  <data name="ModbusBuilderMaskHelp" xml:space="preserve"><value>Register result = (current AND mask) OR (OR mask AND NOT AND mask).</value></data>
+  <data name="ModbusBuilderFifoHelp" xml:space="preserve"><value>Reads the queue at the pointer address. The device supplies the queue length; no quantity is sent.</value></data>
+  <data name="ModbusBuilderDeviceHelp" xml:space="preserve"><value>Start stream queries at object 0. For further pages, use the Next Object ID returned by the device.</value></data>
+  <data name="ModbusBuilderNoDataHelp" xml:space="preserve"><value>This request needs only the Unit ID and function code; there is no address or data field.</value></data>
+  <data name="ModbusBuilderCustomHelp" xml:space="preserve"><value>Enter the function separately and data as HEX bytes without Unit ID, function or CRC. CRC is automatic; custom data semantics are not validated. Unit ID: 1–247.</value></data>
+  <data name="ModbusBuilderWriteAddress" xml:space="preserve"><value>Write start address (base 0)</value></data>
+  <data name="ModbusBuilderDiagnostic" xml:space="preserve"><value>Diagnostic subfunction (HEX)</value></data>
+  <data name="ModbusBuilderDiagnosticData" xml:space="preserve"><value>Diagnostic data (16-bit words)</value></data>
+  <data name="ModbusBuilderDiagnosticEchoHelp" xml:space="preserve"><value>Enter 1–125 words to loop back, separated by spaces or commas.</value></data>
+  <data name="ModbusBuilderDiagnosticRestartHelp" xml:space="preserve"><value>0x0000 keeps the event log; 0xFF00 clears it during restart.</value></data>
+  <data name="ModbusBuilderDiagnosticDelimiterHelp" xml:space="preserve"><value>Enter CHAR then 00 as one word, e.g. 0x0A00 for LF.</value></data>
+  <data name="ModbusBuilderDiagnosticZeroHelp" xml:space="preserve"><value>This subfunction requires a single 0x0000 data word.</value></data>
+  <data name="ModbusBuilderFileRecords" xml:space="preserve"><value>File record groups</value></data>
+  <data name="ModbusBuilderFileReadHelp" xml:space="preserve"><value>Each line: file, record, quantity. Example: 1, 0, 2. File: 1–65535; record: 0–9999.</value></data>
+  <data name="ModbusBuilderFileWriteHelp" xml:space="preserve"><value>Each line: file, record: values. Example: 1, 0: 10 0x1234. Values are 16-bit registers, not raw bytes.</value></data>
+  <data name="ModbusBuilderDeviceAccess" xml:space="preserve"><value>Device identification access</value></data>
+  <data name="ModbusBuilderObjectId" xml:space="preserve"><value>Object ID (0–255)</value></data>
+  <data name="ModbusBuilderCustomFunction" xml:space="preserve"><value>Function (1–127 or 0x01–0x7F)</value></data>
+  <data name="ModbusBuilderCustomData" xml:space="preserve"><value>Raw data · HEX (0–252 bytes)</value></data>
+  <data name="ModbusBuilderInputTooLong" xml:space="preserve"><value>Input is too long; no data has been truncated.</value></data>
+  <data name="ModbusBuilderWordCountError" xml:space="preserve"><value>Enter 1–{0} values.</value></data>
+  <data name="ModbusBuilderRowCountError" xml:space="preserve"><value>Enter 1–{0} record groups, one per line.</value></data>
+  <data name="ModbusBuilderRawDataError" xml:space="preserve"><value>Enter complete HEX bytes (e.g. 00 10 FF), at most 252 bytes.</value></data>
+  <data name="ModbusBuilderReadWriteSummary" xml:space="preserve"><value>{0} bytes · read {1} / write {2} · CRC {3:X2} {4:X2}</value></data>
 </root>

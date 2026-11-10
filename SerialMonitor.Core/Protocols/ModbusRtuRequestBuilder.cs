@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 namespace SerialMonitor.Core.Protocols;
 
 /// <summary>Builds standard RTU requests; owns no connection or transmit state.</summary>
-public static class ModbusRtuRequestBuilder
+public static partial class ModbusRtuRequestBuilder
 {
     public static byte[] Read(int unitId, byte function, int address, int quantity)
     {

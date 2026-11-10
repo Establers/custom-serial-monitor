@@ -13,11 +13,13 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="480">
         <StackPanel Spacing="12" MinWidth="360">
             <ComboBox Header="{Binding FunctionLabel}" ItemsSource="{Binding FunctionOptions}"
-                      SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                      SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" MaxDropDownHeight="360" />
+            <TextBlock Text="{Binding FunctionHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                 <!-- Validate the full input. MaxLength can turn an out-of-range paste into a different valid number. -->
                 <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox Grid.Column="1" Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Grid.Column="1" Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Visibility="{Binding AddressVisibility}" />
             </Grid>
             <TextBlock Text="{Binding NumberHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
             <StackPanel Visibility="{Binding QuantityVisibility}" Spacing="4">
@@ -26,11 +28,43 @@
             </StackPanel>
             <ToggleSwitch Header="{Binding CoilLabel}" IsOn="{Binding CoilOn, Mode=TwoWay}"
                           OffContent="OFF · 0x0000" OnContent="ON · 0xFF00" Visibility="{Binding CoilVisibility}" />
+            <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Visibility="{Binding ReadWriteVisibility}" />
             <StackPanel Visibility="{Binding ValuesVisibility}" Spacing="4">
                 <TextBox Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="100"
                          ScrollViewer.VerticalScrollBarVisibility="Auto" />
                 <TextBlock Text="{Binding ValuesHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+            </StackPanel>
+            <StackPanel Visibility="{Binding DiagnosticsVisibility}" Spacing="8">
+                <ComboBox Header="{Binding DiagnosticLabel}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
+                          SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                <TextBox Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Text="{Binding DiagnosticDataHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+            </StackPanel>
+            <Grid Visibility="{Binding MaskVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                <TextBox Header="AND mask" Text="{Binding AndMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Grid.Column="1" Header="OR mask" Text="{Binding OrMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+            <StackPanel Visibility="{Binding FileReadVisibility}" Spacing="4">
+                <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                <TextBlock Text="{Binding FileReadHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+            </StackPanel>
+            <StackPanel Visibility="{Binding FileWriteVisibility}" Spacing="4">
+                <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileWriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                <TextBlock Text="{Binding FileWriteHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+            </StackPanel>
+            <StackPanel Visibility="{Binding DeviceIdVisibility}" Spacing="8">
+                <ComboBox Header="{Binding DeviceAccessLabel}" ItemsSource="{Binding DeviceAccessOptions}"
+                          SelectedIndex="{Binding DeviceAccessIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                <TextBox Header="{Binding ObjectIdLabel}" Text="{Binding ObjectIdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </StackPanel>
+            <StackPanel Visibility="{Binding CustomVisibility}" Spacing="8">
+                <TextBox Header="{Binding CustomFunctionLabel}" Text="{Binding CustomFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Header="{Binding CustomDataLabel}" Text="{Binding CustomDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="100" ScrollViewer.VerticalScrollBarVisibility="Auto" />
             </StackPanel>
             <TextBlock Text="{Binding UnitHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
             <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap"

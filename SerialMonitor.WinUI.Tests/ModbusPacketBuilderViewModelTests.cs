@@ -22,6 +22,15 @@ public sealed class ModbusPacketBuilderViewModelTests
     [InlineData("AddressText")]
     [InlineData("QuantityText")]
     [InlineData("ValuesText")]
+    [InlineData("WriteAddressText")]
+    [InlineData("DiagnosticDataText")]
+    [InlineData("AndMaskText")]
+    [InlineData("OrMaskText")]
+    [InlineData("FileReadText")]
+    [InlineData("FileWriteText")]
+    [InlineData("ObjectIdText")]
+    [InlineData("CustomFunctionText")]
+    [InlineData("CustomDataText")]
     public void DialogDoesNotTruncatePastedPacketFieldsBeforeValidation(string binding)
     {
         // Model-only tests miss TextBox.MaxLength truncating a paste, e.g.
@@ -119,7 +128,8 @@ public sealed class ModbusPacketBuilderViewModelTests
     [Fact]
     public void ValuesDeriveCountsAndPreserveAddressOrder()
     {
-        var model = new ModbusPacketBuilderViewModel { FunctionIndex = 7, AddressText = "0x10", ValuesText = "10, 0xABCD; 65535\n0" };
+        var model = new ModbusPacketBuilderViewModel { AddressText = "0x10", ValuesText = "10, 0xABCD; 65535\n0" };
+        model.SelectFunction(16);
         Assert.True(model.CanUsePacket);
         Assert.Equal(Convert.FromHexString("01100010000408000AABCDFFFF0000"), model.Packet.Span[..^2].ToArray());
         Assert.Equal(0, ModbusRtuCrc.Compute(model.Packet.Span));
@@ -128,7 +138,7 @@ public sealed class ModbusPacketBuilderViewModelTests
         model.ValuesText = "0xFFFF";
         Assert.True(model.CanUsePacket);
         model.AddressText = "65535";
-        model.FunctionIndex = 7;
+        model.SelectFunction(16);
         model.ValuesText = "1 2";
         Assert.False(model.CanUsePacket);
     }
@@ -136,7 +146,8 @@ public sealed class ModbusPacketBuilderViewModelTests
     [Fact]
     public void CoilListsRejectNonBitsAndExcessiveInputAndRecover()
     {
-        var model = new ModbusPacketBuilderViewModel { FunctionIndex = 6, ValuesText = "1,0,1,0,1,0,1,0,1" };
+        var model = new ModbusPacketBuilderViewModel { ValuesText = "1,0,1,0,1,0,1,0,1" };
+        model.SelectFunction(15);
         Assert.True(model.CanUsePacket);
         Assert.Equal(new byte[] { 0x55, 0x01 }, model.Packet.Span[7..^2].ToArray());
         foreach (var invalid in new[] { "", "1 2", "ON OFF", new string('1', 12001), string.Join(" ", Enumerable.Repeat("1", 1969)) })
