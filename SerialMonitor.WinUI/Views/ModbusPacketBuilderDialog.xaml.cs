@@ -28,6 +28,7 @@ public sealed partial class ModbusPacketBuilderDialog : ContentDialog
             var data = new DataPackage();
             data.SetText(Model.Preview);
             Clipboard.SetContent(data);
+            Clipboard.Flush();
             CopyStatus.Text = UiText.Get("ModbusBuilderCopied", "HEX copied.");
         }
         catch (Exception ex)
