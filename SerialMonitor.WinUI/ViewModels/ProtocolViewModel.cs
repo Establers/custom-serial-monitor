@@ -41,6 +41,9 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public string AddressLabel => IsMstp ? "Src" : "ID";
     public string CodeLabel => IsMstp ? "Type" : "FC";
     public string ClearLabel => UiText.Get("ProtocolClear", "Clear results");
+    public string BuildPacketLabel => UiText.Get("ModbusBuilderButton", "Build packet");
+    public string BuildPacketToolTip => UiText.Get("ModbusBuilderButtonHelp", "Build a Modbus RTU request with automatic CRC, then copy it or use it in TX.");
+    public Visibility PacketBuilderVisibility => SelectedProtocolIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");
     public string TimeLabel => UiText.Get("ProtocolTime", "Time");
@@ -163,7 +166,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
                     OnPropertyChanged(nameof(IsDisplayPaused)); OnPropertyChanged(nameof(PauseLabel)); OnPropertyChanged(nameof(PauseToolTip));
                     ResetFilters();
                 }
-                foreach (var name in new[] { nameof(IsMstp), nameof(AddressLabel), nameof(CodeLabel), nameof(FunctionLabel),
+                foreach (var name in new[] { nameof(IsMstp), nameof(AddressLabel), nameof(CodeLabel), nameof(FunctionLabel), nameof(PacketBuilderVisibility),
                     nameof(FilterUnitLabel), nameof(FilterFunctionLabel), nameof(FilterFunctionHelp), nameof(FilterSummary) }) OnPropertyChanged(name);
             }
             catch (Exception ex) { Status = ex.Message; return; }
@@ -313,4 +316,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     }
 
     public void ResetStatistics() { Analyzer.ResetStatistics(); Refresh(); }
+
+    public void ReportPacketBuilderError() =>
+        Status = UiText.Get("ModbusBuilderOpenFailed", "Could not open the packet builder. See Health diagnostics.");
 }

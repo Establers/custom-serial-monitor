@@ -1221,4 +1221,33 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="AgentMemoryDescription.Text" xml:space="preserve"><value>Product protocol and test notes read and maintained directly by your AI agent. The plugin skill provides this location.</value></data>
   <data name="AgentMemoryOpened" xml:space="preserve"><value>Opened the memory folder.</value></data>
   <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>Could not open the memory folder. Check the displayed path and folder permissions.</value></data>
+  <data name="ModbusBuilderButton" xml:space="preserve"><value>Build packet</value></data>
+  <data name="ModbusBuilderButtonHelp" xml:space="preserve"><value>Build a Modbus RTU request with automatic CRC, then copy it or use it in TX.</value></data>
+  <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU packet builder</value></data>
+  <data name="ModbusBuilderUse" xml:space="preserve"><value>Use in TX</value></data>
+  <data name="ModbusBuilderCopy" xml:space="preserve"><value>Copy HEX</value></data>
+  <data name="ModbusBuilderClose" xml:space="preserve"><value>Close</value></data>
+  <data name="ModbusBuilderUnit" xml:space="preserve"><value>Unit ID (0–247)</value></data>
+  <data name="ModbusBuilderAddress" xml:space="preserve"><value>Start address (base 0)</value></data>
+  <data name="ModbusBuilderQuantity" xml:space="preserve"><value>Quantity</value></data>
+  <data name="ModbusBuilderValues" xml:space="preserve"><value>Values, in address order</value></data>
+  <data name="ModbusBuilderCoil" xml:space="preserve"><value>Coil value</value></data>
+  <data name="ModbusBuilderPreview" xml:space="preserve"><value>RTU packet · HEX (CRC included)</value></data>
+  <data name="ModbusBuilderNumberHelp" xml:space="preserve"><value>Numbers: decimal or 0x HEX. Address 0 is the first item (e.g. holding register 40001).</value></data>
+  <data name="ModbusBuilderUseHelp" xml:space="preserve"><value>Use in TX switches Terminal/HEX to HEX and fills the TX input. Press Send there when ready.</value></data>
+  <data name="ModbusBuilderUnitHelp" xml:space="preserve"><value>ID 0 broadcasts writes to all units; no response is returned. Reads require ID 1–247.</value></data>
+  <data name="ModbusBuilderCoilsHelp" xml:space="preserve"><value>Enter 1–1968 coil values (0 or 1), separated by spaces or commas. Quantity and bit packing are automatic.</value></data>
+  <data name="ModbusBuilderSingleHelp" xml:space="preserve"><value>Enter one register value: 0–65535 or 0x0000–0xFFFF.</value></data>
+  <data name="ModbusBuilderRegistersHelp" xml:space="preserve"><value>Enter 1–123 register values, separated by spaces or commas. Quantity and byte count are automatic.</value></data>
+  <data name="ModbusBuilderQuantityHelp" xml:space="preserve"><value>Allowed quantity: 1–{0}.</value></data>
+  <data name="ModbusBuilderReadBroadcastError" xml:space="preserve"><value>Reads require a Unit ID from 1 to 247.</value></data>
+  <data name="ModbusBuilderAddressRangeError" xml:space="preserve"><value>The last address must not exceed 65535.</value></data>
+  <data name="ModbusBuilderSummary" xml:space="preserve"><value>{0} bytes · quantity {1} · CRC (low first) {2:X2} {3:X2}</value></data>
+  <data name="ModbusBuilderNumberError" xml:space="preserve"><value>{0}: enter {1}–{2} (decimal or 0x HEX).</value></data>
+  <data name="ModbusBuilderCopied" xml:space="preserve"><value>HEX copied.</value></data>
+  <data name="ModbusBuilderCopyFailed" xml:space="preserve"><value>Could not copy HEX. Select and copy the preview text.</value></data>
+  <data name="ModbusBuilderOpenFailed" xml:space="preserve"><value>Could not open the packet builder. See Health diagnostics.</value></data>
+  <data name="ModbusBuilderBusy" xml:space="preserve"><value>TX is busy. Copy the packet or try again after the current operation finishes.</value></data>
+  <data name="ModbusBuilderInvalidPacket" xml:space="preserve"><value>The Modbus RTU packet has an invalid length or CRC.</value></data>
+  <data name="ModbusBuilderPrepared" xml:space="preserve"><value>Modbus RTU packet loaded into HEX TX. Press Send when ready.</value></data>
 </root>

@@ -18,6 +18,7 @@ public sealed partial class ProtocolView : UserControl
     private bool _latestScrollQueued;
     private int _viewGeneration;
     private ProtocolViewModel? Model => DataContext as ProtocolViewModel;
+    public event EventHandler<ModbusPacketPreparedEventArgs>? PacketPrepared;
     public ProtocolView()
     {
         InitializeComponent();
@@ -91,6 +92,25 @@ public sealed partial class ProtocolView : UserControl
     private void Timer_Tick(DispatcherQueueTimer sender, object args) => Model?.Refresh();
     private void Clear_Click(object sender, RoutedEventArgs args) => Model?.Clear();
     private void ResetStatistics_Click(object sender, RoutedEventArgs args) => Model?.ResetStatistics();
+
+    private async void BuildPacket_Click(object sender, RoutedEventArgs args)
+    {
+        if (Model?.SelectedProtocolIndex != 1) return;
+        var button = (Button)sender;
+        button.IsEnabled = false;
+        try
+        {
+            var dialog = new ModbusPacketBuilderDialog { XamlRoot = XamlRoot };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary && dialog.Model.CanUsePacket)
+                PacketPrepared?.Invoke(this, new(dialog.Model.Packet));
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("Protocol.PacketBuilder", ex);
+            if (Model is { } model) model.ReportPacketBuilderError();
+        }
+        finally { button.IsEnabled = true; }
+    }
 
     private void Model_LatestRequested(object? sender, EventArgs args)
     {

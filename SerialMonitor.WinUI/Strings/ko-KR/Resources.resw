@@ -1219,4 +1219,33 @@
   <data name="AgentMemoryDescription.Text" xml:space="preserve"><value>AI가 직접 읽고 정리하는 제품별 프로토콜·테스트 노트입니다. 플러그인 skill이 이 위치를 안내합니다.</value></data>
   <data name="AgentMemoryOpened" xml:space="preserve"><value>메모리 폴더를 열었습니다.</value></data>
   <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>메모리 폴더를 열지 못했습니다. 표시된 경로와 폴더 권한을 확인하세요.</value></data>
+  <data name="ModbusBuilderButton" xml:space="preserve"><value>패킷 만들기</value></data>
+  <data name="ModbusBuilderButtonHelp" xml:space="preserve"><value>CRC를 포함한 Modbus RTU 요청을 만들고 복사하거나 TX에 가져옵니다.</value></data>
+  <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU 패킷 만들기</value></data>
+  <data name="ModbusBuilderUse" xml:space="preserve"><value>TX에 가져오기</value></data>
+  <data name="ModbusBuilderCopy" xml:space="preserve"><value>HEX 복사</value></data>
+  <data name="ModbusBuilderClose" xml:space="preserve"><value>닫기</value></data>
+  <data name="ModbusBuilderUnit" xml:space="preserve"><value>장치 ID (0–247)</value></data>
+  <data name="ModbusBuilderAddress" xml:space="preserve"><value>시작 주소 (0부터)</value></data>
+  <data name="ModbusBuilderQuantity" xml:space="preserve"><value>수량</value></data>
+  <data name="ModbusBuilderValues" xml:space="preserve"><value>값 (주소 순서)</value></data>
+  <data name="ModbusBuilderCoil" xml:space="preserve"><value>코일 값</value></data>
+  <data name="ModbusBuilderPreview" xml:space="preserve"><value>RTU 패킷 · HEX (CRC 포함)</value></data>
+  <data name="ModbusBuilderNumberHelp" xml:space="preserve"><value>숫자는 10진수 또는 0x HEX로 입력합니다. 주소 0이 첫 항목입니다 (예: Holding Register 40001).</value></data>
+  <data name="ModbusBuilderUseHelp" xml:space="preserve"><value>TX에 가져오면 Terminal/HEX가 HEX로 전환되고 TX 입력란에 채워집니다. 확인 후 전송 버튼을 누르세요.</value></data>
+  <data name="ModbusBuilderUnitHelp" xml:space="preserve"><value>ID 0은 전체 장치에 쓰는 브로드캐스트이며 응답이 없습니다. 읽기는 ID 1–247을 사용합니다.</value></data>
+  <data name="ModbusBuilderCoilsHelp" xml:space="preserve"><value>코일 값 0 또는 1을 공백·쉼표로 구분해 1–1968개 입력합니다. 수량과 비트 배치는 자동 계산합니다.</value></data>
+  <data name="ModbusBuilderSingleHelp" xml:space="preserve"><value>레지스터 값 하나를 입력합니다: 0–65535 또는 0x0000–0xFFFF.</value></data>
+  <data name="ModbusBuilderRegistersHelp" xml:space="preserve"><value>레지스터 값을 공백·쉼표로 구분해 1–123개 입력합니다. 수량과 바이트 수는 자동 계산합니다.</value></data>
+  <data name="ModbusBuilderQuantityHelp" xml:space="preserve"><value>입력 가능한 수량: 1–{0}.</value></data>
+  <data name="ModbusBuilderReadBroadcastError" xml:space="preserve"><value>읽기는 장치 ID 1–247을 사용해야 합니다.</value></data>
+  <data name="ModbusBuilderAddressRangeError" xml:space="preserve"><value>마지막 주소가 65535를 넘을 수 없습니다.</value></data>
+  <data name="ModbusBuilderSummary" xml:space="preserve"><value>{0}바이트 · 수량 {1} · CRC (하위 바이트부터) {2:X2} {3:X2}</value></data>
+  <data name="ModbusBuilderNumberError" xml:space="preserve"><value>{0}: {1}–{2} 범위로 입력하세요 (10진수 또는 0x HEX).</value></data>
+  <data name="ModbusBuilderCopied" xml:space="preserve"><value>HEX를 복사했습니다.</value></data>
+  <data name="ModbusBuilderCopyFailed" xml:space="preserve"><value>HEX를 복사하지 못했습니다. 미리보기의 텍스트를 선택해 복사하세요.</value></data>
+  <data name="ModbusBuilderOpenFailed" xml:space="preserve"><value>패킷 만들기를 실행하지 못했습니다. Health 진단을 확인하세요.</value></data>
+  <data name="ModbusBuilderBusy" xml:space="preserve"><value>TX 작업 중입니다. 패킷을 복사하거나 현재 작업 종료 후 다시 가져오세요.</value></data>
+  <data name="ModbusBuilderInvalidPacket" xml:space="preserve"><value>Modbus RTU 패킷의 길이 또는 CRC가 올바르지 않습니다.</value></data>
+  <data name="ModbusBuilderPrepared" xml:space="preserve"><value>Modbus RTU 패킷을 HEX TX에 가져왔습니다. 확인 후 전송 버튼을 누르세요.</value></data>
 </root>

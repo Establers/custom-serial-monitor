@@ -59,6 +59,9 @@
                         <TextBlock Grid.Column="1" Text="{Binding RetainedSummary}" Style="{StaticResource ColumnHeader}" />
                     </Grid>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5">
+                        <Button Content="{Binding BuildPacketLabel}" Visibility="{Binding PacketBuilderVisibility}"
+                                Click="BuildPacket_Click" Style="{StaticResource ToolbarButton}"
+                                ToolTipService.ToolTip="{Binding BuildPacketToolTip}" />
                         <ToggleButton Content="{Binding FollowLabel}" IsChecked="{Binding IsFollowingLatest, Mode=TwoWay}"
                                       Style="{StaticResource ToolbarToggle}" ToolTipService.ToolTip="{Binding FollowToolTip}" />
                         <ToggleButton Content="{Binding PauseLabel}" IsChecked="{Binding IsDisplayPaused, Mode=TwoWay}"

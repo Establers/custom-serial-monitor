@@ -2285,7 +2285,7 @@
                     </TabViewItem>
 
                     <TabViewItem Header="{Binding Protocol.TabTitle}" IsClosable="False">
-                        <views:ProtocolView DataContext="{Binding Protocol}" />
+                        <views:ProtocolView DataContext="{Binding Protocol}" PacketPrepared="Protocol_PacketPrepared" />
                     </TabViewItem>
                     <TabViewItem x:Uid="StaticUi027" Header="Search"
                                  IsClosable="False"
