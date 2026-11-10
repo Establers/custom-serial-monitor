@@ -31,7 +31,7 @@
                     <Grid ColumnDefinitions="Auto,Auto,64" ColumnSpacing="4">
                         <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
                                   AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding FormatLabel}"
-                                  Width="88" HorizontalAlignment="Left" MinWidth="0" MinHeight="26" Height="26" Padding="5,0,24,0" FontSize="11" />
+                                  HorizontalAlignment="Left" MinWidth="88" MinHeight="26" Height="26" Padding="5,0,0,0" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="+" VerticalAlignment="Center" FontSize="11" ToolTipService.ToolTip="{Binding OffsetLabel}" />
                         <TextBox Grid.Column="2" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="{Binding OffsetLabel}" ToolTipService.ToolTip="{Binding OffsetLabel}" />
