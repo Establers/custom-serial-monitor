@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.UI.Xaml;
 using SerialMonitor.Core.Protocols;
@@ -84,13 +85,69 @@ public sealed class ModbusValueInterpreterViewModelTests
         var frame = Response("00FA");
         model.SetFrame(frame);
         Assert.NotEmpty(model.ValuesText);
-        foreach (var unsupported in new[] { frame with { CrcStatus = ModbusCrcStatus.Invalid }, frame with { Kind = ModbusFrameKind.Request } })
+        foreach (var (unsupported, reason) in new[]
+        {
+            (frame with { CrcStatus = ModbusCrcStatus.Invalid }, "CRC error"),
+            (frame with { Kind = ModbusFrameKind.Request }, "Request packet")
+        })
         {
             model.SetFrame(unsupported);
             Assert.Empty(model.ValuesText);
             Assert.Equal(Visibility.Collapsed, model.EditorVisibility);
-            Assert.Contains("CRC-valid", model.Help);
+            Assert.Contains(reason, model.Help);
         }
+    }
+
+    [Theory]
+    [InlineData(ProtocolDirection.Tx)]
+    [InlineData(ProtocolDirection.Rx)]
+    public async Task CrcValidRequestAndFollowingResponseExplainTheirRolesWhenSelected(ProtocolDirection requestDirection)
+    {
+        await using var analyzer = new ModbusRtuAnalyzer();
+        var model = new ProtocolViewModel(analyzer) { IsVisible = true, SelectedProtocolIndex = 1 };
+        analyzer.TryEnqueue(Convert.FromHexString("010300000002C40B"), requestDirection, 1, DateTimeOffset.Now);
+        analyzer.TryEnqueue(Response("00FA0064").Bytes, ProtocolDirection.Rx, 1, DateTimeOffset.Now);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (analyzer.Snapshot().RetainedCount < 2) await Task.Delay(5, timeout.Token);
+        model.Refresh();
+        model.SelectedFrame = model.Frames.Single(row => ((ModbusRtuFrame)row.Frame).Kind == ModbusFrameKind.Request);
+        Assert.Contains("CRC: Valid", model.Details);
+        Assert.Contains("Request packet", model.ValueInterpreter.Help);
+        Assert.DoesNotContain("CRC", model.ValueInterpreter.Help);
+        Assert.Equal(Visibility.Collapsed, model.ValueInterpreter.EditorVisibility);
+        model.SelectedFrame = model.Frames.Single(row => ((ModbusRtuFrame)row.Frame).Kind == ModbusFrameKind.Response);
+        Assert.Equal(Visibility.Visible, model.ValueInterpreter.EditorVisibility);
+        Assert.Contains("+0: 250", model.ValueInterpreter.ValuesText);
+        Assert.Contains("+1: 100", model.ValueInterpreter.ValuesText);
+        Assert.DoesNotContain("Request packet", model.ValueInterpreter.Help);
+    }
+
+    [Fact]
+    public void UnavailableHintsDistinguishExceptionsIncompleteAmbiguousAndUnsupportedDataFromCrcErrors()
+    {
+        var model = new ModbusValueInterpreterViewModel();
+        var frames = new[]
+        {
+            (Frame(Convert.FromHexString("018302"), ModbusFrameKind.Exception), "Exception response"),
+            (Frame(Convert.FromHexString("010600000001"), ModbusFrameKind.RequestOrResponse), "ambiguous"),
+            (Response("00FA") with { CrcStatus = ModbusCrcStatus.Unavailable, Kind = ModbusFrameKind.Incomplete }, "Incomplete frame"),
+            (Frame(Convert.FromHexString("01010101"), ModbusFrameKind.Response), "supports FC03"),
+            (Frame(Convert.FromHexString("01030400FA"), ModbusFrameKind.Response), "invalid address, length or data layout")
+        };
+        foreach (var (frame, reason) in frames)
+        {
+            model.SetFrame(Response("00FA"));
+            Assert.NotEmpty(model.ValuesText);
+            model.SetFrame(frame);
+            Assert.Contains(reason, model.Help);
+            Assert.DoesNotContain("CRC", model.Help);
+            Assert.Empty(model.ValuesText);
+            Assert.Equal(Visibility.Collapsed, model.EditorVisibility);
+        }
+        var corrupted = Response("00FA").Bytes.ToArray();
+        corrupted[^1] ^= 1;
+        model.SetFrame(Response("00FA") with { Bytes = corrupted });
+        Assert.Contains("CRC error", model.Help);
     }
 
     [Theory]
@@ -145,11 +202,13 @@ public sealed class ModbusValueInterpreterViewModelTests
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         Assert.All(markup.Descendants(presentation + "TextBox"), box => Assert.Null(box.Attribute("MaxLength")));
         Assert.Contains(markup.Descendants(presentation + "ComboBox"), box => ((string?)box.Attribute("SelectedIndex"))?.Contains("FormatIndex, Mode=TwoWay") == true);
+        var source = File.ReadAllText(Path.Combine(root, "SerialMonitor.WinUI", "ViewModels", "ModbusValueInterpreterViewModel.cs"));
+        var referencedKeys = Regex.Matches(source, "\"(ModbusValues[^\"]+)\"").Select(match => match.Groups[1].Value).Distinct().Order().ToArray();
         foreach (var locale in new[] { "en-US", "ko-KR" })
         {
             var resources = XDocument.Load(Path.Combine(root, "SerialMonitor.WinUI", "Strings", locale, "Resources.resw"));
             var entries = resources.Descendants("data").Where(entry => ((string?)entry.Attribute("name"))?.StartsWith("ModbusValues", StringComparison.Ordinal) == true).ToArray();
-            Assert.Equal(15, entries.Length);
+            Assert.Equal(referencedKeys, entries.Select(entry => (string)entry.Attribute("name")!).Order());
             Assert.All(entries, entry => Assert.False(string.IsNullOrWhiteSpace((string?)entry.Element("value"))));
         }
     }
@@ -158,9 +217,14 @@ public sealed class ModbusValueInterpreterViewModelTests
     {
         var payload = Convert.FromHexString(data);
         var body = new byte[] { 1, 3, (byte)payload.Length }.Concat(payload).ToArray();
+        return Frame(body, ModbusFrameKind.Response);
+    }
+
+    private static ModbusRtuFrame Frame(byte[] body, ModbusFrameKind kind)
+    {
         var crc = ModbusRtuCrc.Compute(body);
         return new(1, 1, DateTimeOffset.UnixEpoch, ProtocolDirection.Rx,
-            body.Concat(new byte[] { (byte)crc, (byte)(crc >> 8) }).ToArray(), ModbusFrameKind.Response, ModbusCrcStatus.Valid);
+            body.Concat(new byte[] { (byte)crc, (byte)(crc >> 8) }).ToArray(), kind, ModbusCrcStatus.Valid);
     }
 
     private static string RepoRoot()

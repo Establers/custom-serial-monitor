@@ -24,7 +24,7 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     public string SwapWordsHelp => UiText.Get("ModbusValuesSwapWordsHelp", "Swap the two registers of each 32-bit value: AB CD → CD AB.");
     public string Help => _canInterpret
         ? UiText.Get("ModbusValuesHelp", "+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.")
-        : UiText.Get("ModbusValuesUnsupported", "Select a CRC-valid FC03, FC04 or FC17 register read response to interpret values.");
+        : UnavailableHelp();
     public Visibility Visibility => _frame is null ? Visibility.Collapsed : Visibility.Visible;
     public Visibility EditorVisibility => _canInterpret ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => string.IsNullOrEmpty(ValidationError) ? Visibility.Collapsed : Visibility.Visible;
@@ -64,6 +64,31 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
         _canInterpret = frame is not null && ModbusRegisterInterpreter.CanInterpret(frame);
         foreach (var property in new[] { nameof(Visibility), nameof(EditorVisibility), nameof(Help) }) OnPropertyChanged(property);
         Rebuild();
+    }
+
+    private string UnavailableHelp()
+    {
+        if (_frame is { } frame)
+        {
+            if (frame.CrcStatus == ModbusCrcStatus.Invalid)
+                return UiText.Get("ModbusValuesCrcError", "CRC error; values cannot be interpreted.");
+            if (frame.CrcStatus == ModbusCrcStatus.Unavailable || frame.Kind == ModbusFrameKind.Incomplete)
+                return UiText.Get("ModbusValuesIncomplete", "Incomplete frame; register data cannot be established.");
+            if (frame.Length is >= 4 and <= ModbusRtuFrame.MaximumBytes && ModbusRtuCrc.Compute(frame.Bytes.Span) != 0)
+                return UiText.Get("ModbusValuesCrcError", "CRC error; values cannot be interpreted.");
+            switch (frame.Kind)
+            {
+                case ModbusFrameKind.Request:
+                    return UiText.Get("ModbusValuesRequest", "Request packet; select the corresponding register read response to interpret values.");
+                case ModbusFrameKind.Exception:
+                    return UiText.Get("ModbusValuesException", "Exception response; no normal register values are present.");
+                case ModbusFrameKind.RequestOrResponse:
+                    return UiText.Get("ModbusValuesAmbiguous", "The request/response role is ambiguous; values are not interpreted.");
+                case ModbusFrameKind.Response when frame.FunctionCode is 3 or 4 or 23:
+                    return UiText.Get("ModbusValuesInvalidResponse", "The register read response has an invalid address, length or data layout.");
+            }
+        }
+        return UiText.Get("ModbusValuesUnsupported", "Register value interpretation supports FC03, FC04 and FC17 read responses.");
     }
 
     private void Rebuild()
