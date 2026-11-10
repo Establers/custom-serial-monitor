@@ -36,10 +36,12 @@ public sealed class ModbusPacketBuilderViewModelTests
         // Model-only tests miss TextBox.MaxLength truncating a paste, e.g.
         // 0x10000 -> 0x1000, or ID 0x000001 -> broadcast ID 0x0000.
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
-        var input = Assert.Single(DialogMarkup().Descendants(presentation + "TextBox")
-            .Where(element => ((string?)element.Attribute("Text"))?.StartsWith("{Binding " + binding + ",", StringComparison.Ordinal) == true));
-        Assert.True(input.Attribute("MaxLength") is null || (string?)input.Attribute("MaxLength") == "0",
-            $"{binding} must validate the complete paste instead of silently shortening the packet field.");
+        var inputs = DialogMarkup().Descendants(presentation + "TextBox")
+            .Where(element => ((string?)element.Attribute("Text"))?.StartsWith("{Binding " + binding + ",", StringComparison.Ordinal) == true).ToArray();
+        Assert.NotEmpty(inputs);
+        foreach (var input in inputs)
+            Assert.True(input.Attribute("MaxLength") is null || (string?)input.Attribute("MaxLength") == "0",
+                $"{binding} must validate the complete paste instead of silently shortening the packet field.");
     }
 
     [Fact]

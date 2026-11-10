@@ -69,6 +69,8 @@ public sealed partial class ModbusPacketBuilderViewModel
         {
             if (value < 0 || value >= DiagnosticFunctions.Length || !SetProperty(ref _diagnosticIndex, value)) return;
             OnPropertyChanged(nameof(DiagnosticDataHelp)); OnPropertyChanged(nameof(DiagnosticSubFunction)); Refresh();
+            OnPropertyChanged(nameof(DiagnosticSingleDataVisibility)); OnPropertyChanged(nameof(DiagnosticMultipleDataVisibility));
+            OnPropertyChanged(nameof(DiagnosticSelectorColumnSpan));
         }
     }
     public int DeviceAccessIndex

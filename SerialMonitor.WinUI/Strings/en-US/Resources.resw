@@ -1280,4 +1280,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusBuilderRowCountError" xml:space="preserve"><value>Enter 1–{0} record groups, one per line.</value></data>
   <data name="ModbusBuilderRawDataError" xml:space="preserve"><value>Enter complete HEX bytes (e.g. 00 10 FF), at most 252 bytes.</value></data>
   <data name="ModbusBuilderReadWriteSummary" xml:space="preserve"><value>{0} bytes · read {1} / write {2} · CRC {3:X2} {4:X2}</value></data>
+  <data name="ModbusBuilderScalarValue" xml:space="preserve"><value>Value (0–65535)</value></data>
+  <data name="ModbusBuilderWriteQuantity" xml:space="preserve"><value>Write quantity (auto)</value></data>
+  <data name="ModbusBuilderCompactFunction" xml:space="preserve"><value>Function (1–127)</value></data>
+  <data name="ModbusBuilderCompactNumbers" xml:space="preserve"><value>Decimal or 0x HEX · addresses start at 0</value></data>
 </root>

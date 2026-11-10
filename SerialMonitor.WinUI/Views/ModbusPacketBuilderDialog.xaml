@@ -2,77 +2,159 @@
     x:Class="SerialMonitor.WinUI.Views.ModbusPacketBuilderDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Style="{StaticResource DefaultContentDialogStyle}"
+    xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
+    Style="{StaticResource DefaultContentDialogStyle}" FontSize="13"
     Title="{Binding Title}" PrimaryButtonText="{Binding CopyLabel}" CloseButtonText="{Binding CloseLabel}"
     DefaultButton="Primary" IsPrimaryButtonEnabled="{Binding CanUsePacket}"
     PrimaryButtonStyle="{StaticResource AccentButtonStyle}" CloseButtonStyle="{StaticResource DefaultButtonStyle}"
     PrimaryButtonClick="Copy_Click">
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">560</x:Double>
+        <DataTemplate x:Key="CompactFieldHeader">
+            <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
+        </DataTemplate>
+        <Style x:Key="CompactInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+            <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HeaderTemplate" Value="{StaticResource CompactFieldHeader}" />
+        </Style>
+        <Style x:Key="PacketListInput" TargetType="TextBox" BasedOn="{StaticResource CompactInput}">
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MinHeight" Value="54" />
+            <Setter Property="MaxHeight" Value="88" />
+            <!-- Reserve room for the TextBox's own overlay scrollbar as well. -->
+            <Setter Property="Padding" Value="8,4,24,4" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
+        <Style TargetType="TextBox" BasedOn="{StaticResource CompactInput}" />
+        <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HeaderTemplate" Value="{StaticResource CompactFieldHeader}" />
+        </Style>
+        <Style x:Key="FieldHelp" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
     </ContentDialog.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="480">
-        <StackPanel Spacing="12" MinWidth="360">
-            <ComboBox Header="{Binding FunctionLabel}" ItemsSource="{Binding FunctionOptions}"
-                      SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" MaxDropDownHeight="360" />
-            <TextBlock Text="{Binding FunctionHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                <!-- Validate the full input. MaxLength can turn an out-of-range paste into a different valid number. -->
-                <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox Grid.Column="1" Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Visibility="{Binding AddressVisibility}" />
-            </Grid>
-            <TextBlock Text="{Binding NumberHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            <StackPanel Visibility="{Binding QuantityVisibility}" Spacing="4">
-                <TextBox Header="{Binding QuantityLabel}" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock Text="{Binding QuantityHelp}" FontSize="12" Opacity="0.75" />
+
+    <Grid RowDefinitions="*,Auto" RowSpacing="8" MinWidth="380" MaxHeight="480">
+        <ScrollViewer x:Name="EditorScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch" MinHeight="0" MaxHeight="360">
+            <!-- WinUI scrollbars overlay content. Keep a gutter inside the viewport, independent of scrollbar state. -->
+            <StackPanel x:Name="EditorPanel" Margin="0,0,20,0" Spacing="8" MinWidth="0">
+                <Grid x:Name="IdentityRow" ColumnDefinitions="116,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <ComboBox Grid.Column="1" Header="{Binding FunctionLabel}" ItemsSource="{Binding FunctionOptions}"
+                              SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" MaxDropDownHeight="360"
+                              ToolTipService.ToolTip="{Binding FunctionHelp}" />
+                </Grid>
+                <TextBlock Text="{Binding FunctionHelp}" Style="{StaticResource FieldHelp}" />
+
+                <Grid x:Name="ReadRow" Visibility="{Binding ReadRangeVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="1" Header="{Binding QuantityLabel}" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding QuantityHelp}" />
+                </Grid>
+                <TextBlock Text="{Binding QuantityHelp}" Visibility="{Binding ReadRangeVisibility}" Style="{StaticResource FieldHelp}" />
+
+                <Grid x:Name="SingleCoilRow" Visibility="{Binding CoilVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <ToggleSwitch Grid.Column="1" Header="{Binding CoilLabel}" IsOn="{Binding CoilOn, Mode=TwoWay}"
+                                  OffContent="OFF · 0x0000" OnContent="ON · 0xFF00" VerticalAlignment="Bottom" />
+                </Grid>
+                <Grid x:Name="SingleRegisterRow" Visibility="{Binding SingleRegisterVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="1" Header="{Binding ScalarValueLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding ValuesHelp}" />
+                </Grid>
+
+                <Grid x:Name="WriteRow" Visibility="{Binding WriteRangeVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="1" Header="{Binding WriteQuantityLabel}" Text="{Binding WriteQuantityText}" IsReadOnly="True" />
+                </Grid>
+                <Grid x:Name="ReadWriteRow" Visibility="{Binding ReadWriteVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="1" Header="{Binding WriteQuantityLabel}" Text="{Binding WriteQuantityText}" IsReadOnly="True" />
+                </Grid>
+                <StackPanel Visibility="{Binding ValuesVisibility}" Spacing="4">
+                    <TextBox Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource PacketListInput}" />
+                    <TextBlock Text="{Binding ValuesHelp}" Style="{StaticResource FieldHelp}" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding DiagnosticsVisibility}" Spacing="4">
+                    <Grid x:Name="DiagnosticRow" ColumnDefinitions="*,160" ColumnSpacing="12">
+                        <ComboBox Header="{Binding DiagnosticLabel}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
+                                  SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" Grid.ColumnSpan="{Binding DiagnosticSelectorColumnSpan}" />
+                        <TextBox Grid.Column="1" Header="{Binding ScalarValueLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Visibility="{Binding DiagnosticSingleDataVisibility}" />
+                    </Grid>
+                    <TextBox Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Visibility="{Binding DiagnosticMultipleDataVisibility}" Style="{StaticResource PacketListInput}" />
+                    <TextBlock Text="{Binding DiagnosticDataHelp}" Style="{StaticResource FieldHelp}" />
+                </StackPanel>
+                <Grid x:Name="MaskRow" Visibility="{Binding MaskVisibility}" ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="1" Header="AND mask" Text="{Binding AndMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                    <TextBox Grid.Column="2" Header="OR mask" Text="{Binding OrMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                </Grid>
+                <StackPanel Visibility="{Binding FileReadVisibility}" Spacing="4">
+                    <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource PacketListInput}" />
+                    <TextBlock Text="{Binding FileReadHelp}" Style="{StaticResource FieldHelp}" />
+                </StackPanel>
+                <StackPanel Visibility="{Binding FileWriteVisibility}" Spacing="4">
+                    <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileWriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource PacketListInput}" />
+                    <TextBlock Text="{Binding FileWriteHelp}" Style="{StaticResource FieldHelp}" />
+                </StackPanel>
+                <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Visibility="{Binding FifoVisibility}" Width="220" HorizontalAlignment="Left"
+                         ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                <Grid x:Name="DeviceIdRow" Visibility="{Binding DeviceIdVisibility}" ColumnDefinitions="*,144" ColumnSpacing="12">
+                    <ComboBox Header="{Binding DeviceAccessLabel}" ItemsSource="{Binding DeviceAccessOptions}"
+                              SelectedIndex="{Binding DeviceAccessIndex, Mode=TwoWay}" />
+                    <TextBox Grid.Column="1" Header="{Binding ObjectIdLabel}" Text="{Binding ObjectIdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </Grid>
+                <Grid x:Name="CustomRow" Visibility="{Binding CustomVisibility}" ColumnDefinitions="144,*" ColumnSpacing="12">
+                    <TextBox Header="{Binding CompactFunctionLabel}" Text="{Binding CustomFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding CustomFunctionLabel}" />
+                    <TextBox Grid.Column="1" Header="{Binding CustomDataLabel}" Text="{Binding CustomDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource PacketListInput}" />
+                </Grid>
+                <TextBlock Text="{Binding CompactNumberHelp}" Style="{StaticResource FieldHelp}" ToolTipService.ToolTip="{Binding NumberHelp}" />
+                <TextBlock Text="{Binding UnitHelp}" Style="{StaticResource FieldHelp}" />
             </StackPanel>
-            <ToggleSwitch Header="{Binding CoilLabel}" IsOn="{Binding CoilOn, Mode=TwoWay}"
-                          OffContent="OFF · 0x0000" OnContent="ON · 0xFF00" Visibility="{Binding CoilVisibility}" />
-            <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Visibility="{Binding ReadWriteVisibility}" />
-            <StackPanel Visibility="{Binding ValuesVisibility}" Spacing="4">
-                <TextBox Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="100"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                <TextBlock Text="{Binding ValuesHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            </StackPanel>
-            <StackPanel Visibility="{Binding DiagnosticsVisibility}" Spacing="8">
-                <ComboBox Header="{Binding DiagnosticLabel}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
-                          SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
-                <TextBox Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock Text="{Binding DiagnosticDataHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            </StackPanel>
-            <Grid Visibility="{Binding MaskVisibility}" ColumnDefinitions="*,*" ColumnSpacing="12">
-                <TextBox Header="AND mask" Text="{Binding AndMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox Grid.Column="1" Header="OR mask" Text="{Binding OrMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </Grid>
-            <StackPanel Visibility="{Binding FileReadVisibility}" Spacing="4">
-                <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                <TextBlock Text="{Binding FileReadHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            </StackPanel>
-            <StackPanel Visibility="{Binding FileWriteVisibility}" Spacing="4">
-                <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileWriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                <TextBlock Text="{Binding FileWriteHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            </StackPanel>
-            <StackPanel Visibility="{Binding DeviceIdVisibility}" Spacing="8">
-                <ComboBox Header="{Binding DeviceAccessLabel}" ItemsSource="{Binding DeviceAccessOptions}"
-                          SelectedIndex="{Binding DeviceAccessIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
-                <TextBox Header="{Binding ObjectIdLabel}" Text="{Binding ObjectIdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </StackPanel>
-            <StackPanel Visibility="{Binding CustomVisibility}" Spacing="8">
-                <TextBox Header="{Binding CustomFunctionLabel}" Text="{Binding CustomFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox Header="{Binding CustomDataLabel}" Text="{Binding CustomDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         FontFamily="Consolas" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="100" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            </StackPanel>
-            <TextBlock Text="{Binding UnitHelp}" TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
-            <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap"
-                       Foreground="{ThemeResource ErrorTextBrush}" FontSize="12" />
-            <TextBox Header="{Binding PreviewLabel}" Text="{Binding Preview}" IsReadOnly="True" FontFamily="Consolas"
-                     TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            <TextBlock Text="{Binding Summary}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" />
-            <TextBlock x:Name="CopyStatus" FontSize="12" TextWrapping="Wrap" />
+        </ScrollViewer>
+
+        <StackPanel x:Name="PacketFooter" Grid.Row="1" Spacing="4">
+            <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" FontSize="11" TextWrapping="Wrap"
+                       MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ValidationError}"
+                       Foreground="{ThemeResource ErrorTextBrush}" />
+            <TextBox Header="{Binding PreviewLabel}" Text="{Binding Preview}" IsReadOnly="True"
+                     Style="{StaticResource PacketListInput}" VerticalContentAlignment="Center" MinHeight="30" MaxHeight="80" />
+            <TextBlock Text="{Binding Summary}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock x:Name="CopyStatus" FontSize="11" TextWrapping="Wrap" />
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </ContentDialog>

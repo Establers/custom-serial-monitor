@@ -13,6 +13,7 @@ public sealed partial class ModbusPacketBuilderViewModel : ViewModelBase
     private string _unitText = "1", _addressText = "0", _quantityText = "1", _valuesText = "0";
     private bool _coilOn;
     private byte[] _packet = [];
+    private byte _packetFunction;
     private string _validationError = "", _preview = "", _summary = "";
 
     public ModbusPacketBuilderViewModel() => Refresh();
@@ -54,7 +55,7 @@ public sealed partial class ModbusPacketBuilderViewModel : ViewModelBase
     public Visibility AddressVisibility => Function is >= 1 and <= 6 or 15 or 16 or 22 or 23 or 24 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility QuantityVisibility => Function is >= 1 and <= 4 or 23 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility CoilVisibility => Function == 5 ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility ValuesVisibility => Function is 6 or 15 or 16 or 23 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ValuesVisibility => Function is 15 or 16 or 23 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => ValidationError.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     public ReadOnlyMemory<byte> Packet => _packet;
     public bool CanUsePacket => _packet.Length > 0;
@@ -71,7 +72,8 @@ public sealed partial class ModbusPacketBuilderViewModel : ViewModelBase
             foreach (var name in new[] { nameof(Function), nameof(MaximumQuantity), nameof(AddressVisibility), nameof(QuantityVisibility), nameof(CoilVisibility),
                 nameof(ValuesVisibility), nameof(ValuesHelp), nameof(QuantityHelp), nameof(AddressLabel), nameof(QuantityLabel), nameof(UnitHelp),
                 nameof(FunctionHelp), nameof(DiagnosticsVisibility), nameof(MaskVisibility), nameof(ReadWriteVisibility), nameof(FileReadVisibility),
-                nameof(FileWriteVisibility), nameof(DeviceIdVisibility), nameof(CustomVisibility) }) OnPropertyChanged(name);
+                nameof(FileWriteVisibility), nameof(DeviceIdVisibility), nameof(CustomVisibility), nameof(ReadRangeVisibility),
+                nameof(SingleRegisterVisibility), nameof(WriteRangeVisibility), nameof(FifoVisibility) }) OnPropertyChanged(name);
             Refresh();
         }
     }
@@ -92,9 +94,9 @@ public sealed partial class ModbusPacketBuilderViewModel : ViewModelBase
     {
         _packet = [];
         _preview = _summary = _validationError = "";
-        try { Build(); }
+        try { Build(); _packetFunction = Function; }
         catch (ArgumentException ex) { _validationError = ex.Message; }
-        foreach (var name in new[] { nameof(Packet), nameof(CanUsePacket), nameof(Preview), nameof(Summary), nameof(ValidationError), nameof(ErrorVisibility) })
+        foreach (var name in new[] { nameof(Packet), nameof(CanUsePacket), nameof(Preview), nameof(Summary), nameof(ValidationError), nameof(ErrorVisibility), nameof(WriteQuantityText) })
             OnPropertyChanged(name);
     }
 
