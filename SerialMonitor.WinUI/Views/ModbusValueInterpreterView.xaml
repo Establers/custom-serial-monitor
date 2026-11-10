@@ -50,7 +50,7 @@
                 </StackPanel>
                 <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer Visibility="{Binding ValuesVisibility}" MaxHeight="96" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <TextBlock Text="{Binding ValuesText}" IsTextSelectionEnabled="True" FontFamily="Consolas" FontSize="11" LineHeight="14" TextWrapping="Wrap" Margin="0,0,16,0" />
                 </ScrollViewer>
                 <TextBlock Text="{Binding RemainderText}" Visibility="{Binding RemainderVisibility}" FontSize="11" TextWrapping="Wrap" />
