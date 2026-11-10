@@ -42,7 +42,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public string CodeLabel => IsMstp ? "Type" : "FC";
     public string ClearLabel => UiText.Get("ProtocolClear", "Clear results");
     public string BuildPacketLabel => UiText.Get("ModbusBuilderButton", "Build packet");
-    public string BuildPacketToolTip => UiText.Get("ModbusBuilderButtonHelp", "Build a Modbus RTU request with automatic CRC, then copy it or use it in TX.");
+    public string BuildPacketToolTip => UiText.Get("ModbusBuilderButtonHelp", "Build a Modbus RTU request with automatic CRC and copy its HEX.");
     public Visibility PacketBuilderVisibility => SelectedProtocolIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");

@@ -18,7 +18,6 @@ public sealed partial class ProtocolView : UserControl
     private bool _latestScrollQueued;
     private int _viewGeneration;
     private ProtocolViewModel? Model => DataContext as ProtocolViewModel;
-    public event EventHandler<ModbusPacketPreparedEventArgs>? PacketPrepared;
     public ProtocolView()
     {
         InitializeComponent();
@@ -100,9 +99,8 @@ public sealed partial class ProtocolView : UserControl
         button.IsEnabled = false;
         try
         {
-            var dialog = new ModbusPacketBuilderDialog { XamlRoot = XamlRoot };
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary && dialog.Model.CanUsePacket)
-                PacketPrepared?.Invoke(this, new(dialog.Model.Packet));
+            var dialog = new ModbusPacketBuilderDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+            await dialog.ShowAsync();
         }
         catch (Exception ex)
         {

@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using System.Xml.Linq;
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.ViewModels;
 
@@ -14,6 +15,66 @@ public sealed class ModbusPacketBuilderViewModelTests
         Assert.Equal("01 03 00 00 00 02 C4 0B", model.Preview);
         Assert.Equal(Visibility.Visible, model.QuantityVisibility);
         Assert.Equal(Visibility.Collapsed, model.ValuesVisibility);
+    }
+
+    [Theory]
+    [InlineData("UnitText")]
+    [InlineData("AddressText")]
+    [InlineData("QuantityText")]
+    [InlineData("ValuesText")]
+    public void DialogDoesNotTruncatePastedPacketFieldsBeforeValidation(string binding)
+    {
+        // Model-only tests miss TextBox.MaxLength truncating a paste, e.g.
+        // 0x10000 -> 0x1000, or ID 0x000001 -> broadcast ID 0x0000.
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        var input = Assert.Single(DialogMarkup().Descendants(presentation + "TextBox")
+            .Where(element => ((string?)element.Attribute("Text"))?.StartsWith("{Binding " + binding + ",", StringComparison.Ordinal) == true));
+        Assert.True(input.Attribute("MaxLength") is null || (string?)input.Attribute("MaxLength") == "0",
+            $"{binding} must validate the complete paste instead of silently shortening the packet field.");
+    }
+
+    [Fact]
+    public void DialogUsesNativeCopyAndCloseButtonsWithoutATxAction()
+    {
+        var dialog = DialogMarkup().Root!;
+        Assert.Equal("{StaticResource DefaultContentDialogStyle}", (string?)dialog.Attribute("Style"));
+        Assert.Equal("{Binding CopyLabel}", (string?)dialog.Attribute("PrimaryButtonText"));
+        Assert.Equal("Primary", (string?)dialog.Attribute("DefaultButton"));
+        Assert.Equal("{StaticResource AccentButtonStyle}", (string?)dialog.Attribute("PrimaryButtonStyle"));
+        Assert.Equal("{StaticResource DefaultButtonStyle}", (string?)dialog.Attribute("CloseButtonStyle"));
+        Assert.Equal("Copy_Click", (string?)dialog.Attribute("PrimaryButtonClick"));
+        Assert.Equal("{Binding CloseLabel}", (string?)dialog.Attribute("CloseButtonText"));
+        Assert.Null(dialog.Attribute("SecondaryButtonText"));
+    }
+
+    [Fact]
+    public void CompletePaddedInputsPreserveTheirValueAndOutOfRangeInputsStayInvalid()
+    {
+        var model = new ModbusPacketBuilderViewModel
+        {
+            FunctionIndex = 4, UnitText = "0x000001", AddressText = "0x00000010", CoilOn = true
+        };
+        Assert.True(model.CanUsePacket);
+        Assert.Equal(Convert.FromHexString("01050010FF00"), model.Packet.Span[..^2].ToArray());
+        Assert.Equal("0x000001", model.UnitText);
+        model.AddressText = "0x10000";
+        Assert.False(model.CanUsePacket);
+        Assert.True(model.Packet.IsEmpty);
+        Assert.Equal("0x10000", model.AddressText);
+
+        model.AddressText = "0";
+        model.FunctionIndex = 2;
+        model.QuantityText = "00000002";
+        Assert.Equal("01 03 00 00 00 02 C4 0B", model.Preview);
+        model.QuantityText = "0x10000";
+        Assert.False(model.CanUsePacket);
+        Assert.True(model.Packet.IsEmpty);
+
+        model.FunctionIndex = 5;
+        model.ValuesText = new string('0', 12000) + "1";
+        Assert.False(model.CanUsePacket);
+        Assert.True(model.Packet.IsEmpty);
+        Assert.Equal(12001, model.ValuesText.Length);
     }
 
     [Theory]
@@ -103,5 +164,17 @@ public sealed class ModbusPacketBuilderViewModelTests
         Assert.Equal(Visibility.Collapsed, model.PacketBuilderVisibility);
         model.SelectedProtocolIndex = 0;
         Assert.Equal(Visibility.Collapsed, model.PacketBuilderVisibility);
+    }
+
+    private static XDocument DialogMarkup()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null)
+        {
+            var path = Path.Combine(root.FullName, "SerialMonitor.WinUI", "Views", "ModbusPacketBuilderDialog.xaml");
+            if (File.Exists(path)) return XDocument.Load(path);
+            root = root.Parent;
+        }
+        throw new FileNotFoundException("Could not locate the packet builder's actual XAML for paste/style regression checks.");
     }
 }

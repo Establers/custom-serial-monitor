@@ -22,7 +22,6 @@ public sealed class ModbusPacketBuilderViewModel : ViewModelBase
         "05 · Write Single Coil", "06 · Write Single Register", "0F · Write Multiple Coils", "10 · Write Multiple Registers"
     ];
     public string Title => UiText.Get("ModbusBuilderTitle", "Modbus RTU packet builder");
-    public string UseLabel => UiText.Get("ModbusBuilderUse", "Use in TX");
     public string CopyLabel => UiText.Get("ModbusBuilderCopy", "Copy HEX");
     public string CloseLabel => UiText.Get("ModbusBuilderClose", "Close");
     public string UnitLabel => UiText.Get("ModbusBuilderUnit", "Unit ID (0–247)");
@@ -33,7 +32,6 @@ public sealed class ModbusPacketBuilderViewModel : ViewModelBase
     public string CoilLabel => UiText.Get("ModbusBuilderCoil", "Coil value");
     public string PreviewLabel => UiText.Get("ModbusBuilderPreview", "RTU packet · HEX (CRC included)");
     public string NumberHelp => UiText.Get("ModbusBuilderNumberHelp", "Numbers: decimal or 0x HEX. Address 0 is the first item (e.g. holding register 40001).");
-    public string UseHelp => UiText.Get("ModbusBuilderUseHelp", "Use in TX switches Terminal/HEX to HEX and fills the TX input. Press Send there when ready.");
     public string UnitHelp => UiText.Get("ModbusBuilderUnitHelp", "ID 0 broadcasts writes to all units; no response is returned. Reads require ID 1–247.");
     public string ValuesHelp => Function == 15
         ? UiText.Get("ModbusBuilderCoilsHelp", "Enter 1–1968 coil values (0 or 1), separated by spaces or commas. Quantity and bit packing are automatic.")

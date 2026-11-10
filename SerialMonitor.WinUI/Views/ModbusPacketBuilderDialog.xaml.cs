@@ -12,12 +12,10 @@ public sealed partial class ModbusPacketBuilderDialog : ContentDialog
     {
         InitializeComponent();
         DataContext = Model;
-    }
-
-    private void Use_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-    {
-        Model.Refresh();
-        args.Cancel = !Model.CanUsePacket;
+        Model.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName == nameof(Model.Preview)) CopyStatus.Text = string.Empty;
+        };
     }
 
     private void Copy_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)

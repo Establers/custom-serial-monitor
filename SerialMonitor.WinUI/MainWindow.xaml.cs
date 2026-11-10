@@ -5509,13 +5509,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void Protocol_PacketPrepared(object sender, SerialMonitor.WinUI.Views.ModbusPacketPreparedEventArgs args)
-    {
-        if (!_viewModel.TryPrepareModbusPacket(args.Packet)) return;
-        CommandTextBox.Focus(FocusState.Programmatic);
-        CommandTextBox.SelectionStart = CommandTextBox.Text.Length;
-    }
-
     private async void AddCommandSequenceStep_Click(object sender, RoutedEventArgs args) =>
         await AddCommandSequenceStepAsync(CommandSequenceStepKind.Tx);
 
