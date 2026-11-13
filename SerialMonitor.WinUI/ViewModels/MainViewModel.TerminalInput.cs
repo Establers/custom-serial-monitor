@@ -25,13 +25,13 @@ public sealed partial class MainViewModel
     public string TerminalDirectInputVisibility => IsHexRxViewSelected ? "Collapsed" : "Visible";
 
     public string TerminalDirectInputButtonText => IsTerminalDirectInputEnabled
-        ? UiText.Get("TerminalDirectInputOn", "Direct input: ON")
-        : UiText.Get("TerminalDirectInputOff", "Direct input: OFF");
+        ? UiText.Get("TerminalDirectInputOn", "Console input")
+        : UiText.Get("TerminalDirectInputOff", "Log view");
 
     public string TerminalDirectInputMenuToolTip => IsTerminalDirectInputLocked
-        ? UiText.Get("TerminalDirectInputSequenceLocked", "Direct input: ON. Keyboard input is locked while the sequence runs.")
+        ? UiText.Get("TerminalDirectInputSequenceLocked", "Console input. Keyboard input is locked while the sequence runs.")
         : UiText.Format("TerminalDirectInputMenuHint",
-        "{0}. Open the menu to switch direct input or local echo.", TerminalDirectInputButtonText);
+        "{0}. Choose console input or log view and configure local echo.", TerminalDirectInputButtonText);
 
     public bool TerminalDirectInputLocalEcho
     {

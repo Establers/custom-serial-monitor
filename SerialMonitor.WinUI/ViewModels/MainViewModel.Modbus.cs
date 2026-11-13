@@ -35,7 +35,7 @@ public sealed partial class MainViewModel
         if ((_serialService.AppliedConfiguration?.DataBits ?? 8) != 8)
             return UiText.Get("ModbusMonitorNeedEightBits", "Modbus RTU requires 8 data bits. Correct the serial settings first.");
         if (IsTerminalDirectInputEnabled)
-            return UiText.Get("ModbusMonitorDisableDirectInput", "Turn off terminal direct input before starting Modbus.");
+            return UiText.Get("ModbusMonitorDisableDirectInput", "Switch to log view before starting Modbus RTU.");
         if (IsSequenceRunning || IsAutomationBusy || IsBridgeActive || IsBridgeStarting)
             return UiText.Get("ModbusMonitorOtherOwner", "Stop the sequence, AI operation or bridge before starting Modbus.");
         return UiText.Get("ModbusMonitorWait", "Wait for the current connection, transmit, settings or save operation to finish.");

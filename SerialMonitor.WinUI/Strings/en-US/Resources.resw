@@ -1072,12 +1072,12 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ShortcutActionRegex" xml:space="preserve"><value>regular-expression search</value></data>
   <data name="ShortcutActionBrowser" xml:space="preserve"><value>built-in log browser controls</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
-  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Direct input: ON</value></data>
-  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Direct input: OFF</value></data>
-  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Open the menu to switch direct input or local echo.</value></data>
-  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Direct terminal input menu</value></data>
-  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Direct input ON</value></data>
-  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Direct input OFF</value></data>
+  <data name="TerminalDirectInputOn" xml:space="preserve"><value>Console input</value></data>
+  <data name="TerminalDirectInputOff" xml:space="preserve"><value>Log view</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Choose console input or log view and configure local echo.</value></data>
+  <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Console settings menu</value></data>
+  <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Console input</value></data>
+  <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Log view</value></data>
   <data name="TerminalDirectInputLocalEchoMenuItem.Text" xml:space="preserve"><value>Local echo</value></data>
   <data name="TerminalDirectInputLocalEchoMenuItem.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input.</value></data>
   <data name="SerialLinesInputs.Text" xml:space="preserve"><value>Input control lines</value></data>
@@ -1209,7 +1209,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="SerialLinesDtrToolTip" xml:space="preserve"><value>DTR output: ON/OFF selects the driver’s manual mode; AUTO belongs to hardware flow control. Changes apply to the current connection and may reset a wired board.</value></data>
   <data name="SerialLinesRtsToolTip" xml:space="preserve"><value>RTS output: ON/OFF is manual, AUTO is hardware flow control, TX follows transmission. Manual changes require ON/OFF mode. These are driver modes, not measured voltages.</value></data>
   <data name="SerialLinesToggleToolTip" xml:space="preserve"><value>The driver controls RTS during transmission. Disabling restores the previous manual RTS choice. Adapter support and wiring determine RS-485 suitability; no polarity or turnaround-delay adjustment is provided.</value></data>
-  <data name="TerminalDirectInputSequenceLocked" xml:space="preserve"><value>Direct input: ON. Keyboard input is locked while the sequence runs.</value></data>
+  <data name="TerminalDirectInputSequenceLocked" xml:space="preserve"><value>Console input. Keyboard input is locked while the sequence runs.</value></data>
   <data name="BackgroundAnchorLabel.Text" xml:space="preserve"><value>Crop position</value></data>
   <data name="BackgroundAnchorHelp.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>The image always fills the window while preserving its aspect ratio. Left/right apply when cropped horizontally; top/bottom apply when cropped vertically. Saved separately for each preset.</value></data>
   <data name="BackgroundAnchorTop.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Keep top</value></data>
@@ -1373,7 +1373,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorLastAge" xml:space="preserve"><value>Last response {0:N0} s ago</value></data>
 <data name="ModbusMonitorNeedConnection" xml:space="preserve"><value>Connect the device to start Modbus RTU.</value></data>
 <data name="ModbusMonitorNeedEightBits" xml:space="preserve"><value>Modbus RTU requires 8 data bits. Disconnect, change the serial setting and reconnect.</value></data>
-<data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Turn off terminal direct input before starting Modbus RTU.</value></data>
+<data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Switch to log view before starting Modbus RTU.</value></data>
 <data name="ModbusMonitorOtherOwner" xml:space="preserve"><value>Stop the sequence, automation or bridge using this connection before starting Modbus.</value></data>
 <data name="ModbusMonitorWait" xml:space="preserve"><value>Wait for the current connection, driver or settings operation to finish.</value></data>
 </root>

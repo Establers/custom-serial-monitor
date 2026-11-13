@@ -11,7 +11,7 @@ prompts stay intact in the direct screen. Streaming decoding supports split
 UTF-8 and CP949 characters. The device still owns completion and prompt redraw;
 completion and history remain device-owned.
 
-The rightmost fixed 24-pixel terminal icon opens a right-aligned ON/OFF menu with local echo.
+The rightmost fixed 24-pixel terminal icon opens a right-aligned **Console input / Log view** menu with local echo.
 Local echo defaults on for devices that do not echo keystrokes, and can be
 turned off for shells with their own echo. Printed input appears immediately;
 Enter still sends CR for the device to execute its accumulated command. Native

@@ -1287,19 +1287,19 @@
                                 Grid.Column="4"
                                 Style="{StaticResource NavigationIconButtonStyle}"
                                 Visibility="{Binding TerminalDirectInputVisibility}"
-                                AutomationProperties.Name="Direct terminal input menu"
+                                AutomationProperties.Name="Console settings menu"
                                 infra:AppToolTipService.ToolTip="{Binding TerminalDirectInputMenuToolTip}">
                             <FontIcon x:Name="TerminalDirectInputMenuIcon" FontSize="14" Glyph="&#xE756;" />
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight" Opening="TerminalDirectInputMenu_Opening" Closed="TerminalDirectInputMenu_Closed">
                                     <RadioMenuFlyoutItem x:Uid="TerminalDirectInputOnMenuItem"
                                                         x:Name="TerminalDirectInputOnMenuItem"
-                                                        Text="Direct input ON" GroupName="TerminalDirectInput"
+                                                        Text="Console input" GroupName="TerminalDirectInput"
                                                         IsEnabled="{Binding CanEnableTerminalDirectInput}"
                                                         Click="TerminalDirectInputOn_Click" />
                                     <RadioMenuFlyoutItem x:Uid="TerminalDirectInputOffMenuItem"
                                                         x:Name="TerminalDirectInputOffMenuItem"
-                                                        Text="Direct input OFF" GroupName="TerminalDirectInput"
+                                                        Text="Log view" GroupName="TerminalDirectInput"
                                                         Click="TerminalDirectInputOff_Click" />
                                     <MenuFlyoutSeparator />
                                     <ToggleMenuFlyoutItem x:Uid="TerminalDirectInputLocalEchoMenuItem"

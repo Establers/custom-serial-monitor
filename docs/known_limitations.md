@@ -149,7 +149,8 @@ This file tracks current intentional limits and validation gaps.
 
 ## Direct Terminal Input
 
-- Direct input is an opt-in, session-only toggle in Terminal mode. The existing
+- Direct input is an opt-in, session-only choice labeled **Console input** in
+  Terminal mode; **Log view** restores the normal log screen. The existing
   TX editor and its Ending setting are independent; direct Enter sends CR and
   other keys/pastes use xterm's terminal sequences without an added suffix.
 - Device shell support provides completion, history and remote prompt redraw.
@@ -162,7 +163,8 @@ This file tracks current intentional limits and validation gaps.
 - Ctrl+C copies selected text; without a selection it sends the interrupt byte.
   App search/navigation shortcuts remain available. Saved command shortcuts are
   suspended while typing directly in xterm.
-- The rightmost fixed 24-pixel terminal icon opens the ON/OFF and local-echo menu.
+- The rightmost fixed 24-pixel terminal icon opens the **Console input / Log view**
+  choices and local-echo setting.
   Local echo defaults on so typed text is visible without device echo; disable
   it when the device itself echoes input. Local display editing supports
   Backspace/Delete, Left/Right, Home/End, wide/combining characters and wrapping
