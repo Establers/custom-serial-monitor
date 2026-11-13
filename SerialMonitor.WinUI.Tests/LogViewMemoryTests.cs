@@ -35,11 +35,14 @@ public sealed class LogViewMemoryTests
     [Theory]
     [InlineData(RxDisplayMode.Terminal)]
     [InlineData(RxDisplayMode.Hex)]
-    public void DefaultPolicyEvictsLargeStreamsLongBeforeTheMillionRecordLimit(RxDisplayMode mode)
+    public void MemoryPolicyEvictsLargeStreamsLongBeforeTheMillionRecordLimit(RxDisplayMode mode)
     {
-        var log = new LogViewModel(UiSettings.DefaultVisibleLogLines);
+        Assert.Equal(256L * 1024 * 1024, LogViewMemoryPolicy.Default.RetainedBytes);
+        Assert.Equal(64L * 1024 * 1024, LogViewMemoryPolicy.Default.VisibleCharacters);
+        var policy = new LogViewMemoryPolicy(RetainedBytes: 8L * 1024 * 1024, VisibleCharacters: 4L * 1024 * 1024);
+        var log = new LogViewModel(UiSettings.DefaultVisibleLogLines, policy);
         log.SetRxDisplayMode(mode);
-        for (var i = 0; i < 768; i++)
+        for (var i = 0; i < 128; i++)
         {
             var bytes = new byte[65536];
             Array.Fill(bytes, (byte)'x');
@@ -48,10 +51,10 @@ public sealed class LogViewMemoryTests
                 displayText: mode == RxDisplayMode.Hex ? HexFormatter.Format(bytes) : null,
                 contentMode: mode == RxDisplayMode.Hex ? LogRuleMatchMode.Hex : LogRuleMatchMode.Terminal)]);
             Assert.True(log.RetainedMemoryBytes <= log.RetainedMemoryByteLimit);
-            Assert.True(log.VisibleCharacterCount <= LogViewMemoryPolicy.Default.VisibleCharacters);
+            Assert.True(log.VisibleCharacterCount <= policy.VisibleCharacters);
         }
         Assert.True(log.DroppedVisibleLineCount > 0);
-        Assert.True(log.TotalRetainedLineCount < 768);
+        Assert.True(log.TotalRetainedLineCount < 128);
         Assert.All(log.GetVisibleSearchContentSnapshot(), line =>
             Assert.True(line.FullText.Length <= LogViewMemoryPolicy.Default.ContinuousLineCharacters));
     }
@@ -71,7 +74,8 @@ public sealed class LogViewMemoryTests
         log.TextBatchAppended += (_, batch) =>
         {
             var text = Regex.Replace(batch.AppendedText, "\u001b\\]777;[^\u0007]*\u0007", "");
-            projected = projected[Math.Min(projected.Length, batch.TrimCharacterCount)..] + text;
+            projected += text;
+            projected = projected[Math.Min(projected.Length, batch.TrimCharacterCount)..];
         };
         for (var pass = 0; pass < 6; pass++)
         {
@@ -93,7 +97,7 @@ public sealed class LogViewMemoryTests
             Assert.All(log.GetVisibleSearchContentSnapshot(), line => Assert.True(line.FullText.Length <= policy.ContinuousLineCharacters));
             Assert.Equal(log.GetVisibleTextSnapshot(), projected);
         }
-        Assert.True(rebuilds > 0);
+        Assert.Equal(0, rebuilds);
         Assert.True(log.DroppedVisibleLineCount > 0);
         log.Clear();
         Assert.Equal(0, log.RetainedMemoryBytes);
@@ -204,5 +208,59 @@ public sealed class LogViewMemoryTests
         Assert.Equal(10000, large.Text.Length);
         Assert.Equal(1, log.DroppedVisibleLineCount);
         Assert.True(log.RetainedMemoryBytes <= policy.RetainedBytes);
+    }
+
+    [Fact]
+    public void ByteBudgetEvictsOnlyASmallPrefixAndKeepsBatchedProjectionConsistent()
+    {
+        var policy = new LogViewMemoryPolicy(RetainedBytes: 100_000);
+        var log = new LogViewModel(10_000, policy);
+        var rebuilds = 0;
+        var projected = string.Empty;
+        var evictions = 0;
+        log.TextRebuilt += (_, _) => rebuilds++;
+        log.TextBatchAppended += (_, batch) =>
+        {
+            projected += Regex.Replace(batch.AppendedText, "\u001b\\]777;[^\u0007]*\u0007", "");
+            projected = projected[batch.TrimCharacterCount..];
+            if (batch.TrimCharacterCount > 0)
+            {
+                evictions++;
+                Assert.Equal(log.GetVisibleSearchContentSnapshot()[0].LineId, batch.FirstRetainedLineId);
+            }
+        };
+        // First hit the limit one record at a time to measure the cleanup size.
+        while (log.DroppedVisibleLineCount == 0) log.AddRange([LogLine.Rx(new string('x', 64))]);
+        Assert.InRange(log.DroppedVisibleLineCount, 1, 5);
+        // A batch larger than the entire window must also evict its own prefix.
+        log.AddRange(Enumerable.Range(0, 1000).Select(i => LogLine.Rx($"packet {i:D4}")).ToArray());
+        Assert.Equal(log.GetVisibleTextSnapshot(), projected);
+        Assert.Contains("packet 0999", projected);
+        Assert.Equal(0, rebuilds);
+        Assert.True(evictions >= 2);
+        Assert.InRange(log.RetainedMemoryBytes, 1, policy.RetainedBytes);
+    }
+
+    [Fact]
+    public void RuntimeBudgetReductionTrimsThePrefixAndIncreaseDoesNotResurrectHistory()
+    {
+        var log = new LogViewModel(1000);
+        var text = new string('x', 512 * 1024);
+        log.AddRange(Enumerable.Range(0, 80).Select(_ => LogLine.Rx(text)).ToArray());
+        Assert.True(log.RetainedMemoryBytes > 64L * 1024 * 1024);
+        var rebuilds = 0;
+        LogTextBatch? trim = null;
+        log.TextRebuilt += (_, _) => rebuilds++;
+        log.TextBatchAppended += (_, batch) => trim = batch;
+        log.SetMemoryBudgetMiB(64);
+        Assert.InRange(log.RetainedMemoryBytes, 1, 64L * 1024 * 1024);
+        Assert.NotNull(trim?.FirstRetainedLineId);
+        Assert.Equal(0, rebuilds);
+        var retainedCount = log.TotalRetainedLineCount;
+        log.SetMemoryBudgetMiB(512);
+        Assert.Equal(retainedCount, log.TotalRetainedLineCount);
+        Assert.Equal(512L * 1024 * 1024, log.RetainedMemoryByteLimit);
+        Assert.Throws<ArgumentOutOfRangeException>(() => log.SetMemoryBudgetMiB(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => log.SetMemoryBudgetMiB(2049));
     }
 }

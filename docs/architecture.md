@@ -154,12 +154,18 @@ do not take or cancel automation capture ownership.
   producer, flushes accepted log input, and waits for file/event fan-out before
   those consumers stop. Start/stop operations are serialized through this drain.
 - `LogViewModel` owns the bounded visible snapshot and xterm-specific formatting.
-  Its screen projection has separate retained-data (64 MiB), rendered-text
-  (16 Mi characters), and dispatcher pending-data (32 MiB) budgets alongside
+  Its screen projection has separate retained-data (256 MiB by default, configurable
+  from 64 to 2048 MiB per profile), rendered-text (64 Mi characters), and dispatcher
+  pending-data (32 MiB) budgets alongside
   the record count. Continuous partial RX rows wrap at record boundaries without
   resetting streaming rule state. Ordinary native completions remain complete;
   only oversized individual records receive a defensive display preview.
-  Eviction uses a low-water mark to avoid rebuilding on every incoming chunk.
+  Eviction leaves 1% headroom (plus space for the incoming record) and removes only
+  complete visual lines at the front. Ordered OSC 779 retention boundaries trim
+  xterm's row/metadata rings after appends, including prefixes from the same batch.
+  Ordinary eviction and lower runtime limits do not reload the retained suffix;
+  exceptional filter-prefix changes can still require a projection rebuild.
+  The retained-data estimate is not a total process or rendering memory limit.
   Full original records continue through event detection, sequence RX evidence,
   and the asynchronous live file writer independently of screen retention.
 - The xterm navigation modules read the existing bounded OSC ID/timestamp ring.

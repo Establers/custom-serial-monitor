@@ -29,6 +29,8 @@ function createBridge() {
     chrome: { webview: { postMessage: message => messages.push(message) } }
   };
   const context = {
+    directInputSessionId: 0,
+    pendingLocalEchoChunks: 0,
     compactScrollback: { compact() {} },
     window, terminal, console: { error() {} },
     invalidateLogicalLineStartRows() {},

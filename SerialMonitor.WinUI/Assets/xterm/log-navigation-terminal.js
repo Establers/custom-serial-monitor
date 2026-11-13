@@ -14,6 +14,7 @@
     let changeTimer = null;
     let cachedStart = null;
     let anchoredColumns = terminal.cols;
+    let resetEpoch = 0;
     const now = () => root.performance?.now?.() ?? Date.now();
 
     function notify() {
@@ -59,6 +60,7 @@
     }
 
     function reset() {
+      resetEpoch++;
       generation++;
       if (workTimer !== null) clearTimeout(workTimer);
       workTimer = null;
@@ -200,6 +202,57 @@
         ? { start: Math.max(0, start), end: Math.min(end, terminal.buffer.active.length), trimmedRows, generation } : null;
     }
 
+    async function trimBefore(firstId) {
+      const epoch = resetEpoch;
+      // Reflow owns row anchors until its sliced rebuild finishes. The append
+      // queue waits here, so no later write can overtake this retention boundary.
+      const deadline = now() + 5000;
+      while (busy && !disposed) {
+        if (now() >= deadline) throw new Error('Log retention timed out waiting for row anchors.');
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      if (disposed) throw new Error('Log retention was disposed.');
+      if (epoch !== resetEpoch) return false;
+      attach();
+      const bufferService = terminal._core._bufferService;
+      const buffer = bufferService.buffers.normal;
+      if (bufferService.buffer !== buffer) throw new Error('Log retention requires the normal buffer.');
+      let low = 0, high = rawSource.count();
+      while (low < high) {
+        const middle = low + Math.floor((high - low) / 2);
+        const id = rawSource.at(middle).id;
+        if (id.length < firstId.length || (id.length === firstId.length && id < firstId)) low = middle + 1;
+        else high = middle;
+      }
+      const cursorRow = buffer.ybase + buffer.y;
+      const count = Math.max(0, Math.min(cursorRow, low < rawSource.count()
+        ? rawSource.at(low).row - trimmedRows : cursorRow));
+      if (!Number.isFinite(count)) throw new Error('Log retention row anchor is unavailable.');
+      const clearCursor = low === rawSource.count();
+      if (clearCursor) {
+        buffer.lines.get(cursorRow).fill(buffer.getNullCell());
+        buffer.lines.get(cursorRow).isWrapped = false;
+        buffer.x = 0;
+      }
+      if (!count) {
+        if (clearCursor) terminal.refresh(0, terminal.rows - 1);
+        return;
+      }
+      // xterm's trimStart advances the ring but leaves old references alive.
+      // Release only the evicted rows; never splice/copy the retained suffix.
+      for (let index = 0; index < count; index++) buffer.lines.set(index, undefined);
+      buffer.lines.trimStart(count);
+      buffer.ybase = Math.max(0, buffer.ybase - count);
+      buffer.ydisp = Math.max(0, Math.min(buffer.ybase, buffer.ydisp - count));
+      buffer.y = cursorRow - count - buffer.ybase;
+      buffer.savedY = Math.max(0, buffer.savedY - count);
+      while (buffer.lines.length < terminal.rows)
+        buffer.lines.push(buffer.getBlankLine(buffer.getNullCell()));
+      bufferService._onScroll.fire(buffer.ydisp);
+      terminal.refresh(0, terminal.rows - 1);
+      notify();
+    }
+
     function dispose() {
       disposed = true;
       generation++;
@@ -220,7 +273,7 @@
       anchoredColumns = terminal.cols;
       rebuild();
     });
-    return { recordRow, reset, sourceStart, currentIndex, viewportRange, rowAt, indexById, rowsById,
+    return { recordRow, reset, sourceStart, currentIndex, viewportRange, rowAt, indexById, rowsById, trimBefore,
       isBusy: () => busy, dispose };
   }
 

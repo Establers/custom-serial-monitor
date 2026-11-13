@@ -47,6 +47,9 @@ public sealed class UiSettings
 
     public const int DefaultVisibleLogLines = 1_000_000;
     public const int MaxVisibleLogLinesLimit = 1_000_000;
+    public const int DefaultLogMemoryBudgetMiB = 256;
+    public const int MinLogMemoryBudgetMiB = 64;
+    public const int MaxLogMemoryBudgetMiB = 2048;
     public const int FixedMaxVisibleEventCount = 100;
     public const int DefaultHexGroupTimeoutMs = SerialMonitor.Core.SerialTimingAdvisor.MinimumSuggestedTimeoutMilliseconds;
     public const int DefaultXtermFontSize = 13;
@@ -54,6 +57,8 @@ public sealed class UiSettings
     public const int MaxXtermFontSize = 15;
 
     public int MaxVisibleLogLines { get; set; } = DefaultVisibleLogLines;
+
+    public int LogMemoryBudgetMiB { get; set; } = DefaultLogMemoryBudgetMiB;
 
     public int MaxVisibleEventCount { get; set; } = FixedMaxVisibleEventCount;
 
@@ -153,6 +158,7 @@ public sealed class UiSettings
         {
             Theme = Theme,
             MaxVisibleLogLines = MaxVisibleLogLines,
+            LogMemoryBudgetMiB = LogMemoryBudgetMiB,
             MaxVisibleEventCount = MaxVisibleEventCount,
             AutoScrollEnabled = AutoScrollEnabled,
             FileLoggingWhileViewPaused = FileLoggingWhileViewPaused,

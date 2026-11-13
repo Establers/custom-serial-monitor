@@ -12272,6 +12272,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Events.SetCapacity(_currentUiSettings.MaxVisibleEventCount);
             SetVisibleLogRebuildReason("profile visible log capacity restore");
             Log.SetCapacity(_currentUiSettings.MaxVisibleLogLines);
+            Log.SetMemoryBudgetMiB(_currentUiSettings.LogMemoryBudgetMiB);
             _lastVisibleCapChangeTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             SetVisibleLogRebuildReason("profile timestamp display restore");
             Log.SetShowTimestampInLogView(_currentUiSettings.ShowTimestampInLogView);
@@ -12462,6 +12463,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(LastSaveDirectoryError));
         OnPropertyChanged(nameof(MaxVisibleLogLines));
         OnPropertyChanged(nameof(MaxVisibleLogLinesText));
+        OnPropertyChanged(nameof(LogMemoryBudgetMiB));
+        OnPropertyChanged(nameof(LogMemoryBudgetMiBText));
         OnPropertyChanged(nameof(LastVisibleCapChangeTimeText));
         OnPropertyChanged(nameof(MaxVisibleEventCount));
         OnPropertyChanged(nameof(EffectiveXtermScrollbackSize));

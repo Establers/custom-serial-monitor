@@ -6,13 +6,31 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed partial class LogViewModel
 {
-    private readonly LogViewMemoryPolicy _memoryPolicy;
+    private LogViewMemoryPolicy _memoryPolicy;
     private long _retainedMemoryBytes;
     private bool _trimmingForMemory;
     private long _memoryTrimBytes, _memoryTrimCharacters;
 
     public long RetainedMemoryBytes => _retainedMemoryBytes;
     public long RetainedMemoryByteLimit => _memoryPolicy.RetainedBytes;
+
+    public void SetMemoryBudgetMiB(int budgetMiB)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(budgetMiB, UiSettings.MinLogMemoryBudgetMiB);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(budgetMiB, UiSettings.MaxLogMemoryBudgetMiB);
+        var bytes = budgetMiB * 1024L * 1024;
+        if (_memoryPolicy.RetainedBytes == bytes) return;
+        _memoryPolicy = _memoryPolicy with { RetainedBytes = bytes };
+        var version = ++_visibleRebuildVersion;
+        var trimCharacters = 0;
+        var trimmed = _retainedMemoryBytes > bytes || VisibleCharacterCount > _memoryPolicy.VisibleCharacters
+            ? TrimScreenMemory(bytes * 99 / 100, _memoryPolicy.VisibleCharacters * 99 / 100,
+                out trimCharacters, completePartial: false) : 0;
+        DroppedVisibleLineCount += trimmed;
+        OnPropertyChanged(nameof(RetainedMemoryByteLimit));
+        RaiseVisibleCountProperties();
+        NotifyPrefixTrim(trimmed, version, trimCharacters);
+    }
 
     internal LogViewModel(int capacity, LogViewMemoryPolicy memoryPolicy)
     {
@@ -24,8 +42,9 @@ public sealed partial class LogViewModel
     private bool NeedsMemoryTrim(long visibleCharacters) => _trimmingForMemory &&
         (_retainedMemoryBytes > _memoryTrimBytes || visibleCharacters > _memoryTrimCharacters);
 
-    private int ReserveScreenMemory(RetainedLogLine retained)
+    private int ReserveScreenMemory(RetainedLogLine retained, out int trimCharacters, StringBuilder? batch = null)
     {
+        trimCharacters = 0;
         var line = retained.Line;
         var bytes = retained.EstimatedBytes;
         // Reserve room for control escaping and ANSI bracket colors before
@@ -38,19 +57,22 @@ public sealed partial class LogViewModel
             characters = 128L + Math.Min(line.RawBytes?.LongLength ?? 0, _memoryPolicy.HexPreviewBytes) * 3L;
         if (_retainedMemoryBytes + bytes <= _memoryPolicy.RetainedBytes &&
             VisibleCharacterCount + characters <= _memoryPolicy.VisibleCharacters) return 0;
-        return TrimScreenMemory(Math.Max(0, _memoryPolicy.RetainedBytes * 3 / 4 - bytes),
-            Math.Max(0, _memoryPolicy.VisibleCharacters * 3 / 4 - characters));
+        // Leave 1% headroom to amortize cleanup without discarding a quarter of
+        // the user's history. A large incoming record can require more room.
+        return TrimScreenMemory(Math.Max(0, _memoryPolicy.RetainedBytes * 99 / 100 - bytes),
+            Math.Max(0, _memoryPolicy.VisibleCharacters * 99 / 100 - characters), out trimCharacters, batch);
     }
 
-    private int TrimScreenMemory(long bytes, long characters)
+    private int TrimScreenMemory(long bytes, long characters, out int trimCharacters, StringBuilder? batch = null,
+        bool completePartial = true)
     {
         // This is a display boundary, not an RX/rule boundary. Preserve the live
         // streaming matcher suffix even when old screen history is evicted.
-        CompleteActivePartialRxVisualLine();
+        if (completePartial) CompleteActivePartialRxVisualLine(batch);
         _trimmingForMemory = true;
         _memoryTrimBytes = bytes;
         _memoryTrimCharacters = characters;
-        try { return TrimRetainedLinesToCapacity(out _, preserveRuleState: true); }
+        try { return TrimRetainedLinesToCapacity(out trimCharacters, preserveRuleState: true); }
         finally { _trimmingForMemory = false; }
     }
 
@@ -58,8 +80,8 @@ public sealed partial class LogViewModel
     {
         if (_retainedMemoryBytes <= _memoryPolicy.RetainedBytes &&
             VisibleCharacterCount <= _memoryPolicy.VisibleCharacters) return 0;
-        return TrimScreenMemory(_memoryPolicy.RetainedBytes * 3 / 4,
-            _memoryPolicy.VisibleCharacters * 3 / 4);
+        return TrimScreenMemory(_memoryPolicy.RetainedBytes * 99 / 100,
+            _memoryPolicy.VisibleCharacters * 99 / 100, out _);
     }
 
     private bool BreakLongScreenLine(int displayLength, int searchableLength, StringBuilder? batch = null)

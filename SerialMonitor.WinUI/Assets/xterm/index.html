@@ -707,6 +707,7 @@
     let navigationTimeOrder = 'ascending';
     let navigationLastTimestamp = null;
     let navigationRows = null;
+    let pendingRetentionId = null;
     let lineHighlighting = null;
     let navigationEngine = null;
     let navigationReplacing = false;
@@ -741,6 +742,7 @@
     const restoreOverlayDetail = document.getElementById('restoreOverlayDetail');
 
     function resetParsedLogLineIds(resetNavigation = true) {
+      pendingRetentionId = null;
       lineHighlighting?.reset();
       parsedLogLineIds.length = 0;
       parsedLogLineTimestamps.length = 0;
@@ -864,6 +866,13 @@
       return true;
     });
 
+    terminal.parser.registerOscHandler(779, data => {
+      const id = String(data ?? '');
+      if (!/^\d+$/.test(id)) return false;
+      pendingRetentionId = id;
+      return true;
+    });
+
     function normalizeLogText(text) {
       return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
     }
@@ -901,6 +910,22 @@
           error: error ? String(error) : ''
         });
       }
+    }
+
+    async function applyPendingRetention() {
+      const id = pendingRetentionId;
+      if (id === null) return;
+      if (await navigationRows.trimBefore(id) === false || pendingRetentionId !== id) return;
+      // Release metadata alongside cells, including fully hidden histories.
+      while (parsedLogLineIdCount && compareDecimalIds(parsedLogLineIds[parsedLogLineIdHead], id) < 0) {
+        parsedLogLineIds[parsedLogLineIdHead] = undefined;
+        parsedLogLineTimestamps[parsedLogLineIdHead] = undefined;
+        parsedLogLineIdHead = (parsedLogLineIdHead + 1) % parsedLogLineIds.length;
+        parsedLogLineIdCount--;
+      }
+      if (!parsedLogLineIdCount) lastParsedLogLineIsOpen = false;
+      pendingRetentionId = null;
+      navigationRevision++;
     }
 
     function onTerminalWriteParsed() {
@@ -948,10 +973,11 @@
       }
       try {
         if (item.directInputSessionId === directInputSessionId) resetDirectEchoRange();
-        terminal.write(item.text, () => {
+        terminal.write(item.text, async () => {
           // This callback runs after write() returns, outside its try/catch.
           try {
             if (item.directInputSessionId === directInputSessionId) resetDirectEchoRange();
+            if (pendingRetentionId !== null) await applyPendingRetention();
             onTerminalWriteParsed();
             // Re-check Auto Scroll because it can change while xterm parses.
             if (item.autoScroll && autoScrollEnabled && appendQueueLength() === 0) {

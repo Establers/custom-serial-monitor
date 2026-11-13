@@ -22,7 +22,9 @@ public sealed class RuleContextRetentionTests
         log.SetHighlightRules([Rule("FAULT")]);
         if (filtered) log.SetViewFilter(Rule("FAULT"));
         log.AddRange([Rx(new string('x', 198), 1), Rx(new string('x', 198) + "FA", 2)]);
-        var final = Rx("ULT" + new string('z', 197), 3);
+        // Force both earlier records out even with the smaller 1% cleanup
+        // headroom, so this still exercises restoration of an evicted suffix.
+        var final = Rx("ULT" + new string('z', 397), 3);
         log.AddRange([final]);
         Assert.Contains(Red, log.GetVisibleTextSnapshot());
         Assert.True(log.DroppedVisibleLineCount > 0);

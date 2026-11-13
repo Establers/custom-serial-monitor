@@ -10,13 +10,18 @@ internal enum XtermAppendRoute
 
 internal static class XtermAppendRoutingPolicy
 {
+    // An idempotent settings trim can arrive after a newer snapshot. It must
+    // never make an already rendered text batch eligible for replay.
+    public static long AdvanceSyncedThrough(long current, long batchEnd) => Math.Max(current, batchEnd);
+
     public static XtermAppendRoute GetRoute(
         long batchEndDisplayedLineCount,
         long syncedThroughDisplayedLineCount,
         bool isVisualAppendSuspended,
-        bool isAppendBackpressureActive = false)
+        bool isAppendBackpressureActive = false,
+        bool isPrefixTrimOnly = false)
     {
-        if (batchEndDisplayedLineCount <= syncedThroughDisplayedLineCount)
+        if (batchEndDisplayedLineCount <= syncedThroughDisplayedLineCount && !isPrefixTrimOnly)
         {
             return XtermAppendRoute.AlreadyCovered;
         }

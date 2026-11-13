@@ -1044,6 +1044,12 @@ public sealed class ProfileService : IProfileService
             warnings.Add("Max visible log lines was invalid.");
         }
 
+        if (settings.LogMemoryBudgetMiB is < UiSettings.MinLogMemoryBudgetMiB or > UiSettings.MaxLogMemoryBudgetMiB)
+        {
+            settings.LogMemoryBudgetMiB = defaults.LogMemoryBudgetMiB;
+            warnings.Add("Log memory budget was invalid.");
+        }
+
         if (settings.MaxVisibleEventCount != UiSettings.FixedMaxVisibleEventCount)
         {
             settings.MaxVisibleEventCount = UiSettings.FixedMaxVisibleEventCount;

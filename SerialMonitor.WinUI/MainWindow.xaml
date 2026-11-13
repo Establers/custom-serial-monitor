@@ -3664,12 +3664,23 @@
                                                       ItemsSource="{Binding VisibleLogLineCapOptions}"
                                                       SelectedItem="{Binding MaxVisibleLogLines, Mode=TwoWay}"
                                                       Style="{StaticResource FormComboBoxStyle}"
-                                                      infra:AppToolTipService.ToolTip="One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines." />
+                                                      infra:AppToolTipService.ToolTip="Maximum retained records and xterm scrollback. The log memory budget and 64 Mi character limit can trim history earlier. Search and Copy use retained history. Saved log files keep all lines." />
                                             <TextBlock x:Uid="StaticUi161"
                                                        Grid.Column="2"
                                                        Text="Now"
                                                        Style="{StaticResource FormApplyBadgeTextStyle}"
                                                        infra:AppToolTipService.ToolTip="Applies immediately. Lower values trim the retained visible buffer; old lines are not reloaded from files." />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="96,220,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
+                                            <TextBlock x:Uid="LogMemoryBudgetLabel" Text="Log MiB" Style="{StaticResource FormLabelTextStyle}" />
+                                            <TextBox x:Uid="LogMemoryBudgetInput" Grid.Column="1"
+                                                     Text="{Binding LogMemoryBudgetMiBText, Mode=TwoWay}"
+                                                     InputScope="Number"
+                                                     Style="{StaticResource FormTextBoxStyle}"
+                                                     infra:AppToolTipService.ToolTip="Retained log data budget: 64–2048 MiB, default 256. Applies immediately and is saved with the profile. Rendering and other app memory are additional. The separate 64 Mi character limit still applies." />
+                                            <TextBlock x:Uid="LogMemoryBudgetApply" Grid.Column="2" Text="Now"
+                                                       Style="{StaticResource FormApplyBadgeTextStyle}"
+                                                       infra:AppToolTipService.ToolTip="Lowering the budget removes the oldest screen logs. Increasing it keeps future history longer; removed logs are not reloaded." />
                                         </Grid>
                                         <Grid ColumnDefinitions="96,*,58" ColumnSpacing="6">
                                             <TextBlock Text="Auto-scroll" Style="{StaticResource FormLabelTextStyle}" />

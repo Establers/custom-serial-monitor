@@ -444,7 +444,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi160.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines.</value>
+    <value>Maximum retained records and xterm scrollback. The log memory budget and 64 Mi character limit can trim history earlier. Search and Copy use retained history. Saved log files keep all lines.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi161.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
@@ -1305,4 +1305,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusBuilderWriteQuantity" xml:space="preserve"><value>Write quantity (auto)</value></data>
   <data name="ModbusBuilderCompactFunction" xml:space="preserve"><value>Function (1–127)</value></data>
   <data name="ModbusBuilderCompactNumbers" xml:space="preserve"><value>Decimal or 0x HEX · addresses start at 0</value></data>
+  <data name="LogMemoryBudgetLabel.Text" xml:space="preserve"><value>Log MiB</value></data>
+  <data name="LogMemoryBudgetInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Retained log data budget: 64–2048 MiB, default 256. Applies immediately and is saved with the profile. Rendering and other app memory are additional. The separate 64 Mi character limit still applies.</value></data>
+  <data name="LogMemoryBudgetApply.Text" xml:space="preserve"><value>Now</value></data>
+  <data name="LogMemoryBudgetApply.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Lowering the budget removes the oldest screen logs. Increasing it keeps future history longer; removed logs are not reloaded.</value></data>
 </root>

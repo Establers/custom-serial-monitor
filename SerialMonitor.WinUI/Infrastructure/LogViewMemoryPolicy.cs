@@ -5,8 +5,8 @@ namespace SerialMonitor.WinUI.Infrastructure;
 // These limits apply only to the screen projection. Serial RX, rule evaluation,
 // sequence evidence and the live file writer keep their original LogLine/bytes.
 internal sealed record LogViewMemoryPolicy(
-    long RetainedBytes = 64L * 1024 * 1024,
-    long VisibleCharacters = 16L * 1024 * 1024,
+    long RetainedBytes = UiSettings.DefaultLogMemoryBudgetMiB * 1024L * 1024,
+    long VisibleCharacters = 64L * 1024 * 1024,
     int ContinuousLineCharacters = 1024 * 1024,
     int PreviewCharacters = 1024 * 1024 + 256,
     int HexPreviewBytes = 1024 * 1024)

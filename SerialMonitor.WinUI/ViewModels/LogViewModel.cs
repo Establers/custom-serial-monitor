@@ -7,21 +7,29 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed class LogTextBatch
 {
-    public LogTextBatch(string appendedText, int trimCharacterCount, int lineCount, long endDisplayedLineCount)
+    public LogTextBatch(string appendedText, int trimCharacterCount, int lineCount, long endDisplayedLineCount,
+        long? firstRetainedLineId = null)
     {
         AppendedText = appendedText;
         TrimCharacterCount = trimCharacterCount;
         LineCount = lineCount;
         EndDisplayedLineCount = endDisplayedLineCount;
+        FirstRetainedLineId = firstRetainedLineId;
     }
 
     public string AppendedText { get; }
 
+    // Remove this prefix from the combined previous + appended display text.
     public int TrimCharacterCount { get; }
 
     public int LineCount { get; }
 
     public long EndDisplayedLineCount { get; }
+
+    // Apply after appending: the removed prefix may include this batch's lines.
+    public long? FirstRetainedLineId { get; }
+
+    public bool IsPrefixTrimOnly => LineCount == 0 && FirstRetainedLineId.HasValue;
 }
 
 public readonly record struct VisibleLogSearchLine(
@@ -204,7 +212,9 @@ public sealed partial class LogViewModel : ViewModelBase
         var shrinking = capacity < _capacity;
         _visibleRebuildVersion++;
         _capacity = capacity;
-        var trimmed = TrimRetainedLinesToCapacity(out _);
+        var version = _visibleRebuildVersion;
+        var trimmed = TrimRetainedLinesToCapacity(out var trimCharacters);
+        DroppedVisibleLineCount += trimmed;
         if (shrinking)
         {
             _retainedLines.TrimExcess();
@@ -213,10 +223,17 @@ public sealed partial class LogViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(Capacity));
         RaiseVisibleCountProperties();
-        if (trimmed > 0)
-        {
-            TextRebuilt?.Invoke(this, EventArgs.Empty);
-        }
+        NotifyPrefixTrim(trimmed, version, trimCharacters);
+    }
+
+    private long FirstRetainedVisibleLineId => _visibleLines.TryPeek(out var first) ? first.Id : _nextLineId + 1;
+
+    private void NotifyPrefixTrim(int trimmed, long version, int trimCharacters = 0)
+    {
+        if (trimmed == 0) return;
+        if (version != _visibleRebuildVersion) TextRebuilt?.Invoke(this, EventArgs.Empty);
+        else TextBatchAppended?.Invoke(this, new LogTextBatch(string.Empty, trimCharacters, 0,
+            DisplayedLineCount, FirstRetainedVisibleLineId));
     }
 
     public void SetHighlightRules(IEnumerable<HighlightRule> highlightRules)
@@ -321,6 +338,8 @@ public sealed partial class LogViewModel : ViewModelBase
         var formattingErrors = 0;
         var appendedVisibleLineCount = 0;
         var memoryDropped = 0;
+        var memoryTrimCharacters = 0;
+        var versionBeforeTrim = _visibleRebuildVersion;
         foreach (var line in lines)
         {
             var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules,
@@ -336,11 +355,11 @@ public sealed partial class LogViewModel : ViewModelBase
                 memoryDropped++;
                 continue;
             }
-            var evicted = ReserveScreenMemory(retainedLine);
+            var evicted = ReserveScreenMemory(retainedLine, out var trimmedCharacters, builder);
+            memoryTrimCharacters += trimmedCharacters;
             if (evicted > 0)
             {
                 memoryDropped += evicted;
-                builder.Clear();
                 prepared = RestoreEvictedMatchPrefix(prepared);
                 RestoreTerminalHighlightContext(terminalHighlight);
             }
@@ -455,8 +474,8 @@ public sealed partial class LogViewModel : ViewModelBase
             MaxRetainedLineCountSeen = retainedCount;
         }
 
-        var versionBeforeTrim = _visibleRebuildVersion;
         var droppedCount = TrimRetainedLinesToCapacity(out var trimCharacterCount);
+        trimCharacterCount += memoryTrimCharacters;
 
         DisplayedLineCount += lines.Count;
         DroppedVisibleLineCount += droppedCount + memoryDropped;
@@ -464,17 +483,17 @@ public sealed partial class LogViewModel : ViewModelBase
         XtermFormattingErrorCount += formattingErrors;
         RaiseVisibleCountProperties();
 
-        if (memoryDropped > 0 || versionBeforeTrim != _visibleRebuildVersion)
+        if (versionBeforeTrim != _visibleRebuildVersion)
         {
-            // A trim may include records appended earlier in this same batch.
-            // Resynchronize from bounded history instead of trimming text that
-            // has not reached the live terminal yet. Expiring a restored filter
-            // prefix can also change payload offsets within a retained line.
+            // Only exceptional projection changes (e.g. an expired restored
+            // filter prefix) need a snapshot. Ordinary eviction removes a prefix.
             TextRebuilt?.Invoke(this, EventArgs.Empty);
         }
-        else if (appendedVisibleLineCount > 0 || builder.Length > 0)
+        else if (appendedVisibleLineCount > 0 || builder.Length > 0 || trimCharacterCount > 0)
         {
-            TextBatchAppended?.Invoke(this, new LogTextBatch(builder.ToString(), trimCharacterCount, Math.Max(1, appendedVisibleLineCount), DisplayedLineCount));
+            TextBatchAppended?.Invoke(this, new LogTextBatch(builder.ToString(), trimCharacterCount,
+                Math.Max(1, appendedVisibleLineCount), DisplayedLineCount,
+                trimCharacterCount > 0 ? FirstRetainedVisibleLineId : null));
         }
     }
 
@@ -697,7 +716,7 @@ public sealed partial class LogViewModel : ViewModelBase
         {
             cancellationToken.ThrowIfCancellationRequested();
             var line = retainedLine.Line;
-            var evicted = ReserveScreenMemory(retainedLine);
+            var evicted = ReserveScreenMemory(retainedLine, out _);
             DroppedVisibleLineCount += evicted;
             _retainedLines.Enqueue(retainedLine);
             _retainedMemoryBytes += retainedLine.EstimatedBytes;
@@ -836,7 +855,7 @@ public sealed partial class LogViewModel : ViewModelBase
         {
             // Hidden normal lines do not end the visual partial line. Only a
             // terminator or another visible line proves a safe trim boundary.
-            needsRebuild |= trimMaySplitPartialLine;
+            needsRebuild |= trimMaySplitPartialLine && _retainedLines.Count > 0;
 
             if (!needsRebuild)
             {

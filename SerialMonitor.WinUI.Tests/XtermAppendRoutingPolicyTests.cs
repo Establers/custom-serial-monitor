@@ -5,6 +5,25 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class XtermAppendRoutingPolicyTests
 {
     [Fact]
+    public void OldTrimAfterSnapshotDoesNotReplayTheFollowingAlreadyRenderedText()
+    {
+        var synced = 5000L;
+        Assert.Equal(XtermAppendRoute.Append, XtermAppendRoutingPolicy.GetRoute(4999, synced, false, isPrefixTrimOnly: true));
+        synced = XtermAppendRoutingPolicy.AdvanceSyncedThrough(synced, 4999);
+        Assert.Equal(5000, synced);
+        Assert.Equal(XtermAppendRoute.AlreadyCovered, XtermAppendRoutingPolicy.GetRoute(5000, synced, false));
+        Assert.Equal(5001, XtermAppendRoutingPolicy.AdvanceSyncedThrough(synced, 5001));
+    }
+
+    [Fact]
+    public void RetentionOnlyBatchAtTheCurrentSequenceIsAppliedOrSuspended()
+    {
+        Assert.Equal(XtermAppendRoute.Append, XtermAppendRoutingPolicy.GetRoute(5000, 5000, false, isPrefixTrimOnly: true));
+        Assert.Equal(XtermAppendRoute.Suspend, XtermAppendRoutingPolicy.GetRoute(5000, 5000, true, isPrefixTrimOnly: true));
+        Assert.Equal(XtermAppendRoute.Append, XtermAppendRoutingPolicy.GetRoute(4999, 5000, false, isPrefixTrimOnly: true));
+    }
+
+    [Fact]
     public void LiveQueueClearThenReminimize_SuspendsOnlyPostClearBatch()
     {
         var barrier = new XtermClearBarrier();

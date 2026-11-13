@@ -1241,7 +1241,8 @@ public sealed partial class MainWindow : Window
             IsXtermVisualAppendSuspended(),
             XtermRecoveryPolicy.WouldOverflow(
                 Interlocked.Read(ref _pendingLiveXtermCharacters), batch.AppendedText.Length,
-                Volatile.Read(ref _pendingLiveXtermLines), batch.LineCount, _viewModel.MaxVisibleLogLines));
+                Volatile.Read(ref _pendingLiveXtermLines), batch.LineCount, _viewModel.MaxVisibleLogLines),
+            isPrefixTrimOnly: batch.IsPrefixTrimOnly);
         if (route == XtermAppendRoute.AlreadyCovered)
         {
             return;
@@ -1370,11 +1371,12 @@ public sealed partial class MainWindow : Window
             var lineCount = first.Batch.LineCount;
             var trimCharacterCount = first.Batch.TrimCharacterCount;
             var endDisplayedLineCount = first.Batch.EndDisplayedLineCount;
+            var firstRetainedLineId = first.Batch.FirstRetainedLineId;
 
             while (_xtermLiveAppendQueue.Count > 0)
             {
                 var next = _xtermLiveAppendQueue.First!.Value;
-                if (next.Generation != first.Generation ||
+                if (next.Generation != first.Generation || first.Batch.IsPrefixTrimOnly || next.Batch.IsPrefixTrimOnly ||
                     lineCount + next.Batch.LineCount > XtermLiveAppendMaxLines ||
                     builder.Length + next.Batch.AppendedText.Length > XtermLiveAppendMaxChars)
                 {
@@ -1386,10 +1388,11 @@ public sealed partial class MainWindow : Window
                 lineCount += next.Batch.LineCount;
                 trimCharacterCount += next.Batch.TrimCharacterCount;
                 endDisplayedLineCount = next.Batch.EndDisplayedLineCount;
+                firstRetainedLineId = next.Batch.FirstRetainedLineId ?? firstRetainedLineId;
             }
 
             return (
-                new LogTextBatch(builder.ToString(), trimCharacterCount, lineCount, endDisplayedLineCount),
+                new LogTextBatch(builder.ToString(), trimCharacterCount, lineCount, endDisplayedLineCount, firstRetainedLineId),
                 first.Generation);
         }
     }
@@ -1423,7 +1426,8 @@ public sealed partial class MainWindow : Window
         lock (_xtermLiveAppendQueueGate)
         {
             while (_xtermLiveAppendQueue.First is not null &&
-                _xtermLiveAppendQueue.First.Value.Batch.EndDisplayedLineCount <= displayedLineCount)
+                _xtermLiveAppendQueue.First.Value.Batch.EndDisplayedLineCount <= displayedLineCount &&
+                !_xtermLiveAppendQueue.First.Value.Batch.IsPrefixTrimOnly)
             {
                 completed.Add(_xtermLiveAppendQueue.First.Value.Batch);
                 _xtermLiveAppendQueue.RemoveFirst();
@@ -2106,7 +2110,7 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
-                if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount)
+                if (batch.EndDisplayedLineCount <= _xtermSyncedThroughDisplayedLineCount && !batch.IsPrefixTrimOnly)
                 {
                     _logRestoreProgress?.Advance(batch.AppendedText.Length);
                     continue;
@@ -2119,7 +2123,8 @@ public sealed partial class MainWindow : Window
                         batch.AppendedText,
                         batch.LineCount,
                         autoScroll: false,
-                        expectedGeneration: restoreXtermGeneration);
+                        expectedGeneration: restoreXtermGeneration,
+                        firstRetainedLineId: batch.FirstRetainedLineId);
                     if (!appendCompleted)
                     {
                         if (restoreXtermGeneration != Interlocked.Read(ref _xtermRenderGeneration))
@@ -2132,7 +2137,8 @@ public sealed partial class MainWindow : Window
                     }
 
                     _logRestoreProgress?.Advance(batch.AppendedText.Length);
-                    _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
+                    _xtermSyncedThroughDisplayedLineCount = XtermAppendRoutingPolicy.AdvanceSyncedThrough(
+                        _xtermSyncedThroughDisplayedLineCount, batch.EndDisplayedLineCount);
                 }
                 finally
                 {
@@ -3551,15 +3557,16 @@ public sealed partial class MainWindow : Window
     private async Task<bool> AppendLogBatchToXtermAsync(LogTextBatch batch, long generation)
     {
         if (_viewModel.IsTerminalDirectInputEnabled || _displayedDirectInputSessionId != 0) return true;
-        if (!_isXtermReady || IsClosingOrClosed || string.IsNullOrEmpty(batch.AppendedText))
+        var hasContent = !string.IsNullOrEmpty(batch.AppendedText) || batch.FirstRetainedLineId.HasValue;
+        if (!_isXtermReady || IsClosingOrClosed || !hasContent)
         {
-            return string.IsNullOrEmpty(batch.AppendedText) || IsClosingOrClosed;
+            return !hasContent || IsClosingOrClosed;
         }
 
         var route = XtermAppendRoutingPolicy.GetRoute(
             batch.EndDisplayedLineCount,
             Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
-            IsXtermVisualAppendSuspended());
+            IsXtermVisualAppendSuspended(), isPrefixTrimOnly: batch.IsPrefixTrimOnly);
         if (route == XtermAppendRoute.AlreadyCovered)
         {
             return true;
@@ -3578,7 +3585,7 @@ public sealed partial class MainWindow : Window
             route = XtermAppendRoutingPolicy.GetRoute(
                 batch.EndDisplayedLineCount,
                 Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount),
-                IsXtermVisualAppendSuspended());
+                IsXtermVisualAppendSuspended(), isPrefixTrimOnly: batch.IsPrefixTrimOnly);
             if (route == XtermAppendRoute.AlreadyCovered)
             {
                 return true;
@@ -3602,7 +3609,8 @@ public sealed partial class MainWindow : Window
                 _viewModel.RecordXtermBackpressureAutoScrollSuppressed();
             }
 
-            var appendCompleted = await ExecuteXtermAppendScriptAsync(batch.AppendedText, batch.LineCount, autoScroll);
+            var appendCompleted = await ExecuteXtermAppendScriptAsync(batch.AppendedText, batch.LineCount, autoScroll,
+                firstRetainedLineId: batch.FirstRetainedLineId);
             if (!appendCompleted)
             {
                 return generation != Interlocked.Read(ref _xtermRenderGeneration) &&
@@ -3614,7 +3622,8 @@ public sealed partial class MainWindow : Window
                 return batch.EndDisplayedLineCount <= Interlocked.Read(ref _xtermSyncedThroughDisplayedLineCount);
             }
 
-            _xtermSyncedThroughDisplayedLineCount = batch.EndDisplayedLineCount;
+            _xtermSyncedThroughDisplayedLineCount = XtermAppendRoutingPolicy.AdvanceSyncedThrough(
+                _xtermSyncedThroughDisplayedLineCount, batch.EndDisplayedLineCount);
             _viewModel.RecordRenderedSequenceState(
                 _xtermSyncedThroughDisplayedLineCount,
                 Math.Max(0, _viewModel.Log.DisplayedLineCount - _xtermSyncedThroughDisplayedLineCount));
@@ -3685,8 +3694,13 @@ public sealed partial class MainWindow : Window
         string text,
         int lineCount,
         bool autoScroll,
-        long? expectedGeneration = null)
+        long? expectedGeneration = null,
+        long? firstRetainedLineId = null)
     {
+        // An ordered parser marker survives chunking, queue coalescing and
+        // minimize/restore. Apply the boundary only after the new text is parsed.
+        if (firstRetainedLineId.HasValue)
+            text += $"\u001b]779;{firstRetainedLineId.Value.ToString(CultureInfo.InvariantCulture)}\u0007";
         return await ExecuteXtermAppendChunksAsync(
             SplitXtermAppendText(text, lineCount),
             autoScroll,

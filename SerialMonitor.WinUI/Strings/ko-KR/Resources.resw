@@ -444,8 +444,8 @@
     <comment>English: Applies immediately and is saved with the profile.</comment>
   </data>
   <data name="StaticUi160.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>표시 로그와 xterm 스크롤백이 공유하는 보관 한도입니다. 검색, 표시 로그 전체 복사, MARK 이후 복사, TX 이후 복사 용량에도 적용됩니다. 저장된 로그 파일에는 모든 줄이 유지됩니다.</value>
-    <comment>English: One shared limit for retained visible lines and xterm scrollback. It also controls Search, Copy all visible, Copy since MARK, and Copy since TX capacity. Saved log files still keep all lines.</comment>
+    <value>보관 레코드 수와 xterm 스크롤백의 상한입니다. 로그 메모리 예산과 64Mi 문자 제한에 먼저 닿으면 오래된 이력이 제거됩니다. 검색과 복사는 남은 이력을 사용하며, 저장된 로그 파일은 모든 줄을 유지합니다.</value>
+    <comment>English: Maximum retained records and xterm scrollback. The log memory budget and 64 Mi character limit can trim history earlier. Search and Copy use retained history. Saved log files keep all lines.</comment>
   </data>
   <data name="StaticUi161.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>즉시 적용됩니다. 값을 줄이면 표시 버퍼의 오래된 줄이 제거되며 파일에서 다시 불러오지 않습니다.</value>
@@ -1303,4 +1303,8 @@
   <data name="ModbusBuilderWriteQuantity" xml:space="preserve"><value>쓰기 수량 (자동)</value></data>
   <data name="ModbusBuilderCompactFunction" xml:space="preserve"><value>기능 코드 (1–127)</value></data>
   <data name="ModbusBuilderCompactNumbers" xml:space="preserve"><value>10진수 또는 0x HEX · 주소는 0부터</value></data>
+  <data name="LogMemoryBudgetLabel.Text" xml:space="preserve"><value>로그 MiB</value></data>
+  <data name="LogMemoryBudgetInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>로그 보관 데이터 예산: 64–2048MiB, 기본값 256. 즉시 적용되고 프로필에 저장됩니다. 화면 렌더링과 앱의 다른 메모리는 별도이며, 64Mi 문자 제한도 적용됩니다.</value></data>
+  <data name="LogMemoryBudgetApply.Text" xml:space="preserve"><value>즉시</value></data>
+  <data name="LogMemoryBudgetApply.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>예산을 낮추면 오래된 화면 로그를 제거합니다. 높이면 이후 로그를 더 오래 보관하며, 이미 제거된 로그는 다시 불러오지 않습니다.</value></data>
 </root>

@@ -26,6 +26,7 @@ internal static class XtermLogTextBatchCoalescer
         var lineCount = 0;
         var trimCharacterCount = 0;
         long endDisplayedLineCount = 0;
+        long? firstRetainedLineId = null;
 
         foreach (var batch in batches)
         {
@@ -33,17 +34,19 @@ internal static class XtermLogTextBatchCoalescer
 
             var wouldExceedLimit = text is not null &&
                 ((long)lineCount + batch.LineCount > maxLineCount ||
-                 (long)text.Length + batch.AppendedText.Length > maxCharacterCount);
+                 (long)text.Length + batch.AppendedText.Length > maxCharacterCount ||
+                 batch.IsPrefixTrimOnly || lineCount == 0);
             if (wouldExceedLimit)
             {
                 result.Add(new LogTextBatch(
                     text!.ToString(),
                     trimCharacterCount,
                     lineCount,
-                    endDisplayedLineCount));
+                    endDisplayedLineCount, firstRetainedLineId));
                 text = null;
                 lineCount = 0;
                 trimCharacterCount = 0;
+                firstRetainedLineId = null;
             }
 
             text ??= new StringBuilder(Math.Min(maxCharacterCount, batch.AppendedText.Length));
@@ -51,6 +54,7 @@ internal static class XtermLogTextBatchCoalescer
             lineCount += batch.LineCount;
             trimCharacterCount += batch.TrimCharacterCount;
             endDisplayedLineCount = batch.EndDisplayedLineCount;
+            firstRetainedLineId = batch.FirstRetainedLineId ?? firstRetainedLineId;
         }
 
         if (text is not null)
@@ -59,7 +63,7 @@ internal static class XtermLogTextBatchCoalescer
                 text.ToString(),
                 trimCharacterCount,
                 lineCount,
-                endDisplayedLineCount));
+                endDisplayedLineCount, firstRetainedLineId));
         }
 
         return result.ToArray();

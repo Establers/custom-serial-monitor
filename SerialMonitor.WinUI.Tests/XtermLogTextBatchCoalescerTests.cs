@@ -6,6 +6,21 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class XtermLogTextBatchCoalescerTests
 {
     [Fact]
+    public void Coalesce_PreservesTheLatestRetentionBoundaryIncludingTrimOnlyBatches()
+    {
+        var result = XtermLogTextBatchCoalescer.Coalesce([
+            new("first", 10, 1, 1, 5), new("second", 0, 1, 2), new("", 20, 0, 2, 12)
+        ], 100, 1000);
+        Assert.Equal(2, result.Length);
+        var batch = result[0];
+        Assert.Equal("firstsecond", batch.AppendedText);
+        Assert.Equal(5, batch.FirstRetainedLineId);
+        Assert.Equal(12, result[1].FirstRetainedLineId);
+        Assert.True(result[1].IsPrefixTrimOnly);
+        Assert.Equal(30, result.Sum(item => item.TrimCharacterCount));
+    }
+
+    [Fact]
     public void Coalesce_MergesThousandsOfSmallRestoreBatchesWithinTransportBounds()
     {
         var input = Enumerable.Range(1, 5_000)

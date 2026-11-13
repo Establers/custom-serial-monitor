@@ -110,7 +110,7 @@ public sealed class LogHistoryRetentionTests(ITestOutputHelper output)
         Assert.Equal(3_000_000, snapshot[^1].LineId);
         log.SetCapacity(1000);
         Assert.Equal(1000, log.CurrentVisibleLineCount);
-        Assert.Equal(1, rebuilds);
+        Assert.Equal(0, rebuilds);
         log.Clear();
         Assert.Empty(log.GetVisibleSearchContentSnapshot());
         log.AddRange([LogLine.Rx("after clear", isPartialRxSegment: true), LogLine.RxPartialTerminator()]);
