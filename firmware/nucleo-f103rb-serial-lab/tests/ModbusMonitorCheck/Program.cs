@@ -15,6 +15,7 @@ internal static class Program
     {
         Evidence? evidence = null;
         BuildManifest? manifest = null;
+        object? sourceInputs = null;
         Exception? failure = null;
         var startedAtUtc = DateTimeOffset.UtcNow;
         var clockAnchorTimestamp = Stopwatch.GetTimestamp();
@@ -29,15 +30,18 @@ internal static class Program
                 Console.WriteLine($"PASS Offline: independent fixtures + GUI v3 import + manifest {manifest.Version}/{manifest.BuildId}; hardwareVerified=false");
                 return 0;
             }
-            if (args is not ["live", _, _, _, _]) throw new ArgumentException("offline MANIFEST GUI_V3_FILE | live PORT MANIFEST NEW_EVIDENCE_DIR GUI_V3_FILE");
+            if (args is not ["live", _, _, _, _] && args is not ["commands-live", _, _, _, _])
+                throw new ArgumentException("offline MANIFEST GUI_V3_FILE | live PORT MANIFEST NEW_EVIDENCE_DIR GUI_V3_FILE | commands-live PORT MANIFEST NEW_EVIDENCE_DIR UNUSED_GUI_PATH");
             Require(Regex.IsMatch(args[1], @"^COM[1-9][0-9]*$", RegexOptions.IgnoreCase), "Live requires an explicit Windows COM port.");
+            if (args[0] == "commands-live") sourceInputs = await CaptureCommandSourceInputs(stop.Token);
             var directory = Path.GetFullPath(args[3]);
             Require(!Directory.Exists(directory) && !File.Exists(directory), "Evidence directory must be new; existing evidence is never overwritten.");
             Directory.CreateDirectory(directory);
             evidence = new Evidence(directory);
             manifest = BuildManifest.Load(args[2]);
             await using var live = new LiveCheck(args[1], manifest, evidence, args[4], stop.Token);
-            await live.Run();
+            if (args[0] == "commands-live") await live.RunCommands();
+            else await live.Run();
             return 0;
         }
         catch (Exception ex) { failure = ex; Console.Error.WriteLine(ex); return 1; }
@@ -48,7 +52,7 @@ internal static class Program
                 var passed = failure is null && evidence.Results.Count > 0 && evidence.Results.All(result => result.Status == "pass");
                 await evidence.SaveAsync(new
                 {
-                    passed, hardwareVerified = passed, error = failure?.ToString(), manifest,
+                    passed, hardwareVerified = passed, error = failure?.ToString(), manifest, sourceInputs,
                     port = args[1], baud = 115200, serialFormat = "8N1 / no handshake", byteTimeoutMs = 40,
                     startedAtUtc, completedAtUtc = DateTimeOffset.UtcNow, clockAnchorTimestamp,
                     completedCases = evidence.Results.Count(result => result.Status == "pass"),
@@ -56,12 +60,59 @@ internal static class Program
                     serialServiceSha256 = Hash(typeof(SerialService).Assembly.Location),
                     validatorSha256 = Hash(typeof(Program).Assembly.Location),
                     coreAssemblySha256 = Hash(typeof(SequenceRunSession).Assembly.Location),
-                    guiSequencePath = Path.GetFullPath(args[4]), guiSequenceSha256 = File.Exists(args[4]) ? Hash(args[4]) : null,
-                    failureCleanup = "Disconnect only; firmware state is reset/left quiet only by the final-clean-state PASS case. After any failure inspect evidence and explicitly recover the known fixture; no uncertain write is replayed.",
-                    scope = "Direct UART through actual SerialService and ModbusRtuMonitorService; exact GUI file replayed twice through actual CommandSequenceRunner and linked production SequenceRunObserver plus actual core SequenceRunSession/RX matcher, with independent full-wire oracle. GUI controls/rendering, physical button actuation and electrical RS-485 timing are not exercised. Headless validation never retries TX."
+                    mode = args[0],
+                    guiSequencePath = args[0] == "commands-live" ? null : Path.GetFullPath(args[4]),
+                    guiSequenceSha256 = args[0] != "commands-live" && File.Exists(args[4]) ? Hash(args[4]) : null,
+                    failureCleanup = args[0] == "commands-live"
+                        ? "Disconnect only after unexpected failure; never reset/flash/replay uncertain writes. Original first four RAM words and first16 coils are restored only by the final-baseline-restored PASS case after every fault has been independently inspected. Firmware counters are intentionally not reset/restored."
+                        : "Disconnect only; firmware state is reset/left quiet only by the final-clean-state PASS case. After any failure inspect evidence and explicitly recover the known fixture; no uncertain write is replayed.",
+                    scope = args[0] == "commands-live"
+                        ? "Direct UART through actual SerialService and ModbusRtuMonitorService.ExecuteCommandAsync/GetCommandSnapshot (command definitions, separate status checks, sequential writes, stop, faults and active group polling). Independent full-wire oracle, firmware counter deltas and RAM/coil sentinel checks. No generic sequence replay, GUI controls/rendering, physical button actuation/optical LED measurement, reset, flash or electrical RS-485 timing test. Fifth path argument is unused."
+                        : "Direct UART through actual SerialService and ModbusRtuMonitorService; exact GUI file replayed twice through actual CommandSequenceRunner and linked production SequenceRunObserver plus actual core SequenceRunSession/RX matcher, with independent full-wire oracle. GUI controls/rendering, physical button actuation and electrical RS-485 timing are not exercised. Headless validation never retries TX."
                 }, passed);
                 Console.WriteLine($"Evidence: {evidence.Directory}; passed={passed}; completed={evidence.Results.Count(result => result.Status == "pass")}");
             }
+        }
+    }
+
+    private static async Task<object> CaptureCommandSourceInputs(CancellationToken cancellationToken,
+        [System.Runtime.CompilerServices.CallerFilePath] string validatorSourceFile = "")
+    {
+        var root = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(validatorSourceFile)!, "../../../.."));
+        var inputs = new[]
+        {
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Program.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Commands.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Oracle.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Evidence.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/ModbusMonitorCheck.csproj",
+            "SerialMonitor.WinUI/Services/SerialService.cs",
+            "SerialMonitor.WinUI/Services/ModbusRtuMonitorService.cs",
+            "SerialMonitor.WinUI/Services/ModbusRtuMonitorService.Groups.cs",
+            "SerialMonitor.WinUI/Services/ModbusRtuMonitorService.Commands.cs",
+            "SerialMonitor.WinUI/Services/ModbusReceiveInbox.cs",
+            "SerialMonitor.WinUI/Models/ModbusCommandSettings.cs",
+            "SerialMonitor.Core/Modbus/ModbusResponseDecoder.cs",
+            "SerialMonitor.Core/Modbus/ModbusItemCodec.cs"
+        };
+        var hashes = inputs.Select(path => new { path, sha256 = Hash(Path.Combine(root, path)) }).ToArray();
+        return new { repository = root, head = await Git("rev-parse", "HEAD"), workingTree = await Git("status", "--short"), inputs = hashes };
+
+        async Task<string> Git(params string[] arguments)
+        {
+            using var process = new Process { StartInfo = new("git")
+            { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
+            process.StartInfo.ArgumentList.Add("-C");
+            process.StartInfo.ArgumentList.Add(root);
+            foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+            Require(process.Start(), "Could not start read-only source identity query.");
+            var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var error = process.StandardError.ReadToEndAsync(cancellationToken);
+            try { await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken); }
+            catch { try { process.Kill(); } catch (InvalidOperationException) { } throw; }
+            var text = await output;
+            Require(process.ExitCode == 0 && text.Length <= 32768, "Read-only source identity query failed: " + await error);
+            return text.TrimEnd();
         }
     }
 
