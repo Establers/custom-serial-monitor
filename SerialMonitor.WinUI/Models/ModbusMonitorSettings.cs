@@ -12,6 +12,7 @@ public sealed class ModbusMonitorSettings
     public int Quantity { get; set; } = 10;
     public int IntervalMs { get; set; } = 1000;
     public int TimeoutMs { get; set; } = 1000;
+    [System.Text.Json.Serialization.JsonConverter(typeof(ModbusValueTypeJsonConverter))]
     public ModbusValueType ValueType { get; set; } = ModbusValueType.UInt16;
     public double Scale { get; set; } = 1;
     public bool SwapBytes { get; set; }

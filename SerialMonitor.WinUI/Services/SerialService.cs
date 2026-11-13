@@ -339,6 +339,7 @@ public sealed partial class SerialService : ISerialService
         if (baudRate is < 1 or > 10_000_000)
             throw new ArgumentOutOfRangeException(nameof(baudRate), "Baud rate must be between 1 and 10,000,000 bps.");
 
+        var requestedSession = Volatile.Read(ref _currentReceiveSession);
         using var admission = AdmitSerialOperation();
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -347,9 +348,9 @@ public sealed partial class SerialService : ISerialService
             await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var session = Volatile.Read(ref _currentReceiveSession);
-                if (!IsConnected || session is null)
-                    throw new InvalidOperationException("Cannot change baud rate while disconnected.");
+                var session = requestedSession;
+                if (!IsConnected || session is null || !IsCurrentReceiveSession(session))
+                    throw new InvalidOperationException("The original serial connection has ended; baud rate was not changed.");
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var applied = baudRate;
@@ -435,10 +436,10 @@ public sealed partial class SerialService : ISerialService
     private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken,
         long? expectedSessionGeneration = null, ExclusiveSession? exclusiveSession = null)
     {
-        using var admission = AdmitSerialOperation(exclusiveSession);
-        // Bind before waiting: a disconnect barrier can finish while a later
-        // queued writer's continuation is still waiting on the UI dispatcher.
+        // Bind before either admission or physical-write contention: connection
+        // teardown/reopen does not need the admission lock and may overtake us.
         var session = Volatile.Read(ref _currentReceiveSession);
+        using var admission = AdmitSerialOperation(exclusiveSession);
         if (expectedSessionGeneration.HasValue && session?.Generation != expectedSessionGeneration.Value)
             throw new InvalidOperationException("Transmission belongs to a previous serial connection.");
         await _writeGate.WaitAsync(cancellationToken);

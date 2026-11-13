@@ -13,8 +13,8 @@ public sealed partial class SerialService
     {
         ThrowIfDisposed();
         configuration.Validate();
-        using var admission = AdmitSerialOperation();
         var original = Volatile.Read(ref _currentReceiveSession);
+        using var admission = AdmitSerialOperation();
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
+using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.Models;
 
 namespace SerialMonitor.WinUI.Services;
@@ -95,6 +96,8 @@ internal sealed class ModbusReceiveInbox : IDisposable
                 if (count == 2 && (value & 0x80) != 0) expected = 5;
                 if (count > expected) throw new ModbusExchangeException("Unexpected trailing Modbus data.", true);
             }
+            if (count < expected && HasQualifiedNativeBoundary(chunk))
+                throw new ModbusExchangeException("An incomplete Modbus response ended at a confirmed RTU idle boundary.", true);
             if (count == expected)
             {
                 EnsureConnection();
@@ -102,6 +105,22 @@ internal sealed class ModbusReceiveInbox : IDisposable
                 return frame.AsSpan(0, count).ToArray();
             }
         }
+    }
+
+    private bool HasQualifiedNativeBoundary(ReceivedByteChunk chunk)
+    {
+        if (!chunk.EndsAtNativeIdleBoundary) return false;
+        var configuration = _serial.AppliedConfiguration;
+        var stopBits = configuration?.StopBits switch
+        {
+            SerialStopBitsMode.Two => 2d,
+            SerialStopBitsMode.OnePointFive => 1.5d,
+            _ => 1d
+        };
+        var bits = configuration is null ? 12d
+            : 1 + configuration.DataBits + (configuration.Parity == SerialParityMode.None ? 0 : 1) + stopBits;
+        return new ProtocolInputTiming(chunk.ReceivedTimestamp, true, _serial.AppliedReceiveIdleTimeoutMs,
+            ProtocolInputTiming.FrameGapMilliseconds(_serial.AppliedBaudRate, bits)).HasQualifiedBoundary;
     }
 
     public void Dispose()

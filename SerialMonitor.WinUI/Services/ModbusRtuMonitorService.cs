@@ -98,13 +98,20 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
 
     private Task Begin(ModbusMonitorSettings settings, bool repeat, PendingWrite? firstWrite, CancellationToken token)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        // Bind the operation before either admission lock or the worker queue can
+        // wait. A replacement connection must require a new explicit operation.
+        var expectedGeneration = _serial.ReceiveSessionGeneration;
+        if (!_serial.IsConnected || _serial.ReceiveSessionGeneration != expectedGeneration)
+            throw new InvalidOperationException("The original serial connection changed before Modbus could start.");
         TaskCompletionSource completion;
         CancellationTokenSource stop;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_snapshot.IsBusy) throw new InvalidOperationException("A Modbus operation is already active.");
-            if (!_serial.IsConnected) throw new InvalidOperationException("Connect a serial port first.");
+            if (!_serial.IsConnected || _serial.ReceiveSessionGeneration != expectedGeneration)
+                throw new InvalidOperationException("The original serial connection changed before Modbus could start.");
             var sameRequest = _settings?.Request == settings.Request;
             _settings = settings;
             _stop = stop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -117,7 +124,7 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
                 WriteState = firstWrite is null ? ModbusWriteState.None : ModbusWriteState.Queued });
         }
         // No UI context, filesystem access or parsing in the serial callback.
-        _ = Task.Run(() => ExecuteAsync(settings, repeat, firstWrite, stop, completion));
+        _ = Task.Run(() => ExecuteAsync(settings, expectedGeneration, repeat, firstWrite, stop, completion));
         return completion.Task;
     }
 
@@ -137,7 +144,7 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
         }
     }
 
-    private async Task ExecuteAsync(ModbusMonitorSettings settings, bool repeat, PendingWrite? firstWrite,
+    private async Task ExecuteAsync(ModbusMonitorSettings settings, long expectedGeneration, bool repeat, PendingWrite? firstWrite,
         CancellationTokenSource stop, TaskCompletionSource completion)
     {
         Exception? failure = null;
@@ -147,7 +154,11 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
         try
         {
             stop.Token.ThrowIfCancellationRequested();
+            if (!_serial.IsConnected || _serial.ReceiveSessionGeneration != expectedGeneration)
+                throw new InvalidOperationException("The original serial connection changed before Modbus could start.");
             lease = _serial.AcquireExclusiveSession("Modbus RTU");
+            if (lease.Generation != expectedGeneration)
+                throw new InvalidOperationException("The original serial connection changed before Modbus acquired it.");
             inbox = new ModbusReceiveInbox(_serial, lease.Generation);
             do
             {

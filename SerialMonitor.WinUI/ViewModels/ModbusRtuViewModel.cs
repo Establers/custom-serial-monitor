@@ -15,7 +15,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     private readonly Func<Task> _saveSettings;
     private readonly Action _stateChanged;
     private readonly Func<string>? _availabilityReason;
-    private bool _operationAdmitted, _writeAdmitted, _stopRequested;
+    private bool _operationAdmitted, _writeAdmitted, _stopRequested, _selectionChangedDuringWrite;
     private string _unit = "1", _address = "0", _quantity = "10", _interval = "1000", _timeout = "1000", _scale = "1";
     private int _functionIndex = 2, _formatIndex;
     private bool _swapBytes, _swapWords;
@@ -40,6 +40,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsBusy && !_stopRequested);
         WriteCommand = new AsyncRelayCommand(WriteAsync, CanWrite);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy && !_writeAdmitted);
+        Status = T("Ready", "Ready · settings do not start communication");
         Refresh();
     }
 
@@ -131,10 +132,25 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         get => _selectedRow;
         set
         {
-            if (!SetProperty(ref _selectedRow, value) || value is null || _writeAdmitted) return;
-            WriteAddressText = value.Address.ToString(CultureInfo.InvariantCulture);
-            WriteValuesText = value.RawValues is { Length: > 0 } values ? string.Join(" ", values.Select(v => v.ToString(CultureInfo.InvariantCulture))) : "";
+            if (!SetProperty(ref _selectedRow, value)) return;
+            if (_writeAdmitted) { _selectionChangedDuringWrite = true; return; }
+            SynchronizeSelectedRowEditor();
         }
+    }
+
+    private void SynchronizeSelectedRowEditor()
+    {
+        if (_selectedRow is not { } row) return;
+        var address = row.Address.ToString(CultureInfo.InvariantCulture);
+        var text = row.RawValues is { Length: > 0 } values ? string.Join(" ", values.Select(v => v.ToString(CultureInfo.InvariantCulture))) : "";
+        var addressChanged = _writeAddress != address;
+        var valuesChanged = _writeValues != text;
+        // Publish the editor as a consistent address/value pair, including when
+        // completing a write while the public editor setters remain locked.
+        _writeAddress = address;
+        _writeValues = text;
+        if (addressChanged) OnPropertyChanged(nameof(WriteAddressText));
+        if (valuesChanged) OnPropertyChanged(nameof(WriteValuesText));
     }
 
     private void SetSetting(ref string field, string? value, string property)
@@ -146,6 +162,9 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         // Until the next explicit read, old service values must not acquire new addresses or formats.
         _displaySettings = null;
         if (Rows.Count > 0) { Rows.Clear(); SelectedRow = null; OnPropertyChanged(nameof(EmptyVisibility)); }
+        Status = T("Ready", "Ready · settings do not start communication");
+        Statistics = "";
+        _lastServiceError = null;
         Error = "";
         OnPropertyChanged(nameof(RequestSummary));
         RefreshAvailability();
@@ -213,11 +232,18 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         _operationAdmitted = true;
         Error = "";
         _lastPersistableSettings = settings.Clone();
-        _displaySettings = settings;
+        _displaySettings = null;
         RebuildRows(settings);
         _lastRevision = long.MinValue;
         PublishAvailability();
-        try { await _service.RunAsync(settings, repeat, CancellationToken.None); }
+        try
+        {
+            // A returned task confirms admission: the concrete service has
+            // already published this request's snapshot before returning it.
+            var running = _service.RunAsync(settings, repeat, CancellationToken.None);
+            _displaySettings = settings;
+            await running;
+        }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Run", ex); }
         finally { _operationAdmitted = false; Refresh(); PublishAvailability(); }
@@ -266,21 +292,40 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         }
         catch (ArgumentException ex) { Error = ex.Message; return; }
         _writeAdmitted = true;
+        _selectionChangedDuringWrite = false;
         Error = "";
         _lastPersistableSettings = settings.Clone();
-        if (_displaySettings is null) { _displaySettings = settings; RebuildRows(settings); }
+        var needsDisplayContext = _displaySettings is null;
+        if (needsDisplayContext) RebuildRows(settings);
         PublishAvailability();
-        try { await _service.WriteAsync(settings, address, values, CancellationToken.None); }
+        try
+        {
+            var writing = _service.WriteAsync(settings, address, values, CancellationToken.None);
+            if (needsDisplayContext) _displaySettings = settings;
+            await writing;
+        }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Write", ex); }
-        finally { _writeAdmitted = false; Refresh(); PublishAvailability(); }
+        finally
+        {
+            Refresh();
+            // The captured in-flight request stays immutable. Once its readback
+            // is reflected in the rows, align any newly selected row's editor.
+            if (_selectionChangedDuringWrite)
+            {
+                _selectionChangedDuringWrite = false;
+                SynchronizeSelectedRowEditor();
+            }
+            _writeAdmitted = false;
+            PublishAvailability();
+        }
     }
 
     public void Refresh()
     {
         var snapshot = _service.GetSnapshot();
         var ageSecond = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (_lastRevision != snapshot.Revision || _lastAgeSecond != ageSecond)
+        if (_displaySettings is not null && (_lastRevision != snapshot.Revision || _lastAgeSecond != ageSecond))
         {
             _lastAgeSecond = ageSecond;
             Statistics = UiText.Format("ModbusMonitorStatistics", "OK {0:N0} · Errors {1:N0} · Response {2}", snapshot.SuccessCount, snapshot.ErrorCount,
@@ -288,7 +333,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
             if (snapshot.UpdatedAt is { } updated)
                 Statistics += " · " + UiText.Format("ModbusMonitorLastAge", "Last response {0:N0} s ago", Math.Max(0, Math.Floor((DateTimeOffset.Now - updated).TotalSeconds)));
         }
-        if (_lastRevision != snapshot.Revision)
+        if (_displaySettings is not null && _lastRevision != snapshot.Revision)
         {
             _lastRevision = snapshot.Revision;
             Status = _stopRequested && IsBusy ? T("Stopping", "Stopping · waiting for the current response (up to the response timeout)") : snapshot.State switch
