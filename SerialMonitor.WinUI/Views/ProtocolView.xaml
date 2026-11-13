@@ -2,6 +2,7 @@
     x:Class="SerialMonitor.WinUI.Views.ProtocolView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
     xmlns:views="using:SerialMonitor.WinUI.Views"
     HorizontalContentAlignment="Stretch"
     VerticalContentAlignment="Stretch"
@@ -28,27 +29,18 @@
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
-        <Style x:Key="ToolbarButton" TargetType="Button">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Padding" Value="9,0" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{ThemeResource AppSurfaceBorderBrush}" />
-            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource CompactActionButtonStyle}">
+            <Setter Property="Padding" Value="8,0" />
         </Style>
-        <Style x:Key="ToolbarToggle" TargetType="ToggleButton">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Padding" Value="9,0" />
-            <Setter Property="CornerRadius" Value="4" />
+        <Style x:Key="ToolbarToggle" TargetType="ToggleButton" BasedOn="{StaticResource SearchOptionToggleStyle}">
+            <Setter Property="Width" Value="Auto" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="8,0" />
         </Style>
-        <Style x:Key="MonitorMode" TargetType="RadioButton">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Padding" Value="4,0" />
+        <Style TargetType="ComboBox" BasedOn="{StaticResource CompactComboBoxStyle}" />
+        <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
         </Style>
     </UserControl.Resources>
 
@@ -75,7 +67,8 @@
                                       Style="{StaticResource ToolbarToggle}" ToolTipService.ToolTip="{Binding PauseToolTip}" />
                         <Button Content="{Binding FilterLabel}" Style="{StaticResource ToolbarButton}" ToolTipService.ToolTip="{Binding FilterSummary}">
                             <Button.Flyout>
-                                <Flyout x:Name="FilterFlyout" Opening="FilterFlyout_Opening" Placement="BottomEdgeAlignedRight">
+                                <Flyout x:Name="FilterFlyout" Opening="FilterFlyout_Opening" Placement="BottomEdgeAlignedRight"
+                                        FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                     <StackPanel x:Name="FilterEditorPanel" Width="320" Spacing="10">
                                         <TextBlock Text="{Binding FilterTitle}" FontSize="14" FontWeight="SemiBold" />
                                         <Grid ColumnDefinitions="84,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
@@ -122,10 +115,15 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="5" Visibility="{Binding ModbusModeSelectorVisibility}">
-            <RadioButton Content="{Binding PacketModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsPacketAnalysisSelected, Mode=TwoWay}" Style="{StaticResource MonitorMode}" />
-            <RadioButton Grid.Column="1" Content="{Binding RegisterModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsRegisterMonitorSelected, Mode=TwoWay}" Style="{StaticResource MonitorMode}" />
-            <Grid Grid.Column="2" DataContext="{Binding Modbus}" ColumnDefinitions="*,Auto" ColumnSpacing="5" Visibility="{Binding BusyVisibility}">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" Visibility="{Binding ModbusModeSelectorVisibility}">
+            <Border Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="2">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <RadioButton Content="{Binding PacketModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsPacketAnalysisSelected, Mode=TwoWay}" Style="{StaticResource CompactModeRadioButtonStyle}" />
+                    <RadioButton Content="{Binding RegisterModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsRegisterMonitorSelected, Mode=TwoWay}" Style="{StaticResource CompactModeRadioButtonStyle}" />
+                </StackPanel>
+            </Border>
+            <Grid Grid.Column="1" DataContext="{Binding Modbus}" ColumnDefinitions="*,Auto" ColumnSpacing="5" Visibility="{Binding BusyVisibility}">
                 <TextBlock Text="{Binding Status}" Style="{StaticResource CellText}" TextAlignment="Right" ToolTipService.ToolTip="{Binding Status}" />
                 <Button x:Name="MonitorStopButton" Grid.Column="1" Content="{Binding StopLabel}" Command="{Binding StopCommand}" Style="{StaticResource ToolbarButton}" />
             </Grid>

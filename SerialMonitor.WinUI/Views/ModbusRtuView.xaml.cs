@@ -12,6 +12,21 @@ public sealed partial class ModbusRtuView : UserControl
     {
         Model?.Refresh();
     }
-    private void SettingsFlyout_Opening(object sender, object args) => SettingsEditorRoot.DataContext = Model;
-    private void WriteFlyout_Opening(object sender, object args) => WriteEditorRoot.DataContext = Model;
+    private void SettingsFlyout_Opening(object sender, object args)
+    {
+        SettingsEditorRoot.DataContext = Model;
+        FitEditor(SettingsScroll, SettingsPanel, 360, 460);
+    }
+    private void WriteFlyout_Opening(object sender, object args)
+    {
+        WriteEditorRoot.DataContext = Model;
+        FitEditor(WriteScroll, WritePanel, 400, 360);
+    }
+    private void FitEditor(ScrollViewer scroll, FrameworkElement panel, double width, double height)
+    {
+        if (XamlRoot is not { } root) return;
+        // Leave room for popup padding and the overlay scrollbar on small windows.
+        panel.Width = Math.Min(width, Math.Max(160, root.Size.Width - 64));
+        scroll.MaxHeight = Math.Min(height, Math.Max(96, root.Size.Height - 96));
+    }
 }

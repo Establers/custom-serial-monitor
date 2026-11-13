@@ -9,19 +9,21 @@
         <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
         <x:Double x:Key="ExpanderChevronButtonSize">20</x:Double>
-        <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="Padding" Value="6,1" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
         </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource CompactComboBoxStyle}" />
+        <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </UserControl.Resources>
     <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
-              MinWidth="0" MinHeight="24" Padding="6,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+              MinWidth="0" MinHeight="24" Padding="6,4" CornerRadius="4"
+              Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
         <Expander.HeaderTemplate>
             <DataTemplate><TextBlock Text="{Binding}" FontSize="11" /></DataTemplate>
         </Expander.HeaderTemplate>
@@ -31,7 +33,7 @@
                     <Grid ColumnDefinitions="Auto,Auto,64" ColumnSpacing="4">
                         <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}"
                                   AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding FormatLabel}"
-                                  HorizontalAlignment="Left" MinWidth="88" MinHeight="26" Height="26" Padding="5,0,0,0" FontSize="11" />
+                                  HorizontalAlignment="Left" MinWidth="88" Padding="5,0,24,0" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="+" VerticalAlignment="Center" FontSize="11" ToolTipService.ToolTip="{Binding OffsetLabel}" />
                         <TextBox Grid.Column="2" Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="{Binding OffsetLabel}" ToolTipService.ToolTip="{Binding OffsetLabel}" />
