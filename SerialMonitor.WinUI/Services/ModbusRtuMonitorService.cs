@@ -6,7 +6,7 @@ using SerialMonitor.WinUI.Models;
 namespace SerialMonitor.WinUI.Services;
 
 // One owner, one outstanding RTU exchange. RX callbacks only offer bounded chunks.
-public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorService
+public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorService, IModbusRtuCommandService
 {
     private readonly ISerialService _serial;
     private readonly Action<byte[], long>? _transmitted;
@@ -70,6 +70,8 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (HasCommandMutation() || _legacyWriteInProgress)
+                throw new InvalidOperationException("Another Modbus write or command is already active.");
             if (_groupsRunning) throw new InvalidOperationException("Use the captured polling group to write while group polling is active.");
             if (_snapshot.IsBusy)
             {
@@ -118,6 +120,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                 throw new InvalidOperationException("The original serial connection changed before Modbus could start.");
             var sameRequest = _settings?.Request == settings.Request;
             _settings = settings;
+            _operationGeneration = expectedGeneration;
             _stop = stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             _completion = completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             // Clear before scheduling: old values must never acquire new addresses.
@@ -155,6 +158,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         ISerialExclusiveSession? lease = null;
         ModbusReceiveInbox? inbox = null;
         PendingWrite? currentWrite = firstWrite;
+        PendingCommand? currentCommand = null;
         try
         {
             stop.Token.ThrowIfCancellationRequested();
@@ -176,11 +180,16 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                     }
                     else
                     {
+                        lock (_gate) _legacyWriteInProgress = true;
                         try { await PerformWriteAsync(lease, inbox, settings, currentWrite, stop.Token).ConfigureAwait(false); }
                         catch (OperationCanceledException) when (currentWrite.Token.IsCancellationRequested && !stop.IsCancellationRequested)
                         {
-                            currentWrite.Completion.TrySetCanceled(currentWrite.Token);
-                            lock (_gate) SetSnapshot(_snapshot with { WriteState = ModbusWriteState.None });
+                            lock (_gate)
+                            {
+                                _legacyWriteInProgress = false;
+                                SetSnapshot(_snapshot with { WriteState = ModbusWriteState.None });
+                                currentWrite.Completion.TrySetCanceled(currentWrite.Token);
+                            }
                         }
                     }
                     currentWrite = null;
@@ -202,8 +211,15 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                     lock (_gate)
                     {
                         if (_pendingWrite is { } queued) { currentWrite = queued; _pendingWrite = null; }
+                        if (currentWrite is null) currentCommand = TakePendingCommand();
                     }
                     if (currentWrite is not null) break;
+                    if (currentCommand is not null)
+                    {
+                        await ProcessQueuedCommandAsync(currentCommand, lease, inbox, stop.Token).ConfigureAwait(false);
+                        currentCommand = null;
+                        continue;
+                    }
                     await Task.Delay(Math.Min(20, settings.IntervalMs), stop.Token).ConfigureAwait(false);
                 }
             } while (repeat);
@@ -234,6 +250,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                 currentWrite?.Completion.TrySetCanceled();
                 _pendingWrite?.Completion.TrySetCanceled();
                 _pendingWrite = null;
+                _legacyWriteInProgress = false;
                 SetSnapshot(_snapshot with { State = failure is not null ? ModbusMonitorState.Error
                         : !_serial.IsConnected ? ModbusMonitorState.Disconnected : ModbusMonitorState.Stopped,
                     IsBusy = false, IsPolling = false,
@@ -246,6 +263,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                             ? ModbusWriteState.None : _snapshot.WriteState });
                 _stop = null;
                 _completion = null;
+                FinishOwnedCommands(currentCommand, failure, stop.IsCancellationRequested);
             }
             stop.Dispose();
             if (failure is not null) completion.TrySetException(failure);
@@ -264,8 +282,12 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         lock (_gate) SetSnapshot(_snapshot with { WriteState = ModbusWriteState.NotVerified, ValuesCurrent = false });
         if (stop.IsCancellationRequested)
         {
-            lock (_gate) SetSnapshot(_snapshot with { WriteState = ModbusWriteState.NotVerified, ValuesCurrent = false });
-            write.Completion.TrySetResult();
+            lock (_gate)
+            {
+                _legacyWriteInProgress = false;
+                SetSnapshot(_snapshot with { WriteState = ModbusWriteState.NotVerified, ValuesCurrent = false });
+                write.Completion.TrySetResult();
+            }
             return;
         }
         var read = await ExchangeAsync(lease, inbox, settings.Request.BuildPacket(), settings.TimeoutMs, settings, stop).ConfigureAwait(false);
@@ -273,7 +295,11 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         var verified = read.Values.AsSpan(write.Address - settings.Address, write.Values.Length).SequenceEqual(write.Values);
         lock (_gate) SetSnapshot(_snapshot with { WriteState = verified ? ModbusWriteState.Verified : ModbusWriteState.NotVerified });
         if (!verified) throw new ModbusExchangeException("Write acknowledged, but the read-back value differs.", false);
-        write.Completion.TrySetResult();
+        lock (_gate)
+        {
+            _legacyWriteInProgress = false;
+            write.Completion.TrySetResult();
+        }
     }
 
     private async Task<(ushort[] Values, double ElapsedMs)> ExchangeAsync(ISerialExclusiveSession lease,

@@ -56,6 +56,7 @@ public sealed partial class ModbusRtuMonitorService
             groups = settings.Groups.Select(group => new PollingGroupRun(group)).ToArray();
             _groupOrder = groups;
             _groupGeneration = generation;
+            _operationGeneration = generation;
             _groupsRunning = true;
             _groupWriteInProgress = false;
             _pendingGroupWrite = null;
@@ -87,6 +88,7 @@ public sealed partial class ModbusRtuMonitorService
                 throw new InvalidOperationException("The requested polling group is not active.");
             if (_pendingGroupWrite is not null || _groupWriteInProgress)
                 throw new InvalidOperationException("A Modbus group write is already active.");
+            if (HasCommandMutation()) throw new InvalidOperationException("A Modbus command is already active.");
             var settings = group.Definition.Settings;
             settings.ValidateWrite(address, values.Count);
             // Validate before copying so an oversized caller cannot allocate an unbounded queue entry.
@@ -111,6 +113,7 @@ public sealed partial class ModbusRtuMonitorService
         ISerialExclusiveSession? lease = null;
         ModbusReceiveInbox? inbox = null;
         PendingGroupWrite? writing = null;
+        PendingCommand? command = null;
         PollingGroupRun? activeGroup = null;
         var nextGroup = 0;
         var lastWasWrite = false;
@@ -131,10 +134,11 @@ public sealed partial class ModbusRtuMonitorService
                 lock (_gate)
                 {
                     group = lastWasWrite ? SelectDueGroup(groups, ref nextGroup) : null;
-                    writing = group is null ? _pendingGroupWrite : null;
+                    command = group is null ? TakePendingCommand() : null;
+                    writing = group is null && command is null ? _pendingGroupWrite : null;
                     if (writing is not null) _pendingGroupWrite = null;
                     _groupWriteInProgress = writing is not null;
-                    group ??= writing?.Group ?? SelectDueGroup(groups, ref nextGroup);
+                    group ??= writing?.Group ?? (command is null ? SelectDueGroup(groups, ref nextGroup) : null);
                     activeGroup = group;
                     if (group is not null)
                     {
@@ -142,7 +146,13 @@ public sealed partial class ModbusRtuMonitorService
                         PublishPollingSnapshot();
                     }
                 }
-                if (writing is not null)
+                if (command is not null)
+                {
+                    await ProcessQueuedCommandAsync(command, lease, inbox, stop.Token).ConfigureAwait(false);
+                    command = null;
+                    lastWasWrite = true;
+                }
+                else if (writing is not null)
                 {
                     var reschedule = false;
                     var canceled = false;
@@ -264,6 +274,7 @@ public sealed partial class ModbusRtuMonitorService
                 PublishPollingSnapshot();
                 _stop = null;
                 _completion = null;
+                FinishOwnedCommands(command, failure, stop.IsCancellationRequested);
                 // Continuations may submit another operation: release admission and publish first.
                 if (failure is not null) writing?.Write.Completion.TrySetException(failure);
                 else writing?.Write.Completion.TrySetCanceled();

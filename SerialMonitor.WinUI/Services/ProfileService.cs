@@ -625,6 +625,7 @@ public sealed class ProfileService : IProfileService
         UiSettings = profile.UiSettings, EventContextSettings = profile.EventContextSettings,
         BridgeSettings = profile.BridgeSettings, ModbusSettings = profile.ModbusSettings.Clone(),
         ModbusPolling = profile.ModbusPolling?.Clone(),
+        ModbusCommands = profile.ModbusCommands?.Clone(),
         LogRules = profile.LogRules.Select(rule => rule.Clone()).ToList(),
         EventRules = profile.EventRules, HighlightRules = profile.HighlightRules,
         SavedCommands = profile.SavedCommands, CommandHistory = profile.CommandHistory, CommandSequences = sequences
@@ -683,6 +684,15 @@ public sealed class ProfileService : IProfileService
                 // Keep malformed groups and targets visible for explicit
                 // correction; loading or saving does not choose another group.
                 warnings.Add("Modbus polling settings are invalid. Correct them before transmitting.");
+            }
+        }
+
+        if (profile.ModbusCommands is not null)
+        {
+            try { profile.ModbusCommands.Validate(); }
+            catch (ArgumentException)
+            {
+                warnings.Add("Modbus command settings are invalid. Correct them before transmitting.");
             }
         }
 

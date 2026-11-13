@@ -381,6 +381,7 @@ public sealed partial class ModbusRtuMonitorServiceTests
         public long Generation { get; private set; } = 1;
         public string? Owner { get; private set; }
         public bool WasOwnedWhenDisconnected { get; private set; }
+        public int BaudRate { get; set; } = 115200;
         public List<byte[]> Sent { get; } = [];
         public Func<byte[], Task> OnSend { get; set; } = _ => Task.CompletedTask;
 
@@ -401,7 +402,7 @@ public sealed partial class ModbusRtuMonitorServiceTests
             {
                 case "get_IsConnected": return Connected;
                 case "get_ReceiveSessionGeneration": return Generation;
-                case "get_AppliedBaudRate": return 115200;
+                case "get_AppliedBaudRate": return BaudRate;
                 case "get_ExclusiveSessionOwner": return Owner;
                 case "add_CaptureBytesReceived": _received += (Action<long, ReceivedByteChunk>)args[0]!; return null;
                 case "remove_CaptureBytesReceived": _received -= (Action<long, ReceivedByteChunk>)args[0]!; return null;

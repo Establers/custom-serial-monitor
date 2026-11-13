@@ -9,6 +9,7 @@ public sealed partial class ModbusRtuView : UserControl
 {
     private bool _itemDialogOpen;
     private bool _groupDialogOpen;
+    private bool _commandDialogOpen;
     private ModbusRtuViewModel? Model => DataContext as ModbusRtuViewModel;
     public ModbusRtuView() => InitializeComponent();
     private void View_Loaded(object sender, RoutedEventArgs args)
@@ -32,7 +33,7 @@ public sealed partial class ModbusRtuView : UserControl
     }
     private async void Items_Click(object sender, RoutedEventArgs args)
     {
-        if (_itemDialogOpen || _groupDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
+        if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
         _itemDialogOpen = true;
         try
         {
@@ -53,7 +54,7 @@ public sealed partial class ModbusRtuView : UserControl
     }
     private async void Groups_Click(object sender, RoutedEventArgs args)
     {
-        if (_itemDialogOpen || _groupDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
+        if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
         _groupDialogOpen = true;
         try
         {
@@ -84,6 +85,34 @@ public sealed partial class ModbusRtuView : UserControl
             model.ReportItemEditorError(ex.Message);
         }
         finally { _groupDialogOpen = false; }
+    }
+    private void CommandsFlyout_Opening(object sender, object args)
+    {
+        CommandsPanel.DataContext = Model;
+        FitEditor(CommandsScroll, CommandsPanel, 480, 460);
+        Model?.Refresh();
+    }
+    private async void Commands_Click(object sender, RoutedEventArgs args)
+    {
+        if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
+        _commandDialogOpen = true;
+        CommandsFlyout.Hide();
+        try
+        {
+            var revision = model.CommandSettingsRevision;
+            var dialog = new ModbusCommandEditorDialog(model.CreateCommandEditorSettings())
+            {
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme
+            };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                model.ApplyCommandSettings(dialog.ResultSettings, revision);
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("Modbus.CommandEditor", ex);
+            model.ReportItemEditorError(ex.Message);
+        }
+        finally { _commandDialogOpen = false; }
     }
     private void FitEditor(ScrollViewer scroll, FrameworkElement panel, double width, double height)
     {

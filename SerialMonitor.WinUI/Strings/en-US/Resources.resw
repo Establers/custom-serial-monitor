@@ -1473,4 +1473,94 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · Packet analysis</value></data>
 <data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · Read/write values</value></data>
 <data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · Packet analysis</value></data>
+<data name="ModbusCommandEditorTitle" xml:space="preserve"><value>Command definitions</value></data>
+<data name="ModbusCommandApply" xml:space="preserve"><value>Apply</value></data>
+<data name="ModbusCommandCancel" xml:space="preserve"><value>Cancel</value></data>
+<data name="ModbusCommandEditorHelp" xml:space="preserve"><value>Define writes and their result checks. Applying only changes definitions; execute a saved command from the monitor. Steps run in order and writes are never retried automatically.</value></data>
+<data name="ModbusCommandList" xml:space="preserve"><value>Commands</value></data>
+<data name="ModbusCommandSteps" xml:space="preserve"><value>Steps (execution order)</value></data>
+<data name="ModbusCommandNew" xml:space="preserve"><value>New command</value></data>
+<data name="ModbusCommandDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+<data name="ModbusCommandRemove" xml:space="preserve"><value>Remove</value></data>
+<data name="ModbusCommandClear" xml:space="preserve"><value>Clear all</value></data>
+<data name="ModbusCommandSave" xml:space="preserve"><value>Add / update command</value></data>
+<data name="ModbusCommandNewStep" xml:space="preserve"><value>New step</value></data>
+<data name="ModbusCommandDuplicateStep" xml:space="preserve"><value>Duplicate step</value></data>
+<data name="ModbusCommandRemoveStep" xml:space="preserve"><value>Remove step</value></data>
+<data name="ModbusCommandSaveStep" xml:space="preserve"><value>Add / update step</value></data>
+<data name="ModbusCommandMoveUp" xml:space="preserve"><value>Move up</value></data>
+<data name="ModbusCommandMoveDown" xml:space="preserve"><value>Move down</value></data>
+<data name="ModbusCommandName" xml:space="preserve"><value>Command name</value></data>
+<data name="ModbusCommandStepName" xml:space="preserve"><value>Step name</value></data>
+<data name="ModbusCommandWriteAddress" xml:space="preserve"><value>Write address (base 0)</value></data>
+<data name="ModbusCommandWriteArea" xml:space="preserve"><value>Write area</value></data>
+<data name="ModbusCommandUnit" xml:space="preserve"><value>Unit</value></data>
+<data name="ModbusCommandValue" xml:space="preserve"><value>Value or defined value name</value></data>
+<data name="ModbusCommandResponseTimeout" xml:space="preserve"><value>Response timeout (100–10000 ms)</value></data>
+<data name="ModbusCommandVerification" xml:space="preserve"><value>Result check</value></data>
+<data name="ModbusCommandStatusFunction" xml:space="preserve"><value>Status read function</value></data>
+<data name="ModbusCommandStatusAddress" xml:space="preserve"><value>Status address (base 0)</value></data>
+<data name="ModbusCommandMask" xml:space="preserve"><value>Raw mask (0x HEX accepted)</value></data>
+<data name="ModbusCommandExpected" xml:space="preserve"><value>Expected masked value</value></data>
+<data name="ModbusCommandVerificationTimeout" xml:space="preserve"><value>Check timeout (100–60000 ms)</value></data>
+<data name="ModbusCommandVerificationInterval" xml:space="preserve"><value>Check interval (100–60000 ms)</value></data>
+<data name="ModbusCommandValueNames" xml:space="preserve"><value>Value names (optional)</value></data>
+<data name="ModbusCommandValueNamesHelp" xml:space="preserve"><value>One decoded number = name per line, before the multiplier. Example: 0=Manual and 1=Automatic on separate lines.</value></data>
+<data name="ModbusCommandUnsavedDraft" xml:space="preserve"><value>Add/update the current step and command before switching commands. Apply also saves the current draft. New discards its draft.</value></data>
+<data name="ModbusCommandReadBackHelp" xml:space="preserve"><value>After the write response, read the written address and compare the raw values. Use this for persistent settings, not self-clearing commands.</value></data>
+<data name="ModbusCommandStatusHelp" xml:space="preserve"><value>After the write response, read one status register/bit from the same unit until (raw value &amp; mask) equals the expected value. Only reads repeat; the write is not sent again.</value></data>
+<data name="ModbusCommandAcknowledgementHelp" xml:space="preserve"><value>Only the write response is checked. Acknowledged does not mean the device action has completed. No readback is sent; this supports write-only or self-clearing commands.</value></data>
+<data name="ModbusCommandChooseVerification" xml:space="preserve"><value>Choose how to confirm this step.</value></data>
+<data name="ModbusCommandCoils" xml:space="preserve"><value>Coils</value></data>
+<data name="ModbusCommandHoldingRegisters" xml:space="preserve"><value>Holding registers</value></data>
+<data name="ModbusCommandReadBack" xml:space="preserve"><value>Read back written values</value></data>
+<data name="ModbusCommandStatus" xml:space="preserve"><value>Check another status address</value></data>
+<data name="ModbusCommandAcknowledgementOnly" xml:space="preserve"><value>Write response only</value></data>
+<data name="ModbusCommandSaveBeforeCommandSelection" xml:space="preserve"><value>Add/update the current command first, or choose New command to discard its draft.</value></data>
+<data name="ModbusCommandSaveBeforeStepSelection" xml:space="preserve"><value>Add/update the current step first, or choose New step to discard its draft.</value></data>
+<data name="ModbusCommandInvalidCommand" xml:space="preserve"><value>This saved command is invalid. Correct its definition or remove it.</value></data>
+<data name="ModbusCommandInvalidStep" xml:space="preserve"><value>This saved step is invalid. Correct its fields or remove it.</value></data>
+<data name="ModbusCommandInvalidWriteFields" xml:space="preserve"><value>Enter a complete unit, write area, address, type, timeout and result-check mode. Addresses also accept 0x HEX.</value></data>
+<data name="ModbusCommandInvalidScale" xml:space="preserve"><value>Enter a finite nonzero multiplier, for example 1 or 0.1.</value></data>
+<data name="ModbusCommandInvalidStatusFields" xml:space="preserve"><value>Enter a complete status address, mask, expected raw value and check timings.</value></data>
+<data name="ModbusCommandInvalidValueNames" xml:space="preserve"><value>Use at most 128 value names, one integer = name per line.</value></data>
+<data name="ModbusCommandTooManySteps" xml:space="preserve"><value>At most 32 steps are allowed in a command.</value></data>
+<data name="ModbusCommandTooManyCommands" xml:space="preserve"><value>At most 32 commands are allowed.</value></data>
+<data name="ModbusCommandCopySuffix" xml:space="preserve"><value> copy</value></data>
+<data name="ModbusCommandPreview" xml:space="preserve"><value>Wire words: {0}</value></data>
+<data name="ModbusCommandNewName" xml:space="preserve"><value>Command {0}</value></data>
+<data name="ModbusCommandNewStepName" xml:space="preserve"><value>Step {0}</value></data>
+<data name="ModbusCommandInvalidShort" xml:space="preserve"><value>Invalid saved command</value></data>
+<data name="ModbusCommandInvalidStepShort" xml:space="preserve"><value>Invalid saved step</value></data>
+<data name="ModbusCommandActions" xml:space="preserve"><value>Commands…</value></data>
+<data name="ModbusCommandGuideTitle" xml:space="preserve"><value>Write-only actions and command sequences</value></data>
+<data name="ModbusCommandGuideHelp" xml:space="preserve"><value>Commands stores fixed device targets and ordered writes. Each step can read back its value, check a separate status address/bit, or accept only the write response. ACK-only does not confirm that the device finished its action. Inspect the preview and run explicitly; writes are never retried automatically.</value></data>
+<data name="ModbusCommandEditor" xml:space="preserve"><value>Edit commands…</value></data>
+<data name="ModbusCommandSelector" xml:space="preserve"><value>Saved command</value></data>
+<data name="ModbusCommandRun" xml:space="preserve"><value>Run selected command</value></data>
+<data name="ModbusCommandRunHelp" xml:space="preserve"><value>Inspect the target and wire preview before running. Each step writes once. Only status reads repeat. Stop also stops polling. Applying, loading or reconnecting never runs commands.</value></data>
+<data name="ModbusCommandEmpty" xml:space="preserve"><value>Define a command for a write-only action, a separate status check or an ordered sequence.</value></data>
+<data name="ModbusCommandCheckReadBack" xml:space="preserve"><value>Read back the written value</value></data>
+<data name="ModbusCommandCheckAck" xml:space="preserve"><value>ACK only · operation completion is not checked</value></data>
+<data name="ModbusCommandCheckStatus" xml:space="preserve"><value>Status</value></data>
+<data name="ModbusCommandChanged" xml:space="preserve"><value>Command settings changed while editing. Reopen the editor.</value></data>
+<data name="ModbusCommandUnavailable" xml:space="preserve"><value>Select a command and connect an available device before running.</value></data>
+<data name="ModbusCommandReadOnlyOverlap" xml:space="preserve"><value>A command overlaps a read-only monitored item.</value></data>
+<data name="ModbusCommandPartialOverlap" xml:space="preserve"><value>A command must write the complete monitored multi-register item.</value></data>
+<data name="ModbusCommandAckReceived" xml:space="preserve"><value>write ACK received</value></data>
+<data name="ModbusCommandQueued" xml:space="preserve"><value>Command queued</value></data>
+<data name="ModbusCommandRunning" xml:space="preserve"><value>Command running</value></data>
+<data name="ModbusCommandAcknowledged" xml:space="preserve"><value>Write responses received · operation completion is not checked for ACK-only steps</value></data>
+<data name="ModbusCommandVerified" xml:space="preserve"><value>All configured result checks passed</value></data>
+<data name="ModbusCommandNotVerified" xml:space="preserve"><value>Result condition was not met · stopped before the next step</value></data>
+<data name="ModbusCommandCanceled" xml:space="preserve"><value>Command stopped · acknowledged writes may have taken effect</value></data>
+<data name="ModbusCommandFailed" xml:space="preserve"><value>Command failed · inspect before retrying</value></data>
+<data name="ModbusCommandPending" xml:space="preserve"><value>Waiting</value></data>
+<data name="ModbusCommandWriting" xml:space="preserve"><value>Writing</value></data>
+<data name="ModbusCommandStepAcknowledged" xml:space="preserve"><value>ACK only · operation completion is not checked</value></data>
+<data name="ModbusCommandChecking" xml:space="preserve"><value>Checking result</value></data>
+<data name="ModbusCommandStepVerified" xml:space="preserve"><value>Result verified</value></data>
+<data name="ModbusCommandStepNotVerified" xml:space="preserve"><value>Result not verified</value></data>
+<data name="ModbusCommandStepCanceled" xml:space="preserve"><value>Not continued</value></data>
+<data name="ModbusCommandStepFailed" xml:space="preserve"><value>Failed</value></data>
 </root>

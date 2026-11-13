@@ -40,6 +40,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         ReadOnceCommand = new AsyncRelayCommand(() => RunAsync(false), CanReadSelected);
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsBusy && !_stopRequested);
         WriteCommand = new AsyncRelayCommand(WriteAsync, CanWrite);
+        ExecuteCommand = new AsyncRelayCommand(ExecuteSelectedCommandAsync, CanExecuteSelectedCommand);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy && !_writeAdmitted);
         Status = T("Ready", "Ready · settings do not start communication");
         Refresh();
@@ -77,7 +78,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string WriteHelp => WriteModeIndex == 1 ? T("WriteItemHelp", "Enter one defined item's value. Its type, multiplier and byte/word order are applied before writing. Inspect the preview; a readback verifies the raw words. Writes are never retried automatically.") : T("WriteHelp", "Select a row or enter an address inside the monitored area. Values are raw and unscaled; multiple values use consecutive addresses. Writes are never retried automatically. A readback checks the result.");
     public string ReadOnlyHelp => T("ReadOnly", "Discrete inputs and input registers are read-only. Select FC01 or FC03 in Settings to write.");
     public string WriteAvailabilityHelp => IsWritableFunction ? WriteHelp : ReadOnlyHelp;
-    public bool IsWriteEditorEnabled => !_writeAdmitted && !_stopRequested;
+    public bool IsWriteEditorEnabled => !_writeAdmitted && !_commandAdmitted && !_stopRequested;
     public IReadOnlyList<string> Functions { get; } = ["01 · Coils", "02 · Discrete inputs", "03 · Holding registers", "04 · Input registers"];
     public IReadOnlyList<string> Formats { get; } = ["UInt16", "Int16", "UInt32", "Int32", "Float32"];
     public ObservableCollection<ModbusRegisterRow> Rows { get; } = [];
@@ -86,7 +87,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public AsyncRelayCommand StopCommand { get; }
     public AsyncRelayCommand WriteCommand { get; }
     public AsyncRelayCommand SaveSettingsCommand { get; }
-    public bool IsBusy => _operationAdmitted || _writeAdmitted || _service.IsBusy;
+    public bool IsBusy => _operationAdmitted || _writeAdmitted || _commandAdmitted || _service.IsBusy;
     public bool IsSettingsEnabled => !IsBusy && !_writeAdmitted;
     public bool IsCoilFunction => FunctionIndex is 0 or 1;
     public bool IsRegisterFunction => !IsCoilFunction;
@@ -102,7 +103,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string Error { get => _error; private set { if (SetProperty(ref _error, value)) OnPropertyChanged(nameof(ErrorVisibility)); } }
     public string Statistics { get => _statistics; private set => SetProperty(ref _statistics, value); }
-    public string RequestSummary => _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
+    public string RequestSummary => _commandAdmitted ? ActiveCommandTargetSummary : _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
     public string UnitText { get => _unit; set => SetSetting(ref _unit, value, nameof(UnitText)); }
     public string AddressText { get => _address; set => SetSetting(ref _address, value, nameof(AddressText)); }
     public string QuantityText { get => _quantity; set => SetSetting(ref _quantity, value, nameof(QuantityText)); }
@@ -174,7 +175,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         RefreshAvailability();
     }
     private bool CanRun() => !IsBusy && !_writeAdmitted && _canStart();
-    private bool CanWrite() => !_writeAdmitted && !_stopRequested && IsWritableFunction && CanWriteSelectedGroup() && (_service.GetSnapshot().IsPolling || CanRun());
+    private bool CanWrite() => !_writeAdmitted && !_commandAdmitted && !_stopRequested && IsWritableFunction && CanWriteSelectedGroup() && (_service.GetSnapshot().IsPolling || CanRun());
 
     public ModbusMonitorSettings CreateSettingsSnapshot() => BuildSettings(validateItems: true);
 
@@ -363,6 +364,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     public void Refresh()
     {
+        RefreshCommandState();
         RefreshPollingGroups();
         var snapshot = GetSelectedSnapshot();
         var ageSecond = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -400,6 +402,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             if (_displaySettings is { } settings)
                 foreach (var row in Rows) row.Update(snapshot.Values, settings, snapshot.ValuesCurrent, snapshot.UpdatedAt);
         }
+        if (_commandAdmitted && CommandStatus.Length > 0) Status = CommandStatus;
         var busy = IsBusy;
         if (_lastBusy != busy) { _lastBusy = busy; PublishAvailability(); }
         else RefreshAvailability();
@@ -440,6 +443,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsGroupSelectionEnabled));
         StartCommand.NotifyCanExecuteChanged(); ReadOnceCommand.NotifyCanExecuteChanged(); StopCommand.NotifyCanExecuteChanged();
         WriteCommand.NotifyCanExecuteChanged(); SaveSettingsCommand.NotifyCanExecuteChanged();
+        NotifyCommandAvailability();
     }
     internal static bool TryNumber(string text, out int number)
     {

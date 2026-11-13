@@ -26,6 +26,8 @@ public sealed class AppProfile
     // must never fall back to transmitting the old ModbusSettings target.
     public ModbusPollingSettings? ModbusPolling { get; set; }
 
+    public ModbusCommandSettings? ModbusCommands { get; set; }
+
     public List<LogRule> LogRules { get; set; } = new();
 
     public List<EventRule> EventRules { get; set; } = new();
