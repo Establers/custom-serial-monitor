@@ -22,6 +22,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     private string _itemName = "";
     private int _areaIndex = 1, _formatIndex, _verificationIndex, _statusFunctionIndex = 2;
     private bool _swapBytes, _swapWords;
+    private bool _isAdvancedExpanded;
 
     public ModbusCommandEditorViewModel(ModbusCommandSettings settings)
     {
@@ -40,9 +41,9 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     private static string T(string key, string fallback) => UiText.Get("ModbusCommand" + key, fallback);
     private static string M(string key, string fallback) => UiText.Get("ModbusMonitor" + key, fallback);
     public string Title => T("EditorTitle", "Command definitions");
-    public string ApplyLabel => T("Apply", "Apply");
+    public string ApplyLabel => T("Apply", "Apply to monitor");
     public string CancelLabel => T("Cancel", "Cancel");
-    public string Help => T("EditorHelp", "Define writes and their result checks. Applying only changes definitions; execute a saved command from the monitor. Steps run in order and writes are never retried automatically.");
+    public string Help => T("EditorHelp", "Define the target, value and result check first. Open advanced options for value type and scaling. Apply to monitor includes the current draft without sending; use Save profile to keep it for later.");
     public string CommandsLabel => T("List", "Commands");
     public string StepsLabel => T("Steps", "Steps (execution order)");
     public string NewCommandLabel => T("New", "New command");
@@ -76,6 +77,12 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     public string VerificationTimeoutLabel => T("VerificationTimeout", "Check timeout (100–60000 ms)");
     public string VerificationIntervalLabel => T("VerificationInterval", "Check interval (100–60000 ms)");
     public string ValueNamesLabel => T("ValueNames", "Value names (optional)");
+    public string AdvancedLabel => T("Advanced", "Value type, scaling and communication options");
+    public string InterpretationSummary => FormatIndex is >= 0 and < 5
+        ? $"{Formats[FormatIndex]} · ×{ScaleText}" + (EngineeringUnitText.Length == 0 ? "" : " · " + EngineeringUnitText)
+            + (SwapBytes ? " · " + SwapBytesLabel : "") + (SwapWords ? " · " + SwapWordsLabel : "")
+        : T("ChooseInterpretation", "Choose a value type in the advanced options.");
+    public bool IsAdvancedExpanded { get => _isAdvancedExpanded; set => SetProperty(ref _isAdvancedExpanded, value); }
     public string ValueNamesHelp => T("ValueNamesHelp", "One decoded number = name per line, before the multiplier. Example: 0=Manual and 1=Automatic on separate lines.");
     public string DraftHelp => _stepDirty || _commandDirty
         ? T("UnsavedDraft", "Add/update the current step and command before switching commands. Apply also saves the current draft. New discards its draft.") : "";
@@ -177,7 +184,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     private void NotifyStepPresentation()
     {
         foreach (var name in new[] { nameof(DraftHelp), nameof(StatusVisibility), nameof(VerificationHelp), nameof(IsRegister),
-            nameof(CanEditFormat), nameof(CanEditScale), nameof(CanSwapBytes), nameof(CanSwapWords), nameof(Preview) }) OnPropertyChanged(name);
+            nameof(CanEditFormat), nameof(CanEditScale), nameof(CanSwapBytes), nameof(CanSwapWords), nameof(Preview), nameof(InterpretationSummary) }) OnPropertyChanged(name);
     }
 
     public string Preview
@@ -247,6 +254,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         _itemName = ""; EngineeringUnitText = ""; ValueNamesText = ""; SwapBytes = false; SwapWords = false;
         TimeoutText = "1000"; VerificationIndex = 0; StatusFunctionIndex = 2; StatusAddressText = "0";
         MaskText = "0xFFFF"; ExpectedText = "0"; VerificationTimeoutText = "3000"; VerificationIntervalText = "100";
+        IsAdvancedExpanded = false;
     }
     private void LoadStep(ModbusCommandStep? step)
     {
@@ -301,6 +309,8 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
             VerificationTimeoutText = "";
             VerificationIntervalText = "";
         }
+        IsAdvancedExpanded = FormatIndex != 0 || ScaleText != "1" || EngineeringUnitText.Length > 0 ||
+            ValueNamesText.Length > 0 || SwapBytes || SwapWords || TimeoutText != "1000";
     }
 
     private ModbusCommandStep ReadStepDraft()

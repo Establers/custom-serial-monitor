@@ -39,7 +39,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
     private static string T(string key, string fallback) => UiText.Get("ModbusPolling" + key, fallback);
     private static string M(string key, string fallback) => UiText.Get("ModbusMonitor" + key, fallback);
     public string Title => T("Title", "Polling groups");
-    public string ApplyLabel => T("Apply", "Apply");
+    public string ApplyLabel => T("Apply", "Apply to monitor");
     public string CancelLabel => T("Cancel", "Cancel");
     public string Help => T("Help", "Define devices and read areas on this connection. Enabled groups are polled in turn. Applying does not send data or save the app profile.");
     public string ListLabel => T("List", "Groups");

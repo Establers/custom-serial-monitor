@@ -10,16 +10,19 @@ public sealed partial class ModbusRtuViewModel
 {
     private ModbusPollingSettings? _pollingSettings;
     private ModbusPollingGroupRow? _selectedPollingGroup;
-    private bool _loadingPollingGroup, _groupRunAdmitted, _acceptPollingSnapshots;
+    private bool _loadingPollingGroup, _groupRunAdmitted, _acceptPollingSnapshots, _replacingPollingGroups;
     private string? _singleGroupId;
     private long _lastPollingRevision = long.MinValue;
-    private string _pollingSummary = "";
+    private string _pollingSummary = "", _pollingHealthSummary = "";
 
     private static string P(string key, string fallback) => UiText.Get("ModbusPolling" + key, fallback);
     public string GroupEditorLabel => P("Editor", "Polling groups…");
     public string GroupSelectorLabel => P("Selector", "Selected group");
     public ObservableCollection<ModbusPollingGroupRow> PollingGroups { get; } = [];
     public string PollingSummary { get => _pollingSummary; private set => SetProperty(ref _pollingSummary, value); }
+    public string PollingHealthSummary { get => _pollingHealthSummary; private set => SetProperty(ref _pollingHealthSummary, value); }
+    public bool NeedsPollingGroup => _pollingSettings is not null && SelectedPollingGroup?.Definition?.Settings is null;
+    public string EmptySetupLabel => NeedsPollingGroup ? GroupEditorLabel : SettingsLabel;
     public bool IsGroupSelectionEnabled => !_writeAdmitted && (!_operationAdmitted || _groupRunAdmitted);
     public Visibility PollingGroupsVisibility => _pollingSettings is null ? Visibility.Collapsed : Visibility.Visible;
 
@@ -28,7 +31,7 @@ public sealed partial class ModbusRtuViewModel
         get => _selectedPollingGroup;
         set
         {
-            if (ReferenceEquals(value, _selectedPollingGroup)) return;
+            if (_replacingPollingGroups || ReferenceEquals(value, _selectedPollingGroup)) return;
             if (!IsGroupSelectionEnabled || (value is not null && !PollingGroups.Contains(value))) return;
             try { CaptureSelectedGroupDraft(strict: true); }
             catch (ArgumentException ex) { Error = ex.Message; OnPropertyChanged(); return; }
@@ -57,6 +60,7 @@ public sealed partial class ModbusRtuViewModel
         _lastPollingRevision = long.MinValue;
         PollingGroups.Clear();
         PollingSummary = "";
+        PollingHealthSummary = "";
         NotifyPollingPresentation();
     }
 
@@ -68,10 +72,15 @@ public sealed partial class ModbusRtuViewModel
         _acceptPollingSnapshots = false;
         _singleGroupId = null;
         _lastPollingRevision = long.MinValue;
-        PollingGroups.Clear();
-        if (_pollingSettings.Groups is not null)
-            foreach (var group in _pollingSettings.Groups) PollingGroups.Add(new(group));
-        _selectedPollingGroup = PollingGroups.FirstOrDefault(row => row.Id is not null && row.Id == _pollingSettings.SelectedGroupId);
+        _replacingPollingGroups = true;
+        try
+        {
+            PollingGroups.Clear();
+            if (_pollingSettings.Groups is not null)
+                foreach (var group in _pollingSettings.Groups) PollingGroups.Add(new(group));
+            _selectedPollingGroup = PollingGroups.FirstOrDefault(row => row.Id is not null && row.Id == _pollingSettings.SelectedGroupId);
+        }
+        finally { _replacingPollingGroups = false; }
         LoadSelectedGroup();
         try { _pollingSettings.Validate(); }
         catch (ArgumentException ex) { Error = ex.Message; }
@@ -119,6 +128,7 @@ public sealed partial class ModbusRtuViewModel
                 _acceptPollingSnapshots = false;
             }
             group.Settings = settings;
+            SelectedPollingGroup.RefreshDefinitionPresentation();
             _lastPersistableSettings = settings.Clone();
         }
         catch (ArgumentException) when (!strict) { }
@@ -222,6 +232,17 @@ public sealed partial class ModbusRtuViewModel
             if (row is not null) row.Snapshot = _service.GetSnapshot();
         }
         PollingSummary = string.Join("\n", PollingGroups.Select(row => row.Summary));
+        var errors = PollingGroups.Where(row => row.HasError).ToArray();
+        var disabled = PollingGroups.Count(row => !row.HasError && !row.IsEnabled);
+        var current = PollingGroups.Count(row => !row.HasError && row.IsEnabled && row.Snapshot?.ValuesCurrent == true);
+        var health = UiText.Format("ModbusPollingHealth", "Groups {0} · Errors {1} · Current {2} · Waiting/stale {3} · Disabled {4}",
+            PollingGroups.Count, errors.Length, current, PollingGroups.Count - errors.Length - disabled - current, disabled);
+        if (errors.Length > 0)
+        {
+            var names = string.Join(", ", errors.Take(3).Select(row => string.IsNullOrWhiteSpace(row.Name) ? row.Id ?? "—" : row.Name));
+            health += " · " + names + (errors.Length > 3 ? $" (+{errors.Length - 3})" : "");
+        }
+        PollingHealthSummary = health;
     }
 
     private ModbusMonitorSnapshot GetSelectedSnapshot()
@@ -248,7 +269,7 @@ public sealed partial class ModbusRtuViewModel
 
     private void NotifyPollingPresentation()
     {
-        foreach (var name in new[] { nameof(SelectedPollingGroup), nameof(PollingGroupsVisibility), nameof(StartLabel), nameof(RequestSummary), nameof(IsGroupSelectionEnabled) })
+        foreach (var name in new[] { nameof(SelectedPollingGroup), nameof(PollingGroupsVisibility), nameof(StartLabel), nameof(RequestSummary), nameof(IsGroupSelectionEnabled), nameof(NeedsPollingGroup), nameof(EmptySetupLabel) })
             OnPropertyChanged(name);
     }
 }
@@ -257,18 +278,29 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
 {
     internal ModbusPollingGroup? Definition { get; } = definition;
     private ModbusMonitorSnapshot? _snapshot;
+    private string? _configurationError = ValidateDefinition(definition);
     public string? Id => Definition?.Id;
     public string DisplayName => Definition is null ? UiText.Get("ModbusPollingInvalidGroupShort", "Invalid group")
         : $"{Definition.Name} · ID {Definition.Settings?.UnitId} · FC {Definition.Settings?.Function:00} · {Definition.Settings?.Address}+{Definition.Settings?.Quantity}";
     public string Name => Definition?.Name ?? "";
     public bool IsEnabled => Definition?.Enabled == true;
-    public string StatusText => Snapshot?.Error ?? (Snapshot?.State switch
+    public bool HasError => _configurationError is not null || Snapshot?.State is ModbusMonitorState.Error or ModbusMonitorState.Disconnected || !string.IsNullOrWhiteSpace(Snapshot?.Error);
+    public string SelectionLabel => $"{SelectionState} · {DisplayName}";
+    private string SelectionState => HasError ? UiText.Get("ModbusPollingStateError", "Error")
+        : !IsEnabled ? UiText.Get("ModbusPollingDisabled", "Disabled")
+        : Snapshot?.ValuesCurrent == true ? UiText.Get("ModbusPollingStateCurrent", "Read OK")
+        : Snapshot?.IsBusy == true ? UiText.Get("ModbusPollingStateReading", "Reading")
+        : Snapshot?.UpdatedAt is not null ? UiText.Get("ModbusPollingStateStale", "Stale")
+        : UiText.Get("ModbusPollingStateWaiting", "Ready");
+    public string StatusText => _configurationError ?? Snapshot?.Error ?? (Snapshot?.State switch
     {
         ModbusMonitorState.Polling => UiText.Get("ModbusMonitorPolling", "Polling · connection reserved"),
         ModbusMonitorState.Reading => UiText.Get("ModbusMonitorReading", "Reading"),
         ModbusMonitorState.Error => UiText.Get("ModbusMonitorErrorState", "Communication error · retained values are stale"),
         ModbusMonitorState.Disconnected => UiText.Get("ModbusMonitorDisconnected", "Disconnected · restart explicitly after connecting"),
-        ModbusMonitorState.Stopped => UiText.Get("ModbusMonitorStopped", "Stopped · retained values are stale"),
+        ModbusMonitorState.Stopped => Snapshot?.ValuesCurrent == true
+            ? UiText.Get("ModbusMonitorReadComplete", "Read complete · last response shown")
+            : UiText.Get("ModbusMonitorStopped", "Stopped · retained values are stale"),
         _ => IsEnabled ? UiText.Get("ModbusMonitorReady", "Ready · settings do not start communication") : UiText.Get("ModbusPollingDisabled", "Disabled")
     });
     public string ValueSummary => Snapshot?.Values is not { Length: > 0 } values ? "—" : string.Join(" ", values.Take(4).Select(value => value.ToString(System.Globalization.CultureInfo.CurrentCulture))) + (values.Length > 4 ? " …" : "");
@@ -280,8 +312,25 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
         {
             if (!SetProperty(ref _snapshot, value)) return;
             OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(HasError));
+            OnPropertyChanged(nameof(SelectionLabel));
             OnPropertyChanged(nameof(ValueSummary));
             OnPropertyChanged(nameof(Summary));
         }
+    }
+    internal void RefreshDefinitionPresentation()
+    {
+        _configurationError = ValidateDefinition(Definition);
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(SelectionLabel));
+        OnPropertyChanged(nameof(Summary));
+    }
+    private static string? ValidateDefinition(ModbusPollingGroup? definition)
+    {
+        if (definition is null) return UiText.Get("ModbusPollingInvalidGroupShort", "Invalid group");
+        try { definition.Validate(); return null; }
+        catch (ArgumentException ex) { return ex.Message; }
     }
 }

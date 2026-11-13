@@ -35,7 +35,7 @@ public sealed class ModbusItemEditorViewModel : ViewModelBase
 
     private static string T(string key, string fallback) => UiText.Get("ModbusItem" + key, fallback);
     public string Title => T("Title", "Item definitions");
-    public string ApplyLabel => T("Apply", "Apply");
+    public string ApplyLabel => T("Apply", "Apply to monitor");
     public string CancelLabel => T("Cancel", "Cancel");
     public string Help => T("Help", "Define names and formats inside the current read area. Undefined addresses keep the default format. Applying does not save the app profile or send data.");
     public string RangeSummary => $"ID {_settings.UnitId} · FC {_settings.Function:00} · {_settings.Address}–{(long)_settings.Address + _settings.Quantity - 1}";

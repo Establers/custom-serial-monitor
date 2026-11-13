@@ -369,6 +369,44 @@ public sealed class ModbusCommandEditorTests
         Assert.Contains(markup.Descendants(p + "StackPanel"), element => (string?)element.Attribute("Visibility") == "{Binding StatusVisibility}");
     }
 
+    [Fact]
+    public void NewStepsStartWithBasicFieldsAndCustomSavedInterpretationsRemainVisible()
+    {
+        var editor = new ModbusCommandEditorViewModel(Settings());
+        Assert.False(editor.IsAdvancedExpanded);
+        var original = Settings();
+        var step = original.Commands[0].Steps[0];
+        step.Item.ValueType = ModbusValueType.Int16;
+        step.Item.Scale = 0.1;
+        step.Item.Unit = "°C";
+        step.Item.SwapBytes = true;
+        step.Value = "25.3";
+        editor = new(original);
+        Assert.True(editor.IsAdvancedExpanded);
+        editor.IsAdvancedExpanded = false;
+        Assert.Contains("Int16", editor.InterpretationSummary);
+        Assert.Contains("°C", editor.InterpretationSummary);
+        Assert.Contains(editor.SwapBytesLabel, editor.InterpretationSummary);
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal(step.EncodeValues(), result.Commands[0].Steps[0].EncodeValues());
+        editor.NewStep();
+        Assert.False(editor.IsAdvancedExpanded);
+        Assert.Contains("UInt16", editor.InterpretationSummary);
+    }
+
+    [Fact]
+    public void InvalidImportedInterpretationOpensAdvancedOptionsWithoutRepairingOrSendingIt()
+    {
+        var settings = Settings();
+        settings.Commands[0].Steps[0].HasInvalidMetadata = true;
+        var editor = new ModbusCommandEditorViewModel(settings);
+        Assert.True(editor.IsAdvancedExpanded);
+        Assert.Equal(-1, editor.FormatIndex);
+        Assert.Contains("Choose a value type", editor.InterpretationSummary);
+        Assert.False(editor.TryApply(out _));
+        Assert.True(settings.Commands[0].Steps[0].HasInvalidMetadata);
+    }
+
     private static ModbusCommandStep Step(string name, string value) => new()
     {
         Name = name, UnitId = 2, Function = 3, Item = new() { Address = 20, Access = ModbusItemAccess.ReadWrite }, Value = value

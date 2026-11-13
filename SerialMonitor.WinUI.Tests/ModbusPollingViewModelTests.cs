@@ -228,6 +228,106 @@ public sealed class ModbusPollingViewModelTests
         Assert.NotEmpty(model.Error);
     }
 
+    [Fact]
+    public async Task AFifthUnselectedGroupErrorIsVisibleWithoutLosingOtherGroupsOrTheirTargets()
+    {
+        var service = new GroupMonitor();
+        var model = Model(service);
+        var settings = new ModbusPollingSettings
+        {
+            SelectedGroupId = "g1",
+            Groups = Enumerable.Range(1, 5).Select(id => new ModbusPollingGroup
+            {
+                Id = $"g{id}", Name = $"Device {id}", Enabled = id != 4,
+                Settings = new() { UnitId = id, Quantity = 2 }
+            }).ToList()
+        };
+        model.ApplySavedPollingSettings(settings);
+        var run = model.RunAsync(true);
+        var notifications = new List<string?>();
+        model.PollingGroups[4].PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+        service.FailGroup("g5");
+        model.Refresh();
+        Assert.Contains("Groups 5 · Errors 1 · Current 3 · Waiting/stale 0 · Disabled 1", model.PollingHealthSummary);
+        Assert.Contains("Device 5", model.PollingHealthSummary);
+        Assert.StartsWith("Error · Device 5", model.PollingGroups[4].SelectionLabel);
+        Assert.Contains(nameof(ModbusPollingGroupRow.SelectionLabel), notifications);
+        Assert.Equal("g1", model.SelectedPollingGroup?.Id);
+        Assert.Equal("101", model.Rows[0].ValueText);
+        Assert.True(model.IsBusy);
+        Assert.False(run.IsCompleted);
+        var healthUpdates = 0;
+        model.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(model.PollingHealthSummary)) healthUpdates++; };
+        model.Refresh();
+        model.Refresh();
+        Assert.Equal(0, healthUpdates);
+        await model.StopAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task SingleReadIsReportedAsAValidLastResponseAndTargetEditsUpdateTheChoiceLabel()
+    {
+        var model = Model(new GroupMonitor());
+        model.ApplySavedPollingSettings(Workspace());
+        await model.RunAsync(false);
+        Assert.StartsWith("Read OK", model.SelectedPollingGroup!.SelectionLabel);
+        Assert.Contains("Read complete", model.SelectedPollingGroup.StatusText);
+        model.UnitText = "9";
+        model.CreatePersistablePollingSettingsSnapshot();
+        model.Refresh();
+        Assert.Contains("ID 9", model.SelectedPollingGroup.SelectionLabel);
+        Assert.StartsWith("Ready", model.SelectedPollingGroup.SelectionLabel);
+        Assert.Contains("Current 0", model.PollingHealthSummary);
+    }
+
+    [Fact]
+    public void EmptyAndInvalidImportedGroupsKeepAnExplicitSetupPathWithoutSending()
+    {
+        var service = new GroupMonitor();
+        var model = Model(service);
+        Assert.False(model.NeedsPollingGroup);
+        model.ApplySavedPollingSettings(new());
+        Assert.True(model.NeedsPollingGroup);
+        Assert.Equal(model.GroupEditorLabel, model.EmptySetupLabel);
+        Assert.Contains("Groups 0", model.PollingHealthSummary);
+        var settings = Workspace();
+        settings.Groups[1].HasInvalidMetadata = true;
+        model.ApplySavedPollingSettings(settings);
+        Assert.Contains("Errors 1", model.PollingHealthSummary);
+        Assert.StartsWith("Error", model.PollingGroups[1].SelectionLabel);
+        settings = Workspace();
+        settings.Groups[0].Settings = null!;
+        model.ApplySavedPollingSettings(settings);
+        Assert.True(model.NeedsPollingGroup);
+        Assert.False(model.IsTargetSettingsEnabled);
+        Assert.Contains("Errors 1", model.PollingHealthSummary);
+        Assert.Equal(model.GroupEditorLabel, model.EmptySetupLabel);
+        Assert.Empty(service.GroupRuns);
+        Assert.Empty(service.SingleReads);
+    }
+
+    [Fact]
+    public void ReapplyingGroupsKeepsTheSavedSelectionWhenTheBoundListResetsItsSelection()
+    {
+        var service = new GroupMonitor();
+        var model = Model(service);
+        model.ApplySavedPollingSettings(Workspace());
+        model.PollingGroups.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+                model.SelectedPollingGroup = null;
+        };
+        var settings = Workspace();
+        settings.SelectedGroupId = "b";
+        model.ApplySavedPollingSettings(settings);
+        Assert.Equal("b", model.SelectedPollingGroup?.Id);
+        Assert.Equal("2", model.UnitText);
+        Assert.Equal("b", model.CreatePersistablePollingSettingsSnapshot()?.SelectedGroupId);
+        Assert.Empty(service.SingleReads);
+        Assert.Empty(service.GroupRuns);
+    }
+
     private static ModbusRtuViewModel Model(GroupMonitor service) => new(service, () => true, () => Task.CompletedTask, () => { });
     private static ModbusPollingSettings Workspace() => new()
     {
@@ -251,6 +351,15 @@ public sealed class ModbusPollingViewModelTests
         public List<(int Address, ushort[] Values)> SingleWrites { get; } = [];
         public ModbusMonitorSnapshot GetSnapshot() => _groups.IsBusy ? _single with { IsBusy = true, IsPolling = true } : _single;
         public ModbusPollingSnapshot GetPollingSnapshot() => _groups;
+        public void FailGroup(string id) => _groups = _groups with
+        {
+            Revision = _groups.Revision + 1,
+            Groups = _groups.Groups.Select(group => group.GroupId != id ? group : group with
+            {
+                Snapshot = group.Snapshot with { Revision = group.Snapshot.Revision + 1, State = ModbusMonitorState.Error,
+                    IsBusy = false, IsPolling = false, ValuesCurrent = false, ErrorCount = 1, Error = "Device rejected the request" }
+            }).ToArray()
+        };
         public Task RunGroupsAsync(ModbusPollingSettings settings, CancellationToken cancellationToken)
         {
             GroupRuns.Add(settings.Clone());

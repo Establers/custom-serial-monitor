@@ -11,9 +11,10 @@ public sealed partial class ModbusRtuViewModel
 {
     private ModbusCommandSettings? _commandSettings;
     private ModbusCommandChoice? _selectedCommand;
-    private bool _commandAdmitted, _acceptCommandSnapshots, _commandOwnsHeader;
+    private bool _commandAdmitted, _acceptCommandSnapshots, _commandOwnsHeader, _replacingCommandChoices;
     private long _commandSettingsRevision, _lastCommandRevision = long.MinValue;
     private string _commandStatus = "", _commandResults = "", _commandTargetSummary = "";
+    private string _recentCommandSummary = "", _recentCommandResults = "";
 
     private static string C(string key, string fallback) => UiText.Get("ModbusCommand" + key, fallback);
     public string CommandsLabel => C("Actions", "Commands…");
@@ -22,7 +23,12 @@ public sealed partial class ModbusRtuViewModel
     public string CommandEditorLabel => C("Editor", "Edit commands…");
     public string CommandSelectorLabel => C("Selector", "Saved command");
     public string ExecuteCommandLabel => C("Run", "Run selected command");
-    public string CommandHelp => C("RunHelp", "Inspect the target and wire preview before running. Each step writes once. Only status reads repeat. Stop also stops polling. Applying, loading or reconnecting never runs commands.");
+    public string CommandHelp => C("RunHelp", "Commands use fixed unit IDs and addresses, independently of the selected monitoring group. Check the target, value and result check before running. Writes are never retried. Stop also stops polling.");
+    public string StopAllLabel => C("StopAll", "Stop command and polling");
+    public string WirePreviewLabel => C("WirePreview", "RTU packet details (HEX)");
+    public string RecentCommandSummary { get => _recentCommandSummary; private set { if (SetProperty(ref _recentCommandSummary, value)) OnPropertyChanged(nameof(RecentCommandVisibility)); } }
+    public string RecentCommandResults { get => _recentCommandResults; private set => SetProperty(ref _recentCommandResults, value); }
+    public Visibility RecentCommandVisibility => RecentCommandSummary.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public string CommandStatus
     {
         get => _commandStatus;
@@ -61,37 +67,38 @@ public sealed partial class ModbusRtuViewModel
         get => _selectedCommand;
         set
         {
-            if (_commandAdmitted || (value is not null && !CommandChoices.Contains(value)) || !SetProperty(ref _selectedCommand, value)) return;
+            if (_replacingCommandChoices || _commandAdmitted || (value is not null && !CommandChoices.Contains(value)) || !SetProperty(ref _selectedCommand, value)) return;
             if (_commandSettings is not null) _commandSettings.SelectedCommandId = value?.Id;
             ClearCommandResults();
             OnPropertyChanged(nameof(CommandPreview));
+            OnPropertyChanged(nameof(CommandTargetPreview));
             ExecuteCommand.NotifyCanExecuteChanged();
         }
     }
 
-    public string CommandPreview
+    public string CommandPreview => BuildCommandPreview(includeWire: true);
+    public string CommandTargetPreview => BuildCommandPreview(includeWire: false);
+    private string BuildCommandPreview(bool includeWire)
     {
-        get
+        if (SelectedCommand?.Definition is not { } command) return CommandEmptyHelp;
+        try
         {
-            if (SelectedCommand?.Definition is not { } command) return CommandEmptyHelp;
-            try
+            command.Validate();
+            return string.Join("\n", command.Steps.Select((step, index) =>
             {
-                command.Validate();
-                return string.Join("\n", command.Steps.Select((step, index) =>
+                var check = step.Verification.Mode switch
                 {
-                    var check = step.Verification.Mode switch
-                    {
-                        ModbusCommandVerificationMode.ReadBack => C("CheckReadBack", "Read back the written value"),
-                        ModbusCommandVerificationMode.AcknowledgementOnly => C("CheckAck", "ACK only · operation completion is not checked"),
-                        _ => $"{C("CheckStatus", "Status")} FC {step.Verification.Function:00} · {step.Verification.Address} · (& 0x{step.Verification.Mask:X4}) = 0x{step.Verification.ExpectedValue:X4}"
-                    };
-                    var bytes = step.BuildPacket();
-                    var packet = string.Join(" ", bytes.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
-                    return $"{index + 1}. {step.Name} · ID {step.UnitId} · FC {bytes[1]:00} · {step.Item.Address} · {step.Value} {step.Item.Unit}\n{check}\nHEX: {packet}";
-                }));
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return ex.Message; }
+                    ModbusCommandVerificationMode.ReadBack => C("CheckReadBack", "Read back the written value"),
+                    ModbusCommandVerificationMode.AcknowledgementOnly => C("CheckAck", "ACK only · operation completion is not checked"),
+                    _ => $"{C("CheckStatus", "Status")} FC {step.Verification.Function:00} · {step.Verification.Address} · (& 0x{step.Verification.Mask:X4}) = 0x{step.Verification.ExpectedValue:X4}"
+                };
+                var bytes = step.BuildPacket();
+                var packet = string.Join(" ", bytes.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
+                return $"{index + 1}. {step.Name} · ID {step.UnitId} · FC {bytes[1]:00} · {step.Item.Address} · {step.Value} {step.Item.Unit}\n{check}" +
+                    (includeWire ? "\nHEX: " + packet : "");
+            }));
         }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return ex.Message; }
     }
 
     public ModbusCommandSettings CreateCommandEditorSettings() => _commandSettings?.Clone() ?? new();
@@ -112,12 +119,19 @@ public sealed partial class ModbusRtuViewModel
         if (IsBusy) throw new InvalidOperationException(T("StopBeforeSettings", "Stop Modbus before loading settings."));
         _commandSettings = settings?.Clone();
         _commandSettingsRevision++;
-        CommandChoices.Clear();
-        if (_commandSettings?.Commands is { } commands)
-            foreach (var command in commands.Take(ModbusCommandSettings.MaximumCommands + 1)) CommandChoices.Add(new(command));
-        _selectedCommand = CommandChoices.FirstOrDefault(row => row.Id is not null && row.Id == _commandSettings?.SelectedCommandId);
+        _replacingCommandChoices = true;
+        try
+        {
+            CommandChoices.Clear();
+            if (_commandSettings?.Commands is { } commands)
+                foreach (var command in commands.Take(ModbusCommandSettings.MaximumCommands + 1)) CommandChoices.Add(new(command));
+            _selectedCommand = CommandChoices.FirstOrDefault(row => row.Id is not null && row.Id == _commandSettings?.SelectedCommandId);
+        }
+        finally { _replacingCommandChoices = false; }
         ClearCommandResults();
-        foreach (var name in new[] { nameof(SelectedCommand), nameof(CommandPreview), nameof(CommandEmptyVisibility) }) OnPropertyChanged(name);
+        RecentCommandSummary = "";
+        RecentCommandResults = "";
+        foreach (var name in new[] { nameof(SelectedCommand), nameof(CommandPreview), nameof(CommandTargetPreview), nameof(CommandEmptyVisibility) }) OnPropertyChanged(name);
         try { _commandSettings?.Validate(); }
         catch (ArgumentException ex) { CommandStatus = ex.Message; }
         NotifyCommandAvailability();
@@ -182,6 +196,7 @@ public sealed partial class ModbusRtuViewModel
             if (_service.GetSnapshot().IsPolling) ReleaseCommandHeader();
             _lastRevision = long.MinValue;
             Refresh();
+            PublishRecentCommand();
             NotifyCommandHeader();
             PublishAvailability();
         }
@@ -236,6 +251,14 @@ public sealed partial class ModbusRtuViewModel
                 (step.Error is { Length: > 0 } error ? "\n" + error : "");
         }));
         if (!string.IsNullOrWhiteSpace(snapshot.Error)) CommandStatus += " · " + snapshot.Error;
+        PublishRecentCommand();
+    }
+
+    private void PublishRecentCommand()
+    {
+        if (_commandTargetSummary.Length == 0 || CommandStatus.Length == 0) return;
+        RecentCommandSummary = C("Recent", "Recent command") + ": " + _commandTargetSummary + " · " + CommandStatus;
+        RecentCommandResults = CommandResults;
     }
 
     private static string CommandStateText(ModbusCommandState state) => state switch

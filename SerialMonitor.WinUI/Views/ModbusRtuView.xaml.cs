@@ -31,10 +31,17 @@ public sealed partial class ModbusRtuView : UserControl
         GuidePanel.DataContext = Model;
         FitEditor(GuideScroll, GuidePanel, 420, 460);
     }
+    private void ShowSettings_Click(object sender, RoutedEventArgs args)
+    {
+        if (Model?.NeedsPollingGroup == true) Groups_Click(sender, args);
+        else SettingsFlyout.ShowAt(SettingsButton);
+    }
+    private void ShowCommands_Click(object sender, RoutedEventArgs args) => CommandsFlyout.ShowAt(CommandsButton);
     private async void Items_Click(object sender, RoutedEventArgs args)
     {
         if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
         _itemDialogOpen = true;
+        SettingsFlyout.Hide();
         try
         {
             var settingsRevision = model.SettingsRevision;
@@ -56,6 +63,7 @@ public sealed partial class ModbusRtuView : UserControl
     {
         if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
         _groupDialogOpen = true;
+        SettingsFlyout.Hide();
         try
         {
             var settingsRevision = model.SettingsRevision;
@@ -105,7 +113,10 @@ public sealed partial class ModbusRtuView : UserControl
                 XamlRoot = XamlRoot, RequestedTheme = ActualTheme
             };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            {
                 model.ApplyCommandSettings(dialog.ResultSettings, revision);
+                if (IsLoaded && XamlRoot is not null) CommandsFlyout.ShowAt(CommandsButton);
+            }
         }
         catch (Exception ex)
         {

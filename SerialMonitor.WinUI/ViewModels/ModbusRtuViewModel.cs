@@ -51,8 +51,8 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string StartLabel => _pollingSettings is null ? T("Start", "Start polling") : P("Start", "Start enabled groups");
     public string StopLabel => T("Stop", "Stop");
     public string ReadOnceLabel => T("ReadOnce", "Read once");
-    public string SettingsLabel => T("Settings", "Settings");
-    public string SaveLabel => T("Save", "Save settings");
+    public string SettingsLabel => T("Settings", "Target settings");
+    public string SaveLabel => T("Save", "Save profile");
     public string UnitLabel => T("Unit", "Unit ID (1–247)");
     public string FunctionLabel => T("Function", "Read function");
     public string AddressLabel => T("Address", "Start address (base 0)");
@@ -63,14 +63,14 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string ScaleLabel => T("Scale", "Display multiplier");
     public string SwapBytesLabel => T("SwapBytes", "Swap bytes");
     public string SwapWordsLabel => T("SwapWords", "Swap words (32-bit)");
-    public string SetupHelp => T("SetupHelp", "Addresses are protocol offsets: holding register 40001 is address 0. Settings are saved in the app profile. Loading settings or reconnecting never starts polling.");
+    public string SetupHelp => T("SetupHelp", "Addresses start at 0: holding register 40001 is address 0. Edits affect this monitor without transmitting. Save profile stores targets, items, groups and commands for later use.");
     public string OwnershipHelp => T("OwnershipHelp", "Polling reserves this connection. Stop it before using sequences, manual TX or the bridge. Direct writes here are serialized with polling.");
     public string RawLabel => T("Raw", "Raw HEX");
     public string ValueLabel => T("Value", "Value");
     public string StateLabel => T("State", "State");
     public string UpdatedLabel => T("Updated", "Last response");
     public string TableAddressLabel => T("TableAddress", "Address (base 0)");
-    public string EmptyHelp => T("Empty", "View device values by address. Connect, check Settings, then choose Read once. Open ? for the usage guide.");
+    public string EmptyHelp => T("Empty", "Connect the device, open Target settings, then use Read once to check its values. Addresses follow the device register map. Open ? for help.");
     public string WriteLabel => T("Write", "Write and verify");
     public string WriteEditorLabel => T("WriteEditor", "Direct write…");
     public string WriteAddressLabel => T("WriteAddress", "Write address (base 0)");
@@ -89,10 +89,11 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public AsyncRelayCommand SaveSettingsCommand { get; }
     public bool IsBusy => _operationAdmitted || _writeAdmitted || _commandAdmitted || _service.IsBusy;
     public bool IsSettingsEnabled => !IsBusy && !_writeAdmitted;
+    public bool IsTargetSettingsEnabled => IsSettingsEnabled && !NeedsPollingGroup;
     public bool IsCoilFunction => FunctionIndex is 0 or 1;
     public bool IsRegisterFunction => !IsCoilFunction;
     public bool IsWritableFunction => FunctionIndex is 0 or 2;
-    public bool IsWordSwapEnabled => IsSettingsEnabled && IsRegisterFunction && FormatIndex >= 2;
+    public bool IsWordSwapEnabled => IsTargetSettingsEnabled && IsRegisterFunction && FormatIndex >= 2;
     public string AvailabilityText => !IsBusy && !_canStart() ? _availabilityReason?.Invoke() ?? T("Busy", "Connect the device and stop sequences, automation and the bridge before starting Modbus.") : "";
     public Visibility AvailabilityVisibility => AvailabilityText.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility BusyVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
@@ -442,7 +443,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     private void PublishAvailability() { RefreshAvailability(); _stateChanged(); }
     public void RefreshAvailability()
     {
-        foreach (var property in new[] { nameof(IsBusy), nameof(IsSettingsEnabled), nameof(IsWordSwapEnabled), nameof(BusyVisibility), nameof(IsWriteEditorEnabled), nameof(AvailabilityText), nameof(AvailabilityVisibility) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(IsBusy), nameof(IsSettingsEnabled), nameof(IsTargetSettingsEnabled), nameof(IsWordSwapEnabled), nameof(BusyVisibility), nameof(IsWriteEditorEnabled), nameof(AvailabilityText), nameof(AvailabilityVisibility) }) OnPropertyChanged(property);
         OnPropertyChanged(nameof(IsGroupSelectionEnabled));
         StartCommand.NotifyCanExecuteChanged(); ReadOnceCommand.NotifyCanExecuteChanged(); StopCommand.NotifyCanExecuteChanged();
         WriteCommand.NotifyCanExecuteChanged(); SaveSettingsCommand.NotifyCanExecuteChanged();

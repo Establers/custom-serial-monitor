@@ -209,6 +209,76 @@ public sealed class ModbusCommandHeaderTests
         Assert.False(model.IsBusy);
     }
 
+    [Theory]
+    [InlineData(ModbusCommandState.Acknowledged)]
+    [InlineData(ModbusCommandState.Verified)]
+    [InlineData(ModbusCommandState.NotVerified)]
+    [InlineData(ModbusCommandState.Canceled)]
+    [InlineData(ModbusCommandState.Failed)]
+    public async Task RecentResultKeepsTheActualExecutedTargetWhenBrowsingAnotherCommand(ModbusCommandState state)
+    {
+        var service = new HeaderMonitor();
+        var model = Model(service);
+        var run = model.ExecuteSelectedCommandAsync();
+        service.CompleteCommand(state);
+        await run;
+        var summary = model.RecentCommandSummary;
+        var details = model.RecentCommandResults;
+        Assert.Contains("Recent command: first · 1/1 · ID 2 · FC 06 · 300", summary);
+        Assert.Contains(model.CommandStatus, summary);
+        Assert.NotEmpty(details);
+        model.SelectedCommand = model.CommandChoices[1];
+        Assert.Empty(model.CommandResults);
+        Assert.Equal(summary, model.RecentCommandSummary);
+        Assert.Equal(details, model.RecentCommandResults);
+        Assert.Equal(Visibility.Visible, model.RecentCommandVisibility);
+        Assert.Contains("ID 7", model.CommandTargetPreview);
+        Assert.DoesNotContain("HEX:", model.CommandTargetPreview);
+        Assert.Contains("HEX:", model.CommandPreview);
+        Assert.False(model.IsBusy);
+        model.ApplySavedCommandSettings(Settings());
+        Assert.Equal(Visibility.Collapsed, model.RecentCommandVisibility);
+        Assert.Empty(model.RecentCommandResults);
+    }
+
+    [Fact]
+    public async Task PollingAndLaterReadsDoNotEraseTheSeparateRecentCommandResult()
+    {
+        var service = new HeaderMonitor();
+        var model = Model(service);
+        var poll = model.RunAsync(true);
+        var run = model.ExecuteSelectedCommandAsync();
+        service.CompleteCommand(ModbusCommandState.Acknowledged);
+        await run;
+        Assert.Contains("Polling", model.Status);
+        Assert.Contains("completion is not checked", model.RecentCommandSummary);
+        var summary = model.RecentCommandSummary;
+        await model.StopAsync();
+        await poll;
+        await model.RunAsync(false);
+        Assert.Equal(summary, model.RecentCommandSummary);
+        Assert.Contains("Read complete", model.Status);
+    }
+
+    [Fact]
+    public void ReapplyingCommandsKeepsTheSavedSelectionWhenTheBoundListResetsItsSelection()
+    {
+        var model = Model(new HeaderMonitor());
+        model.CommandChoices.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+                model.SelectedCommand = null;
+        };
+        var settings = Settings();
+        settings.SelectedCommandId = "second";
+        model.ApplySavedCommandSettings(settings);
+        Assert.Equal("second", model.SelectedCommand?.Id);
+        Assert.Equal("second", model.CreatePersistableCommandSettingsSnapshot()?.SelectedCommandId);
+        Assert.Contains("ID 7", model.CommandTargetPreview);
+        Assert.Empty(model.RecentCommandResults);
+        Assert.False(model.IsBusy);
+    }
+
     private static ModbusRtuViewModel Model(HeaderMonitor service)
     {
         var model = new ModbusRtuViewModel(service, () => true, () => Task.CompletedTask, () => { });

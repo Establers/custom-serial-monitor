@@ -334,7 +334,8 @@ public sealed class ModbusRtuViewModelTests
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var monitor = Markup("Views/ModbusRtuView.xaml");
-        Assert.Empty(monitor.Descendants(p + "Expander"));
+        Assert.All(monitor.Descendants(p + "Expander"), detail =>
+            Assert.Contains(detail.Ancestors(), parent => parent.Name == p + "Flyout"));
         Assert.All(monitor.Descendants(p + "TextBox"), input =>
         {
             Assert.Null(input.Attribute("MaxLength"));

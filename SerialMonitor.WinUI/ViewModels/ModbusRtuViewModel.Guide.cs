@@ -18,5 +18,5 @@ public sealed partial class ModbusRtuViewModel
     public string GuideWriteTitle => T("GuideWriteTitle", "Change a device value");
     public string GuideWriteHelp => T("GuideWriteHelp", "Select a row, open Direct write, check the address and preview, then choose Write and verify. Raw values are numbers before scaling; Item value uses the defined item's display units. Only FC01 coils and FC03 holding registers are writable. Writing changes the actual device value.");
     public string GuideConnectionTitle => T("GuideConnectionTitle", "Sequences and other senders");
-    public string GuideSaveHelp => T("GuideSaveHelp", "Save settings stores the configuration in the app profile. Loading settings or reconnecting does not start polling automatically.");
+    public string GuideSaveHelp => T("GuideSaveHelp", "Target settings includes item definitions, polling groups and Save profile. Apply to monitor keeps the editor draft in this session; Save profile stores it for later. Loading or reconnecting never starts communication.");
 }
