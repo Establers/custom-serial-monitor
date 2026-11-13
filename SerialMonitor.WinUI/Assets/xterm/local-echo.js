@@ -28,6 +28,7 @@
     position(widths, count = widths.length) {
       let row = 0, column = this.column;
       for (let i = 0; i < count; i++) {
+        if (!widths[i]) continue;
         if (column >= this.terminal.cols || column + widths[i] > this.terminal.cols) {
           row++; column = 0;
         }
@@ -100,6 +101,7 @@
       let result = '', remaining = this.renderedWidths.reduce((sum, width) => sum + width, 0);
       let row = 0, column = this.column;
       for (const width of this.renderedWidths) {
+        if (!width) continue;
         if (column >= this.terminal.cols || column + width > this.terminal.cols) {
           result += `\x1b[${originRow + row + 1};${(row ? 0 : this.column) + 1}H\x1b[0K`;
           row++; column = 0;
@@ -110,10 +112,18 @@
         const start = row ? 0 : this.column;
         result += `\x1b[${originRow + row + 1};${start + 1}H\x1b[${column - start}X`;
       }
-      const widths = this.characters.map(character => this.width(character));
+      // Editing uses graphemes, but xterm wraps individual code points within
+      // ZWJ/flag clusters. Measure that same stream instead of wrapping a whole
+      // grapheme atomically. Zero-width joiners/marks do not consume pending wrap.
+      let cursorCodePoints = 0;
+      const widths = this.characters.flatMap((character, index) => {
+        const cells = Array.from(character, codePoint => this.width(codePoint));
+        if (index < this.cursor) cursorCodePoints += cells.length;
+        return cells;
+      });
       result += this.move(originRow, { row: 0, column: this.column }) + text;
       if (this.cursor < this.characters.length || !text)
-        result += this.move(originRow, this.position(widths, this.cursor));
+        result += this.move(originRow, this.position(widths, cursorCodePoints));
       this.renderedWidths = widths;
       return result;
     }

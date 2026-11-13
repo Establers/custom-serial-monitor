@@ -72,6 +72,9 @@ textarea focus after an unrelated menu/button has focus.
 Local display regressions include prompt boundaries, excess deletion, middle
 insertion, wide glyphs, split combining input, wrapped deletion/navigation and
 Ctrl+C at a full final row.
+ZWJ and flag graphemes split across the right edge are checked against independent
+xterm writes for cursor movement, insertion and deletion, keeping grapheme editing
+separate from code-point wrapping.
 
 Native GUI checks are performed by the user. These automated checks do not
 claim validation of a particular physical device's shell or long-running UART

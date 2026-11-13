@@ -48,6 +48,23 @@ const { chromium } = require('playwright');
       assert.equal(state.x, x);
       assert.equal(state.y, y);
     }
+    async function expectWrappedCluster(prompt, content, prefix) {
+      // Independent xterm writes define actual wrapping; do not reuse the
+      // local echo's width/position calculations for the expected cursor.
+      const reference = await page.evaluate(async ({ prompt, content, prefix }) => {
+        const oracle = new Terminal({ cols: 12, rows: 8, allowProposedApi: true });
+        try {
+          await new Promise(resolve => oracle.write(prompt + content, resolve));
+          const rows = Array.from({ length: 4 }, (_, i) => oracle.buffer.active.getLine(i).translateToString(true).trimEnd());
+          oracle.reset();
+          await new Promise(resolve => oracle.write(prompt + prefix, resolve));
+          let x = oracle.buffer.active.cursorX, y = oracle.buffer.active.cursorY + 1;
+          if (x >= oracle.cols) { x = 0; y++; }
+          return { rows: ['old log', ...rows], x, y };
+        } finally { oracle.dispose(); }
+      }, { prompt, content, prefix });
+      assert.deepEqual(await screen(), reference, 'Wrapped cluster editing must match the actual xterm cells and cursor');
+    }
 
     await start();
     await keys('Backspace', 'Backspace');
@@ -96,6 +113,26 @@ const { chromium } = require('playwright');
     await text('한');
     await keys('Backspace');
     await expect('device> abc', 11);
+
+    for (const cluster of ['👨‍👩‍👧', '🇰🇷', '👩🏽‍💻']) {
+      const prompt = 'device> abc';
+      await start(12, prompt);
+      await text(cluster + 'x');
+      await keys('ArrowLeft');
+      await expectWrappedCluster(prompt, cluster + 'x', cluster);
+      await keys('ArrowLeft', 'ArrowRight');
+      await expectWrappedCluster(prompt, cluster + 'x', cluster);
+      await text('Z');
+      await expectWrappedCluster(prompt, cluster + 'Zx', cluster + 'Z');
+      await keys('ArrowLeft', 'Backspace');
+      await expectWrappedCluster(prompt, 'Zx', '');
+      await keys('Delete');
+      await expectWrappedCluster(prompt, 'x', '');
+      await start(12, prompt);
+      await text(cluster + 'x');
+      await keys('Home', 'Delete');
+      await expectWrappedCluster(prompt, 'x', '');
+    }
 
     await start(12);
     await text('abcd');
