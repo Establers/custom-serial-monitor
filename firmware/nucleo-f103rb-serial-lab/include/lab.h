@@ -21,6 +21,8 @@ typedef struct {
 } lab_platform;
 
 void lab_init(const lab_platform *platform, uint32_t now);
+/* Hardware startup only: retry false on TX backpressure; true queues at most once per init. */
+bool lab_print_boot_guide(void);
 void lab_receive(uint8_t byte, uint32_t now);
 void lab_poll(uint32_t now);
 uint16_t lab_crc16(const uint8_t *bytes, size_t length);

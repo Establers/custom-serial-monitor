@@ -4,6 +4,8 @@
 [레지스터 모니터 시험 안내](MODBUS-MONITOR.md)를 참고한다. [BACnet MS/TP 시험](BACNET-MSTP.md)은 별도 분석 프로토콜로 선택한다.
 
 보드는 부팅 직후 **조용한 RTU 슬레이브(장치 ID 1)** 로 기다린다. HEX 요청에 바이너리 RTU 응답을 보낸다.
+1.7.1에서는 전원 인가·실제 MCU 리셋 시 테스트 안내문을 한 번 출력한 다음 이 대기로 들어간다.
+리셋 전 폴링을 멈추고 Terminal / UTF-8로 안내를 확인한다. LAB/RTU 전환·RTU RESET은 안내문을 재출력하지 않는다.
 문자 `MODBUS NORMAL`을 보낼 필요가 없다. 부팅 메시지·HEARTBEAT·버튼 로그도 RTU 응답에 섞이지 않는다.
 NUCLEO-F103RB의 USART2와 ST-LINK 가상 COM을 사용하며, 추가 배선은 필요 없다.
 

@@ -31,7 +31,7 @@ static void clear(void) { used = 0; out[0] = 0; }
 static void init(uint32_t now) {
     blocked = data_blocked = baud_blocked = was_reset = led_state = false;
     switched = 0; led_calls = 0; clock_ms = now; button_state = true; clear(); lab_init(&platform, now);
-    /* Legacy cases enter the explicit text lab; production-style RTU boots quiet. */
+    /* Native fixtures skip the hardware-only startup guide and enter LAB explicitly. */
     const char quiet[] = "LAB\nMONITOR OFF\n";
     for (size_t i = 0; i < sizeof(quiet) - 1; ++i) lab_receive((uint8_t)quiet[i], now);
     clear();
@@ -286,13 +286,49 @@ static void rtu_init(uint32_t now) {
     init(now); lab_init(&platform,now); clear();
 }
 
+static void boot_guide_tests(void) {
+    uint8_t request[8], normal[9], guide[LAB_TX_CONTROL_RESERVE];
+    size_t normal_size = lab_modbus_copy("NORMAL",normal,sizeof(normal));
+    rtu_init(0);
+    blocked = true;
+    for (unsigned i = 0; i < 3; ++i) { assert(!lab_print_boot_guide()); ++checks; }
+    equals("");
+    blocked = false; data_blocked = true;
+    assert(!lab_print_boot_guide()); ++checks; equals("");
+    data_blocked = false;
+    assert(lab_print_boot_guide()); ++checks;
+    contains("BOOT NUCLEO-F103RB SERIAL-LAB/1 baud=115200 8N1\r\n");
+    contains("FW=" LAB_FIRMWARE_VERSION " BUILD=");
+    contains("리셋 시 1회 테스트 안내");
+    contains("03-monitor-extended.gui.json"); contains("RX Check 26/26");
+    contains("FC04, 0x1000, 6개, UInt32"); contains("BURST 1000 32");
+    contains("MONITOR ON"); contains("[안내 끝]");
+    size_t guide_size = used;
+    assert(guide_size <= sizeof(guide)); ++checks;
+    memcpy(guide,out,guide_size);
+    for (unsigned i = 0; i < 50; ++i) { assert(lab_print_boot_guide()); ++checks; }
+    assert(used == guide_size && !memcmp(out,guide,guide_size)); ++checks;
+    clear(); poll(60000,10); equals("");
+
+    /* The completed guide leaves an unchanged RTU slave, not the LAB parser. */
+    rtu_packet(request,1,3,0,2); feed_bytes(request,sizeof(request)); poll(60005,1);
+    assert(used == normal_size && !memcmp(out,normal,used)); ++checks;
+    clear(); send("LAB\r\nRTU RESET\r\nRTU\r\n");
+    equals("OK LAB\r\nOK RTU RESET\r\nOK RTU\r\n");
+    clear(); assert(lab_print_boot_guide()); ++checks; equals("");
+    poll(70000,10); equals("");
+    /* A real MCU reset re-runs init and permits exactly one new guide. */
+    rtu_init(0); assert(lab_print_boot_guide()); ++checks;
+    assert(used == guide_size && !memcmp(out,guide,guide_size)); ++checks;
+}
+
 static void rtu_tests(void) {
     uint8_t request[8], normal[9], reply[256];
     size_t normal_size = lab_modbus_copy("NORMAL",normal,sizeof(normal));
     rtu_packet(request,1,3,0,2);
     const uint8_t literal[] = {1,3,0,0,0,2,0xc4,0x0b};
     assert(!memcmp(request,literal,8)); ++checks;
-    rtu_init(0); poll(10000,10); equals(""); /* No boot/heartbeat/button text. */
+    rtu_init(0); poll(10000,10); equals(""); /* Core init/poll do not re-emit the hardware startup guide. */
     feed_bytes(request,8); poll(10004,1); equals(""); poll(10005,1);
     assert(used == normal_size && !memcmp(out,normal,used)); ++checks;
     clear(); poll(20000,10); equals(""); /* Exactly once, no periodic replay. */
@@ -610,6 +646,7 @@ static void export_contract(const char *directory) {
     const char *commands[] = {"BUILD?\n","CAPS?\n","SELFTEST\n"};
     const char *files[] = {"BUILD.txt","CAPS.txt","SELFTEST.txt"};
     for (unsigned i = 0; i < 3; ++i) { init(0); send(commands[i]); export_bytes(directory,files[i]); }
+    rtu_init(0); assert(lab_print_boot_guide()); export_bytes(directory,"boot-guide.bin");
     for (size_t i = 0; i < sizeof(fixture_names)/sizeof(fixture_names[0]); ++i) {
         char command_text[96], file[64];
         snprintf(command_text,sizeof(command_text),"RUN %s native_%s\n",fixture_names[i],fixture_names[i]);
@@ -660,6 +697,7 @@ int main(int argc, char **argv) {
     large_binary_tests();
     modbus_tests();
     rtu_tests();
+    boot_guide_tests();
     mstp_tests();
     rtu_fault_tests();
     checks += lab_modbus_extended_tests();

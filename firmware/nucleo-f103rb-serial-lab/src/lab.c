@@ -17,6 +17,26 @@
 #define FRAME_CAP LAB_MAX_FRAME_BYTES
 
 static lab_platform io;
+static bool boot_guide_written;
+static const char boot_guide[] =
+    "\r\nBOOT NUCLEO-F103RB SERIAL-LAB/1 baud=115200 8N1\r\n"
+    "FW=" LAB_FIRMWARE_VERSION " BUILD=" LAB_BUILD_ID "\r\n"
+    "[리셋 시 1회 테스트 안내 / Terminal UTF-8]\r\n"
+    "연결: ST-LINK COM, 115200 / 8N1 / Handshake None\r\n"
+    "자동 시험: Sequences > JSON 불러오기 > 03-monitor-extended.gui.json > Run\r\n"
+    "  폴링/브리지 중지, Auto reconnect OFF. 약 19초, RX Check 26/26 일치.\r\n"
+    "  CRC 오류 1회는 정상 시험. 시험용 RAM/LED 변경 후 초기화.\r\n"
+    "Modbus: Protocol > Modbus RTU > 레지스터 모니터\r\n"
+    "  카운터: ID 1, FC04, 0x1000, 6개, UInt32, 배율 1, 교환 OFF\r\n"
+    "  직접 쓰기: FC03, 0x1000, 10개, UInt16, 값 예: 123 456\r\n"
+    "  LED: FC01, 0x1000, 16개, 첫 코일 1=ON / 0=OFF\r\n"
+    "텍스트: 폴링 중지 > Terminal / CRLF > LAB\r\n"
+    "  MONITOR ON: 1초 HEARTBEAT / STOP: 출력 정지 / HELP: 명령 목록\r\n"
+    "  메모리 부하: BURST 1000 32 또는 STREAM START 1 10000\r\n"
+    "  위 명령은 짧은 시험이며 메모리 예산 한도 확인은 더 많은 데이터가 필요합니다.\r\n"
+    "  RTU: Modbus 복귀 / RTU RESET: 시험 상태만 초기화\r\n"
+    "[안내 끝] 현재 Unit 1 RTU 대기. 리셋 전 폴링을 정지하세요.\r\n";
+_Static_assert(sizeof(boot_guide) - 1u <= LAB_TX_CONTROL_RESERVE, "Boot guide must leave command-reply capacity");
 static char line[LINE_CAP];
 static size_t line_len;
 static bool line_discard, swallow_lf, console_echo;
@@ -565,6 +585,7 @@ static void command(uint32_t now) {
 
 void lab_init(const lab_platform *platform, uint32_t now) {
     io = *platform;
+    boot_guide_written = false;
     line_len = frame_len = frame_expected = 0;
     line_discard = swallow_lf = console_echo = false;
     commands = parse_errors = tx_rejected = 0;
@@ -580,6 +601,13 @@ void lab_init(const lab_platform *platform, uint32_t now) {
     heartbeat_seq = button_presses = button_releases = monitor_missed = 0;
     button_raw = button_stable = io.button();
     button_changed_at = button_pressed_at = now;
+}
+
+bool lab_print_boot_guide(void) {
+    if (boot_guide_written) return true;
+    if (!io.write_data((const uint8_t *)boot_guide, sizeof(boot_guide) - 1u)) return false;
+    boot_guide_written = true;
+    return true;
 }
 
 static void poll_rtu(uint32_t now) {

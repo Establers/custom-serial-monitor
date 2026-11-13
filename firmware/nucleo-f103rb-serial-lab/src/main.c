@@ -110,7 +110,13 @@ int main(void) {
     hardware_init();
     const lab_platform platform = {uart_write, uart_write_data, led, button, baud, reset, stats};
     lab_init(&platform, milliseconds);
+    bool boot_guide_queued = false;
     for (;;) {
+        /* Reset/power-up only. Queue the whole UTF-8 guide before accepting commands. */
+        if (!boot_guide_queued) {
+            boot_guide_queued = lab_print_boot_guide();
+            if (!boot_guide_queued) { __WFI(); continue; }
+        }
         /* Bound parser work so generators, STOP, and delayed output keep progressing. */
         for (unsigned i = 0; i < 128 && rx_tail != rx_head; ++i) {
             uint32_t tail = rx_tail;

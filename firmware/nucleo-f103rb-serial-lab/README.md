@@ -6,6 +6,12 @@ CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다
 
 ## 기본 동작: HEX Modbus RTU 슬레이브
 
+**1.7.1은 전원 인가·실제 MCU 리셋 때만 한글 테스트 안내문을 한 번 출력한 뒤 RTU 대기로 들어갑니다.**
+연결한 상태에서 Terminal / UTF-8로 보고 RESET을 누르면 연결 설정, 카운터·쓰기·LED 시험,
+자동 시퀀스 파일과 LAB 명령을 볼 수 있습니다. 폴링·브리지를 먼저 정지하세요.
+`LAB`/`RTU` 전환·`RTU RESET`·앱 재연결은 안내문을 다시 출력하지 않습니다.
+[1.7.1 기록·리셋 실기 결과](BOOT-GUIDE-VALIDATION.md)에서 확인 범위를 볼 수 있습니다.
+
 **1.7.0은 직접 쓰기·변하는 카운터·LD2 코일·한 번 적용하는 오류 주입을 추가한다.**
 기존 LAB·BACnet 기능은 유지한다. [주소표·GUI 사용 순서·한 명령 자동 검사](MODBUS-MONITOR.md),
 [실제 기록·검증 결과](MODBUS-MONITOR-VALIDATION.md)를 먼저 참고한다.
@@ -142,20 +148,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1 `
 1. Serial Monitor를 실행합니다.
 2. `COM3`, `115200`, 데이터 8비트, Parity None, Stop 1, Handshake None을 선택합니다.
 3. RX는 `Terminal`, 인코딩은 `UTF-8`, TX 줄 끝은 `CRLF`로 설정하고 Connect 합니다.
-4. `PING`을 전송하면 `PONG`, `ID?`는 아래 문자열을 반환해야 합니다.
+4. `LAB`을 보내 `OK LAB`을 확인한 뒤 `PING`을 보내면 `PONG`, `ID?`는 아래 문자열을 반환해야 합니다.
 
 ```text
 ID NUCLEO-F103RB STM32F103RB SERIAL-LAB/1
 ```
 
-보드의 검은 RESET 버튼을 누르면 다음 부팅 로그가 한 번 나옵니다.
+보드의 검은 RESET 버튼을 누르면 다음 줄과 FW/BUILD, 한글 테스트 안내문이 한 번 나옵니다.
 
 ```text
 BOOT NUCLEO-F103RB SERIAL-LAB/1 baud=115200 8N1
 ```
 
 파란 USER 버튼은 `BUTTON?`로 읽고 초록 LD2는 `LED ON`/`LED OFF`로 확인합니다.
-부팅 직후 자동 로그 송신은 꺼져 있습니다. 생성 중인 모든 출력을 멈추려면 `STOP`,
+안내문 이후에는 요청 전까지 조용한 RTU 모드입니다. `RTU RESET`은 안내문 없이 시험 상태만 초기화합니다.
+HEARTBEAT는 LAB에서 `MONITOR ON`을 명시해야 나옵니다. 생성 중인 모든 출력을 멈추려면 `STOP`,
 의도적 오류 설정까지 해제하려면 `FAULT CLEAR`도 전송합니다.
 
 ## 5. 준비한 GUI 시퀀스
