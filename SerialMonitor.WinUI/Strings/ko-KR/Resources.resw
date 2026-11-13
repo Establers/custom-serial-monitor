@@ -1419,4 +1419,9 @@
 <data name="ModbusItemInvalidScale" xml:space="preserve"><value>1 또는 0.1처럼 유한한 배율을 입력하세요.</value></data>
 <data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>한 줄에 정수 = 이름 형식으로 최대 128개를 입력하세요.</value></data>
 <data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>편집 중 Modbus 설정이 변경되었습니다. 현재 대상의 항목 정의를 다시 여세요.</value></data>
+<data name="ProtocolViewSelection" xml:space="preserve"><value>프로토콜 및 보기</value></data>
+<data name="ProtocolMoreActions" xml:space="preserve"><value>더 보기</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · 패킷 분석</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · 값 읽기/쓰기</value></data>
+<data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · 패킷 분석</value></data>
 </root>

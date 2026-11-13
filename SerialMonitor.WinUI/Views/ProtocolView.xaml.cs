@@ -28,6 +28,12 @@ public sealed partial class ProtocolView : UserControl
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs args)
     {
+        // Keep the selector and shared Stop reachable without adding a toolbar
+        // row. Less frequent packet actions remain available in the overflow.
+        var overflow = args.NewSize.Width < 940;
+        PacketBuilderSlot.Visibility = overflow ? Visibility.Collapsed : Visibility.Visible;
+        PacketUtilityActions.Visibility = overflow ? Visibility.Collapsed : Visibility.Visible;
+        PacketOverflowButton.Visibility = overflow ? Visibility.Visible : Visibility.Collapsed;
         // Stacking needs enough vertical space for two headers and scrollable
         // content. Keep the split layout in short Inspectors, even when narrow.
         var narrow = args.NewSize.Width < 780 && args.NewSize.Height >= 280;
@@ -97,6 +103,13 @@ public sealed partial class ProtocolView : UserControl
     }
     private void Clear_Click(object sender, RoutedEventArgs args) => Model?.Clear();
     private void ResetStatistics_Click(object sender, RoutedEventArgs args) => Model?.ResetStatistics();
+
+    private void PacketActionsFlyout_Opening(object sender, object args) => PacketActionsPanel.DataContext = Model;
+    private void BuildPacketFromOverflow_Click(object sender, RoutedEventArgs args)
+    {
+        PacketActionsFlyout.Hide();
+        BuildPacket_Click(sender, args);
+    }
 
     private async void BuildPacket_Click(object sender, RoutedEventArgs args)
     {

@@ -1421,4 +1421,9 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusItemInvalidScale" xml:space="preserve"><value>Enter a finite multiplier, for example 1 or 0.1.</value></data>
 <data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>Use at most 128 value names, one integer = name per line.</value></data>
 <data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>The Modbus settings changed while editing. Reopen item definitions for the current target.</value></data>
+<data name="ProtocolViewSelection" xml:space="preserve"><value>Protocol and view</value></data>
+<data name="ProtocolMoreActions" xml:space="preserve"><value>More actions</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · Packet analysis</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · Read/write values</value></data>
+<data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · Packet analysis</value></data>
 </root>

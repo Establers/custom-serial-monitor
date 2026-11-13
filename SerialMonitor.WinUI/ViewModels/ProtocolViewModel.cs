@@ -43,11 +43,18 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             if (_modbus is not null) _modbus.PropertyChanged += Modbus_PropertyChanged;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsProtocolSelectionEnabled));
+            NotifyViewSelection();
         }
     }
     private void Modbus_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(ModbusRtuViewModel.IsBusy)) OnPropertyChanged(nameof(IsProtocolSelectionEnabled));
+        if (args.PropertyName == nameof(ModbusRtuViewModel.IsBusy))
+        {
+            OnPropertyChanged(nameof(IsProtocolSelectionEnabled));
+            NotifyViewSelection();
+        }
+        else if (args.PropertyName is nameof(ModbusRtuViewModel.Status) or nameof(ModbusRtuViewModel.RequestSummary))
+            NotifyWorkspaceHeader();
     }
     public bool IsProtocolSelectionEnabled => Modbus?.IsBusy != true;
     public bool IsRegisterMonitorSelected
@@ -59,6 +66,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             OnPropertyChanged(nameof(IsPacketAnalysisSelected));
             OnPropertyChanged(nameof(RegisterMonitorVisibility));
             OnPropertyChanged(nameof(PacketAnalysisVisibility));
+            NotifyViewSelection();
             // The shared Protocol tab remains visible in either mode. Refresh
             // metadata on entry, and explicitly restore packet rows on return.
             if (_isVisible) Refresh(force: true);
@@ -213,7 +221,8 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
                     nameof(FilterUnitLabel), nameof(FilterFunctionLabel), nameof(FilterFunctionHelp), nameof(FilterSummary),
                     nameof(ModbusModeSelectorVisibility), nameof(RegisterMonitorVisibility), nameof(PacketAnalysisVisibility) }) OnPropertyChanged(name);
             }
-            catch (Exception ex) { Status = ex.Message; return; }
+            catch (Exception ex) { Status = ex.Message; NotifyViewSelection(); return; }
+            NotifyViewSelection();
             Refresh(force: true);
         }
     }
@@ -298,6 +307,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         Status = snapshot.LastError ?? UiText.Format("ProtocolStatusFormat", "{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)",
             Activity, snapshot.RetainedCount, snapshot.HistoryCapacity, snapshot.EvictedFrames, snapshot.DroppedChunks, snapshot.DroppedBytes);
         NotifyPresentationState();
+        NotifyWorkspaceHeader();
     }
 
     private void UpdateRows(bool force)

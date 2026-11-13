@@ -46,17 +46,9 @@
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
-            <Grid RowDefinitions="Auto,Auto" RowSpacing="4">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
-                    <TextBlock Text="{Binding Status}" Style="{StaticResource Cell}" FontWeight="SemiBold"
-                               ToolTipService.ToolTip="{Binding Status}" />
-                    <Button Grid.Column="1" Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" Style="{StaticResource Action}" />
-                    <Button Grid.Column="2" Content="{Binding StartLabel}" Command="{Binding StartCommand}" Style="{StaticResource Action}" />
-                    <Button x:Name="StopButton" Grid.Column="3" Content="{Binding StopLabel}" Command="{Binding StopCommand}" Style="{StaticResource Action}" />
-                </Grid>
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
-                    <TextBlock Text="{Binding RequestSummary}" Style="{StaticResource Cell}" FontFamily="Consolas"
-                               FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding SetupHelp}" />
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
+                    <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
                     <Button Grid.Column="1" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
                         <Button.Flyout>
                             <Flyout Placement="BottomEdgeAlignedRight" Opening="SettingsFlyout_Opening"
@@ -126,10 +118,8 @@
                         </Button.Flyout>
                     </Button>
                 </Grid>
-            </Grid>
         </Border>
         <StackPanel Grid.Row="1" Spacing="3">
-            <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
             <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding AvailabilityText}" />
             <ScrollViewer MaxHeight="55" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="{Binding ErrorVisibility}">
                 <TextBlock Text="{Binding Error}" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{ThemeResource ErrorTextBrush}" />
