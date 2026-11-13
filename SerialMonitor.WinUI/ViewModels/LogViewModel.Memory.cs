@@ -20,6 +20,7 @@ public sealed partial class LogViewModel
         ArgumentOutOfRangeException.ThrowIfGreaterThan(budgetMiB, UiSettings.MaxLogMemoryBudgetMiB);
         var bytes = budgetMiB * 1024L * 1024;
         if (_memoryPolicy.RetainedBytes == bytes) return;
+        var shrinking = bytes < _memoryPolicy.RetainedBytes;
         _memoryPolicy = _memoryPolicy with { RetainedBytes = bytes };
         var version = ++_visibleRebuildVersion;
         var trimCharacters = 0;
@@ -27,6 +28,9 @@ public sealed partial class LogViewModel
             ? TrimScreenMemory(bytes * 99 / 100, _memoryPolicy.VisibleCharacters * 99 / 100,
                 out trimCharacters, completePartial: false) : 0;
         DroppedVisibleLineCount += trimmed;
+        // Dequeue releases records but retains the queues' high-water arrays.
+        // An explicit budget reduction should also return that unused storage.
+        if (shrinking) TrimScreenStorageCapacity();
         OnPropertyChanged(nameof(RetainedMemoryByteLimit));
         RaiseVisibleCountProperties();
         NotifyPrefixTrim(trimmed, version, trimCharacters);

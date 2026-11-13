@@ -6,21 +6,25 @@ const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 const { Terminal } = require('../SerialMonitor.WinUI/Assets/xterm/xterm.js');
 const { create } = require('../SerialMonitor.WinUI/Assets/xterm/log-navigation-terminal.js');
+const { install } = require('../SerialMonitor.WinUI/Assets/xterm/compact-scrollback.js');
 const html = readFileSync(require.resolve('../SerialMonitor.WinUI/Assets/xterm/index.html'), 'utf8');
 function section(start, end) {
   const from = html.indexOf(start), to = html.indexOf(end, from);
   assert.ok(from >= 0 && to > from, `Missing bridge section: ${start}`);
   return html.slice(from, to);
 }
-function fixture({ cols = 40, rows = 8, scrollback = 2000 } = {}) {
+function fixture({ cols = 40, rows = 8, scrollback = 2000, compact = false } = {}) {
   const terminal = new Terminal({ cols, rows, scrollback });
   const acks = new Map(), errors = [];
+  const compression = compact
+    ? install(terminal, { hotRows: 0, cacheRows: 8, onError: error => errors.push(String(error)) })
+    : { compact() {}, dispose() {} };
   let request = 0, resets = 0;
   const reset = terminal.reset.bind(terminal);
   terminal.reset = () => { resets++; reset(); };
   const context = vm.createContext({
     terminal, setTimeout, clearTimeout, console, directInputSessionId: 0, pendingLocalEchoChunks: 0,
-    compactScrollback: { compact() {} },
+    compactScrollback: compression,
     invalidateLogicalLineStartRows() {}, queueHexSelectionHintUpdate() {}, hideHexSelectionHint() {},
     clearNavigationHighlight() {},
     window: {
@@ -44,7 +48,10 @@ function fixture({ cols = 40, rows = 8, scrollback = 2000 } = {}) {
       findId: id => findParsedLogLineIdIndex(id)
     };
     terminal.onLineFeed(() => { lastParsedLogLineIsOpen = false; });`, context);
-  const adapter = create(terminal, context.raw, { onError: error => errors.push(String(error)) });
+  const adapter = create(terminal, context.raw, {
+    isLastLineOpen: () => vm.runInContext('lastParsedLogLineIsOpen', context),
+    onError: error => errors.push(String(error))
+  });
   context.adapter = adapter;
   vm.runInContext('navigationRows = adapter;', context);
   async function append(text) {
@@ -63,7 +70,7 @@ function fixture({ cols = 40, rows = 8, scrollback = 2000 } = {}) {
   const boundary = id => `\x1b]779;${id}\x07`;
   const first = () => terminal.buffer.active.getLine(0).translateToString(true);
   return { terminal, adapter, raw: context.raw, append, records, boundary, first,
-    resets: () => resets, close() { adapter.dispose(); terminal.dispose(); } };
+    resets: () => resets, close() { adapter.dispose(); compression.dispose(); terminal.dispose(); } };
 }
 
 test('retention drops cells and metadata without copying the surviving suffix or resetting xterm', async () => {
@@ -160,3 +167,35 @@ test('a reset cancels a retention operation waiting for reflow', async () => {
     assert.equal(f.terminal.buffer.active.cursorX, 0);
   } finally { f.close(); }
 });
+
+for (const compact of [false, true]) {
+  test(`randomized retention preserves Unicode, row anchors and subsequent writes (compact=${compact})`, async () => {
+    const f = fixture({ scrollback: 50000, compact });
+    let seed = 0x12345678, next = 1, first = 1;
+    const random = max => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % max; };
+    try {
+      for (let pass = 0; pass < 120; pass++) {
+        const count = 1 + random(20);
+        const payload = ' 한글🙂 e\u0301\t\x1b[31mRED\x1b[0m ' + 'payload '.repeat(random(30));
+        let text = f.records(next, next + count - 1, payload);
+        next += count;
+        first = Math.max(first, next - random(101));
+        text += f.boundary(first);
+        if (pass % 10 === 0) f.terminal.resize(10 + random(90), 5 + random(10));
+        await f.append(text);
+        assert.equal(f.raw.count(), next - first, `metadata count at pass ${pass}`);
+        if (first < next) {
+          assert.equal(f.raw.at(0).id, String(first));
+          assert.match(f.first(), new RegExp(`^ID${first}( |$)`));
+          for (let id = first; id < next; id++) {
+            const index = f.adapter.indexById(String(id));
+            assert.equal(index, id - first, `ID${id} at pass ${pass}`);
+            const row = f.adapter.rowAt(index);
+            assert.match(f.terminal.buffer.active.getLine(row).translateToString(true), new RegExp(`^ID${id}( |$)`));
+          }
+        } else assert.equal(f.first(), '');
+      }
+      assert.equal(f.resets(), 0);
+    } finally { f.close(); }
+  });
+}

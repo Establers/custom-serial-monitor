@@ -215,15 +215,18 @@ public sealed partial class LogViewModel : ViewModelBase
         var version = _visibleRebuildVersion;
         var trimmed = TrimRetainedLinesToCapacity(out var trimCharacters);
         DroppedVisibleLineCount += trimmed;
-        if (shrinking)
-        {
-            _retainedLines.TrimExcess();
-            _retainedVisibleLineContributions.TrimExcess();
-            _visibleLines.TrimExcess();
-        }
+        if (shrinking) TrimScreenStorageCapacity();
         OnPropertyChanged(nameof(Capacity));
         RaiseVisibleCountProperties();
         NotifyPrefixTrim(trimmed, version, trimCharacters);
+    }
+
+    private void TrimScreenStorageCapacity()
+    {
+        _retainedLines.TrimExcess();
+        _retainedVisibleLineContributions.TrimExcess();
+        _visibleLines.TrimExcess();
+        _terminalHighlightLines.TrimExcess();
     }
 
     private long FirstRetainedVisibleLineId => _visibleLines.TryPeek(out var first) ? first.Id : _nextLineId + 1;
@@ -424,7 +427,7 @@ public sealed partial class LogViewModel : ViewModelBase
                         retainedLine.LineId,
                         line.Timestamp,
                         line.Direction);
-                    BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
+                    BeginActivePartialRxVisualLine();
                     builder.Append(taggedPartialDisplayLine);
                     _partialRxVisualLength = formattedPartial.RawTextLength;
                     visibleContribution = ReferenceEquals(prepared.Line, line) ? 1 : 2;
@@ -769,7 +772,7 @@ public sealed partial class LogViewModel : ViewModelBase
                         retainedLine.LineId,
                         line.Timestamp,
                         line.Direction);
-                    BeginActivePartialRxVisualLine(formattedPartial.DisplayLine, formattedPartial.SearchableLine);
+                    BeginActivePartialRxVisualLine();
                     _partialRxVisualLineActive = true;
                     _partialRxVisualLength = formattedPartial.RawTextLength;
                     visibleContribution = ReferenceEquals(prepared.Line, line) ? 1 : 2;
@@ -975,12 +978,12 @@ public sealed partial class LogViewModel : ViewModelBase
         return (int)Math.Max(0, estimated);
     }
 
-    private void BeginActivePartialRxVisualLine(string displayLine, string searchableLine)
+    private void BeginActivePartialRxVisualLine()
     {
+        // Most RX lines finish in one fragment. Keep their immutable strings
+        // and allocate continuation builders only when another fragment arrives.
+        ClearActivePartialRxBuilders();
         _partialRxLine = _lastVisibleLine;
-        _partialRxDisplayBuilder = new StringBuilder(displayLine);
-        _partialRxSearchableBuilder = new StringBuilder(searchableLine);
-        _partialRxLineDirty = false;
         _partialRxVisualLineActive = true;
     }
 
@@ -998,7 +1001,10 @@ public sealed partial class LogViewModel : ViewModelBase
             return;
         }
 
-        BeginActivePartialRxVisualLine(_lastVisibleLine.DisplayText, _lastVisibleLine.SearchText);
+        _partialRxLine = _lastVisibleLine;
+        _partialRxDisplayBuilder = new StringBuilder(_lastVisibleLine.DisplayText);
+        _partialRxSearchableBuilder = ReferenceEquals(_lastVisibleLine.DisplayText, _lastVisibleLine.SearchText)
+            ? _partialRxDisplayBuilder : new StringBuilder(_lastVisibleLine.SearchText);
     }
 
     private void FlushActivePartialRxLineToNodes()
@@ -1012,7 +1018,8 @@ public sealed partial class LogViewModel : ViewModelBase
         }
 
         _partialRxLine.DisplayText = _partialRxDisplayBuilder.ToString();
-        _partialRxLine.SearchText = _partialRxSearchableBuilder.ToString();
+        _partialRxLine.SearchText = ReferenceEquals(_partialRxDisplayBuilder, _partialRxSearchableBuilder)
+            ? _partialRxLine.DisplayText : _partialRxSearchableBuilder.ToString();
         _partialRxLineDirty = false;
     }
 
@@ -1034,7 +1041,7 @@ public sealed partial class LogViewModel : ViewModelBase
         if (_lastVisibleLine is null)
         {
             var taggedDisplayLine = AddVisibleLine(displayText, searchableText, 0, lineId, timestamp, direction);
-            BeginActivePartialRxVisualLine(displayText, searchableText);
+            BeginActivePartialRxVisualLine();
             _partialRxVisualLength = searchableText.Length;
             return taggedDisplayLine;
         }
@@ -1042,8 +1049,15 @@ public sealed partial class LogViewModel : ViewModelBase
         EnsureActivePartialRxBuilders();
         if (_partialRxDisplayBuilder is not null && _partialRxSearchableBuilder is not null)
         {
+            // Color/bracket formatting can make the display diverge midway
+            // through a line. Detach before appending either representation.
+            if (ReferenceEquals(_partialRxDisplayBuilder, _partialRxSearchableBuilder) &&
+                !ReferenceEquals(displayText, searchableText))
+                _partialRxSearchableBuilder = new StringBuilder(_partialRxDisplayBuilder.Length)
+                    .Append(_partialRxDisplayBuilder);
             _partialRxDisplayBuilder.Append(displayText);
-            _partialRxSearchableBuilder.Append(searchableText);
+            if (!ReferenceEquals(_partialRxDisplayBuilder, _partialRxSearchableBuilder))
+                _partialRxSearchableBuilder.Append(searchableText);
             _partialRxLineDirty = true;
         }
         else
@@ -1067,14 +1081,8 @@ public sealed partial class LogViewModel : ViewModelBase
             return false;
         }
 
-        if (_partialRxDisplayBuilder is not null &&
-            _partialRxSearchableBuilder is not null &&
-            _partialRxLine is not null)
-        {
-            _partialRxLine.DisplayText = _partialRxDisplayBuilder.ToString();
-            _partialRxLine.SearchText = _partialRxSearchableBuilder.ToString();
-            ClearActivePartialRxBuilders();
-        }
+        FlushActivePartialRxLineToNodes();
+        ClearActivePartialRxBuilders();
         _lastVisibleLine.HasLineEnding = true;
         _lastVisibleLine.Length += Environment.NewLine.Length;
         _visibleCharacterCount += Environment.NewLine.Length;

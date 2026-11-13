@@ -25,6 +25,16 @@ MobaXterm에도 ScrollbackLines 한도가 있다([제조사 문서](https://blog
 
 Node 회귀는 `node --test scripts/test_xterm_retention.cjs scripts/test_log_navigation_terminal.cjs scripts/test_xterm_queue.mjs`로 실행한다. 브라우저나 데스크톱을 조작하지 않고 배포된 xterm 파서와 큐를 사용해 앞부분 제거, 남은 셀 재사용·제거된 참조 해제, 커서·줄바꿈 없는 수신, 전송 중 분리된 정리 경계, 너비 재배치 및 초기화 중 취소를 검증한다. 설정 기본값·저장/복원·범위 검증과 C# 메모리·문자 경계, 파일 원본 보존은 관련 .NET 회귀에서 확인한다.
 
+## 부분 RX 문자열 공유 검증 — 2026-11-13
+
+- 한 조각으로 끝나는 RX 줄은 기존 표시·검색 문자열을 그대로 보관하고, 이어지는 조각이 올 때만 `StringBuilder`를 만든다.
+- 표시와 검색 내용이 같은 동안에는 버퍼와 완성 문자열을 공유한다. ANSI 색상·괄호 강조로 표시가 달라지면 먼저 버퍼를 분리한다. 룰이 뒤늦게 색상을 적용하거나 기본 색상으로 되돌려도 검색 문자열에 ANSI가 들어가지 않는다.
+- 메모리 예산을 낮출 때 레코드 제거 후 남는 큐의 큰 여유 배열도 반환한다. 보관 줄 수를 줄일 때와 같은 경로를 사용하며, 자동 정리마다 배열 전체를 재할당하지 않는다.
+- 255자 로그 20,000줄을 부분 RX+줄 종료 레코드로 입력한 별도 검사에서 화면 투영의 관리 메모리 증가분은 **30,006,200 → 18,002,168바이트(약 40% 감소)**, 해당 동기 경로의 스레드 할당량은 **106,163,584 → 56,243,568바이트(약 47% 감소)**였다.
+- 원본 레코드를 먼저 만든 뒤 GC 후 추가 보관량을 측정했다. 이 입력에는 raw byte 배열이 없으며, xterm·DOM·프로세스 RSS·실물 UART 장기 시험은 포함하지 않는다. 전체 앱 메모리 감소율이 아니다.
+- 재현: Release x64 빌드 후 `dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj -c Release -p:Platform=x64 --no-build --filter FullyQualifiedName~PartialRxProjectionMemoryTests --logger "console;verbosity=detailed"`.
+- `LogRetentionProjectionRegressionTests`는 Terminal/HEX에서 여러 고정 난수 입력으로 부분 RX·TX·시스템 로그·필터·보관 줄 수·타임스탬프 변경을 섞어, 화면에 보낸 증분과 현재 보관 스냅샷이 일치하는지 확인한다. Node 검사에는 압축 ON/OFF 각각 120회 삭제·너비/높이 변경·한글/이모지/결합 문자·탭 입력을 추가했다.
+
 ## 측정
 
 120열 × 30행, 최근 100만 행을 유지하며 300만 행을 입력했다. 약 50문자의 서로 다른 packet/temperature/voltage/status 행을 1,000개씩 입력한다. 같은 배포 xterm에 압축만 켜고 끈 비교이며 별도 Node 프로세스로 측정했다.

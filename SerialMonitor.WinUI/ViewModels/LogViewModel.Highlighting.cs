@@ -99,7 +99,16 @@ public sealed partial class LogViewModel
             _visibleCharacterCount += delta;
             if (ReferenceEquals(line, _partialRxLine))
             {
-                _partialRxDisplayBuilder!.Clear().Append(display);
+                // A plain display may share its continuation builder with
+                // search. Recolor only the display, preserving searchable text.
+                if (_partialRxDisplayBuilder is { } displayBuilder)
+                {
+                    if (ReferenceEquals(display, line.SearchText))
+                        _partialRxDisplayBuilder = _partialRxSearchableBuilder;
+                    else if (ReferenceEquals(displayBuilder, _partialRxSearchableBuilder))
+                        _partialRxDisplayBuilder = new StringBuilder(display);
+                    else displayBuilder.Clear().Append(display);
+                }
                 _partialRxLineDirty = false;
             }
             appendedText?.Append("\u001b]778;").Append(line.Id.ToString(CultureInfo.InvariantCulture))
