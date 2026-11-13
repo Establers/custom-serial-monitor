@@ -155,7 +155,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel x:Name="PacketFooter" Grid.Row="1" Spacing="4">
+        <StackPanel x:Name="PacketFooter" Grid.Row="1" Spacing="4" Margin="0,0,20,0">
             <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" FontSize="11" TextWrapping="Wrap"
                        MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ValidationError}"
                        Foreground="{ThemeResource ErrorTextBrush}" />
