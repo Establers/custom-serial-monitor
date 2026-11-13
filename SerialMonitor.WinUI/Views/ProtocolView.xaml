@@ -44,23 +44,27 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,Auto,*" MinHeight="0" MinWidth="0">
+    <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
-            <Grid RowDefinitions="Auto,Auto" RowSpacing="5">
-                <Grid ColumnDefinitions="142,*,Auto" ColumnSpacing="10">
-                    <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedIndex="{Binding SelectedProtocolIndex, Mode=TwoWay}"
-                              IsEnabled="{Binding IsProtocolSelectionEnabled}"
+            <Grid RowDefinitions="Auto,Auto">
+                <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
+                    <ComboBox x:Name="PresentationSelector" SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" MinWidth="0" MinHeight="26" Height="26"
-                              Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="Protocol" />
-                    <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="10"
-                          VerticalAlignment="Center" ToolTipService.ToolTip="{Binding Status}">
-                        <TextBlock Text="{Binding Activity}" Style="{StaticResource CellText}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding RetainedSummary}" Style="{StaticResource ColumnHeader}" />
-                    </Grid>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Visibility="{Binding PacketAnalysisVisibility}">
+                              Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="{Binding ViewSelectionLabel}">
+                        <ComboBoxItem Content="{Binding DisabledLabel}" IsEnabled="{Binding IsProtocolSelectionEnabled}" />
+                        <ComboBoxItem Content="{Binding ModbusPacketViewLabel}" IsEnabled="{Binding IsModbusViewSelectionEnabled}" />
+                        <ComboBoxItem Content="{Binding ModbusReadWriteViewLabel}" IsEnabled="{Binding IsModbusViewSelectionEnabled}" />
+                        <ComboBoxItem Content="{Binding MstpPacketViewLabel}" IsEnabled="{Binding IsProtocolSelectionEnabled}" />
+                    </ComboBox>
+                    <TextBlock Grid.Column="1" Text="{Binding WorkspaceHeader}" Style="{StaticResource CellText}"
+                               ToolTipService.ToolTip="{Binding WorkspaceHeaderHelp}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="5" Visibility="{Binding PacketAnalysisVisibility}">
+                        <Grid x:Name="PacketBuilderSlot">
                         <Button Content="{Binding BuildPacketLabel}" Visibility="{Binding PacketBuilderVisibility}"
                                 Click="BuildPacket_Click" Style="{StaticResource ToolbarButton}"
                                 ToolTipService.ToolTip="{Binding BuildPacketToolTip}" />
+                        </Grid>
                         <ToggleButton Content="{Binding FollowLabel}" IsChecked="{Binding IsFollowingLatest, Mode=TwoWay}"
                                       Style="{StaticResource ToolbarToggle}" ToolTipService.ToolTip="{Binding FollowToolTip}" />
                         <ToggleButton Content="{Binding PauseLabel}" IsChecked="{Binding IsDisplayPaused, Mode=TwoWay}"
@@ -97,11 +101,36 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
-                        <Button Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ToolbarButton}" />
-                        <Button Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" Style="{StaticResource ToolbarButton}" />
+                        <StackPanel x:Name="PacketUtilityActions" Orientation="Horizontal" Spacing="5">
+                            <Button Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ToolbarButton}" />
+                            <Button Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" Style="{StaticResource ToolbarButton}" />
+                        </StackPanel>
+                        <Button x:Name="PacketOverflowButton" Content="⋯" Visibility="Collapsed" Style="{StaticResource ToolbarButton}"
+                                ToolTipService.ToolTip="{Binding MoreActionsLabel}" AutomationProperties.Name="{Binding MoreActionsLabel}">
+                            <Button.Flyout>
+                                <Flyout x:Name="PacketActionsFlyout" Opening="PacketActionsFlyout_Opening"
+                                        FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                    <StackPanel x:Name="PacketActionsPanel" Spacing="4">
+                                        <Button Content="{Binding BuildPacketLabel}" Visibility="{Binding PacketBuilderVisibility}"
+                                                Click="BuildPacketFromOverflow_Click" Style="{StaticResource ToolbarButton}" />
+                                        <Button Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ToolbarButton}" />
+                                        <Button Content="{Binding ResetStatisticsLabel}" Click="ResetStatistics_Click" Style="{StaticResource ToolbarButton}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        </StackPanel>
+                        <Grid Visibility="{Binding RegisterMonitorVisibility}">
+                            <StackPanel Orientation="Horizontal" Spacing="5" DataContext="{Binding Modbus}">
+                                <Button Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" Style="{StaticResource ToolbarButton}" />
+                                <Button Content="{Binding StartLabel}" Command="{Binding StartCommand}" Style="{StaticResource ToolbarButton}" />
+                            </StackPanel>
+                        </Grid>
+                        <Button x:Name="MonitorStopButton" DataContext="{Binding Modbus}" Content="{Binding StopLabel}"
+                                Command="{Binding StopCommand}" Visibility="{Binding BusyVisibility}" Style="{StaticResource ToolbarButton}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,2.6*" ColumnSpacing="10"
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,2.6*" ColumnSpacing="10" Margin="0,5,0,0"
                       Visibility="{Binding PacketAnalysisVisibility}"
                       ToolTipService.ToolTip="{Binding StatisticsToolTip}">
                     <TextBlock Text="{Binding TrafficSummary}" Style="{StaticResource CellText}" />
@@ -115,25 +144,11 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" Visibility="{Binding ModbusModeSelectorVisibility}">
-            <Border Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
-                    BorderThickness="1" CornerRadius="6" Padding="2">
-                <StackPanel Orientation="Horizontal" Spacing="2">
-                    <RadioButton Content="{Binding PacketModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsPacketAnalysisSelected, Mode=TwoWay}" Style="{StaticResource CompactModeRadioButtonStyle}" />
-                    <RadioButton Content="{Binding RegisterModeLabel}" GroupName="ModbusPresentation" IsChecked="{Binding IsRegisterMonitorSelected, Mode=TwoWay}" Style="{StaticResource CompactModeRadioButtonStyle}" />
-                </StackPanel>
-            </Border>
-            <Grid Grid.Column="1" DataContext="{Binding Modbus}" ColumnDefinitions="*,Auto" ColumnSpacing="5" Visibility="{Binding BusyVisibility}">
-                <TextBlock Text="{Binding Status}" Style="{StaticResource CellText}" TextAlignment="Right" ToolTipService.ToolTip="{Binding Status}" />
-                <Button x:Name="MonitorStopButton" Grid.Column="1" Content="{Binding StopLabel}" Command="{Binding StopCommand}" Style="{StaticResource ToolbarButton}" />
-            </Grid>
-        </Grid>
-
-        <Grid Grid.Row="2" Visibility="{Binding RegisterMonitorVisibility}" MinHeight="0">
+        <Grid Grid.Row="1" Visibility="{Binding RegisterMonitorVisibility}" MinHeight="0">
             <views:ModbusRtuView DataContext="{Binding Modbus}" />
         </Grid>
 
-        <Grid x:Name="PacketWorkspace" Grid.Row="2" ColumnSpacing="6" MinHeight="0" MinWidth="0" Visibility="{Binding PacketAnalysisVisibility}">
+        <Grid x:Name="PacketWorkspace" Grid.Row="1" ColumnSpacing="6" MinHeight="0" MinWidth="0" Visibility="{Binding PacketAnalysisVisibility}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*" />

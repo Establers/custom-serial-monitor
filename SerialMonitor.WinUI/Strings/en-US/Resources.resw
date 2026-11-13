@@ -1451,4 +1451,9 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusPollingTooManyGroups" xml:space="preserve"><value>At most 32 polling groups are allowed.</value></data>
 <data name="ModbusPollingTooManyCells" xml:space="preserve"><value>The combined read areas cannot exceed 8192 bits/registers.</value></data>
 <data name="ModbusPollingCopySuffix" xml:space="preserve"><value> copy</value></data>
+<data name="ProtocolViewSelection" xml:space="preserve"><value>Protocol and view</value></data>
+<data name="ProtocolMoreActions" xml:space="preserve"><value>More actions</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · Packet analysis</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · Read/write values</value></data>
+<data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · Packet analysis</value></data>
 </root>

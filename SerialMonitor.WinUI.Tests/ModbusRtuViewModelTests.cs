@@ -158,13 +158,20 @@ public sealed class ModbusRtuViewModelTests
         model.Refresh();
         Assert.True(model.IsBusy);
         Assert.False(protocol.IsProtocolSelectionEnabled);
+        Assert.True(protocol.IsModbusViewSelectionEnabled);
         protocol.SelectedProtocolIndex = 2;
         Assert.Equal(1, protocol.SelectedProtocolIndex);
-        protocol.IsRegisterMonitorSelected = true;
+        protocol.SelectedViewIndex = 2;
         Assert.Equal(Visibility.Visible, protocol.RegisterMonitorVisibility);
-        protocol.IsRegisterMonitorSelected = false;
+        protocol.SelectedViewIndex = 3;
+        Assert.Equal(2, protocol.SelectedViewIndex);
+        protocol.SelectedViewIndex = 0;
+        Assert.Equal(2, protocol.SelectedViewIndex);
+        protocol.SelectedViewIndex = 1;
         Assert.Equal(Visibility.Visible, protocol.PacketAnalysisVisibility);
         Assert.Equal(Visibility.Visible, model.BusyVisibility);
+        Assert.Contains(model.RequestSummary, protocol.WorkspaceHeader);
+        Assert.Single(service.Reads);
         model.AddressText = "20";
         Assert.Equal("0", model.AddressText);
         model.WriteValuesText = "1";
@@ -174,6 +181,80 @@ public sealed class ModbusRtuViewModelTests
         await run;
         Assert.False(model.IsBusy);
         Assert.True(protocol.IsProtocolSelectionEnabled);
+        Assert.Equal($"{protocol.Activity} · {protocol.RetainedSummary}", protocol.WorkspaceHeader);
+        protocol.SelectedViewIndex = 3;
+        Assert.Equal(2, protocol.SelectedProtocolIndex);
+    }
+
+    [Theory]
+    [InlineData(0, 0, false)]
+    [InlineData(1, 1, false)]
+    [InlineData(2, 1, true)]
+    [InlineData(3, 2, false)]
+    public async Task CombinedViewMenuMapsToProtocolWithoutStartingIo(int choice, int protocolIndex, bool monitorSelected)
+    {
+        var service = new FakeMonitor();
+        var monitor = Model(service);
+        await using var analyzer = new ProtocolAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { Modbus = monitor };
+        var publishedChoices = new List<int>();
+        protocol.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ProtocolViewModel.SelectedViewIndex)) publishedChoices.Add(protocol.SelectedViewIndex);
+        };
+
+        protocol.SelectedViewIndex = choice;
+
+        Assert.Equal(choice, protocol.SelectedViewIndex);
+        Assert.Equal(protocolIndex, protocol.SelectedProtocolIndex);
+        Assert.Equal(monitorSelected, protocol.IsRegisterMonitorSelected);
+        Assert.Equal(choice != 0, analyzer.Enabled);
+        Assert.All(publishedChoices, published => Assert.Equal(choice, published));
+        Assert.Empty(service.Reads);
+        Assert.Empty(service.Writes);
+        Assert.False(monitor.IsBusy);
+        protocol.SelectedViewIndex = -1;
+        Assert.Equal(choice, protocol.SelectedViewIndex);
+        protocol.SelectedViewIndex = 4;
+        Assert.Equal(choice, protocol.SelectedViewIndex);
+    }
+
+    [Fact]
+    public async Task CombinedViewRejectsUnavailableProtocolAndKeepsCurrentMonitor()
+    {
+        await using var analyzer = new ModbusRtuAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { SelectedViewIndex = 2 };
+        protocol.SelectedViewIndex = 3;
+        Assert.Equal(2, protocol.SelectedViewIndex);
+        Assert.Equal(1, protocol.SelectedProtocolIndex);
+        Assert.True(protocol.IsRegisterMonitorSelected);
+        Assert.True(analyzer.Enabled);
+        Assert.Contains("BACnet", protocol.Status);
+    }
+
+    [Fact]
+    public async Task SharedHeaderFollowsMonitorTargetAndUnsubscribesReplacedModel()
+    {
+        await using var analyzer = new ProtocolAnalyzer();
+        var first = Model(new FakeMonitor());
+        var protocol = new ProtocolViewModel(analyzer) { Modbus = first, SelectedViewIndex = 2 };
+        var changed = new List<string?>();
+        protocol.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        first.AddressText = "123";
+        Assert.Contains(nameof(ProtocolViewModel.WorkspaceHeader), changed);
+        Assert.Contains(first.RequestSummary, protocol.WorkspaceHeader);
+
+        var second = Model(new FakeMonitor());
+        second.AddressText = "456";
+        protocol.Modbus = second;
+        Assert.Contains(second.RequestSummary, protocol.WorkspaceHeader);
+        changed.Clear();
+        first.AddressText = "789";
+        Assert.DoesNotContain(nameof(ProtocolViewModel.WorkspaceHeader), changed);
+        protocol.IsRegisterMonitorSelected = false;
+        Assert.Equal(1, protocol.SelectedViewIndex);
+        protocol.SelectedProtocolIndex = 2;
+        Assert.Equal(3, protocol.SelectedViewIndex);
     }
 
     [Fact]
@@ -248,22 +329,26 @@ public sealed class ModbusRtuViewModelTests
     }
 
     [Fact]
-    public void SourceLayoutKeepsStopOutsideScrollableEditorsAndProvidesInternalModes()
+    public void SourceLayoutKeepsSharedStopOutsideEditorsAndUsesOneViewMenu()
     {
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var monitor = Markup("Views/ModbusRtuView.xaml");
         Assert.Empty(monitor.Descendants(p + "Expander"));
-        var stop = Assert.Single(monitor.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "StopButton"));
-        Assert.DoesNotContain(stop.Ancestors(), e => e.Name == p + "ScrollViewer" || e.Name == p + "Expander");
         Assert.All(monitor.Descendants(p + "TextBox"), input =>
         {
             Assert.Null(input.Attribute("MaxLength"));
             Assert.NotNull(input.Attribute("AutomationProperties.Name"));
         });
         var protocol = Markup("Views/ProtocolView.xaml");
-        Assert.Contains(protocol.Descendants(p + "RadioButton"), e => (string?)e.Attribute("IsChecked") == "{Binding IsRegisterMonitorSelected, Mode=TwoWay}");
+        Assert.Empty(protocol.Descendants(p + "RadioButton"));
+        var selector = Assert.Single(protocol.Descendants(p + "ComboBox").Where(e => (string?)e.Attribute(x + "Name") == "PresentationSelector"));
+        Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)selector.Attribute("SelectedIndex"));
+        Assert.Equal(4, selector.Elements(p + "ComboBoxItem").Count());
+        Assert.All(selector.Elements(p + "ComboBoxItem"), option => Assert.NotNull(option.Attribute("IsEnabled")));
         var activeStop = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "MonitorStopButton"));
+        Assert.Equal("{Binding StopCommand}", (string?)activeStop.Attribute("Command"));
+        Assert.DoesNotContain(activeStop.Ancestors(), e => e.Name == p + "ScrollViewer" || e.Name == p + "Expander" || e.Name == p + "Flyout");
         Assert.DoesNotContain(activeStop.Ancestors(), e => (string?)e.Attribute("Visibility") == "{Binding PacketAnalysisVisibility}" || (string?)e.Attribute("Visibility") == "{Binding RegisterMonitorVisibility}");
         Assert.DoesNotContain(Markup("MainWindow.xaml").Descendants(p + "TabViewItem"), tab => tab.Descendants().Any(e => e.Name.LocalName == "ModbusRtuView"));
     }

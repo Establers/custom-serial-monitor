@@ -21,7 +21,7 @@ public sealed class ProtocolBrowsingTests
         var rowChanges = 0;
         model.Frames.CollectionChanged += (_, _) => rowChanges++;
 
-        model.IsRegisterMonitorSelected = true;
+        model.SelectedViewIndex = 2;
         await Push(analyzer, Request(2)); model.Refresh();
         await Push(analyzer, Request(3)); model.Refresh(force: true);
         Assert.True(analyzer.Enabled);
@@ -32,7 +32,7 @@ public sealed class ProtocolBrowsingTests
         Assert.Contains("3", model.TrafficSummary);
         Assert.Equal(paused ? 2 : 0, model.PendingDisplayFrames);
 
-        model.IsRegisterMonitorSelected = false;
+        model.SelectedViewIndex = 1;
         Assert.Equal(paused, model.IsDisplayPaused);
         Assert.Same(selected, model.SelectedFrame);
         Assert.Equal(paused ? 1 : 3, model.Frames.Count);
