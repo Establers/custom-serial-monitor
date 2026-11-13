@@ -492,7 +492,8 @@
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="MaxWidth" Value="520" />
-        <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+        <!-- Popup surfaces must hide underlying logs; layer fills are translucent. -->
+        <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AppSurfaceBorderBrush}" />
     </Style>
 
