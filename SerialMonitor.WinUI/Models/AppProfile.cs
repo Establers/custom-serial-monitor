@@ -22,6 +22,10 @@ public sealed class AppProfile
 
     public ModbusMonitorSettings ModbusSettings { get; set; } = new();
 
+    // Null means a legacy single-area profile; an explicit empty workspace
+    // must never fall back to transmitting the old ModbusSettings target.
+    public ModbusPollingSettings? ModbusPolling { get; set; }
+
     public List<LogRule> LogRules { get; set; } = new();
 
     public List<EventRule> EventRules { get; set; } = new();

@@ -8,6 +8,7 @@ namespace SerialMonitor.WinUI.Views;
 public sealed partial class ModbusRtuView : UserControl
 {
     private bool _itemDialogOpen;
+    private bool _groupDialogOpen;
     private ModbusRtuViewModel? Model => DataContext as ModbusRtuViewModel;
     public ModbusRtuView() => InitializeComponent();
     private void View_Loaded(object sender, RoutedEventArgs args)
@@ -26,7 +27,7 @@ public sealed partial class ModbusRtuView : UserControl
     }
     private async void Items_Click(object sender, RoutedEventArgs args)
     {
-        if (_itemDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
+        if (_itemDialogOpen || _groupDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
         _itemDialogOpen = true;
         try
         {
@@ -44,6 +45,40 @@ public sealed partial class ModbusRtuView : UserControl
             model.ReportItemEditorError(ex.Message);
         }
         finally { _itemDialogOpen = false; }
+    }
+    private async void Groups_Click(object sender, RoutedEventArgs args)
+    {
+        if (_itemDialogOpen || _groupDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
+        _groupDialogOpen = true;
+        try
+        {
+            var settingsRevision = model.SettingsRevision;
+            var dialog = new ModbusPollingEditorDialog(model.CreatePollingEditorSettings())
+            {
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme
+            };
+            while (true)
+            {
+                var result = await dialog.ShowAsync();
+                if (dialog.ItemEditorSettings is { } itemSettings)
+                {
+                    dialog.ClearItemEditorRequest();
+                    var items = new ModbusItemEditorDialog(itemSettings) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+                    if (await items.ShowAsync() == ContentDialogResult.Primary)
+                        dialog.Model.ApplyItemDefinitions(items.ResultItems);
+                    continue;
+                }
+                if (result == ContentDialogResult.Primary)
+                    model.ApplyPollingSettings(dialog.ResultSettings, settingsRevision);
+                break;
+            }
+        }
+        catch (Exception ex)
+        {
+            RuntimeDiagnostics.RecordError("Modbus.PollingEditor", ex);
+            model.ReportItemEditorError(ex.Message);
+        }
+        finally { _groupDialogOpen = false; }
     }
     private void FitEditor(ScrollViewer scroll, FrameworkElement panel, double width, double height)
     {

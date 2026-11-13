@@ -624,6 +624,7 @@ public sealed class ProfileService : IProfileService
         LastSuccessfulSerialSettings = profile.LastSuccessfulSerialSettings, LogSettings = profile.LogSettings,
         UiSettings = profile.UiSettings, EventContextSettings = profile.EventContextSettings,
         BridgeSettings = profile.BridgeSettings, ModbusSettings = profile.ModbusSettings.Clone(),
+        ModbusPolling = profile.ModbusPolling?.Clone(),
         LogRules = profile.LogRules.Select(rule => rule.Clone()).ToList(),
         EventRules = profile.EventRules, HighlightRules = profile.HighlightRules,
         SavedCommands = profile.SavedCommands, CommandHistory = profile.CommandHistory, CommandSequences = sequences
@@ -672,6 +673,17 @@ public sealed class ProfileService : IProfileService
             // Keep invalid wire addresses visible for correction; never silently
             // turn an invalid saved target into a different valid device target.
             warnings.Add("Modbus settings are invalid. Correct them before transmitting.");
+        }
+
+        if (profile.ModbusPolling is not null)
+        {
+            try { profile.ModbusPolling.Validate(); }
+            catch (ArgumentException)
+            {
+                // Keep malformed groups and targets visible for explicit
+                // correction; loading or saving does not choose another group.
+                warnings.Add("Modbus polling settings are invalid. Correct them before transmitting.");
+            }
         }
 
         if (profile.SerialSettings is null)

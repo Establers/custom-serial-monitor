@@ -1421,4 +1421,34 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusItemInvalidScale" xml:space="preserve"><value>Enter a finite multiplier, for example 1 or 0.1.</value></data>
 <data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>Use at most 128 value names, one integer = name per line.</value></data>
 <data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>The Modbus settings changed while editing. Reopen item definitions for the current target.</value></data>
+<data name="ModbusPollingEditor" xml:space="preserve"><value>Polling groups…</value></data>
+<data name="ModbusPollingTitle" xml:space="preserve"><value>Polling groups</value></data>
+<data name="ModbusPollingSelector" xml:space="preserve"><value>Selected group</value></data>
+<data name="ModbusPollingApply" xml:space="preserve"><value>Apply</value></data>
+<data name="ModbusPollingCancel" xml:space="preserve"><value>Cancel</value></data>
+<data name="ModbusPollingHelp" xml:space="preserve"><value>Define devices and read areas on this connection. Enabled groups are polled in turn. Applying does not send data or save the app profile.</value></data>
+<data name="ModbusPollingList" xml:space="preserve"><value>Groups</value></data>
+<data name="ModbusPollingNew" xml:space="preserve"><value>New group</value></data>
+<data name="ModbusPollingDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+<data name="ModbusPollingRemove" xml:space="preserve"><value>Remove</value></data>
+<data name="ModbusPollingClear" xml:space="preserve"><value>Clear all</value></data>
+<data name="ModbusPollingSaveGroup" xml:space="preserve"><value>Add / update group</value></data>
+<data name="ModbusPollingName" xml:space="preserve"><value>Group name</value></data>
+<data name="ModbusPollingEnabled" xml:space="preserve"><value>Include in polling</value></data>
+<data name="ModbusPollingUnsavedDraft" xml:space="preserve"><value>Add/update this group before selecting another. Apply also saves the current draft; New discards it.</value></data>
+<data name="ModbusPollingInvalidItems" xml:space="preserve"><value>Invalid saved items · open Item definitions to correct them</value></data>
+<data name="ModbusPollingItemsCount" xml:space="preserve"><value>Defined items: {0}</value></data>
+<data name="ModbusPollingSaveBeforeSelection" xml:space="preserve"><value>Add/update this group first, or choose New to discard its draft.</value></data>
+<data name="ModbusPollingNewName" xml:space="preserve"><value>Group {0}</value></data>
+<data name="ModbusPollingDefaultGroup" xml:space="preserve"><value>Group 1</value></data>
+<data name="ModbusPollingStart" xml:space="preserve"><value>Start enabled groups</value></data>
+<data name="ModbusPollingSelectGroup" xml:space="preserve"><value>Select a group</value></data>
+<data name="ModbusPollingUnavailable" xml:space="preserve"><value>Connect a serial port and stop other operations before polling groups.</value></data>
+<data name="ModbusPollingInvalidGroup" xml:space="preserve"><value>This saved group is invalid. Correct its fields and add/update it, or remove it.</value></data>
+<data name="ModbusPollingInvalidGroupShort" xml:space="preserve"><value>Invalid saved group</value></data>
+<data name="ModbusPollingInvalidNumbers" xml:space="preserve"><value>Enter complete unit, address, quantity and timing values. Unit, address and quantity also accept 0x HEX.</value></data>
+<data name="ModbusPollingInvalidScale" xml:space="preserve"><value>Enter a finite display multiplier, for example 1 or 0.1.</value></data>
+<data name="ModbusPollingTooManyGroups" xml:space="preserve"><value>At most 32 polling groups are allowed.</value></data>
+<data name="ModbusPollingTooManyCells" xml:space="preserve"><value>The combined read areas cannot exceed 8192 bits/registers.</value></data>
+<data name="ModbusPollingCopySuffix" xml:space="preserve"><value> copy</value></data>
 </root>

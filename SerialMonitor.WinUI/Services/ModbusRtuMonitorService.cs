@@ -6,7 +6,7 @@ using SerialMonitor.WinUI.Models;
 namespace SerialMonitor.WinUI.Services;
 
 // One owner, one outstanding RTU exchange. RX callbacks only offer bounded chunks.
-public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
+public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorService
 {
     private readonly ISerialService _serial;
     private readonly Action<byte[], long>? _transmitted;
@@ -70,6 +70,7 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_groupsRunning) throw new InvalidOperationException("Use the captured polling group to write while group polling is active.");
             if (_snapshot.IsBusy)
             {
                 if (!_snapshot.IsPolling || _stop is null || _stop.IsCancellationRequested || _pendingWrite is not null ||

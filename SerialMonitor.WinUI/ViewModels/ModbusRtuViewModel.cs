@@ -36,8 +36,8 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         _saveSettings = saveSettings;
         _stateChanged = stateChanged;
         _availabilityReason = availabilityReason;
-        StartCommand = new AsyncRelayCommand(() => RunAsync(true), CanRun);
-        ReadOnceCommand = new AsyncRelayCommand(() => RunAsync(false), CanRun);
+        StartCommand = new AsyncRelayCommand(() => RunAsync(true), CanStartPolling);
+        ReadOnceCommand = new AsyncRelayCommand(() => RunAsync(false), CanReadSelected);
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsBusy && !_stopRequested);
         WriteCommand = new AsyncRelayCommand(WriteAsync, CanWrite);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy && !_writeAdmitted);
@@ -47,7 +47,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     private static string T(string key, string fallback) => UiText.Get("ModbusMonitor" + key, fallback);
     public string TabTitle => "Modbus RTU";
-    public string StartLabel => T("Start", "Start polling");
+    public string StartLabel => _pollingSettings is null ? T("Start", "Start polling") : P("Start", "Start enabled groups");
     public string StopLabel => T("Stop", "Stop");
     public string ReadOnceLabel => T("ReadOnce", "Read once");
     public string SettingsLabel => T("Settings", "Settings");
@@ -102,7 +102,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string Error { get => _error; private set { if (SetProperty(ref _error, value)) OnPropertyChanged(nameof(ErrorVisibility)); } }
     public string Statistics { get => _statistics; private set => SetProperty(ref _statistics, value); }
-    public string RequestSummary => $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
+    public string RequestSummary => _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
     public string UnitText { get => _unit; set => SetSetting(ref _unit, value, nameof(UnitText)); }
     public string AddressText { get => _address; set => SetSetting(ref _address, value, nameof(AddressText)); }
     public string QuantityText { get => _quantity; set => SetSetting(ref _quantity, value, nameof(QuantityText)); }
@@ -116,7 +116,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         get => _functionIndex;
         set
         {
-            if (!IsSettingsEnabled || value is < 0 or > 3 || !SetProperty(ref _functionIndex, value)) return;
+            if ((!IsSettingsEnabled && !_loadingPollingGroup) || value is < 0 or > 3 || !SetProperty(ref _functionIndex, value)) return;
             SettingsChanged();
             foreach (var name in new[] { nameof(IsCoilFunction), nameof(IsRegisterFunction), nameof(IsWritableFunction), nameof(WriteVisibility), nameof(ReadOnlyVisibility), nameof(WriteValuesLabel), nameof(IsWordSwapEnabled), nameof(WriteAvailabilityHelp) }) OnPropertyChanged(name);
         }
@@ -124,10 +124,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public int FormatIndex
     {
         get => _formatIndex;
-        set { if (IsSettingsEnabled && value is >= 0 and <= 4 && SetProperty(ref _formatIndex, value)) { SettingsChanged(); OnPropertyChanged(nameof(IsWordSwapEnabled)); } }
+        set { if ((IsSettingsEnabled || _loadingPollingGroup) && value is >= 0 and <= 4 && SetProperty(ref _formatIndex, value)) { SettingsChanged(); OnPropertyChanged(nameof(IsWordSwapEnabled)); } }
     }
-    public bool SwapBytes { get => _swapBytes; set { if (IsSettingsEnabled && SetProperty(ref _swapBytes, value)) SettingsChanged(); } }
-    public bool SwapWords { get => _swapWords; set { if (IsSettingsEnabled && SetProperty(ref _swapWords, value)) SettingsChanged(); } }
+    public bool SwapBytes { get => _swapBytes; set { if ((IsSettingsEnabled || _loadingPollingGroup) && SetProperty(ref _swapBytes, value)) SettingsChanged(); } }
+    public bool SwapWords { get => _swapWords; set { if ((IsSettingsEnabled || _loadingPollingGroup) && SetProperty(ref _swapWords, value)) SettingsChanged(); } }
     public ModbusRegisterRow? SelectedRow
     {
         get => _selectedRow;
@@ -157,7 +157,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     private void SetSetting(ref string field, string? value, string property)
     {
-        if (IsSettingsEnabled && SetProperty(ref field, value ?? "", property)) SettingsChanged();
+        if ((IsSettingsEnabled || _loadingPollingGroup) && SetProperty(ref field, value ?? "", property)) SettingsChanged();
     }
     private void SettingsChanged()
     {
@@ -174,7 +174,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         RefreshAvailability();
     }
     private bool CanRun() => !IsBusy && !_writeAdmitted && _canStart();
-    private bool CanWrite() => !_writeAdmitted && !_stopRequested && IsWritableFunction && (_service.GetSnapshot().IsPolling || CanRun());
+    private bool CanWrite() => !_writeAdmitted && !_stopRequested && IsWritableFunction && CanWriteSelectedGroup() && (_service.GetSnapshot().IsPolling || CanRun());
 
     public ModbusMonitorSettings CreateSettingsSnapshot() => BuildSettings(validateItems: true);
 
@@ -182,6 +182,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     private ModbusMonitorSettings BuildSettings(bool validateItems)
     {
+        if (_pollingSettings is not null && SelectedPollingGroup?.Definition is null)
+            throw new ArgumentException(P("SelectGroup", "Select a group"));
+        if (_pollingSettings?.HasInvalidMetadata == true || SelectedPollingGroup?.Definition?.HasInvalidMetadata == true)
+            throw new ArgumentException(P("InvalidGroup", "Correct the imported group metadata in Polling groups before transmitting."));
         if (!TryNumber(UnitText, out var unit) || !TryNumber(AddressText, out var address) || !TryNumber(QuantityText, out var quantity) ||
             !int.TryParse(IntervalText, NumberStyles.None, CultureInfo.InvariantCulture, out var interval) ||
             !int.TryParse(TimeoutText, NumberStyles.None, CultureInfo.InvariantCulture, out var timeout))
@@ -194,7 +198,18 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             Items = CloneItemDefinitions(_itemDefinitions) };
         try
         {
-            if (validateItems) result.Validate();
+            if (validateItems)
+            {
+                result.Validate();
+                if (_pollingSettings is not null)
+                {
+                    var workspace = _pollingSettings.Clone();
+                    var selectedIndex = SelectedPollingGroup is null ? -1 : PollingGroups.IndexOf(SelectedPollingGroup);
+                    if (selectedIndex >= 0 && workspace.Groups is not null && selectedIndex < workspace.Groups.Count && workspace.Groups[selectedIndex] is { } group)
+                        group.Settings = result.Clone();
+                    workspace.Validate();
+                }
+            }
             else { var baseSettings = result.Clone(); baseSettings.Items = []; baseSettings.Validate(); }
         }
         catch (ArgumentException ex) { throw new ArgumentException(T("InvalidSettings", "Check ID 1–247, address 0–65535, quantity 1–125 registers / 1–2000 bits, address range, interval 100–60000 ms, timeout 100–10000 ms and a finite multiplier."), ex); }
@@ -210,7 +225,8 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     public void ApplySettings(ModbusMonitorSettings? settings)
     {
-        if (IsBusy || _writeAdmitted) throw new InvalidOperationException(T("StopBeforeSettings", "Stop Modbus before loading settings."));
+        if (!_loadingPollingGroup && (IsBusy || _writeAdmitted)) throw new InvalidOperationException(T("StopBeforeSettings", "Stop Modbus before loading settings."));
+        if (!_loadingPollingGroup) ResetPollingContext();
         var copy = settings?.Clone() ?? new();
         _itemDefinitions = CloneItemDefinitions(copy.Items);
         _lastPersistableSettings = copy.Clone();
@@ -239,10 +255,15 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     public async Task RunAsync(bool repeat)
     {
+        if (repeat && _pollingSettings is not null) { await RunPollingGroupsAsync(); return; }
+        if (!repeat && !CanReadSelected()) { Error = P("SelectGroup", "Select a group"); return; }
         if (!CanRun()) { Error = T("Busy", "Connect the device and stop sequences, automation and the bridge before starting Modbus."); return; }
         ModbusMonitorSettings settings;
         try { settings = CreateSettingsSnapshot(); }
         catch (ArgumentException ex) { Error = ex.Message; return; }
+        CaptureSelectedGroupDraft(strict: false);
+        var singleGroupId = SelectedPollingGroup?.Id;
+        PrepareSingleGroupOperation(singleGroupId);
         _operationAdmitted = true;
         Error = "";
         _lastPersistableSettings = settings.Clone();
@@ -255,6 +276,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             // A returned task confirms admission: the concrete service has
             // already published this request's snapshot before returning it.
             var running = _service.RunAsync(settings, repeat, CancellationToken.None);
+            _singleGroupId = singleGroupId;
             _displaySettings = settings;
             await running;
         }
@@ -276,7 +298,17 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public async Task SaveSettingsAsync()
     {
         if (!IsSettingsEnabled) return;
-        try { var settings = CreateSettingsSnapshot(); await _saveSettings(); _lastPersistableSettings = settings; Error = ""; Status = T("Saved", "Settings saved in the app profile"); }
+        try
+        {
+            if (_pollingSettings is not null)
+            {
+                CaptureSelectedGroupDraft(strict: true);
+                _pollingSettings.Validate();
+                await _saveSettings();
+            }
+            else { var settings = CreateSettingsSnapshot(); await _saveSettings(); _lastPersistableSettings = settings; }
+            Error = ""; Status = T("Saved", "Settings saved in the app profile");
+        }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Save", ex); }
     }
 
@@ -292,6 +324,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             (address, values) = BuildWriteValues(settings);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { Error = ex.Message; return; }
+        CaptureSelectedGroupDraft(strict: false);
+        var groupId = SelectedPollingGroup?.Id;
+        var groupWrite = _groupRunAdmitted;
+        if (!groupWrite) PrepareSingleGroupOperation(groupId);
         _writeAdmitted = true;
         _selectionChangedDuringWrite = false;
         Error = "";
@@ -301,7 +337,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         PublishAvailability();
         try
         {
-            var writing = _service.WriteAsync(settings, address, values, CancellationToken.None);
+            var writing = groupWrite && _service is IModbusRtuGroupMonitorService groups && groupId is not null
+                ? groups.WriteGroupAsync(groupId, address, values, CancellationToken.None)
+                : _service.WriteAsync(settings, address, values, CancellationToken.None);
+            if (!groupWrite) _singleGroupId = groupId;
             if (needsDisplayContext) _displaySettings = settings;
             await writing;
         }
@@ -324,7 +363,8 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     public void Refresh()
     {
-        var snapshot = _service.GetSnapshot();
+        RefreshPollingGroups();
+        var snapshot = GetSelectedSnapshot();
         var ageSecond = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (_displaySettings is not null && (_lastRevision != snapshot.Revision || _lastAgeSecond != ageSecond))
         {
@@ -397,6 +437,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public void RefreshAvailability()
     {
         foreach (var property in new[] { nameof(IsBusy), nameof(IsSettingsEnabled), nameof(IsWordSwapEnabled), nameof(BusyVisibility), nameof(IsWriteEditorEnabled), nameof(AvailabilityText), nameof(AvailabilityVisibility) }) OnPropertyChanged(property);
+        OnPropertyChanged(nameof(IsGroupSelectionEnabled));
         StartCommand.NotifyCanExecuteChanged(); ReadOnceCommand.NotifyCanExecuteChanged(); StopCommand.NotifyCanExecuteChanged();
         WriteCommand.NotifyCanExecuteChanged(); SaveSettingsCommand.NotifyCanExecuteChanged();
     }

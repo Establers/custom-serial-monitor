@@ -46,7 +46,7 @@
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
-            <Grid RowDefinitions="Auto,Auto" RowSpacing="4">
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
                     <TextBlock Text="{Binding Status}" Style="{StaticResource Cell}" FontWeight="SemiBold"
                                ToolTipService.ToolTip="{Binding Status}" />
@@ -126,9 +126,22 @@
                         </Button.Flyout>
                     </Button>
                 </Grid>
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                    <TextBlock Text="{Binding GroupSelectorLabel}" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Visibility="{Binding PollingGroupsVisibility}" />
+                    <ComboBox x:Name="PollingGroupSelector" Grid.Column="1" ItemsSource="{Binding PollingGroups}"
+                              SelectedItem="{Binding SelectedPollingGroup, Mode=TwoWay}" DisplayMemberPath="DisplayName"
+                              IsEnabled="{Binding IsGroupSelectionEnabled}" FontSize="12" MinWidth="0" MaxDropDownHeight="280"
+                              Visibility="{Binding PollingGroupsVisibility}"
+                              AutomationProperties.Name="{Binding GroupSelectorLabel}" />
+                    <Button x:Name="GroupsButton" Grid.Column="2" Content="{Binding GroupEditorLabel}" Click="Groups_Click"
+                            IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" />
+                </Grid>
             </Grid>
         </Border>
         <StackPanel Grid.Row="1" Spacing="3">
+            <TextBlock Text="{Binding PollingSummary}" FontSize="11" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                       Visibility="{Binding PollingGroupsVisibility}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding PollingSummary}" />
             <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
             <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding AvailabilityText}" />
             <ScrollViewer MaxHeight="55" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="{Binding ErrorVisibility}">

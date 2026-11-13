@@ -12222,6 +12222,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             EventContextSettings = _currentEventContextSettings.Clone(),
             BridgeSettings = CreatePersistedBridgeSettings(),
             ModbusSettings = Modbus?.CreatePersistableSettingsSnapshot() ?? new ModbusMonitorSettings(),
+            ModbusPolling = Modbus?.CreatePersistablePollingSettingsSnapshot(),
             LogRules = LogRules.Select(CloneLogRule).ToList(),
             EventRules = EventRules.Select(CloneEventRule).ToList(),
             HighlightRules = HighlightRules.Select(CloneHighlightRule).ToList(),
@@ -12249,6 +12250,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             Modbus?.ApplySettings(profile.ModbusSettings);
+            Modbus?.ApplySavedPollingSettings(profile.ModbusPolling);
             _currentSerialSettings = profile.SerialSettings.Clone();
             _lastSuccessfulSerialSettings = profile.LastSuccessfulSerialSettings?.Clone();
             _lastSuccessfulPort = string.IsNullOrWhiteSpace(_lastSuccessfulSerialSettings?.PortName)

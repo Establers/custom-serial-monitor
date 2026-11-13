@@ -7,7 +7,7 @@ using SerialMonitor.WinUI.Services;
 
 namespace SerialMonitor.WinUI.Tests;
 
-public sealed class ModbusRtuMonitorServiceTests
+public sealed partial class ModbusRtuMonitorServiceTests
 {
     [Fact]
     public async Task ReadOnceAssemblesSplitResponseAndKeepsSuccessfulValuesUntilDisconnect()
