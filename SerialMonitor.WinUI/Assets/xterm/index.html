@@ -1249,7 +1249,10 @@
       window.chrome.webview.postMessage({
         type: 'contextMenuAction',
         action,
-        selectedText: contextMenuSelection,
+        // Keep the menu-open snapshot for Copy/Search only. Other actions do
+        // not consume selection text and must not transfer a large log copy.
+        ...((action === 'copy' || action === 'searchSelected')
+          ? { selectedText: contextMenuSelection } : {}),
         source: 'xterm-context-menu'
       });
     }

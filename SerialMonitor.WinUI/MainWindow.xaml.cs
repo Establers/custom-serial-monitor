@@ -4378,17 +4378,17 @@ public sealed partial class MainWindow : Window
         }
 
         _xtermFitQueued = true;
-        DispatcherQueue.TryEnqueue(async () =>
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(50);
+            // Coalesce requests throughout the delay. Release before fitting so
+            // a size change during the WebView call can schedule a final fit.
+            _xtermFitQueued = false;
+            await FitXtermAsync();
+        }))
         {
             _xtermFitQueued = false;
-            if (IsClosingOrClosed)
-            {
-                return;
-            }
-
-            await Task.Delay(50);
-            await FitXtermAsync();
-        });
+        }
     }
 
     private async Task SearchXtermAsync(XtermSearchRequest request, CancellationToken cancellationToken)
