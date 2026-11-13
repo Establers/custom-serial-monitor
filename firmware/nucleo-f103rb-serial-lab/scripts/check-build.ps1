@@ -17,10 +17,18 @@ dotnet run --project (Join-Path $root 'tests\AssetsCheck') -- (Join-Path $root '
 if ($LASTEXITCODE -ne 0) { throw 'GUI/CLI sequence definitions rejected by app parsers.' }
 & (Join-Path $PSScriptRoot 'verify-mstp.ps1') -Mode Offline -BuildDirectory $BuildDirectory |
     Tee-Object -FilePath (Join-Path $output 'mstp-check.txt')
+& (Join-Path $PSScriptRoot 'verify-modbus.ps1') -Mode Offline -BuildDirectory $BuildDirectory |
+    Tee-Object -FilePath (Join-Path $output 'modbus-fixture-check.txt')
+& (Join-Path $PSScriptRoot 'verify-rtu-server.ps1') -Mode Offline -BuildDirectory $BuildDirectory |
+    Tee-Object -FilePath (Join-Path $output 'rtu-server-check.txt')
+& (Join-Path $PSScriptRoot 'verify-modbus-monitor.ps1') -Mode Offline -BuildDirectory $BuildDirectory |
+    Tee-Object -FilePath (Join-Path $output 'modbus-monitor-check.txt')
 $manifest = Get-Content -LiteralPath (Join-Path $output 'manifest.json') -Raw | ConvertFrom-Json
 $contract = Get-Content -LiteralPath (Join-Path $output 'contract-report.json') -Raw | ConvertFrom-Json
 $validatorFiles = @(Get-ChildItem -LiteralPath (Join-Path $root 'tests\FixtureContractCheck') -File -Filter '*.cs') +
-    @(Get-Item -LiteralPath (Join-Path $PSScriptRoot 'WireCodec.cs'),(Join-Path $root 'tests\test_lab.c'))
+    @(Get-ChildItem -LiteralPath (Join-Path $root 'tests\ModbusMonitorCheck'),(Join-Path $root 'tests\ModbusUartCheck') -File -Filter '*.cs') +
+    @(Get-Item -LiteralPath (Join-Path $PSScriptRoot 'WireCodec.cs'),(Join-Path $root 'tests\test_lab.c'),(Join-Path $root 'tests\test_modbus_extended.c'),
+        (Join-Path $root '..\..\SerialMonitor.WinUI\Services\SequenceRunObserver.cs'))
 $validation = [ordered]@{
     schemaVersion=1; checkedAt=[DateTimeOffset]::Now.ToString('o'); passed=$true
     firmwareVersion=$manifest.firmwareVersion; buildId=$manifest.buildId; binarySha256=$manifest.sha256
@@ -28,11 +36,13 @@ $validation = [ordered]@{
     binaryPayloadLengths=$contract.binaryLengths; binaryContractChecks=$contract.binaryAssertions
     maxBinaryPayloadBytes=$manifest.maxBinaryPayloadBytes; maxBinaryFrameBytes=$manifest.maxBinaryFrameBytes
     guiDefinitions=5; cliDefinitions=2; mstpGuiDefinitions=1; mstpCliDefinitions=1; mstpNativeCases=6; fixtureCases=$contract.cases
+    modbusLegacyGuiDefinitions=2; modbusMonitorGuiDefinitions=1; modbusMonitorOfflinePassed=$true
     hardwareVerified=$false; hardwareStatus='Not run for this build; previous hardware reports identify an earlier BIN hash.'
     deviceOperations='none'; guiModeChanges=0
     testPlanSha256=(Get-FileHash -LiteralPath (Join-Path $root 'test-plan.json') -Algorithm SHA256).Hash
     validators=@($validatorFiles | Sort-Object FullName | ForEach-Object {
-        [ordered]@{path=$_.FullName.Substring($root.Length + 1).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
+        $relativePath = ([Uri]($root + [IO.Path]::DirectorySeparatorChar)).MakeRelativeUri([Uri]$_.FullName).ToString()
+        [ordered]@{path=[Uri]::UnescapeDataString($relativePath); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
     })
 }
 $validation | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $output 'validation.json') -Encoding UTF8

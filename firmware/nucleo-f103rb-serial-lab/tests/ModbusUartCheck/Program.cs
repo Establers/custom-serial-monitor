@@ -51,7 +51,10 @@ if (args is ["offline", var directory])
         using var definition=JsonDocument.Parse(File.ReadAllText(file));
         AutomationSequenceValidation.Parse(definition.RootElement);
     }
-    var sequences=await new CommandSequenceFileService().LoadAsync(Directory.GetFiles(examples,"*.gui.json"),stop.Token);
+    // The extended register-monitor plan has its own validator. Keep this
+    // legacy fixture contract pinned to its original two definitions.
+    var legacyGui = new[] { "01-modbus-cases.gui.json", "02-rtu-server.gui.json" };
+    var sequences=await new CommandSequenceFileService().LoadAsync(legacyGui.Select(name => Path.Combine(examples,name)).ToArray(),stop.Token);
     Require(sequences.Count==2 && sequences.Sum(s=>s.Steps.Count)==36,"Modbus GUI sequence definitions");
     Console.WriteLine("PASS legacy fixture and true RTU HEX CLI/GUI RX Check sequence parsers");
     return;

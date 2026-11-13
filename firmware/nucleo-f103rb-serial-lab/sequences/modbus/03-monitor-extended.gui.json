@@ -1,0 +1,505 @@
+{
+  "_manual": [
+    "GUI 가져오기 전용 FormatVersion 3. CLI/MCP에 이 파일을 전달하지 마세요.",
+    "NUCLEO-F103RB 확장 펌웨어 1.7.0 이상, 115200/8N1. 자동 재연결 OFF, 자동 폴링·브리지·다른 시퀀스 정지 후 실행하세요.",
+    "LAB/RTU RESET은 시험 레지스터·카운터·LED·일회성 오류를 초기화합니다. 실제 시험 장치 상태가 변경됩니다.",
+    "FC01/02/03/04/05/06/0F/10, 고정 입력 패턴, 단일·복수 쓰기와 재조회, LED, 주소 예외, 일회성 CRC 오류와 복구를 확인합니다.",
+    "FC02 RX Check는 버튼과 CRC 바이트를 와일드카드로 허용합니다. GUI 패턴 검사는 CRC를 계산하지 않으며 동적 값의 정확성을 증명하지 않습니다.",
+    "Live 검사기는 전체 RX 바이트의 CRC·패딩·LED 관계를 독립 계산하고 이 파일을 실제 시퀀스 실행기와 코어 RX Check 경로로 두 번 재생합니다. Live 검사기는 TX를 자동 재전송하지 않습니다.",
+    "GUI 직접 실행의 송신 실패 재시도는 앱의 자동 재연결 정책 영향을 받습니다. 따라서 이 시험에서는 자동 재연결을 OFF로 설정하세요.",
+    "실제 폴링 서비스·프로토콜 판정과 시퀀스 코어 실행 경로를 검사하며 GUI 컨트롤·렌더링은 실행하지 않습니다."
+  ],
+  "FormatVersion": 3,
+  "Name": "STM32 Modbus Monitor - 확장 레지스터·쓰기·LED·오류 복구",
+  "RepeatCount": 1,
+  "Steps": [
+    {
+      "Kind": "Tx",
+      "Name": "01 LAB TX",
+      "Comment": "",
+      "CommandText": "LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "01 LAB RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "02 Reset banks TX",
+      "Comment": "",
+      "CommandText": "RTU RESET",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "02 Reset banks RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK RTU RESET",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "03 Quiet RTU TX",
+      "Comment": "",
+      "CommandText": "RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "03 Quiet RTU RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "04 Legacy holding TX",
+      "Comment": "",
+      "CommandText": "01 03 00 00 00 02 C4 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "04 Legacy holding RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E9",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "05 Known input patterns TX",
+      "Comment": "",
+      "CommandText": "01 04 10 08 00 06 F5 0A",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "05 Known input patterns RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 04 0C FF 85 00 FA 12 34 56 78 41 C8 00 00 CC E0",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "06 Single register write TX",
+      "Comment": "",
+      "CommandText": "01 06 10 01 04 D2 5E 57",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "06 Single register write RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 06 10 01 04 D2 5E 57",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "07 Single write readback TX",
+      "Comment": "",
+      "CommandText": "01 03 10 00 00 02 C0 CB",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "07 Single write readback RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 00 04 D2 78 AE",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "08 Multiple register write TX",
+      "Comment": "",
+      "CommandText": "01 10 10 00 00 03 06 00 01 00 02 00 03 6E 41",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "08 Multiple register write RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 10 10 00 00 03 84 C8",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "09 Multiple write readback TX",
+      "Comment": "",
+      "CommandText": "01 03 10 00 00 03 01 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "09 Multiple write readback RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 03 06 00 01 00 02 00 03 FD 74",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "10 LED coil ON TX",
+      "Comment": "",
+      "CommandText": "01 05 10 00 FF 00 88 FA",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "10 LED coil ON RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 05 10 00 FF 00 88 FA",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "11 Coils ON readback TX",
+      "Comment": "",
+      "CommandText": "01 01 10 00 00 08 39 0C",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "11 Coils ON readback RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 01 01 01 90 48",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "12 LED input register TX",
+      "Comment": "",
+      "CommandText": "01 04 10 07 00 01 84 CB",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "12 LED input register RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 04 02 00 01 78 F0",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "12a Multiple coils write TX",
+      "CommandText": "01 0F 10 00 00 08 01 55 3C 3A",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "12a Multiple coils write RX",
+      "Comment": "Exact FC0F acknowledgement for8 coils at0x1000; payload pattern0x55.",
+      "CommandText": "",
+      "RxPattern": "01 0F 10 00 00 08 50 CD",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "12b Multiple coils readback TX",
+      "CommandText": "01 01 10 00 00 08 39 0C",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "12b Multiple coils readback RX",
+      "Comment": "Exact FC01 readback byte0x55 and known CRC.",
+      "CommandText": "",
+      "RxPattern": "01 01 01 55 91 B7",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "12c Dynamic button and LED TX",
+      "CommandText": "01 02 10 00 00 02 FD 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "12c Dynamic button and LED RX",
+      "Comment": "FC02 GUI pattern allows dynamic button/CRC; independent Live oracle checks the complete CRC, extent, padding and LED relation.",
+      "CommandText": "",
+      "RxPattern": "01 02 01 ?? ?? ??",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "13 Address exception TX",
+      "Comment": "",
+      "CommandText": "01 03 20 00 00 01 8F CA",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "13 Address exception RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 83 02 C0 F1",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "14a LAB before one-shot fault TX",
+      "Comment": "One-shot fault applies to the next addressed Modbus reply.",
+      "CommandText": "LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "14a LAB before one-shot fault RX",
+      "CommandText": "",
+      "RxPattern": "OK LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "14b Arm one-shot CRC TX",
+      "Comment": "One-shot fault applies to the next addressed Modbus reply.",
+      "CommandText": "RTU FAULT CRC",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "14b Arm one-shot CRC RX",
+      "CommandText": "",
+      "RxPattern": "OK RTU FAULT CRC",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "14c Quiet RTU preserves fault TX",
+      "Comment": "One-shot fault applies to the next addressed Modbus reply.",
+      "CommandText": "RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "14c Quiet RTU preserves fault RX",
+      "CommandText": "",
+      "RxPattern": "OK RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "14d One-shot CRC read TX",
+      "Comment": "RX Check matches known corrupt bytes; it does not calculate or certify a CRC.",
+      "CommandText": "01 03 00 00 00 02 C4 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "14d Known corrupt response RX",
+      "Comment": "RX Check matches known corrupt bytes; it does not calculate or certify a CRC.",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E8",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "15 CRC recovery TX",
+      "Comment": "",
+      "CommandText": "01 03 00 00 00 02 C4 0B",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "15 CRC recovery RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 03 04 00 FA 00 64 DB E9",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "16 LED coil OFF TX",
+      "Comment": "",
+      "CommandText": "01 05 10 00 00 00 C9 0A",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "16 LED coil OFF RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "01 05 10 00 00 00 C9 0A",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "17 Coils OFF readback TX",
+      "Comment": "",
+      "CommandText": "01 01 10 00 00 08 39 0C",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "17 Coils OFF readback RX",
+      "Comment": "Only LED coil bit0 is OFF; bits2/4/6 retain the preceding FC0F pattern, so the complete byte is0x54.",
+      "CommandText": "",
+      "RxPattern": "01 01 01 54 50 77",
+      "TxMode": "Hex",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "18 Final LAB TX",
+      "Comment": "",
+      "CommandText": "LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "18 Final LAB RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK LAB",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "19 Final banks reset TX",
+      "Comment": "",
+      "CommandText": "RTU RESET",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "19 Final banks reset RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK RTU RESET",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    },
+    {
+      "Kind": "Tx",
+      "Name": "20 Final quiet RTU TX",
+      "Comment": "",
+      "CommandText": "RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "Crlf",
+      "DelayAfterMs": 0
+    },
+    {
+      "Kind": "RxCheck",
+      "Name": "20 Final quiet RTU RX",
+      "Comment": "",
+      "CommandText": "",
+      "RxPattern": "OK RTU",
+      "TxMode": "Terminal",
+      "LineEndingMode": "None",
+      "DelayAfterMs": 700
+    }
+  ]
+}

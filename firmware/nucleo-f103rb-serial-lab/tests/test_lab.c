@@ -10,14 +10,15 @@ static uint8_t out[65536];
 static size_t used;
 static uint32_t clock_ms, switched;
 static bool blocked, data_blocked, baud_blocked, was_reset, led_state, button_state;
-static unsigned checks;
+static unsigned checks, led_calls;
+unsigned lab_modbus_extended_tests(void);
 static bool write_bytes(const uint8_t *bytes, size_t length) {
     if (blocked) return false;
     assert(used + length < sizeof(out));
     memcpy(out + used, bytes, length); used += length; out[used] = 0;
     return true;
 }
-static void set_led(bool on) { led_state = on; }
+static void set_led(bool on) { led_state = on; ++led_calls; }
 static bool write_data(const uint8_t *bytes, size_t length) {
     return !data_blocked && write_bytes(bytes, length);
 }
@@ -29,7 +30,7 @@ static const lab_platform platform = {write_bytes,write_data,set_led,get_button,
 static void clear(void) { used = 0; out[0] = 0; }
 static void init(uint32_t now) {
     blocked = data_blocked = baud_blocked = was_reset = led_state = false;
-    switched = 0; clock_ms = now; button_state = true; clear(); lab_init(&platform, now);
+    switched = 0; led_calls = 0; clock_ms = now; button_state = true; clear(); lab_init(&platform, now);
     /* Legacy cases enter the explicit text lab; production-style RTU boots quiet. */
     const char quiet[] = "LAB\nMONITOR OFF\n";
     for (size_t i = 0; i < sizeof(quiet) - 1; ++i) lab_receive((uint8_t)quiet[i], now);
@@ -337,7 +338,9 @@ static void rtu_tests(void) {
     rtu_packet(request,1,4,1,1);
     assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 7 && reply[1] == 4 && reply[2] == 2 && reply[4] == 100 && !lab_modbus_crc(reply,7)); ++checks;
     rtu_packet(request,1,6,0,1);
-    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[1] == 0x86 && reply[2] == 1); ++checks;
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[1] == 0x86 && reply[2] == 2); ++checks;
+    rtu_packet(request,1,0x41,0,1);
+    assert(lab_modbus_reply(request,8,reply,sizeof(reply)) == 5 && reply[1] == 0xc1 && reply[2] == 1); ++checks;
     rtu_packet(request,1,0x83,0,1);
     assert(!lab_modbus_reply(request,8,reply,sizeof(reply))); ++checks;
     rtu_init(0); send("ID?\r\n"); contains("ID NUCLEO-F103RB");
@@ -404,6 +407,157 @@ static void mstp_tests(void) {
     feed_bytes(request,length); poll(10,1); assert(used == length); ++checks;
     rtu_init(0xfffffffdu); length = mstp_packet(request,1,2,(const uint8_t *)"ABC",3);
     feed_bytes(request,length); poll(2,1); assert(used == sizeof(normal)); ++checks;
+}
+
+static void arm_rtu_fault(const char *command_text, uint32_t now) {
+    init(now); send(command_text); send("RTU\n"); clear();
+}
+
+static void normal_rtu_reply(const uint8_t *normal, size_t length) {
+    assert(used == length && !memcmp(out,normal,length));
+    assert(lab_modbus_crc(out,used) == 0); ++checks;
+}
+
+static void rtu_fault_tests(void) {
+    uint8_t request[8], normal[9], mstp[LAB_MSTP_MAX_BYTES];
+    size_t normal_length = lab_modbus_copy("NORMAL",normal,sizeof(normal));
+    rtu_packet(request,1,3,0,2);
+    init(0); send("RTU STATUS?\n");
+    equals("RTU reads=0 writes=0 led=0 fault=NONE delay_ms=0 pending=0\r\n");
+    clear(); send("RTU FAULT DELAY 40\nRTU STATUS?\n");
+    contains("OK RTU FAULT DELAY 40\r\n"); contains("fault=DELAY delay_ms=40 pending=0");
+    const char *invalid[] = {"RTU FAULT\n","RTU FAULT BAD\n","RTU FAULT DELAY\n",
+        "RTU FAULT DELAY 0\n","RTU FAULT DELAY 5001\n","RTU FAULT SPLIT -1\n",
+        "RTU FAULT CRC extra\n","RTU FAULT CLEAR extra\n","RTU RESET extra\n","RTU STATUS? extra\n"};
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        clear(); send(invalid[i]); contains("ERR");
+        clear(); send("RTU STATUS?\n"); contains("fault=DELAY delay_ms=40 pending=0");
+    }
+    clear(); send("RTU FAULT CLEAR\nRTU STATUS?\n");
+    contains("OK RTU FAULT CLEAR\r\n"); contains("fault=NONE delay_ms=0 pending=0");
+
+    /* Bare RTU preserves the armed fault, and a delay never blocks the loop. */
+    arm_rtu_fault("RTU FAULT DELAY 40\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1); equals(""); poll(44,4); equals("");
+    poll(45,1); normal_rtu_reply(normal,normal_length);
+    clear(); poll(200,4); equals("");
+    feed_bytes(request,sizeof(request)); poll(205,1); normal_rtu_reply(normal,normal_length);
+    arm_rtu_fault("RTU FAULT DELAY 30\n",0xfffffff0u);
+    feed_bytes(request,sizeof(request)); poll(0xfffffff5u,1); equals("");
+    poll(18,1); equals(""); poll(19,1); normal_rtu_reply(normal,normal_length);
+
+    arm_rtu_fault("RTU FAULT SPLIT 20\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    assert(used == 3 && !memcmp(out,normal,3)); ++checks;
+    poll(24,4); assert(used == 3); ++checks;
+    poll(25,1); normal_rtu_reply(normal,normal_length);
+    clear(); feed_bytes(request,sizeof(request)); poll(30,1); normal_rtu_reply(normal,normal_length);
+    arm_rtu_fault("RTU FAULT SPLIT 20\n",0); data_blocked = true;
+    feed_bytes(request,sizeof(request)); poll(5,4); equals("");
+    data_blocked = false; poll(6,1); assert(used == 3); ++checks;
+    poll(25,1); assert(used == 3); ++checks;
+    poll(26,1); normal_rtu_reply(normal,normal_length);
+    arm_rtu_fault("RTU FAULT SPLIT 30\n",0xfffffff0u);
+    feed_bytes(request,sizeof(request)); poll(0xfffffff5u,1); assert(used == 3); ++checks;
+    poll(18,1); assert(used == 3); ++checks;
+    poll(19,1); normal_rtu_reply(normal,normal_length);
+
+    arm_rtu_fault("RTU FAULT WRONGID\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    assert(used == normal_length && out[0] == 2 && !lab_modbus_crc(out,used)); ++checks;
+    clear(); feed_bytes(request,sizeof(request)); poll(10,1); normal_rtu_reply(normal,normal_length);
+    arm_rtu_fault("RTU FAULT TRUNCATE\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    assert(used == 3 && !memcmp(out,normal,3)); ++checks;
+    clear(); feed_bytes(request,sizeof(request)); poll(10,1); normal_rtu_reply(normal,normal_length);
+
+    /* Ignored CRC/unit requests and all MS/TP responses leave the fault armed. */
+    arm_rtu_fault("RTU FAULT CRC\n",0);
+    rtu_packet(request,2,3,0,2); feed_bytes(request,sizeof(request)); poll(5,1); equals("");
+    rtu_packet(request,1,3,0,2); request[7] ^= 1;
+    feed_bytes(request,sizeof(request)); poll(10,1); equals(""); request[7] ^= 1;
+    size_t mstp_length = mstp_packet(mstp,1,2,(const uint8_t *)"ABC",3);
+    feed_bytes(mstp,mstp_length); poll(15,1);
+    assert(used == mstp_length && out[0] == 0x55 && out[1] == 0xff && out[2] == 4); ++checks;
+    clear(); feed_bytes(request,sizeof(request)); poll(20,1);
+    assert(used == normal_length && lab_modbus_crc(out,used) != 0); ++checks;
+    clear(); feed_bytes(request,sizeof(request)); poll(25,1); normal_rtu_reply(normal,normal_length);
+    /* Normalize CRC before corrupting: the legacy corrupt fixture must stay bad. */
+    arm_rtu_fault("RTU FAULT CRC\n",0); rtu_packet(request,1,3,0x100,2);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    assert(used == normal_length && lab_modbus_crc(out,used) != 0); ++checks;
+    arm_rtu_fault("RTU FAULT WRONGID\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    assert(used == normal_length && out[0] == 2 && !lab_modbus_crc(out,used)); ++checks;
+
+    /* DROP loses only the ACK; the write and physical LED commit exactly once. */
+    arm_rtu_fault("RTU FAULT DROP\n",0); rtu_packet(request,1,5,0x1000,0xff00);
+    unsigned led_before = led_calls;
+    feed_bytes(request,sizeof(request)); poll(5,10); equals("");
+    assert(led_state && lab_modbus_write_commits() == 1 && led_calls == led_before + 1); ++checks;
+    poll(100,20); equals(""); assert(lab_modbus_write_commits() == 1); ++checks;
+    rtu_packet(request,1,1,0x1000,1); feed_bytes(request,sizeof(request)); poll(105,1);
+    assert(used == 6 && out[1] == 1 && out[3] == 1 && !lab_modbus_crc(out,used)); ++checks;
+    clear(); send("LAB\nRTU STATUS?\n"); contains("writes=1 led=1 fault=NONE delay_ms=0 pending=0");
+    clear(); send("RTU RESET\nPING still-lab\nRTU STATUS?\n");
+    contains("OK RTU RESET\r\nPONG still-lab\r\n");
+    contains("RTU reads=0 writes=0 led=0 fault=NONE delay_ms=0 pending=0");
+    assert(!led_state); ++checks;
+
+    /* A pending ACK cannot be overwritten or cause the write to execute again. */
+    rtu_init(0); rtu_packet(request,1,5,0x1000,0xff00); data_blocked = true;
+    led_before = led_calls;
+    feed_bytes(request,sizeof(request)); poll(5,20); equals("");
+    assert(led_state && lab_modbus_write_commits() == 1 && led_calls == led_before + 1); ++checks;
+    uint8_t second[8]; rtu_packet(second,1,5,0x1000,0);
+    feed_bytes(second,sizeof(second)); poll(10,10); equals("");
+    assert(led_state && lab_modbus_write_commits() == 1 && led_calls == led_before + 1); ++checks;
+    data_blocked = false; poll(11,1);
+    assert(used == sizeof(request) && !memcmp(out,request,sizeof(request))); ++checks;
+    clear(); feed_bytes(second,sizeof(second)); poll(16,1);
+    assert(!led_state && lab_modbus_write_commits() == 2 && !memcmp(out,second,sizeof(second))); ++checks;
+
+    /* Mode escapes and STOP cancel queued bytes, without resetting device RAM. */
+    arm_rtu_fault("RTU FAULT DELAY 50\n",0); rtu_packet(request,1,3,0,2);
+    feed_bytes(request,sizeof(request)); poll(5,1); equals("");
+    send("LAB\n"); equals("OK LAB\r\n"); clear(); poll(100,10); equals("");
+    send("RTU STATUS?\n"); contains("fault=NONE delay_ms=0 pending=0");
+    clear(); send("RTU\n"); clear(); feed_bytes(request,sizeof(request)); poll(105,1); normal_rtu_reply(normal,normal_length);
+    arm_rtu_fault("RTU FAULT SPLIT 50\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1); assert(used == 3); ++checks;
+    clear(); send("STOP\n"); equals("OK STOP\r\n"); clear(); poll(100,10); equals("");
+    send("RTU STATUS?\n"); contains("fault=NONE delay_ms=0 pending=0");
+
+    /* RESET also cancels a retained pending reply after the compatibility ID escape. */
+    arm_rtu_fault("RTU FAULT DELAY 50\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1); send("ID?\n");
+    clear(); send("RTU STATUS?\n"); contains("pending=1");
+    clear(); send("RTU RESET\nRTU STATUS?\n");
+    contains("RTU reads=0 writes=0 led=0 fault=NONE delay_ms=0 pending=0");
+    clear(); send("RTU\n"); clear(); poll(100,10); equals("");
+
+    arm_rtu_fault("RTU FAULT DELAY 50\n",0);
+    feed_bytes(request,sizeof(request)); poll(5,1); send("ID?\n");
+    clear(); send("RTU STATUS?\n"); contains("pending=1");
+    clear(); send("RTU FAULT CLEAR\nRTU STATUS?\n");
+    contains("OK RTU FAULT CLEAR\r\n"); contains("fault=NONE delay_ms=0 pending=0");
+    clear(); send("RTU\n"); clear(); poll(100,10); equals("");
+
+    arm_rtu_fault("RTU FAULT DROP\n",0); rtu_packet(request,1,5,0x1000,0xff00);
+    feed_bytes(request,sizeof(request)); poll(5,1);
+    clear(); send("LAB\nRTU STATUS?\n"); contains("writes=1 led=1");
+    send("RTU FAULT DELAY 50\nRTU\n"); clear(); rtu_packet(request,1,3,0,2);
+    feed_bytes(request,sizeof(request)); poll(10,1); equals("");
+    send("STOP\n"); clear(); send("RTU STATUS?\n");
+    contains("writes=1 led=1 fault=NONE delay_ms=0 pending=0");
+    assert(led_state); ++checks;
+    clear(); send("RTU\n"); clear(); poll(100,10); equals("");
+
+    /* LAB itself must not silently stop legacy jobs or change their faults. */
+    init(0); send("STREAM START 10 2\nLAB\n"); clear(); poll(10,1); poll(20,1);
+    contains("DATA seq=1 "); contains("DATA seq=2 ");
+    init(0); send("RTU FAULT DROP\nLAB\nRTU STATUS?\n"); contains("fault=NONE delay_ms=0 pending=0");
+    init(0); send("RTU FAULT DELAY 5000\nSTOP\nRTU STATUS?\n"); contains("fault=NONE delay_ms=0 pending=0");
 }
 
 static void fixture_tests(void) {
@@ -477,7 +631,7 @@ static void export_contract(const char *directory) {
     }
     const uint16_t addresses[] = {0,0x200,0x100,1,0,0,0,0,0};
     const uint16_t quantities[] = {2,2,2,1,0,126,1,2,2};
-    const uint8_t functions[] = {3,3,3,4,3,3,6,3,3};
+    const uint8_t functions[] = {3,3,3,4,3,3,0x41,3,3};
     const uint8_t units[] = {1,1,1,1,1,1,1,0,2};
     for (unsigned i = 0; i < 9; ++i) {
         uint8_t request[8]; char file[64];
@@ -507,6 +661,8 @@ int main(int argc, char **argv) {
     modbus_tests();
     rtu_tests();
     mstp_tests();
+    rtu_fault_tests();
+    checks += lab_modbus_extended_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);
     if (argc == 3 && !strcmp(argv[1],"--export")) export_contract(argv[2]);
     return 0;

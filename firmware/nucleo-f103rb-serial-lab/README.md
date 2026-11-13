@@ -6,6 +6,10 @@ CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다
 
 ## 기본 동작: HEX Modbus RTU 슬레이브
 
+**1.7.0은 직접 쓰기·변하는 카운터·LD2 코일·한 번 적용하는 오류 주입을 추가한다.**
+기존 LAB·BACnet 기능은 유지한다. [주소표·GUI 사용 순서·한 명령 자동 검사](MODBUS-MONITOR.md),
+[실제 기록·검증 결과](MODBUS-MONITOR-VALIDATION.md)를 먼저 참고한다.
+
 1.6.0은 기존 Modbus RTU와 **BACnet MS/TP Test Request/Response**를 같은 UART에서 시험합니다.
 앱의 분석 프로토콜을 선택하고 해당 HEX 시퀀스를 실행하세요. [MS/TP 시험 안내·패킷 예시](BACNET-MSTP.md)를 제공합니다.
 

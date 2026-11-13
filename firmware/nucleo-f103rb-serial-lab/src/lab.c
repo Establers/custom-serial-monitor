@@ -38,9 +38,13 @@ static size_t modbus_length, modbus_position;
 static uint32_t modbus_remaining, modbus_sent, modbus_due, modbus_interval;
 static bool modbus_gap;
 static uint8_t rtu_request[LAB_MSTP_MAX_BYTES], rtu_response[LAB_MSTP_MAX_BYTES];
-static size_t rtu_length, rtu_response_length;
-static uint32_t rtu_last_byte;
-static bool rtu_mode, rtu_overflow;
+static size_t rtu_length, rtu_response_length, rtu_response_position;
+static uint32_t rtu_last_byte, rtu_response_due, rtu_response_gap;
+static bool rtu_mode, rtu_overflow, rtu_response_split;
+typedef enum { RTU_FAULT_NONE, RTU_FAULT_DROP, RTU_FAULT_CRC, RTU_FAULT_TRUNCATE,
+               RTU_FAULT_WRONGID, RTU_FAULT_DELAY, RTU_FAULT_SPLIT } rtu_fault_kind;
+static rtu_fault_kind rtu_fault;
+static uint32_t rtu_fault_delay;
 /* Conservative assembly idle on this millisecond-tick UART bench, not t1.5 certification. */
 #define RTU_ASSEMBLY_IDLE_MS 5u
 static bool monitor_enabled, button_raw, button_stable;
@@ -133,6 +137,30 @@ static void stop_jobs(void) {
     pending_len = pending_pos = 0;
     modbus_remaining = 0;
     modbus_position = 0;
+}
+
+static const char *rtu_fault_name(rtu_fault_kind kind) {
+    switch (kind) {
+        case RTU_FAULT_DROP: return "DROP";
+        case RTU_FAULT_CRC: return "CRC";
+        case RTU_FAULT_TRUNCATE: return "TRUNCATE";
+        case RTU_FAULT_WRONGID: return "WRONGID";
+        case RTU_FAULT_DELAY: return "DELAY";
+        case RTU_FAULT_SPLIT: return "SPLIT";
+        default: return "NONE";
+    }
+}
+
+static void clear_rtu_state(bool clear_fault) {
+    rtu_length = rtu_response_length = rtu_response_position = 0;
+    rtu_response_due = rtu_response_gap = 0;
+    rtu_overflow = rtu_response_split = false;
+    if (clear_fault) { rtu_fault = RTU_FAULT_NONE; rtu_fault_delay = 0; }
+}
+
+static void apply_modbus_led(void) {
+    bool enabled;
+    if (lab_modbus_take_led(&enabled)) io.led(enabled);
 }
 
 static bool number(const char *text, uint32_t low, uint32_t high, uint32_t *result) {
@@ -271,7 +299,9 @@ static void complete_line(void) {
         "BAUD 9600", "BAUD 19200", "BAUD 38400", "BAUD 57600", "BAUD 115200", "BAUD 230400",
         "BAUD 460800", "BAUD 921600", "RESET CONFIRM", "MODBUS NORMAL", "MODBUS CRC", "MODBUS EXCEPTION",
         "MODBUS PREFIX", "MODBUS NESTED", "MODBUS CORRUPT", "MODBUS PAIR", "MODBUS TRUNCATED",
-        "MODBUS GAP", "MODBUS MAX", "MODBUS?", "RTU", "LAB", "CONSOLE ON", "CONSOLE OFF"
+        "MODBUS GAP", "MODBUS MAX", "MODBUS?", "RTU", "RTU RESET", "RTU STATUS?",
+        "RTU FAULT CLEAR", "RTU FAULT DROP", "RTU FAULT CRC", "RTU FAULT TRUNCATE",
+        "RTU FAULT WRONGID", "RTU FAULT DELAY", "RTU FAULT SPLIT", "LAB", "CONSOLE ON", "CONSOLE OFF"
     };
     const char *first = NULL;
     size_t common = 0, matches = 0;
@@ -332,6 +362,9 @@ static void command(uint32_t now) {
         (void)say("MODBUS case [count_1..1000000] [gap_ms_0..60000]; requires MONITOR OFF, idle, FAULT CLEAR\r\n"
                   "MODBUS cases: " LAB_MODBUS_CASES " | MODBUS?\r\n");
         (void)say("RTU (quiet unit 1 HEX slave); LAB enters legacy commands from RTU\r\n"
+                  "RTU reads 01|02|03|04; writes 05|06|0F|10; test bank starts at 0x1000\r\n"
+                  "RTU RESET | RTU STATUS? | RTU FAULT CLEAR|DROP|CRC|TRUNCATE|WRONGID\r\n"
+                  "RTU FAULT DELAY|SPLIT 1..5000 (one addressed reply only)\r\n"
                   "CONSOLE ON|OFF (remote echo); BS/DEL delete; Tab completes commands\r\n");
     } else if (!strcmp(cmd, "CONSOLE")) {
         char *state = token(&cursor);
@@ -349,11 +382,47 @@ static void command(uint32_t now) {
         selftest();
     } else if (!strcmp(cmd, "RUN")) {
         run_fixture(cursor,now);
-    } else if (!strcmp(cmd, "RTU") && !*cursor) {
-        stop_jobs(); rtu_length = rtu_response_length = 0; rtu_overflow = false;
-        rtu_mode = true; console_echo = false;
-        (void)say("OK RTU\r\n");
+    } else if (!strcmp(cmd, "RTU")) {
+        char *action = token(&cursor);
+        if (!action) {
+            stop_jobs(); clear_rtu_state(false); rtu_last_byte = now;
+            rtu_mode = true; console_echo = false;
+            io.led(lab_modbus_led());
+            (void)say("OK RTU\r\n");
+        } else if (!strcmp(action,"RESET") && !*cursor) {
+            clear_rtu_state(true); lab_modbus_reset(now); apply_modbus_led();
+            rtu_mode = false;
+            (void)say("OK RTU RESET\r\n");
+        } else if (!strcmp(action,"STATUS?") && !*cursor) {
+            (void)say("RTU reads=%lu writes=%lu led=%u fault=%s delay_ms=%lu pending=%u\r\n",
+                (unsigned long)lab_modbus_reads(), (unsigned long)lab_modbus_write_commits(),
+                lab_modbus_led() ? 1u : 0u, rtu_fault_name(rtu_fault),
+                (unsigned long)rtu_fault_delay, rtu_response_length ? 1u : 0u);
+        } else if (!strcmp(action,"FAULT")) {
+            char *kind = token(&cursor);
+            uint32_t delay = 0;
+            rtu_fault_kind next;
+            if (!kind) { error("ARGS RTU FAULT mode [1..5000]"); return; }
+            if (!strcmp(kind,"CLEAR")) next = RTU_FAULT_NONE;
+            else if (!strcmp(kind,"DROP")) next = RTU_FAULT_DROP;
+            else if (!strcmp(kind,"CRC")) next = RTU_FAULT_CRC;
+            else if (!strcmp(kind,"TRUNCATE")) next = RTU_FAULT_TRUNCATE;
+            else if (!strcmp(kind,"WRONGID")) next = RTU_FAULT_WRONGID;
+            else if (!strcmp(kind,"DELAY")) next = RTU_FAULT_DELAY;
+            else if (!strcmp(kind,"SPLIT")) next = RTU_FAULT_SPLIT;
+            else { error("ARGS RTU FAULT CLEAR|DROP|CRC|TRUNCATE|WRONGID|DELAY|SPLIT"); return; }
+            if ((next == RTU_FAULT_DELAY || next == RTU_FAULT_SPLIT) &&
+                !number(token(&cursor),1,5000,&delay)) {
+                error("ARGS RTU FAULT DELAY|SPLIT 1..5000"); return;
+            }
+            if (*cursor) { error("ARGS RTU FAULT mode [1..5000]"); return; }
+            if (next == RTU_FAULT_NONE) clear_rtu_state(true);
+            else { rtu_fault = next; rtu_fault_delay = delay; }
+            if (delay) (void)say("OK RTU FAULT %s %lu\r\n",kind,(unsigned long)delay);
+            else (void)say("OK RTU FAULT %s\r\n",kind);
+        } else error("ARGS RTU [RESET|STATUS?|FAULT mode]");
     } else if (!strcmp(cmd, "LAB") && !*cursor) {
+        clear_rtu_state(true);
         (void)say("OK LAB\r\n");
     } else if (!strcmp(cmd, "MODBUS?" ) && !*cursor) {
         (void)say("MODBUS active=%u remaining=%lu sent=%lu bytes=%u gap_ms=%lu split_gap_ms=%u\r\n",
@@ -384,7 +453,7 @@ static void command(uint32_t now) {
             (unsigned long)tx_rejected, (unsigned long)records, (unsigned long)injected_drops,
             (unsigned long)injected_duplicates, (unsigned long)injected_crc);
     } else if (!strcmp(cmd, "STOP") && !*cursor) {
-        stop_jobs(); (void)say("OK STOP\r\n");
+        stop_jobs(); clear_rtu_state(true); (void)say("OK STOP\r\n");
     } else if (!strcmp(cmd, "MONITOR?" ) && !*cursor) {
         (void)say("MONITOR enabled=%u heartbeat_ms=1000 debounce_ms=20 user=%s presses=%lu releases=%lu missed=%lu\r\n",
             monitor_enabled ? 1u : 0u, button_stable ? "PRESSED" : "RELEASED",
@@ -505,8 +574,8 @@ void lab_init(const lab_platform *platform, uint32_t now) {
     stop_jobs(); last_byte = now;
     modbus_length = 0; modbus_sent = modbus_due = modbus_interval = 0; modbus_gap = false;
     monitor_enabled = false;
-    rtu_mode = true; rtu_length = rtu_response_length = 0;
-    rtu_last_byte = now; rtu_overflow = false;
+    rtu_mode = true; clear_rtu_state(true);
+    rtu_last_byte = now; lab_modbus_reset(now); apply_modbus_led();
     heartbeat_due = now + HEARTBEAT_MS;
     heartbeat_seq = button_presses = button_releases = monitor_missed = 0;
     button_raw = button_stable = io.button();
@@ -518,13 +587,44 @@ static void poll_rtu(uint32_t now) {
         if (!rtu_overflow && !rtu_response_length) {
             /* The configured Modbus unit starts 01, MS/TP starts 55 FF.
              * These bench endpoints are disjoint; no CRC-guessing auto mode. */
+            rtu_response_position = 0; rtu_response_due = now;
+            rtu_response_gap = 0; rtu_response_split = false;
             if (rtu_length >= 2 && rtu_request[0] == 0x55 && rtu_request[1] == 0xff)
                 rtu_response_length = lab_mstp_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
-            else rtu_response_length = lab_modbus_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+            else {
+                lab_modbus_update(now,io.button());
+                rtu_response_length = lab_modbus_reply(rtu_request,rtu_length,rtu_response,sizeof(rtu_response));
+                apply_modbus_led();
+                /* Commit once before faulting/queueing its ACK. Repeated TX
+                 * backpressure retries send only this immutable reply buffer. */
+                if (rtu_response_length) {
+                    rtu_fault_kind fault = rtu_fault;
+                    uint32_t delay = rtu_fault_delay;
+                    rtu_fault = RTU_FAULT_NONE; rtu_fault_delay = 0;
+                    if (fault == RTU_FAULT_DROP) rtu_response_length = 0;
+                    else if (fault == RTU_FAULT_TRUNCATE) rtu_response_length = 3;
+                    else if (fault == RTU_FAULT_CRC || fault == RTU_FAULT_WRONGID) {
+                        if (fault == RTU_FAULT_WRONGID) rtu_response[0] = 2;
+                        uint16_t crc = lab_modbus_crc(rtu_response,rtu_response_length - 2);
+                        rtu_response[rtu_response_length - 2] = (uint8_t)crc;
+                        rtu_response[rtu_response_length - 1] = (uint8_t)(crc >> 8);
+                        if (fault == RTU_FAULT_CRC) rtu_response[rtu_response_length - 1] ^= 1;
+                    } else if (fault == RTU_FAULT_DELAY) rtu_response_due = now + delay;
+                    else if (fault == RTU_FAULT_SPLIT) { rtu_response_split = true; rtu_response_gap = delay; }
+                }
+            }
         }
         rtu_length = 0; rtu_overflow = false;
     }
-    if (rtu_response_length && io.write_data(rtu_response,rtu_response_length)) rtu_response_length = 0;
+    if (rtu_response_length && due(now,rtu_response_due)) {
+        size_t length = rtu_response_length - rtu_response_position;
+        if (rtu_response_split && rtu_response_position == 0) length = 3;
+        if (io.write_data(rtu_response + rtu_response_position,length)) {
+            rtu_response_position += length;
+            if (rtu_response_position == rtu_response_length) rtu_response_length = rtu_response_position = 0;
+            else rtu_response_due = now + rtu_response_gap;
+        }
+    }
 }
 
 static void receive_rtu(uint8_t byte, uint32_t now) {

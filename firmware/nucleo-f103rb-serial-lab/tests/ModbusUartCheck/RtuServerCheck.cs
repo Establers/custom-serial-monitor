@@ -27,7 +27,7 @@ static class RtuServerCheck
         new("INPUT",Adu(1,4,0,1,0,1),Adu(1,4,2,0,100)),
         new("ZERO",Adu(1,3,0,0,0,0),Adu(1,0x83,3),Exception:1),
         new("OVERSIZE",Adu(1,3,0,0,0,126),Adu(1,0x83,3),Exception:1),
-        new("FUNCTION",Adu(1,6,0,0,0,1),Adu(1,0x86,1),Exception:1),
+        new("FUNCTION",Adu(1,0x41,0,0,0,1),Adu(1,0xc1,1),Exception:1),
         new("BROADCAST",Adu(0,3,0,0,0,2),[]),
         new("OTHER_UNIT",Adu(2,3,0,0,0,2),[]),
         new("BAD_REQUEST_CRC",Bad(Adu(1,3,0,0,0,2)),[]),
