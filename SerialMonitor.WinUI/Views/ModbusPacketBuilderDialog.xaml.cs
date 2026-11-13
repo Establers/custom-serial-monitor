@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.ViewModels;
@@ -20,6 +21,14 @@ public sealed partial class ModbusPacketBuilderDialog : ContentDialog
             _copySession.PreviewChanged(Model.Preview);
             CopyStatus.Text = string.Empty;
         };
+    }
+
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        // Keep the native button row aligned with the editor's scrollbar gutter.
+        if (GetTemplateChild("CommandSpace") is FrameworkElement commandSpace)
+            commandSpace.Margin = EditorPanel.Margin;
     }
 
     private async void Copy_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)

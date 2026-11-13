@@ -10,6 +10,7 @@
     PrimaryButtonClick="Copy_Click">
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">560</x:Double>
+        <x:Double x:Key="ContentDialogButtonSpacing">12</x:Double>
         <DataTemplate x:Key="CompactFieldHeader">
             <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
