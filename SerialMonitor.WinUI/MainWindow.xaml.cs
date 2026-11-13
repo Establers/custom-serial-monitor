@@ -254,17 +254,37 @@ public sealed partial class MainWindow : Window
         }
 
         args.Cancel = true;
+        BeginShutdown();
+    }
+
+    private void BeginShutdown()
+    {
         if (_closeCleanupStarted)
         {
             return;
         }
 
         _closeCleanupStarted = true;
+        // Hiding keeps the window/dispatcher alive until RX drain, file flush,
+        // profile persistence and WebView cleanup have finished.
+        HideWindowForShutdown(AppWindow);
+        if (_sequenceResultsWindow is { } resultsWindow)
+            HideWindowForShutdown(resultsWindow.AppWindow);
         DisableShutdownInput(Root);
         UpdateLogNavigationActivity();
         _portAlias.Dispose();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
+    }
+
+    private static void HideWindowForShutdown(AppWindow window)
+    {
+        try { window.Hide(); }
+        catch (Exception ex)
+        {
+            // A visibility failure must not skip saving logs or releasing ports.
+            RuntimeDiagnostics.RecordError("MainWindow.HideWindowForShutdown", ex);
+        }
     }
 
     private static void DisableShutdownInput(DependencyObject element)
