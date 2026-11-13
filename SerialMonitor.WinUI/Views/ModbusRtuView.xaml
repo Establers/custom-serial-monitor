@@ -75,7 +75,12 @@
                                             <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding TimeoutLabel}" />
                                             <TextBlock Grid.Row="6" Text="{Binding FormatLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" />
+                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}">
+                                                <ComboBox.Resources>
+                                                    <!-- The native arrow otherwise keeps the closed field 32 pixels tall. -->
+                                                    <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
+                                                </ComboBox.Resources>
+                                            </ComboBox>
                                             <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
                                         </Grid>
                                         <Border Height="1" Background="{ThemeResource AppSurfaceBorderBrush}" Margin="0,2" />
