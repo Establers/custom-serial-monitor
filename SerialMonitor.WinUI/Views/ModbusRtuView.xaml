@@ -74,7 +74,11 @@
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding UnitLabel}" />
-                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" />
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}">
+                                                <ComboBox.Resources>
+                                                    <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
+                                                </ComboBox.Resources>
+                                            </ComboBox>
                                             <TextBlock Grid.Row="2" Text="{Binding AddressLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding QuantityLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="3" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding AddressLabel}" />
