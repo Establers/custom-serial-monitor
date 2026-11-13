@@ -29,6 +29,47 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     private string _errorSummary = string.Empty;
     private string _otherSummary = string.Empty;
     private string _details = SelectionPrompt;
+    private ModbusRtuViewModel? _modbus;
+    private bool _isRegisterMonitorSelected;
+
+    public ModbusRtuViewModel? Modbus
+    {
+        get => _modbus;
+        set
+        {
+            if (ReferenceEquals(_modbus, value)) return;
+            if (_modbus is not null) _modbus.PropertyChanged -= Modbus_PropertyChanged;
+            _modbus = value;
+            if (_modbus is not null) _modbus.PropertyChanged += Modbus_PropertyChanged;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsProtocolSelectionEnabled));
+        }
+    }
+    private void Modbus_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(ModbusRtuViewModel.IsBusy)) OnPropertyChanged(nameof(IsProtocolSelectionEnabled));
+    }
+    public bool IsProtocolSelectionEnabled => Modbus?.IsBusy != true;
+    public bool IsRegisterMonitorSelected
+    {
+        get => _isRegisterMonitorSelected;
+        set
+        {
+            if (!SetProperty(ref _isRegisterMonitorSelected, value)) return;
+            OnPropertyChanged(nameof(IsPacketAnalysisSelected));
+            OnPropertyChanged(nameof(RegisterMonitorVisibility));
+            OnPropertyChanged(nameof(PacketAnalysisVisibility));
+            // The shared Protocol tab remains visible in either mode. Refresh
+            // metadata on entry, and explicitly restore packet rows on return.
+            if (_isVisible) Refresh(force: true);
+        }
+    }
+    public bool IsPacketAnalysisSelected { get => !IsRegisterMonitorSelected; set => IsRegisterMonitorSelected = !value; }
+    public Visibility ModbusModeSelectorVisibility => SelectedProtocolIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RegisterMonitorVisibility => SelectedProtocolIndex == 1 && IsRegisterMonitorSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility PacketAnalysisVisibility => RegisterMonitorVisibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+    public string PacketModeLabel => UiText.Get("ModbusMonitorPacketMode", "Packet analysis");
+    public string RegisterModeLabel => UiText.Get("ModbusMonitorRegisterMode", "Register monitor");
 
     public IProtocolAnalyzer Analyzer { get; } = analyzer;
     public ModbusValueInterpreterViewModel ValueInterpreter { get; } = new();
@@ -128,7 +169,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             if (_isDisplayPaused == value) return;
             if (value && !_hasDisplaySnapshot)
             {
-                var snapshot = Analyzer.Snapshot();
+                var snapshot = Analyzer.Snapshot(includeFrames: RegisterMonitorVisibility != Visibility.Visible);
                 _displaySource = snapshot.Results ?? Array.Empty<IProtocolFrame>();
                 _displayedThroughFrameId = snapshot.LastFrameId;
                 _hasDisplaySnapshot = true;
@@ -147,6 +188,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         set
         {
             var normalized = value is 1 or 2 ? value : 0;
+            if (!IsProtocolSelectionEnabled && normalized != _selectedProtocolIndex) return;
             if (_selectedProtocolIndex == normalized) return;
             try
             {
@@ -168,7 +210,8 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
                     ResetFilters();
                 }
                 foreach (var name in new[] { nameof(IsMstp), nameof(AddressLabel), nameof(CodeLabel), nameof(FunctionLabel), nameof(PacketBuilderVisibility),
-                    nameof(FilterUnitLabel), nameof(FilterFunctionLabel), nameof(FilterFunctionHelp), nameof(FilterSummary) }) OnPropertyChanged(name);
+                    nameof(FilterUnitLabel), nameof(FilterFunctionLabel), nameof(FilterFunctionHelp), nameof(FilterSummary),
+                    nameof(ModbusModeSelectorVisibility), nameof(RegisterMonitorVisibility), nameof(PacketAnalysisVisibility) }) OnPropertyChanged(name);
             }
             catch (Exception ex) { Status = ex.Message; return; }
             Refresh(force: true);
@@ -220,7 +263,8 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
     public void Refresh(bool force = false)
     {
-        var snapshot = Analyzer.Snapshot(force ? -1 : _version, includeFrames: _isVisible && !IsDisplayPaused);
+        var renderPackets = _isVisible && RegisterMonitorVisibility != Visibility.Visible;
+        var snapshot = Analyzer.Snapshot(force ? -1 : _version, includeFrames: renderPackets && !IsDisplayPaused);
         PendingDisplayFrames = IsDisplayPaused ? Math.Max(0, snapshot.LastFrameId - _pauseBaselineId) : 0;
         var state = snapshot.LastError is not null ? UiText.Get("ProtocolError", "Analysis error")
             : snapshot.Enabled ? UiText.Get("ProtocolRunning", "Analyzing") : DisabledLabel;
@@ -238,7 +282,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             stats.StartedAt.ToLocalTime().ToString("MM-dd HH:mm:ss"),
             stats.LastCrcValidAt?.ToLocalTime().ToString("MM-dd HH:mm:ss.fff") ?? "—");
 
-        if (_isVisible)
+        if (renderPackets)
         {
             if (!IsDisplayPaused && snapshot.Results is { } packets)
             {
@@ -295,13 +339,14 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
     private void RequestLatest()
     {
-        if (_isVisible && IsFollowingLatest && !IsDisplayPaused && Frames.Count > 0)
+        if (_isVisible && RegisterMonitorVisibility != Visibility.Visible && IsFollowingLatest && !IsDisplayPaused && Frames.Count > 0)
             LatestRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void NotifyPresentationState()
     {
-        ValueInterpreter.SetFrame(SelectedProtocolIndex == 1 ? _selectedFrame?.Frame as ModbusRtuFrame : null);
+        if (RegisterMonitorVisibility != Visibility.Visible)
+            ValueInterpreter.SetFrame(SelectedProtocolIndex == 1 ? _selectedFrame?.Frame as ModbusRtuFrame : null);
         OnPropertyChanged(nameof(HasFrames));
         OnPropertyChanged(nameof(EmptyStateVisibility));
         OnPropertyChanged(nameof(DetailsVisibility));

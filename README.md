@@ -40,7 +40,7 @@ Windows 10/11 **x64**와 Microsoft Edge WebView2 Runtime이 필요합니다.
 | 룰 | 문자·HEX 규칙으로 이벤트 탐지, 강조·필터·알림 |
 | AI 플러그인 | Codex·Claude Code·GitHub Copilot에서 명령 전송과 RX 수집 |
 | 로그 | 파일 기록·회전·내보내기, 검색·필터, 시간별 이동 |
-| 프로토콜 분석 | Modbus RTU·BACnet MS/TP 해석, CRC·누락 통계, Modbus 요청 패킷 만들기 |
+| 프로토콜 | Modbus RTU·BACnet MS/TP 분석, Modbus RTU 자동 폴링·레지스터 표·직접 쓰기·설정 저장 |
 | 프로필 | 연결 설정·룰·명령·시퀀스 저장 및 불러오기 |
 
 수신 과부하와 백그라운드 오류는 하단 **Health** 상태에서 확인할 수 있습니다.
@@ -108,6 +108,7 @@ dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln -c Release --no-build -m
 | [시리얼 제어선](docs/serial-control-lines.md) | CTS·DSR·DCD·RI 상태, 연결 중 DTR/RTS 조작과 RTS 송신 자동 제어 |
 | [아키텍처](docs/architecture.md) | 수신 파이프라인과 백그라운드 처리 구조 |
 | [Modbus RTU 분석](docs/modbus-rtu-analysis.md) | 사용법과 해석 범위 |
+| [Modbus RTU 레지스터 모니터](docs/modbus-rtu-monitor.md) | 자동 폴링·직접 쓰기·프로필 저장과 송신 소유권 |
 | [테스트 체크리스트](docs/manual_test_checklist.md) | 기능별 수동 회귀 검사 |
 | [장치 테스트](docs/device-test-development-guide.md) | STM32 테스트 펌웨어와 실제 RX 기반 검증 |
 | [릴리스 기록](https://github.com/Establers/custom-serial-monitor/releases) | 버전별 변경 사항과 배포 파일 |

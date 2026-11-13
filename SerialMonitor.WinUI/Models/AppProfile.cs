@@ -20,6 +20,8 @@ public sealed class AppProfile
 
     public BridgeSettings BridgeSettings { get; set; } = new();
 
+    public ModbusMonitorSettings ModbusSettings { get; set; } = new();
+
     public List<LogRule> LogRules { get; set; } = new();
 
     public List<EventRule> EventRules { get; set; } = new();

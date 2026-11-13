@@ -11,7 +11,7 @@ public sealed partial class MainViewModel
     private long _serialControlLineErrorGeneration;
 
     public bool IsSerialControlLineBusy => _serialControlLineBusy;
-    private bool CanChangeSerialControlLines => !IsShuttingDown && !IsBusy && !IsAutoReconnectRunning &&
+    private bool CanChangeSerialControlLines => !IsShuttingDown && !IsBusy && !IsModbusBusy && !IsAutoReconnectRunning &&
         !IsAutomationBusy && !_serialControlLineBusy && !_serialConfigurationBusy && !IsSequenceRunning &&
         !_isProfileSaveActive && !IsBridgeStarting;
     public bool CanEditDtrControl => CanChangeSerialControlLines && (IsConnected

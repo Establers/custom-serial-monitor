@@ -1,0 +1,153 @@
+<UserControl
+    x:Class="SerialMonitor.WinUI.Views.ModbusRtuView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+    Loaded="View_Loaded">
+    <UserControl.Resources>
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="MaxLines" Value="1" />
+        </Style>
+        <Style x:Key="Action" TargetType="Button">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="9,2" />
+        </Style>
+        <Style x:Key="Input" TargetType="TextBox">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="7,3" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Padding="6,4,6,6" RowDefinitions="Auto,Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
+        <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="7,5">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="5">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
+                    <TextBlock Text="{Binding Status}" Style="{StaticResource Cell}" FontWeight="SemiBold"
+                               ToolTipService.ToolTip="{Binding Status}" />
+                    <Button Grid.Column="1" Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" Style="{StaticResource Action}" />
+                    <Button Grid.Column="2" Content="{Binding StartLabel}" Command="{Binding StartCommand}" Style="{StaticResource Action}" />
+                    <Button x:Name="StopButton" Grid.Column="3" Content="{Binding StopLabel}" Command="{Binding StopCommand}" Style="{StaticResource Action}" />
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
+                    <TextBlock Text="{Binding RequestSummary}" Style="{StaticResource Cell}" FontFamily="Consolas"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding SetupHelp}" />
+                    <Button Grid.Column="1" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight" Opening="SettingsFlyout_Opening">
+                                <ScrollViewer x:Name="SettingsScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ContentControl x:Name="SettingsEditorRoot" IsEnabled="{Binding IsSettingsEnabled}" HorizontalContentAlignment="Stretch">
+                                    <StackPanel x:Name="SettingsPanel" Width="350" Spacing="10" Margin="0,0,20,0">
+                                        <TextBlock Text="{Binding SettingsLabel}" FontSize="15" FontWeight="SemiBold" />
+                                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="5">
+                                            <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource Cell}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource Cell}" />
+                                            <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding UnitLabel}" />
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" />
+                                            <TextBlock Grid.Row="2" Text="{Binding AddressLabel}" Style="{StaticResource Cell}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding QuantityLabel}" Style="{StaticResource Cell}" />
+                                            <TextBox Grid.Row="3" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding AddressLabel}" />
+                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding QuantityLabel}" />
+                                            <TextBlock Grid.Row="4" Text="{Binding IntervalLabel}" FontSize="11" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TimeoutLabel}" FontSize="11" TextWrapping="Wrap" />
+                                            <TextBox Grid.Row="5" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding IntervalLabel}" />
+                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding TimeoutLabel}" />
+                                            <TextBlock Grid.Row="6" Text="{Binding FormatLabel}" Style="{StaticResource Cell}" />
+                                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource Cell}" />
+                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" />
+                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
+                                        </Grid>
+                                        <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegisterFunction}" FontSize="12" />
+                                        <CheckBox Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding IsWordSwapEnabled}" FontSize="12" />
+                                        <TextBlock Text="{Binding SetupHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding OwnershipHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    </ContentControl>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Grid.Column="2" Content="{Binding SaveLabel}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Action}" />
+                    <Button Grid.Column="3" Content="{Binding WriteEditorLabel}" IsEnabled="{Binding IsWritableFunction}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight" Opening="WriteFlyout_Opening">
+                                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ContentControl x:Name="WriteEditorRoot" IsEnabled="{Binding IsWriteEditorEnabled}" HorizontalContentAlignment="Stretch">
+                                        <StackPanel Width="420" Spacing="8" Margin="0,0,20,0">
+                                            <TextBlock Text="{Binding WriteEditorLabel}" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding WriteHelp}" FontSize="11" TextWrapping="Wrap" />
+                                            <Grid ColumnDefinitions="125,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                                                <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                                <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                                <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
+                                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding WriteValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AcceptsReturn="True" MinHeight="60" MaxHeight="100" TextWrapping="Wrap" AutomationProperties.Name="{Binding WriteValuesLabel}" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding Status}" FontSize="12" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
+                                            <Button Content="{Binding WriteLabel}" Command="{Binding WriteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </ContentControl>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+        <StackPanel Grid.Row="1" Spacing="3">
+            <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
+            <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding AvailabilityText}" />
+            <ScrollViewer MaxHeight="55" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="{Binding ErrorVisibility}">
+                <TextBlock Text="{Binding Error}" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{ThemeResource ErrorTextBrush}" />
+            </ScrollViewer>
+        </StackPanel>
+        <Border Grid.Row="2" Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" MinHeight="0">
+            <Grid MinHeight="0">
+                <ScrollViewer x:Name="TableScroll" HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
+                    <Grid MinWidth="640" RowDefinitions="Auto,*" MinHeight="0">
+                        <Border Background="{ThemeResource InspectorHeaderBrush}" Padding="8,5,24,5">
+                            <Grid ColumnDefinitions="110,110,*,105,100" ColumnSpacing="8">
+                                <TextBlock Text="{Binding TableAddressLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="1" Text="{Binding RawLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="2" Text="{Binding ValueLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="3" Text="{Binding StateLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="4" Text="{Binding UpdatedLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                            </Grid>
+                        </Border>
+                        <ListView x:Name="RegisterList" Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                                  HorizontalContentAlignment="Stretch" SelectionMode="Single" MinHeight="0" Padding="0"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  AutomationProperties.Name="{Binding TabTitle}">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="28" />
+                                    <Setter Property="Padding" Value="8,3" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="ContentTransitions"><Setter.Value><TransitionCollection /></Setter.Value></Setter>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="110,110,*,105,100" ColumnSpacing="8">
+                                        <TextBlock Text="{Binding AddressText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
+                                        <TextBlock Grid.Column="1" Text="{Binding RawText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding RawText}" />
+                                        <Grid Grid.Column="2" ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                            <TextBlock Text="{Binding ChangeText}" Style="{StaticResource Cell}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding ValueText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding ValueText}" />
+                                        </Grid>
+                                        <TextBlock Grid.Column="3" Text="{Binding StatusText}" Style="{StaticResource Cell}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding StatusText}" />
+                                        <TextBlock Grid.Column="4" Text="{Binding UpdatedText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </ScrollViewer>
+                <TextBlock Text="{Binding EmptyHelp}" Visibility="{Binding EmptyVisibility}" MaxWidth="440" Margin="15" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

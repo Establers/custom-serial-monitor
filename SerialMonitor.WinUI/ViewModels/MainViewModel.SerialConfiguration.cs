@@ -9,7 +9,7 @@ public sealed partial class MainViewModel
     private bool _serialConfigurationBusy;
     private bool _automationSerialControl;
 
-    public bool CanEditSerialParameters => !IsShuttingDown && !IsBusy && !IsAutoReconnectRunning &&
+    public bool CanEditSerialParameters => !IsShuttingDown && !IsBusy && !IsModbusBusy && !IsAutoReconnectRunning &&
         !IsAutomationBusy && !_serialControlLineBusy && !_serialConfigurationBusy && !IsSequenceRunning &&
         !_isProfileSaveActive && !IsBridgeStarting && !IsBridgeActive;
 

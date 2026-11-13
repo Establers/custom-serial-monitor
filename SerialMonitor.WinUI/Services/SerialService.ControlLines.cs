@@ -32,6 +32,7 @@ public sealed partial class SerialService
         Func<SerialPortConfiguration, SerialPortConfiguration> update, CancellationToken token)
     {
         ThrowIfDisposed();
+        using var admission = AdmitSerialOperation();
         var requestedSession = Volatile.Read(ref _currentReceiveSession);
         await _lifecycleGate.WaitAsync(token).ConfigureAwait(false);
         try

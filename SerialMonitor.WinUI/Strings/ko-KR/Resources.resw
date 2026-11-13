@@ -1307,4 +1307,71 @@
   <data name="LogMemoryBudgetInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>로그 보관 데이터 예산: 64–2048MiB, 기본값 256. 즉시 적용되고 프로필에 저장됩니다. 화면 렌더링과 앱의 다른 메모리는 별도이며, 64Mi 문자 제한도 적용됩니다.</value></data>
   <data name="LogMemoryBudgetApply.Text" xml:space="preserve"><value>즉시</value></data>
   <data name="LogMemoryBudgetApply.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>예산을 낮추면 오래된 화면 로그를 제거합니다. 높이면 이후 로그를 더 오래 보관하며, 이미 제거된 로그는 다시 불러오지 않습니다.</value></data>
+<data name="ModbusMonitorStart" xml:space="preserve"><value>폴링 시작</value></data>
+<data name="ModbusMonitorStop" xml:space="preserve"><value>정지</value></data>
+<data name="ModbusMonitorReadOnce" xml:space="preserve"><value>한 번 읽기</value></data>
+<data name="ModbusMonitorSettings" xml:space="preserve"><value>설정</value></data>
+<data name="ModbusMonitorSave" xml:space="preserve"><value>설정 저장</value></data>
+<data name="ModbusMonitorUnit" xml:space="preserve"><value>장치 ID (1–247)</value></data>
+<data name="ModbusMonitorFunction" xml:space="preserve"><value>읽기 기능</value></data>
+<data name="ModbusMonitorAddress" xml:space="preserve"><value>시작 주소 (0부터)</value></data>
+<data name="ModbusMonitorQuantity" xml:space="preserve"><value>수량</value></data>
+<data name="ModbusMonitorInterval" xml:space="preserve"><value>주기 (100–60000 ms)</value></data>
+<data name="ModbusMonitorTimeout" xml:space="preserve"><value>응답 제한 (100–10000 ms)</value></data>
+<data name="ModbusMonitorFormat" xml:space="preserve"><value>표시 형식</value></data>
+<data name="ModbusMonitorScale" xml:space="preserve"><value>표시 배율</value></data>
+<data name="ModbusMonitorSwapBytes" xml:space="preserve"><value>바이트 교환</value></data>
+<data name="ModbusMonitorSwapWords" xml:space="preserve"><value>워드 교환 (32비트)</value></data>
+<data name="ModbusMonitorSetupHelp" xml:space="preserve"><value>주소는 실제 프로토콜의 0부터 세는 값입니다. 예: Holding Register 40001 → 주소 0. 설정은 앱 프로필에 저장합니다. 설정 불러오기나 재연결로 폴링을 자동 시작하지 않습니다.</value></data>
+<data name="ModbusMonitorOwnershipHelp" xml:space="preserve"><value>폴링 중에는 이 연결을 예약합니다. 시퀀스·수동 전송·브리지를 사용하려면 먼저 정지하세요. 이 화면의 직접 쓰기는 폴링과 순서대로 처리합니다.</value></data>
+<data name="ModbusMonitorRaw" xml:space="preserve"><value>원본 HEX</value></data>
+<data name="ModbusMonitorValue" xml:space="preserve"><value>해석 값</value></data>
+<data name="ModbusMonitorState" xml:space="preserve"><value>상태</value></data>
+<data name="ModbusMonitorUpdated" xml:space="preserve"><value>마지막 응답</value></data>
+<data name="ModbusMonitorTableAddress" xml:space="preserve"><value>주소 (0부터)</value></data>
+<data name="ModbusMonitorEmpty" xml:space="preserve"><value>장치를 연결하고 설정을 확인한 뒤 한 번 읽기 또는 폴링 시작을 누르세요.</value></data>
+<data name="ModbusMonitorWrite" xml:space="preserve"><value>쓰기 및 확인</value></data>
+<data name="ModbusMonitorWriteAddress" xml:space="preserve"><value>쓰기 주소 (0부터)</value></data>
+<data name="ModbusMonitorWriteCoils" xml:space="preserve"><value>원시 코일 값 (0 / 1)</value></data>
+<data name="ModbusMonitorWriteRegisters" xml:space="preserve"><value>원시 UInt16 값 (0–65535 / 0x HEX)</value></data>
+<data name="ModbusMonitorWriteHelp" xml:space="preserve"><value>행을 선택하거나 감시 영역 안의 주소를 입력하세요. 배율 적용 전의 원시 값을 사용하며 여러 값은 연속 주소에 씁니다. 쓰기는 자동 재시도하지 않습니다. 쓰기 후 다시 읽어 확인합니다.</value></data>
+<data name="ModbusMonitorReadOnly" xml:space="preserve"><value>이산 입력과 Input Register는 읽기 전용입니다. 쓰려면 설정에서 FC01 또는 FC03을 선택하세요.</value></data>
+<data name="ModbusMonitorInvalidNumbers" xml:space="preserve"><value>완전한 0 이상의 숫자를 입력하세요. ID·주소·수량은 0x HEX도 사용할 수 있습니다.</value></data>
+<data name="ModbusMonitorInvalidScale" xml:space="preserve"><value>유한한 표시 배율을 입력하세요. 예: 1 또는 0.1.</value></data>
+<data name="ModbusMonitorInvalidSettings" xml:space="preserve"><value>ID 1–247, 주소 0–65535, 수량 1–125레지스터 / 1–2000비트, 마지막 주소 범위, 주기 100–60000ms, 응답 제한 100–10000ms, 유한한 배율을 확인하세요.</value></data>
+<data name="ModbusMonitorStopBeforeSettings" xml:space="preserve"><value>설정을 불러오기 전에 Modbus를 정지하세요.</value></data>
+<data name="ModbusMonitorReady" xml:space="preserve"><value>준비 · 설정만으로 통신을 시작하지 않습니다</value></data>
+<data name="ModbusMonitorBusy" xml:space="preserve"><value>장치를 연결하고 시퀀스·자동화·브리지를 정지한 뒤 Modbus를 시작하세요.</value></data>
+<data name="ModbusMonitorSaved" xml:space="preserve"><value>앱 프로필에 설정을 저장했습니다</value></data>
+<data name="ModbusMonitorWriteUnavailable" xml:space="preserve"><value>FC01·FC03에서 연결이 비어 있거나 이 화면에서 폴링 중일 때 쓸 수 있습니다.</value></data>
+<data name="ModbusMonitorInvalidWriteAddress" xml:space="preserve"><value>쓰기 주소를 0부터 세는 완전한 숫자로 입력하세요.</value></data>
+<data name="ModbusMonitorInvalidWriteValues" xml:space="preserve"><value>원시 값을 공백이나 쉼표로 구분해 입력하세요. 값 범위와 수량을 확인하세요.</value></data>
+<data name="ModbusMonitorWriteRange" xml:space="preserve"><value>쓰기 후 확인할 수 있도록 전체 쓰기 범위를 감시 영역 안에 지정하세요.</value></data>
+<data name="ModbusMonitorReading" xml:space="preserve"><value>읽는 중</value></data>
+<data name="ModbusMonitorPolling" xml:space="preserve"><value>폴링 중 · 연결 예약됨</value></data>
+<data name="ModbusMonitorStopped" xml:space="preserve"><value>정지 · 보관된 값은 과거 값입니다</value></data>
+<data name="ModbusMonitorErrorState" xml:space="preserve"><value>통신 오류 · 보관된 값은 과거 값입니다</value></data>
+<data name="ModbusMonitorDisconnected" xml:space="preserve"><value>연결 해제 · 다시 연결한 뒤 직접 시작하세요</value></data>
+<data name="ModbusMonitorWriteQueued" xml:space="preserve"><value>쓰기 대기 중</value></data>
+<data name="ModbusMonitorWriting" xml:space="preserve"><value>쓰는 중</value></data>
+<data name="ModbusMonitorWriteVerified" xml:space="preserve"><value>쓰기 값 확인됨</value></data>
+<data name="ModbusMonitorWriteNotVerified" xml:space="preserve"><value>쓰기 확인 실패 · 재시도 전 확인 필요</value></data>
+<data name="ModbusMonitorWriteFailed" xml:space="preserve"><value>쓰기 실패 · 재시도 전 확인 필요</value></data>
+<data name="ModbusMonitorStatistics" xml:space="preserve"><value>정상 {0:N0} · 오류 {1:N0} · 응답 {2}</value></data>
+<data name="ModbusMonitorNoValue" xml:space="preserve"><value>응답 대기</value></data>
+<data name="ModbusMonitorCurrent" xml:space="preserve"><value>최신 값</value></data>
+<data name="ModbusMonitorStale" xml:space="preserve"><value>과거 값</value></data>
+<data name="ModbusMonitorUnpaired" xml:space="preserve"><value>32비트 짝 레지스터 부족</value></data>
+<data name="ModbusMonitorOverflow" xml:space="preserve"><value>배율 범위 초과</value></data>
+<data name="ModbusMonitorPacketMode" xml:space="preserve"><value>패킷 분석</value></data>
+<data name="ModbusMonitorRegisterMode" xml:space="preserve"><value>레지스터 모니터</value></data>
+<data name="ModbusMonitorStopping" xml:space="preserve"><value>정지 중 · 현재 응답 처리 대기 (최대 응답 제한 시간)</value></data>
+<data name="ModbusMonitorWriteEditor" xml:space="preserve"><value>직접 쓰기…</value></data>
+<data name="ModbusMonitorReadComplete" xml:space="preserve"><value>읽기 완료 · 마지막 응답 표시 중</value></data>
+<data name="ModbusMonitorLastAge" xml:space="preserve"><value>마지막 응답 {0:N0}초 전</value></data>
+<data name="ModbusMonitorNeedConnection" xml:space="preserve"><value>Modbus RTU를 시작하려면 장치를 연결하세요.</value></data>
+<data name="ModbusMonitorNeedEightBits" xml:space="preserve"><value>Modbus RTU에는 8 데이터 비트가 필요합니다. 연결을 해제하고 시리얼 설정을 바꾼 뒤 다시 연결하세요.</value></data>
+<data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Modbus RTU를 시작하기 전에 터미널 직접 입력을 끄세요.</value></data>
+<data name="ModbusMonitorOtherOwner" xml:space="preserve"><value>이 연결을 사용하는 시퀀스·자동화·브리지를 정지한 뒤 Modbus를 시작하세요.</value></data>
+<data name="ModbusMonitorWait" xml:space="preserve"><value>진행 중인 연결·드라이버·설정 작업이 끝날 때까지 기다리세요.</value></data>
 </root>

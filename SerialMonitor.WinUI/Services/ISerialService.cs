@@ -20,6 +20,11 @@ public interface ISerialService : IAsyncDisposable
 
     long ReceiveSessionGeneration { get; }
 
+    string? ExclusiveSessionOwner => null;
+
+    ISerialExclusiveSession AcquireExclusiveSession(string owner) =>
+        throw new NotSupportedException("Exclusive serial sessions are unavailable.");
+
     string? LastError { get; }
 
     long ReceivedByteCount { get; }

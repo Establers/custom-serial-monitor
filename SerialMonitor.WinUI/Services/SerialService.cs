@@ -339,6 +339,7 @@ public sealed partial class SerialService : ISerialService
         if (baudRate is < 1 or > 10_000_000)
             throw new ArgumentOutOfRangeException(nameof(baudRate), "Baud rate must be between 1 and 10,000,000 bps.");
 
+        using var admission = AdmitSerialOperation();
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -432,13 +433,14 @@ public sealed partial class SerialService : ISerialService
     }
 
     private async Task SendPayloadAsync(byte[] payload, string mockResponse, CancellationToken cancellationToken,
-        long? expectedSessionGeneration = null)
+        long? expectedSessionGeneration = null, ExclusiveSession? exclusiveSession = null)
     {
+        using var admission = AdmitSerialOperation(exclusiveSession);
         // Bind before waiting: a disconnect barrier can finish while a later
         // queued writer's continuation is still waiting on the UI dispatcher.
         var session = Volatile.Read(ref _currentReceiveSession);
         if (expectedSessionGeneration.HasValue && session?.Generation != expectedSessionGeneration.Value)
-            throw new InvalidOperationException("Direct input belongs to a previous serial connection.");
+            throw new InvalidOperationException("Transmission belongs to a previous serial connection.");
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
@@ -1152,7 +1154,12 @@ public sealed partial class SerialService : ISerialService
 
     public void SetRawBridgePriorityEnabled(bool enabled)
     {
-        Volatile.Write(ref _rawBridgePriorityEnabled, enabled ? 1 : 0);
+        lock (_transmitAdmissionGate)
+        {
+            if (enabled && _exclusiveSession is not null)
+                throw new InvalidOperationException("Stop the exclusive serial session before starting a bridge.");
+            Volatile.Write(ref _rawBridgePriorityEnabled, enabled ? 1 : 0);
+        }
         RaiseStatusChanged();
     }
 

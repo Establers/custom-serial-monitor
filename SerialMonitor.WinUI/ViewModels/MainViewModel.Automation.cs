@@ -123,7 +123,7 @@ public sealed partial class MainViewModel
             ? _serialService.AppliedBaudRate : settings.BaudRate;
         return new(_serialService.IsConnected, settings.PortName, effectiveBaudRate,
             _serialService.ReceiveSessionGeneration, _currentSerialSettings.Encoding.ToString(),
-            CaptureConnectionSnapshot.SerialErrorCount, IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
+            CaptureConnectionSnapshot.SerialErrorCount, IsBusy || IsModbusBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
             IsAutoReconnectRunning || IsAutomationBusy || IsTerminalDirectInputEnabled ||
             _activeGuiSends > 0 || _isProfileSaveActive, _serialService.LastError,
             settings.DataBits, settings.Parity.ToString(), settings.StopBits.ToString(), settings.Handshake.ToString(),
@@ -155,6 +155,7 @@ public sealed partial class MainViewModel
         LoadProfileCommand.NotifyCanExecuteChanged();
         ResetProfileCommand.NotifyCanExecuteChanged();
         CancelAutomationCommand.NotifyCanExecuteChanged();
+        RefreshModbusAvailability();
     }
 
     private async Task<object> InvokeAutomationOnUiAsync(string operation, JsonElement args, CancellationToken cancellationToken)
@@ -194,7 +195,7 @@ public sealed partial class MainViewModel
             case "reserve":
                 var serialControl = args.String("operation") is "set_control_line" or "configure";
                 var busy = serialControl
-                    ? IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting || IsAutoReconnectRunning ||
+                    ? IsBusy || IsModbusBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting || IsAutoReconnectRunning ||
                         IsAutomationBusy || _activeGuiSends > 0 || _isProfileSaveActive || _serialConfigurationBusy || _serialControlLineBusy
                     : AutomationState().Busy;
                 if (busy || !_automationControl.TryReserveAutomation())

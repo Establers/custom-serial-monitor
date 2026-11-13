@@ -88,7 +88,13 @@ public sealed partial class ProtocolView : UserControl
         }
         if (visible) _timer?.Start(); else _timer?.Stop();
     }
-    private void Timer_Tick(DispatcherQueueTimer sender, object args) => Model?.Refresh();
+    private void Timer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        Model?.Refresh();
+        // Reuse the existing visible-tab timer. A hidden monitor must not keep
+        // formatting thousands of rows on an independent 200ms timer.
+        if (Model?.IsRegisterMonitorSelected == true) Model.Modbus?.Refresh();
+    }
     private void Clear_Click(object sender, RoutedEventArgs args) => Model?.Clear();
     private void ResetStatistics_Click(object sender, RoutedEventArgs args) => Model?.ResetStatistics();
 

@@ -6,6 +6,45 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class ProtocolBrowsingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RegisterMonitor_UpdatesMetadataWithoutPacketSnapshots_AndRestoresSelectionAndPause(bool paused)
+    {
+        await using var analyzer = new RecordingAnalyzer();
+        var model = CreateModel(analyzer);
+        await Push(analyzer, Request(1)); model.Refresh();
+        model.SelectedFrame = Assert.Single(model.Frames);
+        var selected = model.SelectedFrame;
+        model.IsDisplayPaused = paused;
+        var frameRequests = analyzer.FrameSnapshotRequests;
+        var rowChanges = 0;
+        model.Frames.CollectionChanged += (_, _) => rowChanges++;
+
+        model.IsRegisterMonitorSelected = true;
+        await Push(analyzer, Request(2)); model.Refresh();
+        await Push(analyzer, Request(3)); model.Refresh(force: true);
+        Assert.True(analyzer.Enabled);
+        Assert.Equal(frameRequests, analyzer.FrameSnapshotRequests);
+        Assert.Equal(0, rowChanges);
+        Assert.Same(selected, Assert.Single(model.Frames));
+        Assert.Same(selected, model.SelectedFrame);
+        Assert.Contains("3", model.TrafficSummary);
+        Assert.Equal(paused ? 2 : 0, model.PendingDisplayFrames);
+
+        model.IsRegisterMonitorSelected = false;
+        Assert.Equal(paused, model.IsDisplayPaused);
+        Assert.Same(selected, model.SelectedFrame);
+        Assert.Equal(paused ? 1 : 3, model.Frames.Count);
+        Assert.Equal(frameRequests + (paused ? 0 : 1), analyzer.FrameSnapshotRequests);
+        if (paused)
+        {
+            model.IsDisplayPaused = false;
+            Assert.Equal(3, model.Frames.Count);
+            Assert.Same(selected, model.SelectedFrame);
+        }
+    }
+
     [Fact]
     public async Task FrozenList_SurvivesTabSwitchAndLiveEviction_WithoutRequestingNewFrameArrays()
     {

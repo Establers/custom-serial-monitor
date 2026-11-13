@@ -883,6 +883,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
         AllVisibleLogFilterOption.IsCheckedChanged += OnVisibleLogFilterOptionCheckedChanged;
 
+        InitializeModbusMonitor();
         ApplyProfile(profile);
 
         Commands.PropertyChanged += (_, args) =>
@@ -1297,6 +1298,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 SendSavedCommandCommand.NotifyCanExecuteChanged();
                 NotifySequenceDebugCommandStates();
                 StartBridgeCommand.NotifyCanExecuteChanged();
+                RefreshModbusAvailability();
             }
         }
     }
@@ -1483,6 +1485,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanStartBridge =>
         !IsShuttingDown && IsConnected &&
+        !IsModbusBusy &&
         !IsTerminalDirectInputEnabled &&
         !IsAutomationBusy &&
         !IsBridgeStarting &&
@@ -1552,7 +1555,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool IsShuttingDown => Volatile.Read(ref _shutdownStarted) != 0;
 
-    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning && !_serialControlLineBusy && !_serialConfigurationBusy;
+    public bool CanSendManualTx => !IsShuttingDown && IsConnected && !IsBusy && !IsModbusBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning && !_serialControlLineBusy && !_serialConfigurationBusy;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -1719,7 +1722,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool CanChangeTerminalMode => !IsAutomationBusy && !IsBusy && !IsSequenceRunning &&
+    public bool CanChangeTerminalMode => !IsAutomationBusy && !IsBusy && !IsModbusBusy && !IsSequenceRunning &&
         !IsBridgeActive && !IsBridgeStarting && !IsAutoReconnectRunning && _activeGuiSends == 0;
 
     public RxDisplayMode SelectedRxDisplayMode
@@ -2672,7 +2675,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public bool CanEditConnectionSettings => !IsConnected && !IsBusy && !IsAutoReconnectRunning && !IsAutomationBusy;
+    public bool CanEditConnectionSettings => !IsConnected && !IsBusy && !IsModbusBusy && !IsAutoReconnectRunning && !IsAutomationBusy;
 
     public bool CanEditSizeRotationMegabytes => !IsBusy && SizeRotationEnabled;
 
@@ -2682,6 +2685,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public bool CanConnect =>
         !IsShuttingDown && !IsConnected &&
+        !IsModbusBusy &&
         !_isLogSaveDirectoryValidating &&
         !IsAutomationBusy &&
         !IsBusy &&
@@ -4350,6 +4354,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return false;
         _connectDiagnosticStop.Cancel();
+        _ = StopModbusMonitorAsync();
         IsTerminalDirectInputEnabled = false;
         _eventPresentationStop?.Cancel();
         _wasSequenceRunningDuringShutdown = IsSequenceRunning;
@@ -4394,6 +4399,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _statusTimer.Tick -= OnStatusTimerTick;
 
         await DisconnectAsync();
+        if (_modbusService is not null) await _modbusService.DisposeAsync();
         await _fileLogWriter.StopAsync(CancellationToken.None);
         _serialService.Error -= OnBackgroundError;
         _serialService.StatusChanged -= OnSerialStatusChanged;
@@ -6132,6 +6138,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task StartBridgeAsync()
     {
         if (IsShuttingDown) return;
+        if (IsModbusBusy) { SetStatus("Stop Modbus polling before starting the bridge."); return; }
         var startup = _automationControl.TryBeginBridgeStart();
         if (startup is null) { SetStatus("AI/CLI or bridge startup is active. Stop it before starting the bridge."); return; }
         NotifyBridgePropertiesChanged();
@@ -6356,6 +6363,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsShuttingDown) return;
+        if (IsModbusBusy) return;
         if (IsAutomationBusy && !isAutomation) return;
         Volatile.Write(ref _autoReconnectArmed, 0);
         await _connectionLifecycleGate.WaitAsync(cancellationToken);
@@ -6670,6 +6678,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task DisconnectAsync(CancellationToken cancellationToken)
     {
+        var modbusStopped = StopModbusMonitorAsync();
         _sequenceCancellation?.Cancel();
         Volatile.Write(ref _autoReconnectArmed, 0);
         var reconnectTask = CancelAutoReconnect();
@@ -6688,6 +6697,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             await DisconnectCoreAsync(cancellationToken, updateBusy: true);
+            await modbusStopped.WaitAsync(cancellationToken);
         }
         finally
         {
@@ -7002,6 +7012,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void TryStartAutoReconnect()
     {
+        if (IsModbusBusy) return;
         var settings = _lastSuccessfulSerialSettings?.Clone();
         if (settings is null ||
             (_autoReconnectTask is not null && !_autoReconnectTask.IsCompleted) ||
@@ -7945,6 +7956,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             : SelectedCommandSequence;
         return !IsShuttingDown && IsConnected &&
             !IsBusy &&
+            !IsModbusBusy &&
             !IsAutomationBusy &&
             !IsBridgeActive &&
             !IsBridgeStarting &&
@@ -8203,6 +8215,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsShuttingDown) return false;
+        if (IsModbusBusy)
+        {
+            RecordTxError("TX busy: Modbus owns the serial request and response window.");
+            return false;
+        }
         if (IsSequenceRunning && !isSequence && !isAutomation)
         {
             RecordTxError("TX busy: a sequence owns the response observation window.");
@@ -12204,6 +12221,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             UiSettings = uiSettings,
             EventContextSettings = _currentEventContextSettings.Clone(),
             BridgeSettings = CreatePersistedBridgeSettings(),
+            ModbusSettings = Modbus?.CreatePersistableSettingsSnapshot() ?? new ModbusMonitorSettings(),
             LogRules = LogRules.Select(CloneLogRule).ToList(),
             EventRules = EventRules.Select(CloneEventRule).ToList(),
             HighlightRules = HighlightRules.Select(CloneHighlightRule).ToList(),
@@ -12230,6 +12248,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _suppressSettingsApplyRecording = true;
         try
         {
+            Modbus?.ApplySettings(profile.ModbusSettings);
             _currentSerialSettings = profile.SerialSettings.Clone();
             _lastSuccessfulSerialSettings = profile.LastSuccessfulSerialSettings?.Clone();
             _lastSuccessfulPort = string.IsNullOrWhiteSpace(_lastSuccessfulSerialSettings?.PortName)
@@ -12800,7 +12819,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var successfulSettings = _lastSuccessfulSerialSettings;
-        if (successfulSettings is not null &&
+        if (!IsModbusBusy && successfulSettings is not null &&
             AutoReconnectPolicy.ShouldStart(
                 _currentUiSettings.AutoReconnectEnabled,
                 Volatile.Read(ref _autoReconnectArmed) != 0,
@@ -13014,6 +13033,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         RefreshSerialControlLineProperties();
         RefreshSequenceTxActivity();
+        Modbus?.Refresh();
         StartResourceSnapshotRefreshIfDue();
         var backgroundStatusChanged = Interlocked.Exchange(ref _backgroundStatusSnapshotDirty, 0) != 0;
         if (Interlocked.Exchange(ref _fileLogStatusSnapshotDirty, 0) != 0)
@@ -13704,6 +13724,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         StopCommandSequenceCommand.NotifyCanExecuteChanged();
         NotifySequenceDebugCommandStates();
         NotifyLogFileActionCommandStates();
+        RefreshModbusAvailability();
     }
 
     private void NotifyLogFileActionCommandStates()

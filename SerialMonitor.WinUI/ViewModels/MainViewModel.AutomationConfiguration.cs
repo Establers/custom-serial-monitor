@@ -13,7 +13,7 @@ public sealed partial class MainViewModel
         // Parse all fields before any driver or UI mutation. In particular an
         // invalid timeout cannot change the baud rate as a partial side effect.
         var configuration = AutomationSerialConfiguration.Parse(args);
-        if (!IsAutomationBusy || IsBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
+        if (!IsAutomationBusy || IsBusy || IsModbusBusy || IsSequenceRunning || IsBridgeActive || IsBridgeStarting ||
             IsAutoReconnectRunning || _activeGuiSends > 0 || _isProfileSaveActive)
             throw new AutomationException("busy", "GUI TX, sequence, bridge, reconnect or connection change is active.");
         var state = AutomationState();

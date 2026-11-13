@@ -623,7 +623,8 @@ public sealed class ProfileService : IProfileService
         CurrentSessionName = profile.CurrentSessionName, SerialSettings = profile.SerialSettings,
         LastSuccessfulSerialSettings = profile.LastSuccessfulSerialSettings, LogSettings = profile.LogSettings,
         UiSettings = profile.UiSettings, EventContextSettings = profile.EventContextSettings,
-        BridgeSettings = profile.BridgeSettings, LogRules = profile.LogRules.Select(rule => rule.Clone()).ToList(),
+        BridgeSettings = profile.BridgeSettings, ModbusSettings = profile.ModbusSettings.Clone(),
+        LogRules = profile.LogRules.Select(rule => rule.Clone()).ToList(),
         EventRules = profile.EventRules, HighlightRules = profile.HighlightRules,
         SavedCommands = profile.SavedCommands, CommandHistory = profile.CommandHistory, CommandSequences = sequences
     };
@@ -655,6 +656,23 @@ public sealed class ProfileService : IProfileService
         profile.CurrentSessionName = string.IsNullOrWhiteSpace(profile.CurrentSessionName)
             ? string.Empty
             : profile.CurrentSessionName;
+
+        profile.ModbusSettings ??= new ModbusMonitorSettings();
+        if (!double.IsFinite(profile.ModbusSettings.Scale))
+        {
+            // Overflowing JSON exponents can deserialize as Infinity. This is
+            // display-only; preserve every wire target while keeping the whole
+            // profile serializable on ordinary save and shutdown.
+            profile.ModbusSettings.Scale = 1;
+            warnings.Add("Non-finite Modbus display multiplier was restored to 1.");
+        }
+        try { profile.ModbusSettings.Validate(); }
+        catch (ArgumentException)
+        {
+            // Keep invalid wire addresses visible for correction; never silently
+            // turn an invalid saved target into a different valid device target.
+            warnings.Add("Modbus settings are invalid. Correct them before transmitting.");
+        }
 
         if (profile.SerialSettings is null)
         {
