@@ -65,7 +65,7 @@ MOCK로 화면 동작을 먼저 확인한 뒤 실물 UART로 반복한다. MOCK 
 NUCLEO LAB의 기존 RTU 기본값은 **COM3 / 115200 / 8N1 / 흐름 제어 없음 / 장치 ID 1**이다.
 연결 후 실제 펌웨어 버전과 [레지스터 맵](../firmware/nucleo-f103rb-serial-lab/MODBUS-RTU.md)을 확인한다.
 기존 1.6.0은 FC03/04 주소 0·1의 250·100을 읽는 시험부터 가능하다.
-FC01/02·쓰기·카운터·LED·추가 오류 주입은 해당 기능을 지원하는 확장 펌웨어와 그 맵을 사용한다.
+1.7.0의 FC01/02·쓰기·카운터·LED·추가 오류 주입은 [확장 펌웨어 주소표](../firmware/nucleo-f103rb-serial-lab/MODBUS-MONITOR.md)를 따른다.
 쓰기 시험은 시험 보드의 지정된 영역에서 수행하고 초기 값을 복원한다.
 
 - [ ] **B01 — 한 번 읽기:** ID 1, FC03, 시작 주소 0, 수량 2로 한 번 읽는다.
@@ -104,7 +104,24 @@ FC01/02·쓰기·카운터·LED·추가 오류 주입은 해당 기능을 지원
 
 ## 한 번에 자동 시험하는 경로
 
-**현재 바로 사용할 수 있는 GUI 시퀀스:** Modbus 폴링과 다른 송신 작업을 먼저 정지한 뒤,
+**1.7.0 확장 GUI 시퀀스:** COM3 / 115200 / 8N1 / 흐름 제어 없음으로 연결하고, 자동 재연결을 OFF로 설정한다.
+Modbus 폴링·브리지·다른 시퀀스도 정지한다. Sequences → 시퀀스 관리 → JSON 불러오기에서
+[03-monitor-extended.gui.json](../firmware/nucleo-f103rb-serial-lab/sequences/modbus/03-monitor-extended.gui.json)을 추가한다.
+**STM32 Modbus Monitor - 확장 레지스터·쓰기·LED·오류 복구**를 선택하고 Run을 누른다.
+각 단계에 모드와 줄 끝이 지정되어 있다. HEX 화면에서 보면 원본 RTU 패킷을 확인하기 쉽다.
+총 52단계(TX 26개 + RX Check 26개), 대기 합계 18.2초이며 전송 시간을 포함해 약 19초가 걸린다.
+실행 결과에서 **RX Check 26개 모두 일치, 미일치·판정 불가 0개**인지 확인한다.
+
+정상 읽기·고정 패턴 → 단일/복수 레지스터 쓰기·재조회 → 단일/복수 코일·LED·입력 읽기 →
+주소 예외 → 일회성 CRC 오류·정상 복구 → LED OFF → 시험 상태 초기화 순서다.
+파일은 시험용 RAM·코일·카운터를 변경하며, 정상 완료 시 초기 값과 LED OFF·조용한 RTU 상태로 돌아간다.
+다른 제품 장치에 그대로 실행하지 않는다. 중간 정지/실패 시 초기화 단계가 실행되지 않을 수 있다.
+
+CRC 손상 바이트를 정확히 받는 단계는 RX Check 일치가 정상이며 패킷 분석에는 CRC 오류가 표시된다.
+FC02 패턴의 버튼·CRC 바이트는 동적이므로 와일드카드를 쓴다. 실제 CRC·패딩·LED 관계는 아래 Live 검증기가 판정한다.
+자세한 주소·실행 안내와 검증 범위는 [확장 시험 안내](../firmware/nucleo-f103rb-serial-lab/MODBUS-MONITOR.md)를 따른다.
+
+**기존 맵용 GUI 시퀀스:** Modbus 폴링과 다른 송신 작업을 먼저 정지한 뒤,
 Sequences → 시퀀스 관리 → JSON 불러오기에서
 [정상·예외·CRC·복구 시퀀스](../firmware/nucleo-f103rb-serial-lab/sequences/modbus/02-rtu-server.gui.json)를 추가한다.
 RTU 모드의 보드에 한 번 실행하면 읽기·주소 예외·CRC 손상·복구·FC04·수량 예외를 순서대로 검사한다.
@@ -125,11 +142,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\firmware\nucleo-f103rb-ser
 
 기존 검증기는 정상/오류/무응답/복구 17개 사례의 원본 UART·CRC·앱 분석기 결과를 판정하고 `results/`에 증거를 남긴다.
 화면 렌더링이나 레지스터 모니터 GUI 조작까지 자동 검증한 결과는 아니다.
-확장 펌웨어의 쓰기·카운터·LED·오류 주입 자동화는 그 빌드와 함께 제공되는 최신 실행 안내를 따른다.
+1.7.0 확장 검증기는 실제 앱의 SerialService/ModbusRtuMonitorService로 쓰기·카운터·폴링·오류 주입을 시험한다.
+기존 검증기 명령 대신 [verify-modbus-monitor.ps1](../firmware/nucleo-f103rb-serial-lab/scripts/verify-modbus-monitor.ps1)의 Live 모드를 사용하고,
+보드와 일치하는 `-BuildDirectory build-modbus-monitor`, 명시적인 `-Port COM3`, 새 `-EvidenceDirectory`를 지정한다.
+정확한 한 명령과 증거 경로는 위 확장 시험 안내에 있다. GUI에서 COM3 연결을 닫은 뒤 실행하며 TX를 자동 재시도하지 않는다.
 실행 결과에는 기대한 오류와 예상하지 못한 실패, 미실행 항목을 구분한다.
 
 확장 시험을 한 실행에 묶을 때의 순서는 **빌드 ID 확인 → 정상 읽기 → 단/복수 쓰기·재조회·적용 횟수 확인 →
-카운터 변화 → LED 코일 → 오류 주입·정상 복구 → 원래 값 복원 → 보고서 저장**으로 한다.
+카운터 변화 → LED 코일 → 오류 주입·정상 복구 → 시험 초기값 복원 → 보고서 저장**으로 한다.
 LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한다. 번호 로그·파일 무결성과 메모리 추이를 기록하고,
 화면 설정·선택·최소화·복원 결과는 위 수동 체크리스트에 남긴다.
 
