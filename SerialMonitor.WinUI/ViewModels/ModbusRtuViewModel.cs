@@ -69,7 +69,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string StateLabel => T("State", "State");
     public string UpdatedLabel => T("Updated", "Last response");
     public string TableAddressLabel => T("TableAddress", "Address (base 0)");
-    public string EmptyHelp => T("Empty", "Connect to the device, check Settings, then choose Read once or Start polling.");
+    public string EmptyHelp => T("Empty", "View device values by address. Connect, check Settings, then choose Read once. Open ? for the usage guide.");
     public string WriteLabel => T("Write", "Write and verify");
     public string WriteEditorLabel => T("WriteEditor", "Direct write…");
     public string WriteAddressLabel => T("WriteAddress", "Write address (base 0)");

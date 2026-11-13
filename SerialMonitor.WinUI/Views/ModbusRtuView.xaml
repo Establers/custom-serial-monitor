@@ -43,11 +43,21 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
+        <Style x:Key="GuideBody" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="IsTextSelectionEnabled" Value="True" />
+        </Style>
+        <Style x:Key="GuideHeading" TargetType="TextBlock" BasedOn="{StaticResource GuideBody}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+        </Style>
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto" RowSpacing="4">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="5">
                     <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
                     <Button Grid.Column="1" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
@@ -119,6 +129,36 @@
                                             <Button Content="{Binding WriteLabel}" Command="{Binding WriteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Right" />
                                         </StackPanel>
                                     </ContentControl>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button x:Name="GuideButton" Grid.Column="5" Content="?" Width="24" Padding="0"
+                            Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding GuideLabel}"
+                            AutomationProperties.Name="{Binding GuideLabel}">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight" Opening="GuideFlyout_Opening"
+                                    FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                <ScrollViewer x:Name="GuideScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="GuidePanel" Width="420" Spacing="6" Margin="0,0,16,0">
+                                        <TextBlock Text="{Binding GuideTitle}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding GuidePurpose}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideModesTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding GuideModesHelp}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideStartTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding GuideConnectStep}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideSetupStep}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideReadStep}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideGroupsTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding GuideGroupsHelp}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideDisplayTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding GuideDisplayHelp}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideWriteTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding GuideWriteHelp}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideConnectionTitle}" Style="{StaticResource GuideHeading}" />
+                                        <TextBlock Text="{Binding OwnershipHelp}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding GuideSaveHelp}" Style="{StaticResource GuideBody}" />
+                                    </StackPanel>
                                 </ScrollViewer>
                             </Flyout>
                         </Button.Flyout>

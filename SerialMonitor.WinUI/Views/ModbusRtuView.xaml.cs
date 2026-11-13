@@ -25,6 +25,11 @@ public sealed partial class ModbusRtuView : UserControl
         WriteEditorRoot.DataContext = Model;
         FitEditor(WriteScroll, WritePanel, 400, 360);
     }
+    private void GuideFlyout_Opening(object sender, object args)
+    {
+        GuidePanel.DataContext = Model;
+        FitEditor(GuideScroll, GuidePanel, 420, 460);
+    }
     private async void Items_Click(object sender, RoutedEventArgs args)
     {
         if (_itemDialogOpen || _groupDialogOpen || Model is not { IsSettingsEnabled: true } model) return;
