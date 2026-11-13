@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Reflection;
+using SerialMonitor.Core.Modbus;
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
@@ -273,6 +274,63 @@ public sealed class ModbusRtuMonitorServiceTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.WriteAsync(Settings(), 9, [1], default));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.WriteAsync(Settings(), 11, [1, 2], default));
         Assert.Empty(device.Sent);
+    }
+
+    [Fact]
+    public async Task ItemPermissionsAndCompletePairsAreEnforcedBeforeTransport()
+    {
+        var (serial, device) = Device();
+        await using var service = new ModbusRtuMonitorService(serial);
+        var settings = Settings();
+        settings.Quantity = 3;
+        settings.Items = [
+            new() { Address = 10, Access = ModbusItemAccess.ReadOnly },
+            new() { Address = 11, ValueType = ModbusValueType.Int32, Access = ModbusItemAccess.ReadWrite }
+        ];
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.WriteAsync(settings, 10, [1], default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.WriteAsync(settings, 11, [1], default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.WriteAsync(settings, 12, [1], default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.WriteAsync(settings, 10, [1, 2, 3], default));
+        Assert.Empty(device.Sent);
+        Assert.Null(device.Owner);
+    }
+
+    [Fact]
+    public async Task CallerCannotRemoveReadOnlyDefinitionsCapturedByPolling()
+    {
+        var (serial, device) = Device();
+        var sent = Signal();
+        byte[]? request = null;
+        device.OnSend = packet => { request = packet; sent.TrySetResult(); return Task.CompletedTask; };
+        await using var service = new ModbusRtuMonitorService(serial);
+        var settings = Settings(timeout: 2000);
+        settings.Items = [new() { Address = 10, Access = ModbusItemAccess.ReadOnly }];
+        var run = service.RunAsync(settings, true, default);
+        await sent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var weakened = settings.Clone();
+        weakened.Items.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.WriteAsync(weakened, 10, [1], default));
+        var stop = service.StopAsync();
+        device.Emit(ReadReply(request!, [0, 0]));
+        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+        await run;
+        Assert.Single(device.Sent);
+    }
+
+    [Fact]
+    public async Task FloatItemWritesBothWordsInOneRequestThenVerifiesReadback()
+    {
+        var (serial, device) = Device();
+        var item = new ModbusItemDefinition { Address = 10, ValueType = ModbusValueType.Float32, Access = ModbusItemAccess.ReadWrite };
+        var words = ModbusItemCodec.Encode("1.5", item);
+        device.OnSend = packet => { device.Emit(packet[1] == 3 ? ReadReply(packet, words) : WriteAck(packet)); return Task.CompletedTask; };
+        await using var service = new ModbusRtuMonitorService(serial);
+        var settings = Settings();
+        settings.Items = [item];
+        await service.WriteAsync(settings, 10, words, default).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(new byte[] { 16, 3 }, device.Sent.Select(packet => packet[1]));
+        Assert.Equal(new byte[] { 0, 10, 0, 2, 4, 0x3F, 0xC0, 0, 0 }, device.Sent[0][2..^2]);
+        Assert.Equal(ModbusWriteState.Verified, service.GetSnapshot().WriteState);
     }
 
     private static ModbusMonitorSettings Settings(int timeout = 1000) => new()

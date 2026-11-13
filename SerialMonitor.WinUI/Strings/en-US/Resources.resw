@@ -1381,4 +1381,44 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Switch to log view before starting Modbus RTU.</value></data>
 <data name="ModbusMonitorOtherOwner" xml:space="preserve"><value>Stop the sequence, automation or bridge using this connection before starting Modbus.</value></data>
 <data name="ModbusMonitorWait" xml:space="preserve"><value>Wait for the current connection, driver or settings operation to finish.</value></data>
+<data name="ModbusMonitorItemsEditor" xml:space="preserve"><value>Item definitions…</value></data>
+<data name="ModbusMonitorTableName" xml:space="preserve"><value>Name</value></data>
+<data name="ModbusMonitorWriteMode" xml:space="preserve"><value>Write mode</value></data>
+<data name="ModbusMonitorWriteModeRaw" xml:space="preserve"><value>Raw values</value></data>
+<data name="ModbusMonitorWriteModeItem" xml:space="preserve"><value>Item value</value></data>
+<data name="ModbusMonitorWritePreview" xml:space="preserve"><value>Wire words: {0}</value></data>
+<data name="ModbusMonitorWriteItemSelect" xml:space="preserve"><value>Select a defined item for interpreted writes.</value></data>
+<data name="ModbusMonitorWriteItemValue" xml:space="preserve"><value>Item value or value name</value></data>
+<data name="ModbusMonitorWriteItemHelp" xml:space="preserve"><value>Enter one value or a configured value name for the selected item. Its type, multiplier and byte/word order determine the raw values. Review the preview before writing. Raw readback verifies the result; writes are never retried automatically.</value></data>
+<data name="ModbusItemTitle" xml:space="preserve"><value>Item definitions</value></data>
+<data name="ModbusItemApply" xml:space="preserve"><value>Apply</value></data>
+<data name="ModbusItemCancel" xml:space="preserve"><value>Cancel</value></data>
+<data name="ModbusItemHelp" xml:space="preserve"><value>Define names and formats inside the current read area. Undefined addresses keep the default format. Applying does not save the app profile or send data.</value></data>
+<data name="ModbusItemList" xml:space="preserve"><value>Defined items</value></data>
+<data name="ModbusItemNew" xml:space="preserve"><value>New</value></data>
+<data name="ModbusItemSaveItem" xml:space="preserve"><value>Add / update item</value></data>
+<data name="ModbusItemRemove" xml:space="preserve"><value>Remove</value></data>
+<data name="ModbusItemClear" xml:space="preserve"><value>Clear all</value></data>
+<data name="ModbusItemAddress" xml:space="preserve"><value>Address (base 0)</value></data>
+<data name="ModbusItemName" xml:space="preserve"><value>Name</value></data>
+<data name="ModbusItemFormat" xml:space="preserve"><value>Value type</value></data>
+<data name="ModbusItemScale" xml:space="preserve"><value>Multiplier</value></data>
+<data name="ModbusItemUnit" xml:space="preserve"><value>Unit</value></data>
+<data name="ModbusItemAccess" xml:space="preserve"><value>Access</value></data>
+<data name="ModbusItemSwapBytes" xml:space="preserve"><value>Swap bytes</value></data>
+<data name="ModbusItemSwapWords" xml:space="preserve"><value>Swap words (32-bit)</value></data>
+<data name="ModbusItemValueNames" xml:space="preserve"><value>Value names (one raw value = name per line)</value></data>
+<data name="ModbusItemValueNamesHelp" xml:space="preserve"><value>Example: 0=Manual, 1=Automatic on separate lines. Values refer to decoded numbers before the multiplier. Leave blank for numeric display.</value></data>
+<data name="ModbusItemUnsavedDraft" xml:space="preserve"><value>This item has unsaved edits. Add/update it before selecting another item. Apply also adds or updates the current draft.</value></data>
+<data name="ModbusItemReadOnly" xml:space="preserve"><value>Read only</value></data>
+<data name="ModbusItemReadWrite" xml:space="preserve"><value>Read / write</value></data>
+<data name="ModbusItemSaveBeforeSelection" xml:space="preserve"><value>Add/update this item first, or choose New to discard its draft.</value></data>
+<data name="ModbusItemInvalidEntry" xml:space="preserve"><value>This saved definition is invalid. Remove it or clear the list, then define the item again.</value></data>
+<data name="ModbusItemInvalidEntryShort" xml:space="preserve"><value>Invalid saved definition</value></data>
+<data name="ModbusItemOverlap" xml:space="preserve"><value>This item overlaps another definition. Remove or edit that definition first.</value></data>
+<data name="ModbusItemTooMany" xml:space="preserve"><value>The number of items cannot exceed the size of the read area.</value></data>
+<data name="ModbusItemInvalidAddress" xml:space="preserve"><value>Enter a complete address from 0 to 65535, or 0x HEX.</value></data>
+<data name="ModbusItemInvalidScale" xml:space="preserve"><value>Enter a finite multiplier, for example 1 or 0.1.</value></data>
+<data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>Use at most 128 value names, one integer = name per line.</value></data>
+<data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>The Modbus settings changed while editing. Reopen item definitions for the current target.</value></data>
 </root>

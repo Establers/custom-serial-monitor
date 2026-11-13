@@ -1379,4 +1379,44 @@
 <data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Modbus RTU를 시작하기 전에 로그 보기로 전환하세요.</value></data>
 <data name="ModbusMonitorOtherOwner" xml:space="preserve"><value>이 연결을 사용하는 시퀀스·자동화·브리지를 정지한 뒤 Modbus를 시작하세요.</value></data>
 <data name="ModbusMonitorWait" xml:space="preserve"><value>진행 중인 연결·드라이버·설정 작업이 끝날 때까지 기다리세요.</value></data>
+<data name="ModbusMonitorItemsEditor" xml:space="preserve"><value>항목 정의…</value></data>
+<data name="ModbusMonitorTableName" xml:space="preserve"><value>이름</value></data>
+<data name="ModbusMonitorWriteMode" xml:space="preserve"><value>쓰기 방식</value></data>
+<data name="ModbusMonitorWriteModeRaw" xml:space="preserve"><value>원시 값</value></data>
+<data name="ModbusMonitorWriteModeItem" xml:space="preserve"><value>항목 값</value></data>
+<data name="ModbusMonitorWritePreview" xml:space="preserve"><value>전송 원시 값: {0}</value></data>
+<data name="ModbusMonitorWriteItemSelect" xml:space="preserve"><value>해석값을 쓰려면 정의한 항목을 선택하세요.</value></data>
+<data name="ModbusMonitorWriteItemValue" xml:space="preserve"><value>항목 값 또는 값 이름</value></data>
+<data name="ModbusMonitorWriteItemHelp" xml:space="preserve"><value>선택한 항목의 값 하나 또는 설정한 값 이름을 입력합니다. 항목의 자료형·배율·바이트/워드 순서로 원시 값을 계산합니다. 전송 전 미리보기를 확인하세요. 재조회한 원시 값으로 결과를 검증하며 자동으로 다시 쓰지 않습니다.</value></data>
+<data name="ModbusItemTitle" xml:space="preserve"><value>항목 정의</value></data>
+<data name="ModbusItemApply" xml:space="preserve"><value>적용</value></data>
+<data name="ModbusItemCancel" xml:space="preserve"><value>취소</value></data>
+<data name="ModbusItemHelp" xml:space="preserve"><value>현재 읽기 영역 안의 항목에 이름과 표시 형식을 지정합니다. 정의하지 않은 주소는 기본 형식을 사용합니다. 적용만으로 앱 프로필을 저장하거나 데이터를 송신하지 않습니다.</value></data>
+<data name="ModbusItemList" xml:space="preserve"><value>정의한 항목</value></data>
+<data name="ModbusItemNew" xml:space="preserve"><value>새 항목</value></data>
+<data name="ModbusItemSaveItem" xml:space="preserve"><value>항목 추가 / 수정</value></data>
+<data name="ModbusItemRemove" xml:space="preserve"><value>삭제</value></data>
+<data name="ModbusItemClear" xml:space="preserve"><value>전체 삭제</value></data>
+<data name="ModbusItemAddress" xml:space="preserve"><value>주소 (0 기준)</value></data>
+<data name="ModbusItemName" xml:space="preserve"><value>이름</value></data>
+<data name="ModbusItemFormat" xml:space="preserve"><value>자료형</value></data>
+<data name="ModbusItemScale" xml:space="preserve"><value>배율</value></data>
+<data name="ModbusItemUnit" xml:space="preserve"><value>단위</value></data>
+<data name="ModbusItemAccess" xml:space="preserve"><value>접근 권한</value></data>
+<data name="ModbusItemSwapBytes" xml:space="preserve"><value>바이트 교환</value></data>
+<data name="ModbusItemSwapWords" xml:space="preserve"><value>워드 교환 (32비트)</value></data>
+<data name="ModbusItemValueNames" xml:space="preserve"><value>값 이름 (한 줄에 원시 값 = 이름)</value></data>
+<data name="ModbusItemValueNamesHelp" xml:space="preserve"><value>예: 0=수동, 1=자동을 각각 다른 줄에 입력합니다. 값은 배율 적용 전 해석한 숫자입니다. 비워 두면 숫자로 표시합니다.</value></data>
+<data name="ModbusItemUnsavedDraft" xml:space="preserve"><value>편집 중인 항목이 있습니다. 항목 추가/수정 후 다른 항목을 선택하세요. 적용 버튼도 현재 편집 내용을 추가하거나 수정합니다.</value></data>
+<data name="ModbusItemReadOnly" xml:space="preserve"><value>읽기 전용</value></data>
+<data name="ModbusItemReadWrite" xml:space="preserve"><value>읽기 / 쓰기</value></data>
+<data name="ModbusItemSaveBeforeSelection" xml:space="preserve"><value>현재 항목을 추가/수정하거나, 새 항목을 눌러 편집 내용을 비우세요.</value></data>
+<data name="ModbusItemInvalidEntry" xml:space="preserve"><value>저장된 항목 정의가 올바르지 않습니다. 해당 항목을 삭제하거나 목록을 비운 뒤 다시 정의하세요.</value></data>
+<data name="ModbusItemInvalidEntryShort" xml:space="preserve"><value>잘못된 저장 항목</value></data>
+<data name="ModbusItemOverlap" xml:space="preserve"><value>다른 항목과 주소가 겹칩니다. 해당 항목을 먼저 삭제하거나 수정하세요.</value></data>
+<data name="ModbusItemTooMany" xml:space="preserve"><value>항목 수는 읽기 영역의 크기를 초과할 수 없습니다.</value></data>
+<data name="ModbusItemInvalidAddress" xml:space="preserve"><value>0–65535 범위의 주소 또는 0x HEX를 끝까지 입력하세요.</value></data>
+<data name="ModbusItemInvalidScale" xml:space="preserve"><value>1 또는 0.1처럼 유한한 배율을 입력하세요.</value></data>
+<data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>한 줄에 정수 = 이름 형식으로 최대 128개를 입력하세요.</value></data>
+<data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>편집 중 Modbus 설정이 변경되었습니다. 현재 대상의 항목 정의를 다시 여세요.</value></data>
 </root>

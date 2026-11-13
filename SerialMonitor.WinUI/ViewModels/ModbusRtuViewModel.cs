@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Microsoft.UI.Xaml;
+using SerialMonitor.Core.Modbus;
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.Infrastructure;
 using SerialMonitor.WinUI.Models;
@@ -8,7 +9,7 @@ using SerialMonitor.WinUI.Services;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
-public sealed class ModbusRtuViewModel : ViewModelBase
+public sealed partial class ModbusRtuViewModel : ViewModelBase
 {
     private readonly IModbusRtuMonitorService _service;
     private readonly Func<bool> _canStart;
@@ -72,8 +73,8 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     public string WriteLabel => T("Write", "Write and verify");
     public string WriteEditorLabel => T("WriteEditor", "Direct write…");
     public string WriteAddressLabel => T("WriteAddress", "Write address (base 0)");
-    public string WriteValuesLabel => IsCoilFunction ? T("WriteCoils", "Raw coil values (0 / 1)") : T("WriteRegisters", "Raw UInt16 values (0–65535 / 0x HEX)");
-    public string WriteHelp => T("WriteHelp", "Select a row or enter an address inside the monitored area. Values are raw and unscaled; multiple values use consecutive addresses. Writes are never retried automatically. A readback checks the result.");
+    public string WriteValuesLabel => WriteModeIndex == 1 ? T("WriteItemValue", "Item value or value name") : IsCoilFunction ? T("WriteCoils", "Raw coil values (0 / 1)") : T("WriteRegisters", "Raw UInt16 values (0–65535 / 0x HEX)");
+    public string WriteHelp => WriteModeIndex == 1 ? T("WriteItemHelp", "Enter one defined item's value. Its type, multiplier and byte/word order are applied before writing. Inspect the preview; a readback verifies the raw words. Writes are never retried automatically.") : T("WriteHelp", "Select a row or enter an address inside the monitored area. Values are raw and unscaled; multiple values use consecutive addresses. Writes are never retried automatically. A readback checks the result.");
     public string ReadOnlyHelp => T("ReadOnly", "Discrete inputs and input registers are read-only. Select FC01 or FC03 in Settings to write.");
     public string WriteAvailabilityHelp => IsWritableFunction ? WriteHelp : ReadOnlyHelp;
     public bool IsWriteEditorEnabled => !_writeAdmitted && !_stopRequested;
@@ -108,8 +109,8 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     public string IntervalText { get => _interval; set => SetSetting(ref _interval, value, nameof(IntervalText)); }
     public string TimeoutText { get => _timeout; set => SetSetting(ref _timeout, value, nameof(TimeoutText)); }
     public string ScaleText { get => _scale; set => SetSetting(ref _scale, value, nameof(ScaleText)); }
-    public string WriteAddressText { get => _writeAddress; set { if (!_writeAdmitted) SetProperty(ref _writeAddress, value ?? ""); } }
-    public string WriteValuesText { get => _writeValues; set { if (!_writeAdmitted) SetProperty(ref _writeValues, value ?? ""); } }
+    public string WriteAddressText { get => _writeAddress; set { if (!_writeAdmitted && SetProperty(ref _writeAddress, value ?? "")) NotifyWritePresentation(); } }
+    public string WriteValuesText { get => _writeValues; set { if (!_writeAdmitted && SetProperty(ref _writeValues, value ?? "")) NotifyWritePresentation(); } }
     public int FunctionIndex
     {
         get => _functionIndex;
@@ -133,7 +134,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         set
         {
             if (!SetProperty(ref _selectedRow, value)) return;
-            if (_writeAdmitted) { _selectionChangedDuringWrite = true; return; }
+            if (_writeAdmitted) { _selectionChangedDuringWrite = true; NotifyWritePresentation(); return; }
             SynchronizeSelectedRowEditor();
         }
     }
@@ -142,7 +143,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     {
         if (_selectedRow is not { } row) return;
         var address = row.Address.ToString(CultureInfo.InvariantCulture);
-        var text = row.RawValues is { Length: > 0 } values ? string.Join(" ", values.Select(v => v.ToString(CultureInfo.InvariantCulture))) : "";
+        var text = WriteModeIndex == 1 ? row.EngineeringValueText : row.RawValues is { Length: > 0 } values ? string.Join(" ", values.Select(v => v.ToString(CultureInfo.InvariantCulture))) : "";
         var addressChanged = _writeAddress != address;
         var valuesChanged = _writeValues != text;
         // Publish the editor as a consistent address/value pair, including when
@@ -151,6 +152,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         _writeValues = text;
         if (addressChanged) OnPropertyChanged(nameof(WriteAddressText));
         if (valuesChanged) OnPropertyChanged(nameof(WriteValuesText));
+        NotifyWritePresentation();
     }
 
     private void SetSetting(ref string field, string? value, string property)
@@ -159,6 +161,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     }
     private void SettingsChanged()
     {
+        _settingsRevision++;
         // Until the next explicit read, old service values must not acquire new addresses or formats.
         _displaySettings = null;
         if (Rows.Count > 0) { Rows.Clear(); SelectedRow = null; OnPropertyChanged(nameof(EmptyVisibility)); }
@@ -167,12 +170,17 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         _lastServiceError = null;
         Error = "";
         OnPropertyChanged(nameof(RequestSummary));
+        NotifyWritePresentation();
         RefreshAvailability();
     }
     private bool CanRun() => !IsBusy && !_writeAdmitted && _canStart();
     private bool CanWrite() => !_writeAdmitted && !_stopRequested && IsWritableFunction && (_service.GetSnapshot().IsPolling || CanRun());
 
-    public ModbusMonitorSettings CreateSettingsSnapshot()
+    public ModbusMonitorSettings CreateSettingsSnapshot() => BuildSettings(validateItems: true);
+
+    public ModbusMonitorSettings CreateItemEditorSettings() => BuildSettings(validateItems: false);
+
+    private ModbusMonitorSettings BuildSettings(bool validateItems)
     {
         if (!TryNumber(UnitText, out var unit) || !TryNumber(AddressText, out var address) || !TryNumber(QuantityText, out var quantity) ||
             !int.TryParse(IntervalText, NumberStyles.None, CultureInfo.InvariantCulture, out var interval) ||
@@ -182,8 +190,13 @@ public sealed class ModbusRtuViewModel : ViewModelBase
             !double.TryParse(ScaleText, NumberStyles.Float, CultureInfo.InvariantCulture, out scale))
             throw new ArgumentException(T("InvalidScale", "Enter a finite display multiplier, for example 1 or 0.1."));
         var result = new ModbusMonitorSettings { UnitId = unit, Function = (byte)(FunctionIndex + 1), Address = address, Quantity = quantity,
-            IntervalMs = interval, TimeoutMs = timeout, ValueType = (ModbusValueType)FormatIndex, Scale = scale, SwapBytes = SwapBytes, SwapWords = SwapWords };
-        try { result.Validate(); }
+            IntervalMs = interval, TimeoutMs = timeout, ValueType = (ModbusValueType)FormatIndex, Scale = scale, SwapBytes = SwapBytes, SwapWords = SwapWords,
+            Items = CloneItemDefinitions(_itemDefinitions) };
+        try
+        {
+            if (validateItems) result.Validate();
+            else { var baseSettings = result.Clone(); baseSettings.Items = []; baseSettings.Validate(); }
+        }
         catch (ArgumentException ex) { throw new ArgumentException(T("InvalidSettings", "Check ID 1–247, address 0–65535, quantity 1–125 registers / 1–2000 bits, address range, interval 100–60000 ms, timeout 100–10000 ms and a finite multiplier."), ex); }
         return result;
     }
@@ -199,6 +212,7 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     {
         if (IsBusy || _writeAdmitted) throw new InvalidOperationException(T("StopBeforeSettings", "Stop Modbus before loading settings."));
         var copy = settings?.Clone() ?? new();
+        _itemDefinitions = CloneItemDefinitions(copy.Items);
         _lastPersistableSettings = copy.Clone();
         UnitText = copy.UnitId.ToString(CultureInfo.InvariantCulture);
         // Preserve the complete saved target for correction; loading never transmits.
@@ -275,22 +289,9 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         try
         {
             settings = CreateSettingsSnapshot();
-            if (!TryNumber(WriteAddressText, out address)) throw new ArgumentException(T("InvalidWriteAddress", "Enter a complete write address (base 0)."));
-            if (WriteValuesText.Length > 16000) throw new ArgumentException(T("InvalidWriteValues", "Enter raw values separated by spaces or commas. Check the quantity and numeric range."));
-            var parts = WriteValuesText.Split([' ', '\t', '\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries);
-            var maximum = settings.Function == 1 ? 1968 : 123;
-            if (parts.Length == 0 || parts.Length > maximum) throw new ArgumentException(T("InvalidWriteValues", "Enter raw values separated by spaces or commas. Check the quantity and numeric range."));
-            values = new ushort[parts.Length];
-            for (var index = 0; index < parts.Length; index++)
-            {
-                if (!TryNumber(parts[index], out var value) || value > (settings.Function == 1 ? 1 : ushort.MaxValue))
-                    throw new ArgumentException(T("InvalidWriteValues", "Enter raw values separated by spaces or commas. Check the quantity and numeric range."));
-                values[index] = (ushort)value;
-            }
-            if (address < settings.Address || (long)address + values.Length > (long)settings.Address + settings.Quantity)
-                throw new ArgumentException(T("WriteRange", "The complete write must be inside the monitored read area so it can be verified."));
+            (address, values) = BuildWriteValues(settings);
         }
-        catch (ArgumentException ex) { Error = ex.Message; return; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { Error = ex.Message; return; }
         _writeAdmitted = true;
         _selectionChangedDuringWrite = false;
         Error = "";
@@ -369,8 +370,26 @@ public sealed class ModbusRtuViewModel : ViewModelBase
         var width = settings.Function <= 2 || settings.ValueType is ModbusValueType.UInt16 or ModbusValueType.Int16 ? 1 : 2;
         Rows.Clear();
         SelectedRow = null;
-        for (var offset = 0; offset < settings.Quantity; offset += width)
-            Rows.Add(new ModbusRegisterRow(settings.Address + offset, offset, Math.Min(width, settings.Quantity - offset), width));
+        var definitions = settings.Items.OrderBy(item => item.Address).ToArray();
+        var itemIndex = 0;
+        for (var offset = 0; offset < settings.Quantity;)
+        {
+            var address = settings.Address + offset;
+            if (itemIndex < definitions.Length && definitions[itemIndex].Address == address)
+            {
+                var item = definitions[itemIndex++];
+                Rows.Add(new ModbusRegisterRow(address, offset, item.RegisterCount, item.RegisterCount, item));
+                offset += item.RegisterCount;
+            }
+            else
+            {
+                var available = settings.Quantity - offset;
+                if (itemIndex < definitions.Length) available = Math.Min(available, definitions[itemIndex].Address - address);
+                var count = Math.Min(width, available);
+                Rows.Add(new ModbusRegisterRow(address, offset, count, width));
+                offset += count;
+            }
+        }
         WriteAddressText = settings.Address.ToString(CultureInfo.InvariantCulture);
         OnPropertyChanged(nameof(EmptyVisibility));
     }
@@ -390,10 +409,13 @@ public sealed class ModbusRtuViewModel : ViewModelBase
     }
 }
 
-public sealed class ModbusRegisterRow(int address, int offset, int count, int width) : ViewModelBase
+public sealed class ModbusRegisterRow(int address, int offset, int count, int width, ModbusItemDefinition? definition = null) : ViewModelBase
 {
+    private readonly ModbusItemDefinition? _definition = definition?.Clone();
     private string _raw = "—", _value = "—", _status = UiText.Get("ModbusMonitorNoValue", "No value"), _updated = "—", _changed = "";
     public int Address { get; } = address;
+    public string NameText => string.IsNullOrWhiteSpace(_definition?.Name) ? "—" : _definition.Name;
+    public string EngineeringValueText { get; private set; } = "";
     public string AddressText => count == 1 ? Address.ToString(CultureInfo.InvariantCulture) : $"{Address}–{Address + count - 1}";
     public ushort[]? RawValues { get; private set; }
     public string RawText { get => _raw; private set => SetProperty(ref _raw, value); }
@@ -414,8 +436,20 @@ public sealed class ModbusRegisterRow(int address, int offset, int count, int wi
         RawText = string.Join(" ", raw.Select(v => v.ToString("X4", CultureInfo.InvariantCulture)));
         UpdatedText = updated?.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.CurrentCulture) ?? "—";
         StatusText = current ? UiText.Get("ModbusMonitorCurrent", "Current") : UiText.Get("ModbusMonitorStale", "Stale value");
-        if (count < width) { ValueText = UiText.Get("ModbusMonitorUnpaired", "Missing 32-bit partner"); return; }
-        if (settings.Function <= 2) { ValueText = raw[0] == 0 ? "0 · OFF" : "1 · ON"; return; }
+        if (count < width) { EngineeringValueText = ""; ValueText = UiText.Get("ModbusMonitorUnpaired", "Missing 32-bit partner"); return; }
+        if (_definition is { } item)
+        {
+            var interpreted = ModbusItemCodec.Decode(raw, item);
+            EngineeringValueText = ModbusItemCodec.FormatEngineeringValue(raw, item);
+            var text = double.IsFinite(interpreted.RawValue) && !double.IsFinite(interpreted.Value)
+                ? UiText.Get("ModbusMonitorOverflow", "Scaling overflow") : EngineeringValueText;
+            var label = item.ValueNames.FirstOrDefault(entry => entry.Value == interpreted.RawValue)?.Name;
+            if (!string.IsNullOrWhiteSpace(label)) text = $"{label} ({text})";
+            if (!string.IsNullOrWhiteSpace(item.Unit)) text += " " + item.Unit;
+            ValueText = text;
+            return;
+        }
+        if (settings.Function <= 2) { EngineeringValueText = raw[0].ToString(CultureInfo.InvariantCulture); ValueText = raw[0] == 0 ? "0 · OFF" : "1 · ON"; return; }
         ushort Word(ushort value) => settings.SwapBytes ? (ushort)((value >> 8) | (value << 8)) : value;
         double decoded;
         if (width == 1) decoded = settings.ValueType == ModbusValueType.Int16 ? unchecked((short)Word(raw[0])) : Word(raw[0]);
@@ -426,6 +460,7 @@ public sealed class ModbusRegisterRow(int address, int offset, int count, int wi
             decoded = settings.ValueType switch { ModbusValueType.UInt32 => (double)bits, ModbusValueType.Int32 => (double)unchecked((int)bits), _ => (double)BitConverter.Int32BitsToSingle(unchecked((int)bits)) };
         }
         var result = decoded * settings.Scale;
+        EngineeringValueText = result.ToString(settings.ValueType == ModbusValueType.Float32 && settings.Scale == 1 ? "G9" : "G17", CultureInfo.CurrentCulture);
         ValueText = double.IsFinite(decoded) && !double.IsFinite(result) ? UiText.Get("ModbusMonitorOverflow", "Scaling overflow") :
             result.ToString(settings.ValueType == ModbusValueType.Float32 && settings.Scale == 1 ? "G9" : "G17", CultureInfo.CurrentCulture);
     }

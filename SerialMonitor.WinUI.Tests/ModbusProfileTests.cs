@@ -58,7 +58,8 @@ public sealed class ModbusProfileTests
             nameof(ModbusMonitorSettings.Address), nameof(ModbusMonitorSettings.Quantity),
             nameof(ModbusMonitorSettings.IntervalMs), nameof(ModbusMonitorSettings.TimeoutMs),
             nameof(ModbusMonitorSettings.ValueType), nameof(ModbusMonitorSettings.Scale),
-            nameof(ModbusMonitorSettings.SwapBytes), nameof(ModbusMonitorSettings.SwapWords)
+            nameof(ModbusMonitorSettings.SwapBytes), nameof(ModbusMonitorSettings.SwapWords),
+            nameof(ModbusMonitorSettings.Items)
         ];
         Assert.Equal(expectedProperties.Order(), settings.EnumerateObject().Select(property => property.Name).Order());
         Assert.False(settings.TryGetProperty(nameof(ModbusMonitorSettings.Request), out _));

@@ -58,6 +58,7 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
         settings.Validate();
         cancellationToken.ThrowIfCancellationRequested();
         var copy = values.ToArray();
+        settings.ValidateWrite(address, copy.Length);
         if (settings.Function is not (1 or 3)) throw new InvalidOperationException("This area is read-only.");
         if (address < settings.Address || copy.Length == 0 || (long)address + copy.Length > (long)settings.Address + settings.Quantity)
             throw new ArgumentOutOfRangeException(nameof(address), "The write must stay inside the monitored area.");
@@ -76,6 +77,8 @@ public sealed class ModbusRtuMonitorService : IModbusRtuMonitorService
                     throw new InvalidOperationException("A Modbus operation is already active.");
                 if (_settings?.Request != settings.Request)
                     throw new InvalidOperationException("The polling configuration changed.");
+                // A caller cannot weaken the definitions captured by active polling.
+                _settings.ValidateWrite(address, copy.Length);
                 _pendingWrite = write;
                 SetSnapshot(_snapshot with { WriteState = ModbusWriteState.Queued });
                 return write.Completion.Task;

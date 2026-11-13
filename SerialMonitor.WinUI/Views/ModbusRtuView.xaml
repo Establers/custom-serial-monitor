@@ -54,7 +54,7 @@
                     <Button Grid.Column="2" Content="{Binding StartLabel}" Command="{Binding StartCommand}" Style="{StaticResource Action}" />
                     <Button x:Name="StopButton" Grid.Column="3" Content="{Binding StopLabel}" Command="{Binding StopCommand}" Style="{StaticResource Action}" />
                 </Grid>
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
                     <TextBlock Text="{Binding RequestSummary}" Style="{StaticResource Cell}" FontFamily="Consolas"
                                FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding SetupHelp}" />
                     <Button Grid.Column="1" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
@@ -96,8 +96,9 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button Grid.Column="2" Content="{Binding SaveLabel}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Action}" />
-                    <Button Grid.Column="3" Content="{Binding WriteEditorLabel}" IsEnabled="{Binding IsWritableFunction}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}">
+                    <Button x:Name="ItemsButton" Grid.Column="2" Content="{Binding ItemsEditorLabel}" Click="Items_Click" IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" />
+                    <Button Grid.Column="3" Content="{Binding SaveLabel}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Action}" />
+                    <Button Grid.Column="4" Content="{Binding WriteEditorLabel}" IsEnabled="{Binding IsWritableFunction}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}">
                         <Button.Flyout>
                             <Flyout Placement="BottomEdgeAlignedRight" Opening="WriteFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
@@ -106,12 +107,15 @@
                                         <StackPanel x:Name="WritePanel" Width="400" Spacing="8" Margin="0,0,16,0">
                                             <TextBlock Text="{Binding WriteEditorLabel}" FontSize="14" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding WriteHelp}" FontSize="11" TextWrapping="Wrap" />
+                                            <ComboBox Header="{Binding WriteModeLabel}" ItemsSource="{Binding WriteModes}" SelectedIndex="{Binding WriteModeIndex, Mode=TwoWay}" FontSize="12" />
+                                            <TextBlock Text="{Binding WriteItemSummary}" FontSize="11" TextWrapping="Wrap" />
                                             <Grid ColumnDefinitions="125,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
                                                 <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource FieldLabel}" />
                                                 <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
                                                 <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
                                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding WriteValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ValuesInput}" AutomationProperties.Name="{Binding WriteValuesLabel}" />
                                             </Grid>
+                                            <TextBlock Text="{Binding WritePreview}" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                                             <TextBlock Text="{Binding Status}" FontSize="12" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
                                             <Button Content="{Binding WriteLabel}" Command="{Binding WriteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Right" />
@@ -134,14 +138,15 @@
         <Border Grid.Row="2" Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" MinHeight="0">
             <Grid MinHeight="0">
                 <ScrollViewer x:Name="TableScroll" HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
-                    <Grid MinWidth="640" RowDefinitions="Auto,*" MinHeight="0">
+                    <Grid MinWidth="780" RowDefinitions="Auto,*" MinHeight="0">
                         <Border Background="{ThemeResource InspectorHeaderBrush}" Padding="8,5,24,5">
-                            <Grid ColumnDefinitions="110,110,*,105,100" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="110,110,125,*,105,100" ColumnSpacing="8">
                                 <TextBlock Text="{Binding TableAddressLabel}" Style="{StaticResource Cell}" FontSize="11" />
                                 <TextBlock Grid.Column="1" Text="{Binding RawLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="2" Text="{Binding ValueLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="3" Text="{Binding StateLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="4" Text="{Binding UpdatedLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="2" Text="{Binding TableNameLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="3" Text="{Binding ValueLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="4" Text="{Binding StateLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="5" Text="{Binding UpdatedLabel}" Style="{StaticResource Cell}" FontSize="11" />
                             </Grid>
                         </Border>
                         <ListView x:Name="RegisterList" Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
@@ -158,15 +163,16 @@
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid ColumnDefinitions="110,110,*,105,100" ColumnSpacing="8">
+                                    <Grid ColumnDefinitions="110,110,125,*,105,100" ColumnSpacing="8">
                                         <TextBlock Text="{Binding AddressText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
                                         <TextBlock Grid.Column="1" Text="{Binding RawText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding RawText}" />
-                                        <Grid Grid.Column="2" ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                        <TextBlock Grid.Column="2" Text="{Binding NameText}" Style="{StaticResource Cell}" ToolTipService.ToolTip="{Binding NameText}" />
+                                        <Grid Grid.Column="3" ColumnDefinitions="Auto,*" ColumnSpacing="4">
                                             <TextBlock Text="{Binding ChangeText}" Style="{StaticResource Cell}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                             <TextBlock Grid.Column="1" Text="{Binding ValueText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding ValueText}" />
                                         </Grid>
-                                        <TextBlock Grid.Column="3" Text="{Binding StatusText}" Style="{StaticResource Cell}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding StatusText}" />
-                                        <TextBlock Grid.Column="4" Text="{Binding UpdatedText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
+                                        <TextBlock Grid.Column="4" Text="{Binding StatusText}" Style="{StaticResource Cell}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding StatusText}" />
+                                        <TextBlock Grid.Column="5" Text="{Binding UpdatedText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
