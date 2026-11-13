@@ -15,6 +15,11 @@ const eventFor = text => {
     shiftKey: parts.includes('SHIFT'), metaKey: parts.includes('WIN') };
 };
 for (const gesture of catalog.reservedKeys) assert.equal(catalog.userShortcut(eventFor(gesture)), null, gesture);
+for (const imeState of [{ isComposing: true }, { keyCode: 229 }]) {
+  assert.equal(catalog.matches('ConsoleEnter', { key: 'Enter', ...imeState }), false);
+  assert.equal(catalog.matches('ConsoleBackspace', { key: 'Backspace', ...imeState }), false);
+  assert.equal(catalog.userShortcut({ key: 'a', ...imeState }), null);
+}
 
 // WinUI records number-row keys as VirtualKey.NumberN even when the layout
 // produces punctuation or accented letters. Leave modified keys unchanged.

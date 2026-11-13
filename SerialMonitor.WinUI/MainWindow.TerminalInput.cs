@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI;
@@ -31,7 +33,7 @@ public sealed partial class MainWindow
                 sessionId != _viewModel.TerminalDirectInputSessionId) return;
             restoreLog = !enabled && _displayedDirectInputSessionId != 0;
             var result = await ExecuteXtermScriptAsync(
-                $"window.serialMonitorSetDirectInput && window.serialMonitorSetDirectInput({(enabled ? "true" : "false")}, {sessionId}, {(_viewModel.TerminalDirectInputLocalEcho ? "true" : "false")}, {(_viewModel.IsTerminalDirectInputLocked ? "true" : "false")});");
+                $"window.serialMonitorSetDirectInput && window.serialMonitorSetDirectInput({(enabled ? "true" : "false")}, {sessionId}, {(_viewModel.TerminalDirectInputLocalEcho ? "true" : "false")}, {(_viewModel.IsTerminalDirectInputLocked ? "true" : "false")}, {GetTerminalConsoleSettingsJson()});");
             if (TryParseScriptBoolean(result) != true)
                 throw new InvalidOperationException("xterm rejected the direct input state.");
             _displayedDirectInputSessionId = enabled ? sessionId : 0;
@@ -105,6 +107,64 @@ public sealed partial class MainWindow
         _terminalInputMenuOpen = true;
         TerminalDirectInputOnMenuItem.IsChecked = _viewModel.IsTerminalDirectInputEnabled;
         TerminalDirectInputOffMenuItem.IsChecked = !_viewModel.IsTerminalDirectInputEnabled;
+        UpdateTerminalConsoleMenuChecks();
+    }
+
+    private string GetTerminalConsoleSettingsJson() => JsonSerializer.Serialize(new
+    {
+        enter = _viewModel.TerminalEnter.ToString(),
+        backspace = _viewModel.TerminalBackspace.ToString(),
+        receiveNewline = _viewModel.TerminalReceiveNewline.ToString()
+    });
+
+    private async Task SyncXtermConsoleSettingsAsync()
+    {
+        if (!_isXtermReady || IsClosingOrClosed) return;
+        try
+        {
+            var result = await ExecuteXtermScriptAsync(
+                $"window.serialMonitorSetConsoleSettings && window.serialMonitorSetConsoleSettings({GetTerminalConsoleSettingsJson()});");
+            if (TryParseScriptBoolean(result) != true)
+                throw new InvalidOperationException("xterm rejected the console settings.");
+        }
+        catch (Exception ex)
+        {
+            _viewModel.IsTerminalDirectInputEnabled = false;
+            _viewModel.RecordXtermLayoutError($"Console settings update failed: {ex.Message}");
+        }
+    }
+
+    private void UpdateTerminalConsoleMenuChecks()
+    {
+        CheckChoice(TerminalEnterMenu, _viewModel.TerminalEnter.ToString());
+        CheckChoice(TerminalBackspaceMenu, _viewModel.TerminalBackspace.ToString());
+        CheckChoice(TerminalReceiveNewlineMenu, _viewModel.TerminalReceiveNewline.ToString());
+        static void CheckChoice(MenuFlyoutSubItem menu, string value)
+        {
+            foreach (var item in menu.Items.OfType<RadioMenuFlyoutItem>())
+                item.IsChecked = Equals(item.Tag, value);
+        }
+    }
+
+    private void TerminalEnter_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is RadioMenuFlyoutItem { Tag: string tag } && Enum.TryParse<TerminalEnterMode>(tag, out var value))
+            _viewModel.TerminalEnter = value;
+        UpdateTerminalConsoleMenuChecks();
+    }
+
+    private void TerminalBackspace_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is RadioMenuFlyoutItem { Tag: string tag } && Enum.TryParse<TerminalBackspaceMode>(tag, out var value))
+            _viewModel.TerminalBackspace = value;
+        UpdateTerminalConsoleMenuChecks();
+    }
+
+    private void TerminalReceiveNewline_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is RadioMenuFlyoutItem { Tag: string tag } && Enum.TryParse<TerminalReceiveNewlineMode>(tag, out var value))
+            _viewModel.TerminalReceiveNewline = value;
+        UpdateTerminalConsoleMenuChecks();
     }
 
     private void TerminalDirectInputMenu_Closed(object sender, object args)

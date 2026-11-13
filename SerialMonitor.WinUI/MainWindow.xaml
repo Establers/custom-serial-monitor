@@ -1306,6 +1306,21 @@
                                                          Text="Local echo"
                                                          IsChecked="{Binding TerminalDirectInputLocalEcho, Mode=TwoWay}"
                                                          infra:AppToolTipService.ToolTip="Show typed text immediately. Editing keys still go to the device and require shell support. Turn this off when the device echoes input." />
+                                    <MenuFlyoutSubItem x:Name="TerminalEnterMenu" Text="{Binding TerminalEnterMenuText}">
+                                        <RadioMenuFlyoutItem Text="CR" Tag="Cr" GroupName="TerminalEnter" Click="TerminalEnter_Click" />
+                                        <RadioMenuFlyoutItem Text="LF" Tag="Lf" GroupName="TerminalEnter" Click="TerminalEnter_Click" />
+                                        <RadioMenuFlyoutItem Text="CRLF" Tag="CrLf" GroupName="TerminalEnter" Click="TerminalEnter_Click" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSubItem x:Name="TerminalBackspaceMenu" Text="{Binding TerminalBackspaceMenuText}">
+                                        <RadioMenuFlyoutItem Text="DEL (0x7F)" Tag="Del" GroupName="TerminalBackspace" Click="TerminalBackspace_Click" />
+                                        <RadioMenuFlyoutItem Text="BS (0x08)" Tag="Bs" GroupName="TerminalBackspace" Click="TerminalBackspace_Click" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSubItem x:Name="TerminalReceiveNewlineMenu" Text="{Binding TerminalReceiveNewlineMenuText}">
+                                        <RadioMenuFlyoutItem x:Uid="TerminalReceiveNewlinePreserve" Text="Original" Tag="Preserve" GroupName="TerminalReceiveNewline" Click="TerminalReceiveNewline_Click" />
+                                        <RadioMenuFlyoutItem Text="LF → CRLF" Tag="Lf" GroupName="TerminalReceiveNewline" Click="TerminalReceiveNewline_Click" />
+                                        <RadioMenuFlyoutItem Text="CR → CRLF" Tag="Cr" GroupName="TerminalReceiveNewline" Click="TerminalReceiveNewline_Click" />
+                                        <RadioMenuFlyoutItem x:Uid="TerminalReceiveNewlineAuto" Text="Auto (CR/LF)" Tag="Auto" GroupName="TerminalReceiveNewline" Click="TerminalReceiveNewline_Click" />
+                                    </MenuFlyoutSubItem>
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>

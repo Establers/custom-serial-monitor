@@ -1098,6 +1098,22 @@ public sealed class ProfileService : IProfileService
             warnings.Add("xterm font family was invalid.");
         }
 
+        if (!Enum.IsDefined(settings.TerminalEnter))
+        {
+            settings.TerminalEnter = defaults.TerminalEnter;
+            warnings.Add("Console Enter mode was invalid.");
+        }
+        if (!Enum.IsDefined(settings.TerminalBackspace))
+        {
+            settings.TerminalBackspace = defaults.TerminalBackspace;
+            warnings.Add("Console Backspace mode was invalid.");
+        }
+        if (!Enum.IsDefined(settings.TerminalReceiveNewline))
+        {
+            settings.TerminalReceiveNewline = defaults.TerminalReceiveNewline;
+            warnings.Add("Console receive newline mode was invalid.");
+        }
+
         if (!Enum.IsDefined(settings.Theme))
         {
             settings.Theme = defaults.Theme;

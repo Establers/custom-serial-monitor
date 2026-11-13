@@ -2594,6 +2594,9 @@ public sealed partial class MainWindow : Window
             _ = SyncXtermDirectInputLockAsync();
         if (args.PropertyName == nameof(MainViewModel.TerminalDirectInputLocalEcho))
             _ = SyncXtermDirectInputLocalEchoAsync();
+        if (args.PropertyName is nameof(MainViewModel.TerminalEnter) or
+            nameof(MainViewModel.TerminalBackspace) or nameof(MainViewModel.TerminalReceiveNewline))
+            _ = SyncXtermConsoleSettingsAsync();
         if (args.PropertyName is nameof(MainViewModel.SelectedRxLineEnding) or
             nameof(MainViewModel.SelectedTimestampDisplayFormatOption) or
             nameof(MainViewModel.ShowTimestampInLogView) or nameof(MainViewModel.ShowRxTxDirectionPrefixInLogView))

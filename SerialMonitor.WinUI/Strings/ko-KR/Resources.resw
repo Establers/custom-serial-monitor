@@ -1072,7 +1072,12 @@
   <data name="ShortcutActionWindow" xml:space="preserve"><value>창 제어</value></data>
   <data name="TerminalDirectInputOn" xml:space="preserve"><value>콘솔 입력</value></data>
   <data name="TerminalDirectInputOff" xml:space="preserve"><value>로그 보기</value></data>
-  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. 콘솔 입력·로그 보기 전환과 로컬 에코를 설정합니다.</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. 콘솔 입력·로그 보기 전환, 로컬 에코, Enter, Backspace, 수신 줄바꿈을 설정합니다.</value></data>
+  <data name="TerminalEnterMenuText" xml:space="preserve"><value>Enter: {0}</value></data>
+  <data name="TerminalBackspaceMenuText" xml:space="preserve"><value>Backspace: {0}</value></data>
+  <data name="TerminalReceiveNewlineMenuText" xml:space="preserve"><value>수신 줄바꿈: {0}</value></data>
+  <data name="TerminalReceiveNewlinePreserve.Text" xml:space="preserve"><value>원본 유지</value></data>
+  <data name="TerminalReceiveNewlineAuto.Text" xml:space="preserve"><value>자동 (CR/LF)</value></data>
   <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>콘솔 설정 메뉴</value></data>
   <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>콘솔 입력</value></data>
   <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>로그 보기</value></data>

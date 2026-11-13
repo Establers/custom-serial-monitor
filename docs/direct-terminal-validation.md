@@ -1,20 +1,27 @@
 # Direct terminal input and RX rendering
 
-Direct input uses xterm keystrokes with no added line ending, and a separate,
+Direct input uses xterm keystrokes and configurable physical Enter/Backspace keys, and a separate,
 generation-bound raw RX display buffer. The normal `LogPipeline` still receives
 the same chunks and continues parsing, rule detection and asynchronous file
 logging. Its escaped log text is not sent to the interactive screen.
 
 Enabling direct input preserves visible logs and the cursor. Disabling it restores the
-retained normal log snapshot. `CR`, `BS`, ANSI cursor/erase sequences and partial
+retained normal log snapshot. In the default Original mode, `CR`, `BS`, ANSI cursor/erase sequences and partial
 prompts stay intact in the direct screen. Streaming decoding supports split
 UTF-8 and CP949 characters. The device still owns completion and prompt redraw;
 completion and history remain device-owned.
 
-The rightmost fixed 24-pixel terminal icon opens a right-aligned **Console input / Log view** menu with local echo.
+The rightmost fixed 24-pixel terminal icon opens a right-aligned **Console input / Log view** menu with
+local echo and compact **Enter**, **Backspace**, **Receive newline** submenus showing current choices.
+Defaults are CR, DEL and Original. Enter can send LF/CRLF and Backspace can send BS;
+pastes, Ctrl/Alt combinations and IME composition keep xterm handling. RX correction
+supports LF→CRLF, CR→CRLF and Auto without doubling CRLF across host batches.
+Correction affects future console display only; byte logging, parsing, event detection
+and retained normal logs are unchanged. All four preferences survive profile save/load,
+while console input activation remains session-only.
 Local echo defaults on for devices that do not echo keystrokes, and can be
 turned off for shells with their own echo. Printed input appears immediately;
-Enter still sends CR for the device to execute its accumulated command. Native
+Enter sends the selected newline for the device to execute its accumulated command. Native
 WebView2 focus is assigned before focusing/verifying xterm's textarea, after the
 menu finishes closing.
 The local display mirror is limited to 16,384 characters and 32 pending echo
@@ -45,8 +52,10 @@ than calling `terminal.write` with hand-written echo text.
 
 ```powershell
 $env:SERIALMONITOR_TERMINAL_RX_FIXTURE = "$PWD/artifacts/direct-rx-fixture.json"
-dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj -p:Platform=x64 --filter 'FullyQualifiedName~TerminalInputSessionTests|FullyQualifiedName~TerminalOutputBufferTests'
+dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj -p:Platform=x64 --filter 'FullyQualifiedName~TerminalInputSessionTests|FullyQualifiedName~TerminalOutputBufferTests|FullyQualifiedName~TerminalConsoleProfileTests'
 # NODE_PATH may point to an existing Playwright installation.
+node --test scripts/test_console_input.mjs
+node scripts/test_xterm_console_settings.cjs
 node scripts/test_xterm_direct_input.cjs
 node scripts/test_xterm_direct_rx.cjs
 node scripts/test_xterm_local_echo.cjs

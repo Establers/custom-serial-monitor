@@ -72,10 +72,10 @@
       matches(action, event) {
         if (!actions.has(action)) throw new Error(`Unknown shortcut action: ${action}`);
         const input = gesture(event);
-        return !event.isComposing && input.key !== null && actions.get(action).has(format(input.key, input.flags));
+        return !event.isComposing && event.keyCode !== 229 && input.key !== null && actions.get(action).has(format(input.key, input.flags));
       },
       userShortcut(event) {
-        if (event.isComposing) return null;
+        if (event.isComposing || event.keyCode === 229) return null;
         const input = gesture(event);
         if (input.key === null || input.key === 'PLUS' || input.key === 'MINUS' || input.flags & (SHIFT | WIN)) return null;
         const text = format(input.key, input.flags);

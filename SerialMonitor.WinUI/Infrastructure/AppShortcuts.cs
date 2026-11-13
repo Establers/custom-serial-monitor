@@ -9,7 +9,8 @@ internal enum AppShortcutAction
     EditorConfirm, EditorCancel, SearchCancel, SearchSubmitNext, SearchSubmitPrevious,
     CommandSubmit, ListActivate, HistoryPrevious, HistoryNext, SearchFocus,
     SearchNext, SearchPrevious, SearchCase, SearchWord, SearchRegex, GoTo, Marker,
-    Copy, AutoScroll, FocusNavigation, FocusNext, TextNavigation, TextEditing, BrowserControls, WindowControls
+    Copy, AutoScroll, FocusNavigation, FocusNext, TextNavigation, TextEditing, BrowserControls, WindowControls,
+    ConsoleEnter, ConsoleBackspace
 }
 
 internal static class AppShortcuts

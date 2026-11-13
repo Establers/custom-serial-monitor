@@ -12498,6 +12498,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedAppTheme));
         OnPropertyChanged(nameof(EffectiveXtermFontCssFamily));
         OnPropertyChanged(nameof(XtermFontSize));
+        NotifyTerminalConsoleSettingsChanged();
         if (includeBackgroundVisualSettings)
         {
             NotifyBackgroundPresetPropertiesChanged();

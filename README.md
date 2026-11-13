@@ -60,6 +60,11 @@ Windows 10/11 **x64**와 Microsoft Edge WebView2 Runtime이 필요합니다.
 선택한 텍스트가 있을 때 Ctrl+C는 복사하고, 선택이 없으면 장치로 전달합니다.
 글자가 두 번 표시되면 같은 메뉴에서 **로컬 에코**를 끄세요. 자세한 동작은 [직접 입력 안내](docs/known_limitations.md#direct-terminal-input)를 참고하세요.
 
+같은 메뉴에서 **Enter**, **Backspace**, **수신 줄바꿈**을 설정할 수 있습니다.
+기본값은 각각 `CR`, `DEL`, `원본 유지`이며 현재 값이 메뉴에 표시됩니다.
+수신 줄바꿈 보정은 콘솔 화면에만 적용되고 수신 원본·파일 로그에는 영향을 주지 않습니다.
+키 설정은 해당 키를 누를 때 적용되며 붙여넣기 내용은 기존 방식으로 전송합니다. 네 설정은 프로필에 저장됩니다.
+
 업데이트는 `About`의 `Check for updates`에서 확인합니다.
 
 <a id="ai-skill-install"></a>

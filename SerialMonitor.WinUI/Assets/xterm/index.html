@@ -362,6 +362,7 @@
   <script src="./xterm-addon-fit.js"></script>
   <script src="./xterm-addon-search.js"></script>
   <script src="./local-echo.js"></script>
+  <script src="./console-input.js"></script>
   <script src="./direct-search.js"></script>
   <script src="./compact-scrollback.js"></script>
   <script src="./log-navigation.js"></script>
@@ -555,6 +556,8 @@
     let directInputSessionId = 0;
     let directInputLocalEcho = true;
     let directInputLocked = false;
+    const consoleInput = new SerialMonitorConsoleInput();
+    window.serialMonitorSetConsoleSettings = settings => consoleInput.configure(settings);
     const directInputEcho = new SerialMonitorLocalEcho(terminal);
     const directSearch = new SerialMonitorDirectSearch(terminal, selectPayloadSearchMatch,
       message => window.chrome?.webview?.postMessage(message));
@@ -572,9 +575,11 @@
       directInputLocalEcho = false;
       window.chrome?.webview?.postMessage({ type: 'terminalInputEchoError', sessionId: directInputSessionId, error: String(error) });
     }
-    window.serialMonitorSetDirectInput = (enabled, sessionId, localEcho = directInputLocalEcho, locked = false) => {
+    window.serialMonitorSetDirectInput = (enabled, sessionId, localEcho = directInputLocalEcho, locked = false, settings) => {
       if (enabled && (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !window.chrome?.webview)) return false;
+      if (settings !== undefined && !consoleInput.configure(settings)) return false;
       if (directInputSessionId !== (enabled ? sessionId : 0)) {
+        consoleInput.resetReceive();
         resetDirectEchoRange();
         // Enabling continues at the current cursor and keeps visible history.
         // Only leaving raw rendering needs the normal retained-log rebuild.
@@ -609,7 +614,7 @@
       directInputLocalEcho = !!enabled;
       return true;
     };
-    terminal.onData(data => {
+    function sendDirectInput(data) {
       if (directInputSessionId && !directInputLocked && data) {
         window.chrome?.webview?.postMessage({ type: 'terminalInput', sessionId: directInputSessionId, data });
         if (directInputLocalEcho && data.length <= 16_384) {
@@ -621,7 +626,8 @@
           }
         }
       }
-    });
+    }
+    terminal.onData(sendDirectInput);
 
     const reportCompactScrollbackError = error => {
       console.error('Compact scrollback failed', error);
@@ -1551,9 +1557,9 @@
         postAppendResult({ requestId }, false, 'stale direct input session');
         return false;
       }
-      // In particular, never normalize CR to CRLF here. The device controls
-      // carriage return, erasure and cursor positioning, including split CSI.
-      appendQueue.push({ text: String(text ?? ''), autoScroll: !!autoScroll, requestId, directInputSessionId: sessionId });
+      // Original mode preserves control sequences byte-for-byte. Optional
+      // newline correction is display-only and retains split CRLF pairs.
+      appendQueue.push({ text: consoleInput.normalizeReceived(String(text ?? '')), autoScroll: !!autoScroll, requestId, directInputSessionId: sessionId });
       queueAppendDrain();
       return true;
     };
@@ -2478,6 +2484,15 @@
       }
 
       if (postCommandShortcut(event, 'xterm-key-handler')) return false;
+
+      if (directInputSessionId && !directInputLocked) {
+        const data = consoleInput.keyData(event);
+        if (data !== null) {
+          event.preventDefault();
+          sendDirectInput(data);
+          return false;
+        }
+      }
 
       return true;
     });

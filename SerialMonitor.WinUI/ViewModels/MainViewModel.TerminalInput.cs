@@ -12,7 +12,6 @@ public sealed partial class MainViewModel
     private long _terminalInputSessionId;
     private long _terminalInputSerialGeneration;
     private TerminalOutputBuffer? _terminalOutput;
-    private bool _terminalDirectInputLocalEcho = true;
 
     // Keystrokes and driver changes share the service's write gate. A pending
     // control-line/configuration operation must not tear down the input session.
@@ -31,12 +30,17 @@ public sealed partial class MainViewModel
     public string TerminalDirectInputMenuToolTip => IsTerminalDirectInputLocked
         ? UiText.Get("TerminalDirectInputSequenceLocked", "Console input. Keyboard input is locked while the sequence runs.")
         : UiText.Format("TerminalDirectInputMenuHint",
-        "{0}. Choose console input or log view and configure local echo.", TerminalDirectInputButtonText);
+        "{0}. Choose console input or log view and configure echo, keys and receive newlines.", TerminalDirectInputButtonText);
 
     public bool TerminalDirectInputLocalEcho
     {
-        get => _terminalDirectInputLocalEcho;
-        set => SetProperty(ref _terminalDirectInputLocalEcho, value);
+        get => _currentUiSettings.TerminalLocalEcho;
+        set
+        {
+            if (TerminalDirectInputLocalEcho == value) return;
+            _currentUiSettings.TerminalLocalEcho = value;
+            OnPropertyChanged();
+        }
     }
 
     public bool IsTerminalDirectInputEnabled

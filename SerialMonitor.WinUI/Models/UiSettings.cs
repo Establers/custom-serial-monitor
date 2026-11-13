@@ -82,6 +82,11 @@ public sealed class UiSettings
 
     public int XtermFontSize { get; set; } = DefaultXtermFontSize;
 
+    public bool TerminalLocalEcho { get; set; } = true;
+    public TerminalEnterMode TerminalEnter { get; set; } = TerminalEnterMode.Cr;
+    public TerminalBackspaceMode TerminalBackspace { get; set; } = TerminalBackspaceMode.Del;
+    public TerminalReceiveNewlineMode TerminalReceiveNewline { get; set; } = TerminalReceiveNewlineMode.Preserve;
+
     public RxDisplayMode RxDisplayMode { get; set; } = RxDisplayMode.Terminal;
 
     public int HexGroupTimeoutMs { get; set; } = DefaultHexGroupTimeoutMs;
@@ -170,6 +175,10 @@ public sealed class UiSettings
             TimestampDisplayFormat = TimestampDisplayFormat,
             XtermFontFamily = XtermFontFamily,
             XtermFontSize = XtermFontSize,
+            TerminalLocalEcho = TerminalLocalEcho,
+            TerminalEnter = TerminalEnter,
+            TerminalBackspace = TerminalBackspace,
+            TerminalReceiveNewline = TerminalReceiveNewline,
             RxDisplayMode = RxDisplayMode,
             HexGroupTimeoutMs = HexGroupTimeoutMs,
             HexGroupTimeoutUserConfigured = HexGroupTimeoutUserConfigured,

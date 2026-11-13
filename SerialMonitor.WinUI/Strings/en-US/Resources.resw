@@ -1074,7 +1074,12 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ShortcutActionWindow" xml:space="preserve"><value>window controls</value></data>
   <data name="TerminalDirectInputOn" xml:space="preserve"><value>Console input</value></data>
   <data name="TerminalDirectInputOff" xml:space="preserve"><value>Log view</value></data>
-  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Choose console input or log view and configure local echo.</value></data>
+  <data name="TerminalDirectInputMenuHint" xml:space="preserve"><value>{0}. Choose console input or log view and configure echo, keys and receive newlines.</value></data>
+  <data name="TerminalEnterMenuText" xml:space="preserve"><value>Enter: {0}</value></data>
+  <data name="TerminalBackspaceMenuText" xml:space="preserve"><value>Backspace: {0}</value></data>
+  <data name="TerminalReceiveNewlineMenuText" xml:space="preserve"><value>Receive newline: {0}</value></data>
+  <data name="TerminalReceiveNewlinePreserve.Text" xml:space="preserve"><value>Original</value></data>
+  <data name="TerminalReceiveNewlineAuto.Text" xml:space="preserve"><value>Auto (CR/LF)</value></data>
   <data name="TerminalDirectInputMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Console settings menu</value></data>
   <data name="TerminalDirectInputOnMenuItem.Text" xml:space="preserve"><value>Console input</value></data>
   <data name="TerminalDirectInputOffMenuItem.Text" xml:space="preserve"><value>Log view</value></data>

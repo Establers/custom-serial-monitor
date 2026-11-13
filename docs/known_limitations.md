@@ -151,10 +151,12 @@ This file tracks current intentional limits and validation gaps.
 
 - Direct input is an opt-in, session-only choice labeled **Console input** in
   Terminal mode; **Log view** restores the normal log screen. The existing
-  TX editor and its Ending setting are independent; direct Enter sends CR and
-  other keys/pastes use xterm's terminal sequences without an added suffix.
+  TX editor and its Ending setting are independent. The console menu's **Enter**
+  selects CR (default), LF or CRLF; **Backspace** selects DEL (default) or BS.
+  Only physical keypresses use these mappings: IME composition, modified control
+  keys and pastes retain xterm's handling without an added suffix.
 - Device shell support provides completion, history and remote prompt redraw.
-  ON preserves the visible screen and continues at the current cursor; raw RX
+  ON preserves the visible screen and continues at the current cursor; default raw RX
   preserves CR, Backspace and ANSI cursor/erase sequences. OFF restores the retained normal log view.
   Normal RX parsing, event detection and asynchronous file logging continue
   independently. Time/line navigation belongs to the retained normal log view.
@@ -164,14 +166,21 @@ This file tracks current intentional limits and validation gaps.
   App search/navigation shortcuts remain available. Saved command shortcuts are
   suspended while typing directly in xterm.
 - The rightmost fixed 24-pixel terminal icon opens the **Console input / Log view**
-  choices and local-echo setting.
+  choices, local echo, **Enter**, **Backspace** and **Receive newline** settings.
+  Receive newline defaults to **Original**, preserving CR redraw and ANSI editing.
+  Optional LF→CRLF, CR→CRLF and Auto (CR/LF) corrections affect only future console
+  RX display. Existing CRLF pairs, including pairs split between RX batches, remain
+  one newline; changing the correction does not rewrite existing screen history.
+  Normal RX parsing, event detection and file logging retain their original data.
+  Echo, Enter, Backspace and receive-newline choices are saved in the profile;
+  enabling console input itself remains session-only.
   Local echo defaults on so typed text is visible without device echo; disable
   it when the device itself echoes input. Local display editing supports
   Backspace/Delete, Left/Right, Home/End, wide/combining characters and wrapping
   within the current viewport, without erasing the prompt or prior logs.
   Device responses and resize end ownership of that local display span;
   completion and history remain device-owned.
-  Characters are still sent immediately; Enter supplies the execution newline
+  Characters are still sent immediately; Enter supplies the selected execution newline
   to the device's line editor. The bounded display mirror never delays or
   rewrites TX. It retains at most 16,384 characters and 32 pending echo chunks;
   overflow or an uneditable span stops direct input with a visible error.

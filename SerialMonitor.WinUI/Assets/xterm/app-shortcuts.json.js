@@ -5,6 +5,8 @@ globalThis.serialMonitorShortcutDefinitions = [
   { "action": "SearchSubmitNext", "gestures": ["Enter"], "resourceId": "ShortcutActionConfirm", "description": "search" },
   { "action": "SearchSubmitPrevious", "gestures": ["Shift+Enter"], "resourceId": "ShortcutActionSearch", "description": "previous search result" },
   { "action": "CommandSubmit", "gestures": ["Enter"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionConfirm", "description": "TX" },
+  { "action": "ConsoleEnter", "gestures": ["Enter"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionConfirm", "description": "console Enter" },
+  { "action": "ConsoleBackspace", "gestures": ["Backspace"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionEditing", "description": "console Backspace" },
   { "action": "ListActivate", "gestures": ["Enter"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionConfirm", "description": "activate selected result" },
   { "action": "HistoryPrevious", "gestures": ["Up"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionNavigation", "description": "previous history entry" },
   { "action": "HistoryNext", "gestures": ["Down"], "ignoreModifiers": ["Shift"], "resourceId": "ShortcutActionNavigation", "description": "next history entry" },
