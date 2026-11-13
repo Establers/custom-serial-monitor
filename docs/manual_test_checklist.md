@@ -813,6 +813,14 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 
 ## Log File Actions
 
+- [ ] With live file logging enabled, close the main window during RX. Confirm
+  the main window and any open Sequence Results window disappear immediately,
+  while the process stays alive to finish accepted RX, flush the live log, save
+  the profile and release the port/WebView. Confirm the process then exits, the
+  final accepted RX (including a partial line) is saved, and settings survive
+  restart. Repeat while disconnected and while profile saving is temporarily
+  delayed; hiding must not cancel the existing shutdown cleanup.
+
 - [ ] Without opening the Log tab, find **Export logs...** / **로그 내보내기...** immediately
   to the right of **Start Logging / Stop Logging**. Confirm its icon and text
   remain visible when the inspector is collapsed and the window is narrow.

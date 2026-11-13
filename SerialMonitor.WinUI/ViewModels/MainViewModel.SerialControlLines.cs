@@ -9,6 +9,14 @@ public sealed partial class MainViewModel
     private string? _serialControlLineError;
     private SerialControlLineStatus _serialControlLineStatus = SerialControlLineStatus.Disconnected;
     private long _serialControlLineErrorGeneration;
+    private SerialControlLineUiState? _lastSerialControlLineUiState;
+
+    private readonly record struct SerialControlLineUiState(
+        SerialControlLineStatus Status, bool Connected,
+        SerialControlLineMode DtrMode, SerialControlLineMode RtsMode,
+        bool DtrEnabled, bool RtsEnabled, bool RtsToggle,
+        bool CanEditParameters, bool CanEditDtr, bool CanEditRts, bool CanEditToggle,
+        bool Busy, string Hint);
 
     public bool IsSerialControlLineBusy => _serialControlLineBusy;
     private bool CanChangeSerialControlLines => !IsShuttingDown && !IsBusy && !IsModbusBusy && !IsAutoReconnectRunning &&
@@ -144,11 +152,28 @@ public sealed partial class MainViewModel
         }
     }
 
-    private void RefreshSerialControlLineProperties()
+    private void RefreshSerialControlLineProperties(bool onlyIfChanged = false)
     {
         _serialControlLineStatus = _serialService?.ControlLineStatus ?? SerialControlLineStatus.Disconnected;
         if (_serialControlLineErrorGeneration != _serialControlLineStatus.Generation)
             _serialControlLineError = null;
+        if (onlyIfChanged)
+        {
+            var state = new SerialControlLineUiState(
+                _serialControlLineStatus, IsConnected, DtrOutputMode, RtsOutputMode,
+                DtrEnable, RtsEnable, RtsToggleOnTransmit,
+                CanEditSerialParameters, CanEditDtrControl, CanEditRtsControl, CanEditRtsToggle,
+                IsSerialControlLineBusy, SerialControlLineHint);
+            if (_lastSerialControlLineUiState == state) return;
+            _lastSerialControlLineUiState = state;
+        }
+        else
+        {
+            // Preserve explicit refreshes, including teardown and rejected-edit
+            // restoration, without adding getter reads to those lifecycle paths.
+            // Re-baseline on the next poll rather than retain an older UI state.
+            _lastSerialControlLineUiState = null;
+        }
         foreach (var property in new[] { nameof(CanEditSerialParameters), nameof(DtrEnable), nameof(RtsEnable), nameof(RtsToggleOnTransmit),
             nameof(DtrControlChecked), nameof(RtsControlChecked),
             nameof(CanEditDtrControl), nameof(CanEditRtsControl), nameof(CanEditRtsToggle), nameof(IsSerialControlLineBusy),

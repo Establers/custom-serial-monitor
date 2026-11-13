@@ -13034,7 +13034,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnStatusTimerTick(DispatcherQueueTimer sender, object args)
     {
-        RefreshSerialControlLineProperties();
+        RefreshSerialControlLineProperties(onlyIfChanged: true);
         RefreshSequenceTxActivity();
         Modbus?.Refresh();
         StartResourceSnapshotRefreshIfDue();

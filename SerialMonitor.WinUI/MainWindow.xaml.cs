@@ -254,17 +254,37 @@ public sealed partial class MainWindow : Window
         }
 
         args.Cancel = true;
+        BeginShutdown();
+    }
+
+    private void BeginShutdown()
+    {
         if (_closeCleanupStarted)
         {
             return;
         }
 
         _closeCleanupStarted = true;
+        // Hiding keeps the window/dispatcher alive until RX drain, file flush,
+        // profile persistence and WebView cleanup have finished.
+        HideWindowForShutdown(AppWindow);
+        if (_sequenceResultsWindow is { } resultsWindow)
+            HideWindowForShutdown(resultsWindow.AppWindow);
         DisableShutdownInput(Root);
         UpdateLogNavigationActivity();
         _portAlias.Dispose();
         _xtermSearchCancellation.Cancel();
         _ = ShutdownAndCloseAsync();
+    }
+
+    private static void HideWindowForShutdown(AppWindow window)
+    {
+        try { window.Hide(); }
+        catch (Exception ex)
+        {
+            // A visibility failure must not skip saving logs or releasing ports.
+            RuntimeDiagnostics.RecordError("MainWindow.HideWindowForShutdown", ex);
+        }
     }
 
     private static void DisableShutdownInput(DependencyObject element)
@@ -4358,17 +4378,17 @@ public sealed partial class MainWindow : Window
         }
 
         _xtermFitQueued = true;
-        DispatcherQueue.TryEnqueue(async () =>
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(50);
+            // Coalesce requests throughout the delay. Release before fitting so
+            // a size change during the WebView call can schedule a final fit.
+            _xtermFitQueued = false;
+            await FitXtermAsync();
+        }))
         {
             _xtermFitQueued = false;
-            if (IsClosingOrClosed)
-            {
-                return;
-            }
-
-            await Task.Delay(50);
-            await FitXtermAsync();
-        });
+        }
     }
 
     private async Task SearchXtermAsync(XtermSearchRequest request, CancellationToken cancellationToken)
