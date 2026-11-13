@@ -11,9 +11,9 @@ public sealed partial class ModbusRtuViewModel
 {
     private ModbusCommandSettings? _commandSettings;
     private ModbusCommandChoice? _selectedCommand;
-    private bool _commandAdmitted, _acceptCommandSnapshots;
+    private bool _commandAdmitted, _acceptCommandSnapshots, _commandOwnsHeader;
     private long _commandSettingsRevision, _lastCommandRevision = long.MinValue;
-    private string _commandStatus = "", _commandResults = "";
+    private string _commandStatus = "", _commandResults = "", _commandTargetSummary = "";
 
     private static string C(string key, string fallback) => UiText.Get("ModbusCommand" + key, fallback);
     public string CommandsLabel => C("Actions", "Commands…");
@@ -23,7 +23,14 @@ public sealed partial class ModbusRtuViewModel
     public string CommandSelectorLabel => C("Selector", "Saved command");
     public string ExecuteCommandLabel => C("Run", "Run selected command");
     public string CommandHelp => C("RunHelp", "Inspect the target and wire preview before running. Each step writes once. Only status reads repeat. Stop also stops polling. Applying, loading or reconnecting never runs commands.");
-    public string CommandStatus { get => _commandStatus; private set => SetProperty(ref _commandStatus, value); }
+    public string CommandStatus
+    {
+        get => _commandStatus;
+        private set
+        {
+            if (SetProperty(ref _commandStatus, value) && _commandOwnsHeader) OnPropertyChanged(nameof(Status));
+        }
+    }
     public string CommandResults { get => _commandResults; private set => SetProperty(ref _commandResults, value); }
     public string CommandEmptyHelp => C("Empty", "Define a command for a write-only action, a separate status check or an ordered sequence.");
     public Visibility CommandEmptyVisibility => CommandChoices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -31,21 +38,22 @@ public sealed partial class ModbusRtuViewModel
     public AsyncRelayCommand ExecuteCommand { get; }
     public long CommandSettingsRevision => _commandSettingsRevision;
     public bool IsCommandSelectionEnabled => !_commandAdmitted;
-    private string ActiveCommandTargetSummary
+    private void SetCommandTargetSummary(string name, int step, int count, int unitId, byte function, int address)
     {
-        get
-        {
-            if (_acceptCommandSnapshots && _service is IModbusRtuCommandService commands)
-            {
-                var snapshot = commands.GetCommandSnapshot();
-                if (snapshot.CommandId == SelectedCommand?.Id && snapshot.CurrentStep > 0 && snapshot.CurrentStep <= snapshot.Steps.Count)
-                {
-                    var step = snapshot.Steps[snapshot.CurrentStep - 1];
-                    return $"{snapshot.Name} · {step.StepNumber}/{snapshot.Steps.Count} · ID {step.UnitId} · FC {step.WriteFunction:00} · {step.WriteAddress}";
-                }
-            }
-            return SelectedCommand?.DisplayName ?? "";
-        }
+        SetProperty(ref _commandTargetSummary, $"{name} · {step}/{count} · ID {unitId} · FC {function:00} · {address}", nameof(RequestSummary));
+    }
+
+    private void ReleaseCommandHeader()
+    {
+        if (!_commandOwnsHeader || _commandAdmitted) return;
+        _commandOwnsHeader = false;
+        NotifyCommandHeader();
+    }
+
+    private void NotifyCommandHeader()
+    {
+        OnPropertyChanged(nameof(Status));
+        OnPropertyChanged(nameof(RequestSummary));
     }
 
     public ModbusCommandChoice? SelectedCommand
@@ -117,10 +125,12 @@ public sealed partial class ModbusRtuViewModel
 
     private void ClearCommandResults()
     {
+        ReleaseCommandHeader();
         _acceptCommandSnapshots = false;
         _lastCommandRevision = long.MinValue;
         CommandStatus = "";
         CommandResults = "";
+        _commandTargetSummary = "";
     }
 
     private bool CanExecuteSelectedCommand() => _service is IModbusRtuCommandService && SelectedCommand?.Definition is not null &&
@@ -130,16 +140,21 @@ public sealed partial class ModbusRtuViewModel
     {
         if (!CanExecuteSelectedCommand()) { Error = C("Unavailable", "Select a command and connect an available device before running."); return; }
         ModbusCommandDefinition command;
+        byte firstWriteFunction;
         try
         {
             // Validate the complete workspace, including duplicate identities and malformed imports.
             _commandSettings!.Validate();
             command = SelectedCommand!.Definition!.Clone();
             ValidateCommandMonitorPermissions(command);
+            firstWriteFunction = command.Steps[0].BuildPacket()[1];
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { Error = ex.Message; return; }
         ClearCommandResults();
         _commandAdmitted = true;
+        _commandOwnsHeader = true;
+        var first = command.Steps[0];
+        SetCommandTargetSummary(command.Name, 1, command.Steps.Count, first.UnitId, firstWriteFunction, first.Item.Address);
         Error = "";
         PublishAvailability();
         try
@@ -149,9 +164,27 @@ public sealed partial class ModbusRtuViewModel
             RefreshCommandState();
             await executing;
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("Modbus.Command", ex); }
-        finally { _commandAdmitted = false; Refresh(); PublishAvailability(); }
+        catch (OperationCanceledException)
+        {
+            if (!_acceptCommandSnapshots) CommandStatus = CommandStateText(ModbusCommandState.Canceled);
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+            if (!_acceptCommandSnapshots) CommandStatus = CommandStateText(ModbusCommandState.Failed) + " · " + ex.Message;
+            RuntimeDiagnostics.RecordError("Modbus.Command", ex);
+        }
+        finally
+        {
+            _commandAdmitted = false;
+            // A resumed poll owns the current header again. Standalone terminal
+            // results retain their captured command target until the next action.
+            if (_service.GetSnapshot().IsPolling) ReleaseCommandHeader();
+            _lastRevision = long.MinValue;
+            Refresh();
+            NotifyCommandHeader();
+            PublishAvailability();
+        }
     }
 
     private void ValidateCommandMonitorPermissions(ModbusCommandDefinition command)
@@ -187,6 +220,12 @@ public sealed partial class ModbusRtuViewModel
         var snapshot = commands.GetCommandSnapshot();
         if (snapshot.CommandId != SelectedCommand?.Id || snapshot.Revision == _lastCommandRevision) return;
         _lastCommandRevision = snapshot.Revision;
+        if (snapshot.CurrentStep > 0 && snapshot.CurrentStep <= snapshot.Steps.Count)
+        {
+            var current = snapshot.Steps[snapshot.CurrentStep - 1];
+            SetCommandTargetSummary(snapshot.Name ?? "", current.StepNumber, snapshot.Steps.Count, current.UnitId,
+                current.WriteFunction, current.WriteAddress);
+        }
         CommandStatus = CommandStateText(snapshot.State);
         CommandResults = string.Join("\n", snapshot.Steps.Select(step =>
         {

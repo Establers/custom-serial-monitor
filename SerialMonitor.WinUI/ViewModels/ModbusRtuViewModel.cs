@@ -100,10 +100,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public Visibility ErrorVisibility => Error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility WriteVisibility => IsWritableFunction ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ReadOnlyVisibility => IsWritableFunction ? Visibility.Collapsed : Visibility.Visible;
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status { get => _commandOwnsHeader && !_stopRequested && CommandStatus.Length > 0 ? CommandStatus : _status; private set => SetProperty(ref _status, value); }
     public string Error { get => _error; private set { if (SetProperty(ref _error, value)) OnPropertyChanged(nameof(ErrorVisibility)); } }
     public string Statistics { get => _statistics; private set => SetProperty(ref _statistics, value); }
-    public string RequestSummary => _commandAdmitted ? ActiveCommandTargetSummary : _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
+    public string RequestSummary => _commandOwnsHeader ? _commandTargetSummary : _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
     public string UnitText { get => _unit; set => SetSetting(ref _unit, value, nameof(UnitText)); }
     public string AddressText { get => _address; set => SetSetting(ref _address, value, nameof(AddressText)); }
     public string QuantityText { get => _quantity; set => SetSetting(ref _quantity, value, nameof(QuantityText)); }
@@ -162,6 +162,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     }
     private void SettingsChanged()
     {
+        ReleaseCommandHeader();
         _settingsRevision++;
         // Until the next explicit read, old service values must not acquire new addresses or formats.
         _displaySettings = null;
@@ -265,6 +266,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         CaptureSelectedGroupDraft(strict: false);
         var singleGroupId = SelectedPollingGroup?.Id;
         PrepareSingleGroupOperation(singleGroupId);
+        ReleaseCommandHeader();
         _operationAdmitted = true;
         Error = "";
         _lastPersistableSettings = settings.Clone();
@@ -293,7 +295,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         RefreshAvailability();
         try { await _service.StopAsync(); }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Stop", ex); }
-        finally { _stopRequested = false; _lastRevision = long.MinValue; Refresh(); PublishAvailability(); }
+        finally { _stopRequested = false; _lastRevision = long.MinValue; Refresh(); NotifyCommandHeader(); PublishAvailability(); }
     }
 
     public async Task SaveSettingsAsync()
@@ -308,6 +310,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
                 await _saveSettings();
             }
             else { var settings = CreateSettingsSnapshot(); await _saveSettings(); _lastPersistableSettings = settings; }
+            ReleaseCommandHeader();
             Error = ""; Status = T("Saved", "Settings saved in the app profile");
         }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Save", ex); }
@@ -329,6 +332,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         var groupId = SelectedPollingGroup?.Id;
         var groupWrite = _groupRunAdmitted;
         if (!groupWrite) PrepareSingleGroupOperation(groupId);
+        ReleaseCommandHeader();
         _writeAdmitted = true;
         _selectionChangedDuringWrite = false;
         Error = "";
@@ -402,7 +406,6 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             if (_displaySettings is { } settings)
                 foreach (var row in Rows) row.Update(snapshot.Values, settings, snapshot.ValuesCurrent, snapshot.UpdatedAt);
         }
-        if (_commandAdmitted && CommandStatus.Length > 0) Status = CommandStatus;
         var busy = IsBusy;
         if (_lastBusy != busy) { _lastBusy = busy; PublishAvailability(); }
         else RefreshAvailability();

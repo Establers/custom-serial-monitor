@@ -173,6 +173,7 @@ public sealed partial class ModbusRtuViewModel
             _displaySettings = selectedSettings.Clone();
             _lastRevision = long.MinValue;
         }
+        ReleaseCommandHeader();
         _operationAdmitted = true;
         _groupRunAdmitted = true;
         _acceptPollingSnapshots = false;
