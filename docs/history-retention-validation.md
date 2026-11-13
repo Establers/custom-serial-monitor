@@ -35,6 +35,19 @@ Node 회귀는 `node --test scripts/test_xterm_retention.cjs scripts/test_log_na
 - 재현: Release x64 빌드 후 `dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj -c Release -p:Platform=x64 --no-build --filter FullyQualifiedName~PartialRxProjectionMemoryTests --logger "console;verbosity=detailed"`.
 - `LogRetentionProjectionRegressionTests`는 Terminal/HEX에서 여러 고정 난수 입력으로 부분 RX·TX·시스템 로그·필터·보관 줄 수·타임스탬프 변경을 섞어, 화면에 보낸 증분과 현재 보관 스냅샷이 일치하는지 확인한다. Node 검사에는 압축 ON/OFF 각각 120회 삭제·너비/높이 변경·한글/이모지/결합 문자·탭 입력을 추가했다.
 
+## 모드버스·메모리 통합 검사
+
+`ModbusMemoryIntegrationTests`는 GUI나 실물 포트를 열지 않고 모의 시리얼 드라이버와 실제 Modbus 엔진·로그 파이프라인·파일 writer·화면 로그 모델을 연결한다.
+
+- 분할된 RTU 응답을 반복 수신하면서 작은 화면 메모리 한도로 오래된 이력을 제거한다. 폴링 중 보관 줄 수와 메모리 예산도 변경한다.
+- 정리 후에도 마지막 레지스터 값·정상 종료·연결 소유권 해제를 확인하고, 디스크에 저장된 TX/RX를 바이트로 복원해 각각 원본 SHA-256과 비교한다. 화면 제거와 파일 writer의 누락을 구분한다.
+- 메모리 예산과 Modbus 대상 설정을 함께 저장·복원하고, 시퀀스 저장 경로를 거쳐도 두 설정이 유지되는지 확인한다.
+- 잘못된 Modbus 표시 형식을 읽고 다시 저장하는 경우에도 화면 메모리 예산·보관 줄 수·통신 대상이 초기화되지 않는지 확인한다.
+
+개별 실행은 Release x64 빌드 후 `dotnet test SerialMonitor.WinUI.Tests/SerialMonitor.WinUI.Tests.csproj -c Release -p:Platform=x64 --no-build --filter FullyQualifiedName~ModbusMemoryIntegrationTests`를 사용한다. 최종 통합 검증은 Modbus 후속 수정과 메모리 변경이 함께 들어간 HEAD에서 솔루션 빌드·전체 C# 회귀·Node 터미널 회귀로 수행한다. GUI 상호작용과 실물 UART 장기 운전은 별도 수동 검증 범위다.
+
+2026-11-13에는 `f055366`(Modbus 구현 `b42fe99`, 메모리 변경 `ec7a56c`·`60c89fa` 포함)을 기준으로 루트 Release 솔루션 빌드가 경고·오류 0으로 통과했고, 교차 검사 4개를 다시 실행해 모두 통과했다. 같은 최종 소스의 전체 검사 TRX를 재확인한 결과 Core 668개·WinUI 1,963개가 통과했고 장치 조건부 17개는 제외됐다. 전체 결과 안에도 교차 검사 4개가 포함되어 있다. 본 작업의 재실행 결과는 `SerialMonitor.WinUI.Tests/TestResults/modbus-memory-cross-final.trx`에 기록한다. Node 터미널 회귀 30개도 통과했으며, Modbus 후속 수정에서 해당 JS·검사 소스가 바뀌지 않았음을 확인했다.
+
 ## 측정
 
 120열 × 30행, 최근 100만 행을 유지하며 300만 행을 입력했다. 약 50문자의 서로 다른 packet/temperature/voltage/status 행을 1,000개씩 입력한다. 같은 배포 xterm에 압축만 켜고 끈 비교이며 별도 Node 프로세스로 측정했다.
