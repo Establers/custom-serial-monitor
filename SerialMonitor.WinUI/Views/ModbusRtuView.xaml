@@ -227,8 +227,8 @@
                                         <Button Content="{Binding StopAllLabel}" Command="{Binding StopCommand}" Visibility="{Binding BusyVisibility}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                         <TextBlock Text="{Binding Status}" Visibility="{Binding BusyVisibility}" Style="{StaticResource GuideBody}" />
                                         <Button Content="{Binding CommandEditorLabel}" Click="Commands_Click" IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
-                                        <TextBlock Text="{Binding RecentCommandSummary}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
+                                        <TextBlock Text="{Binding RecentCommandSummary}" Visibility="{Binding RecentCommandVisibility}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding RecentCommandResults}" Visibility="{Binding RecentCommandVisibility}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
                                     </StackPanel>
                                 </ScrollViewer>
                             </Flyout>
