@@ -1,0 +1,416 @@
+{
+  "Commands": [
+    {
+      "Id": "nucleo-f103rb-led-on",
+      "Name": "NUCLEO · LED 켜기 (상태 확인)",
+      "Steps": [
+        {
+          "Name": "LED 켜기 및 입력 레지스터 상태 확인",
+          "UnitId": 1,
+          "Function": 1,
+          "Item": {
+            "Address": 4096,
+            "Name": "LD2 LED 명령",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "1",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "Status",
+            "Function": 4,
+            "Address": 4103,
+            "Mask": 1,
+            "ExpectedValue": 1,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-led-off",
+      "Name": "NUCLEO · LED 끄기 (상태 확인)",
+      "Steps": [
+        {
+          "Name": "LED 끄기 및 디지털 입력 상태 확인",
+          "UnitId": 1,
+          "Function": 1,
+          "Item": {
+            "Address": 4096,
+            "Name": "LD2 LED 명령",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "0",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "Status",
+            "Function": 2,
+            "Address": 4097,
+            "Mask": 1,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-led-cycle",
+      "Name": "NUCLEO · LED 켜기 → 끄기 (순차 실행)",
+      "Steps": [
+        {
+          "Name": "LED 켜기 및 입력 레지스터 상태 확인",
+          "UnitId": 1,
+          "Function": 1,
+          "Item": {
+            "Address": 4096,
+            "Name": "LD2 LED 명령",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "1",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "Status",
+            "Function": 4,
+            "Address": 4103,
+            "Mask": 1,
+            "ExpectedValue": 1,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        },
+        {
+          "Name": "LED 끄기 및 디지털 입력 상태 확인",
+          "UnitId": 1,
+          "Function": 1,
+          "Item": {
+            "Address": 4096,
+            "Name": "LD2 LED 명령",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "0",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "Status",
+            "Function": 2,
+            "Address": 4097,
+            "Mask": 1,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-uint16",
+      "Name": "NUCLEO · RAM UInt16 쓰기 · 123",
+      "Steps": [
+        {
+          "Name": "UInt16 123 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4112,
+            "Name": "UInt16 123 쓰기 및 재조회",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "123",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4112,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-int16",
+      "Name": "NUCLEO · RAM Int16 쓰기 · -123",
+      "Steps": [
+        {
+          "Name": "Int16 -123 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4113,
+            "Name": "Int16 -123 쓰기 및 재조회",
+            "ValueType": "Int16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "-123",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4113,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-scaled-int16",
+      "Name": "NUCLEO · RAM 배율 0.1 쓰기 · 25.3",
+      "Steps": [
+        {
+          "Name": "배율값 25.3 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4114,
+            "Name": "배율값 25.3 쓰기 및 재조회",
+            "ValueType": "Int16",
+            "Scale": 0.1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "25.3",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4114,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-uint32",
+      "Name": "NUCLEO · RAM UInt32 쓰기 · 305419896",
+      "Steps": [
+        {
+          "Name": "UInt32 305419896 쓰기 및 2워드 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4116,
+            "Name": "UInt32 305419896 쓰기 및 2워드 재조회",
+            "ValueType": "UInt32",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "305419896",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4116,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-float32",
+      "Name": "NUCLEO · RAM Float32 쓰기 · 1.5",
+      "Steps": [
+        {
+          "Name": "Float32 1.5 쓰기 및 2워드 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4118,
+            "Name": "Float32 1.5 쓰기 및 2워드 재조회",
+            "ValueType": "Float32",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "1.5",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4118,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-int32",
+      "Name": "NUCLEO · RAM Int32 쓰기 · -123456789",
+      "Steps": [
+        {
+          "Name": "Int32 -123456789 쓰기 및 2워드 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4120,
+            "Name": "Int32 -123456789 쓰기 및 2워드 재조회",
+            "ValueType": "Int32",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "-123456789",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4120,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    },
+    {
+      "Id": "nucleo-f103rb-ram-sequence",
+      "Name": "NUCLEO · RAM 순차 쓰기 · 6 → 7 → 15",
+      "Steps": [
+        {
+          "Name": "1단계 · 6 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4112,
+            "Name": "1단계 · 6 쓰기 및 재조회",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "6",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4112,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        },
+        {
+          "Name": "2단계 · 7 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4112,
+            "Name": "2단계 · 7 쓰기 및 재조회",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "7",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4112,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        },
+        {
+          "Name": "3단계 · 15 쓰기 및 재조회",
+          "UnitId": 1,
+          "Function": 3,
+          "Item": {
+            "Address": 4112,
+            "Name": "3단계 · 15 쓰기 및 재조회",
+            "ValueType": "UInt16",
+            "Scale": 1,
+            "Unit": "",
+            "SwapBytes": false,
+            "SwapWords": false,
+            "Access": "ReadWrite",
+            "ValueNames": []
+          },
+          "Value": "15",
+          "TimeoutMs": 1000,
+          "Verification": {
+            "Mode": "ReadBack",
+            "Function": 3,
+            "Address": 4112,
+            "Mask": 65535,
+            "ExpectedValue": 0,
+            "TimeoutMs": 3000,
+            "IntervalMs": 100
+          }
+        }
+      ]
+    }
+  ],
+  "SelectedCommandId": "nucleo-f103rb-led-on"
+}
