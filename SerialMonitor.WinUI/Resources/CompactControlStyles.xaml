@@ -490,7 +490,7 @@
     <DataTemplate x:Key="CompactExpanderHeaderTemplate">
         <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" />
     </DataTemplate>
-    <Style x:Key="CompactExpanderStyle" TargetType="Expander" BasedOn="{StaticResource DefaultExpanderStyle}">
+    <Style x:Key="CompactExpanderStyle" TargetType="Expander">
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="Padding" Value="6,4" />
