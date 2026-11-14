@@ -39,9 +39,12 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
-        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource ModbusFieldLabelStyle}" />
+        <Style x:Key="NumberInput" TargetType="TextBox" BasedOn="{StaticResource Input}">
+            <Setter Property="Width" Value="128" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="FontFamily" Value="Consolas" />
         </Style>
         <Style x:Key="GuideBody" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
@@ -99,38 +102,38 @@
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <ContentControl IsEnabled="{Binding IsTargetSettingsEnabled}" HorizontalContentAlignment="Stretch">
                                         <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="5">
+                                        <Grid ColumnDefinitions="128,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
-                                            <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding UnitLabel}" />
-                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}">
+                                            <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding UnitLabel}" />
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
                                             </ComboBox>
                                             <TextBlock Grid.Row="2" Text="{Binding AddressLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding QuantityLabel}" Style="{StaticResource FieldLabel}" />
-                                            <TextBox Grid.Row="3" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding AddressLabel}" />
-                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding QuantityLabel}" />
-                                            <TextBlock Grid.Row="4" Text="{Binding IntervalLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
-                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TimeoutLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
-                                            <TextBox Grid.Row="5" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding IntervalLabel}" />
-                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" AutomationProperties.Name="{Binding TimeoutLabel}" />
+                                            <TextBox Grid.Row="3" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding AddressLabel}" />
+                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding QuantityLabel}" />
+                                            <TextBlock Grid.Row="4" Text="{Binding IntervalLabel}" Style="{StaticResource FieldLabel}" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TimeoutLabel}" Style="{StaticResource FieldLabel}" />
+                                            <TextBox Grid.Row="5" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding IntervalLabel}" />
+                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding TimeoutLabel}" />
                                             <TextBlock Grid.Row="6" Text="{Binding FormatLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}">
+                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <!-- The native arrow otherwise keeps the closed field 32 pixels tall. -->
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
                                             </ComboBox>
-                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
+                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
                                         </Grid>
                                         <Border Height="1" Background="{ThemeResource AppSurfaceBorderBrush}" Margin="0,2" />
-                                        <StackPanel Spacing="2">
+                                        <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
                                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegisterFunction}" Style="{StaticResource CompactCheckBoxStyle}" />
-                                            <CheckBox Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding IsWordSwapEnabled}" Style="{StaticResource CompactCheckBoxStyle}" />
-                                        </StackPanel>
+                                            <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding IsWordSwapEnabled}" Style="{StaticResource CompactCheckBoxStyle}" />
+                                        </Grid>
                                         </StackPanel>
                                         </ContentControl>
                                         <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
@@ -172,17 +175,19 @@
                                                     </Button.Flyout>
                                                 </Button>
                                             </Grid>
+                                            <StackPanel Spacing="4">
                                             <TextBlock Text="{Binding WriteModeLabel}" Style="{StaticResource FieldLabel}" />
                                             <ComboBox ItemsSource="{Binding WriteModes}" SelectedIndex="{Binding WriteModeIndex, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
-                                                      AutomationProperties.Name="{Binding WriteModeLabel}">
+                                                      AutomationProperties.Name="{Binding WriteModeLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                             </ComboBox>
+                                            </StackPanel>
                                             <TextBlock Text="{Binding WriteItemSummary}" Visibility="{Binding WriteItemSummary, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" TextWrapping="Wrap" />
-                                            <Grid ColumnDefinitions="104,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                                            <Grid ColumnDefinitions="128,*" RowDefinitions="Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
                                                 <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource FieldLabel}" />
-                                                <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
-                                                <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
                                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding WriteValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ValuesInput}" AutomationProperties.Name="{Binding WriteValuesLabel}" />
                                             </Grid>
                                             <TextBlock Text="{Binding WritePreview}" Visibility="{Binding WritePreview, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />

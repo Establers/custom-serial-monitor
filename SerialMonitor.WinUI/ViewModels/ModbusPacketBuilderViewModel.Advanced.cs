@@ -71,6 +71,7 @@ public sealed partial class ModbusPacketBuilderViewModel
             OnPropertyChanged(nameof(DiagnosticDataHelp)); OnPropertyChanged(nameof(DiagnosticSubFunction)); Refresh();
             OnPropertyChanged(nameof(DiagnosticSingleDataVisibility)); OnPropertyChanged(nameof(DiagnosticMultipleDataVisibility));
             OnPropertyChanged(nameof(DiagnosticSelectorColumnSpan));
+            OnPropertyChanged(nameof(DiagnosticSelectorColumn));
         }
     }
     public int DeviceAccessIndex

@@ -15,11 +15,11 @@
         <x:Double x:Key="ContentDialogButtonHeight">24</x:Double>
         <x:Double x:Key="ContentDialogButtonMinHeight">24</x:Double>
         <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
-        <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
-        <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
+        <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,4</Thickness>
+        <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,4</Thickness>
         <x:Double x:Key="ContentDialogMaxWidth">480</x:Double>
         <DataTemplate x:Key="FieldHeader">
-            <TextBlock Text="{Binding}" FontSize="11" LineHeight="15" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
+            <TextBlock Text="{Binding}" Style="{StaticResource ModbusFieldLabelStyle}" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
         <Style x:Key="CommandInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
@@ -32,9 +32,10 @@
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource CommandInput}" />
         <Style x:Key="CommandNumberInput" TargetType="TextBox" BasedOn="{StaticResource CommandInput}">
+            <Setter Property="Width" Value="128" />
             <Setter Property="MaxWidth" Value="128" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
@@ -104,13 +105,17 @@
                       HorizontalContentAlignment="Stretch" MinHeight="0">
             <StackPanel x:Name="StepEditorPanel" Spacing="4" Margin="0,0,20,0">
                 <TextBox Header="{Binding StepNameLabel}" Text="{Binding StepNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <Grid ColumnDefinitions="104,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Width="104" />
-                    <ComboBox Grid.Column="1" Header="{Binding AreaLabel}" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" VerticalAlignment="Bottom" />
+                <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding AreaLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AreaLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 </Grid>
-                <Grid ColumnDefinitions="128,176" ColumnSpacing="8" HorizontalAlignment="Left">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
-                    <TextBox Grid.Column="1" Header="{Binding ValueLabel}" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="176" />
+                <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding ValueLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Width="176" MaxWidth="176" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ValueLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding InterpretationSummary}" Visibility="{Binding InterpretationSummary, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
@@ -119,15 +124,19 @@
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                     </Expander.Resources>
                     <StackPanel Spacing="6">
-                        <Grid ColumnDefinitions="128,144" ColumnSpacing="8" HorizontalAlignment="Left">
-                            <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding CanEditFormat}" VerticalAlignment="Bottom" />
-                            <TextBox Grid.Column="1" Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditScale}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
+                        <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                            <TextBlock Text="{Binding FormatLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                            <TextBlock Text="{Binding ScaleLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                            <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding CanEditFormat}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                            <TextBox Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditScale}" Style="{StaticResource CommandNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScaleLabel}" />
                         </Grid>
-                        <Grid ColumnDefinitions="*,128" ColumnSpacing="8">
-                            <TextBox Header="{Binding EngineeringUnitLabel}" Text="{Binding EngineeringUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
-                            <TextBox Grid.Column="1" Header="{Binding TimeoutLabel}" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
+                        <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                            <TextBlock Text="{Binding EngineeringUnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                            <TextBlock Text="{Binding TimeoutLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                            <TextBox Text="{Binding EngineeringUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding EngineeringUnitLabel}" />
+                            <TextBox Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding TimeoutLabel}" />
                         </Grid>
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding CanSwapBytes}" Style="{StaticResource CompactCheckBoxStyle}" />
                             <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                         </Grid>
@@ -144,20 +153,26 @@
                         </Expander>
                     </StackPanel>
                 </Expander>
-                <ComboBox Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" />
+                <ComboBox Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 <TextBlock Text="{Binding VerificationHelp}" Visibility="{Binding VerificationHelp, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <StackPanel x:Name="StatusFields" Spacing="6" Visibility="{Binding StatusVisibility}">
-                    <Grid ColumnDefinitions="*,128" ColumnSpacing="8">
-                        <ComboBox Header="{Binding StatusFunctionLabel}" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" VerticalAlignment="Bottom" />
-                        <TextBox Grid.Column="1" Header="{Binding StatusAddressLabel}" Text="{Binding StatusAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
+                    <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                        <TextBlock Text="{Binding StatusAddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBlock Grid.Column="1" Text="{Binding StatusFunctionLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBox Text="{Binding StatusAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding StatusAddressLabel}" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding StatusFunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                     </Grid>
-                    <Grid ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
-                        <TextBox Header="{Binding MaskLabel}" Text="{Binding MaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
-                        <TextBox Grid.Column="1" Header="{Binding ExpectedLabel}" Text="{Binding ExpectedText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
+                    <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                        <TextBlock Text="{Binding MaskLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBlock Text="{Binding ExpectedLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBox Text="{Binding MaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding MaskLabel}" />
+                        <TextBox Grid.Column="1" Text="{Binding ExpectedText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ExpectedLabel}" />
                     </Grid>
-                    <Grid ColumnDefinitions="144,144" ColumnSpacing="8" HorizontalAlignment="Left">
-                        <TextBox Header="{Binding VerificationTimeoutLabel}" Text="{Binding VerificationTimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
-                        <TextBox Grid.Column="1" Header="{Binding VerificationIntervalLabel}" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
+                    <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                        <TextBlock Text="{Binding VerificationTimeoutLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBlock Text="{Binding VerificationIntervalLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBox Text="{Binding VerificationTimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding VerificationTimeoutLabel}" />
+                        <TextBox Grid.Column="1" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding VerificationIntervalLabel}" />
                     </Grid>
                 </StackPanel>
                 <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">

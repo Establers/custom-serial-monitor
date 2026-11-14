@@ -15,10 +15,10 @@
         <Thickness x:Key="ContentDialogPadding">12</Thickness>
         <Thickness x:Key="ContentDialogTitleMargin">0,0,0,6</Thickness>
         <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
-        <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
-        <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
+        <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,4</Thickness>
+        <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,4</Thickness>
         <DataTemplate x:Key="CompactFieldHeader">
-            <TextBlock Text="{Binding}" FontSize="11" LineHeight="15" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
+            <TextBlock Text="{Binding}" Style="{StaticResource ModbusFieldLabelStyle}" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
         <Style x:Key="CompactInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
@@ -42,9 +42,10 @@
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
         </Style>
         <Style x:Key="PacketNumberInput" TargetType="TextBox" BasedOn="{StaticResource CompactInput}">
+            <Setter Property="Width" Value="128" />
             <Setter Property="MaxWidth" Value="128" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource PacketNumberInput}" />
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
@@ -91,29 +92,33 @@
                       HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch" MinHeight="0" MaxHeight="360">
             <!-- WinUI scrollbars overlay content. Keep a gutter inside the viewport, independent of scrollbar state. -->
             <StackPanel x:Name="EditorPanel" Margin="0,0,20,0" Spacing="4" MinWidth="0">
-                <Grid x:Name="IdentityRow" ColumnDefinitions="104,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="104" />
-                    <ComboBox Grid.Column="1" Header="{Binding FunctionLabel}" ItemsSource="{Binding FunctionOptions}"
+                <Grid x:Name="IdentityRow" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding FunctionLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding FunctionOptions}"
                               SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" MaxDropDownHeight="360"
-                              ToolTipService.ToolTip="{Binding FunctionHelp}" />
+                              ToolTipService.ToolTip="{Binding FunctionHelp}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FunctionLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding FunctionHelp}" Visibility="{Binding FunctionHelp, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource FieldHelp}" />
 
-                <Grid x:Name="ReadRow" Visibility="{Binding ReadRangeVisibility}" ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="1" Header="{Binding QuantityLabel}" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="{Binding QuantityHelp}" />
+                <Grid x:Name="ReadRow" Visibility="{Binding ReadRangeVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding QuantityLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding QuantityHelp}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding QuantityLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding QuantityHelp}" Visibility="{Binding ReadRangeVisibility}" Style="{StaticResource FieldHelp}" />
 
-                <Grid x:Name="SingleCoilRow" Visibility="{Binding CoilVisibility}" ColumnDefinitions="128,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" VerticalAlignment="Top" />
-                    <ToggleSwitch Grid.Column="1" Header="{Binding CoilLabel}" IsOn="{Binding CoilOn, Mode=TwoWay}"
-                                  HeaderTemplate="{StaticResource CompactFieldHeader}" FontSize="12"
-                                  OffContent="OFF · 0x0000" OnContent="ON · 0xFF00"
-                                  VerticalAlignment="Top" VerticalContentAlignment="Center">
+                <Grid x:Name="SingleCoilRow" Visibility="{Binding CoilVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding CoilLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AddressLabel}" />
+                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CoilOn, Mode=TwoWay}" FontSize="12"
+                                  OffContent="OFF · 0x0000" OnContent="ON · 0xFF00" VerticalContentAlignment="Center" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding CoilLabel}">
                         <ToggleSwitch.Resources>
                             <Thickness x:Key="ToggleSwitchTopHeaderMargin">0,0,0,2</Thickness>
                             <x:Double x:Key="ToggleSwitchPreContentMargin">2</x:Double>
@@ -121,22 +126,28 @@
                         </ToggleSwitch.Resources>
                     </ToggleSwitch>
                 </Grid>
-                <Grid x:Name="SingleRegisterRow" Visibility="{Binding SingleRegisterVisibility}" ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="1" Header="{Binding ScalarValueLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="{Binding ValuesHelp}" />
+                <Grid x:Name="SingleRegisterRow" Visibility="{Binding SingleRegisterVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding ScalarValueLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding ValuesHelp}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScalarValueLabel}" />
                 </Grid>
 
-                <Grid x:Name="WriteRow" Visibility="{Binding WriteRangeVisibility}" ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
-                    <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="1" Header="{Binding WriteQuantityLabel}" Text="{Binding WriteQuantityText}" IsReadOnly="True" />
+                <Grid x:Name="WriteRow" Visibility="{Binding WriteRangeVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding WriteQuantityLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding WriteQuantityText}" IsReadOnly="True" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteQuantityLabel}" />
                 </Grid>
-                <Grid x:Name="ReadWriteRow" Visibility="{Binding ReadWriteVisibility}" ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
-                    <TextBox Header="{Binding WriteAddressLabel}" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="1" Header="{Binding WriteQuantityLabel}" Text="{Binding WriteQuantityText}" IsReadOnly="True" />
+                <Grid x:Name="ReadWriteRow" Visibility="{Binding ReadWriteVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding WriteQuantityLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding WriteQuantityText}" IsReadOnly="True" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteQuantityLabel}" />
                 </Grid>
                 <StackPanel Visibility="{Binding ValuesVisibility}" Spacing="4">
                     <TextBox Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -145,23 +156,28 @@
                 </StackPanel>
 
                 <StackPanel Visibility="{Binding DiagnosticsVisibility}" Spacing="4">
-                    <Grid x:Name="DiagnosticRow" ColumnDefinitions="*,128" ColumnSpacing="8">
-                        <ComboBox Header="{Binding DiagnosticLabel}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
-                                  SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" Grid.ColumnSpan="{Binding DiagnosticSelectorColumnSpan}" />
-                        <TextBox Grid.Column="1" Header="{Binding ScalarValueLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Visibility="{Binding DiagnosticSingleDataVisibility}" />
+                    <Grid x:Name="DiagnosticRow" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                        <TextBlock Text="{Binding ScalarValueLabel}" Visibility="{Binding DiagnosticSingleDataVisibility}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBlock Grid.Column="{Binding DiagnosticSelectorColumn}" Text="{Binding DiagnosticLabel}" Grid.ColumnSpan="{Binding DiagnosticSelectorColumnSpan}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                        <TextBox Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Visibility="{Binding DiagnosticSingleDataVisibility}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScalarValueLabel}" />
+                        <ComboBox Grid.Column="{Binding DiagnosticSelectorColumn}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
+                                  SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" Grid.ColumnSpan="{Binding DiagnosticSelectorColumnSpan}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding DiagnosticLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                     </Grid>
                     <TextBox Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding DiagnosticMultipleDataVisibility}" Style="{StaticResource PacketListInput}" />
                     <TextBlock Text="{Binding DiagnosticDataHelp}" Style="{StaticResource FieldHelp}" />
                 </StackPanel>
-                <Grid x:Name="MaskRow" Visibility="{Binding MaskVisibility}" ColumnDefinitions="*,*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="1" Header="AND mask" Text="{Binding AndMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                    <TextBox Grid.Column="2" Header="OR mask" Text="{Binding OrMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
+                <Grid x:Name="MaskRow" Visibility="{Binding MaskVisibility}" ColumnDefinitions="128,*,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="AND mask" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="OR mask" Grid.Column="2" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AddressLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding AndMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Style="{StaticResource CompactInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="AND mask" />
+                    <TextBox Grid.Column="2" Text="{Binding OrMaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Style="{StaticResource CompactInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="OR mask" />
                 </Grid>
                 <StackPanel Visibility="{Binding FileReadVisibility}" Spacing="4">
                     <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -176,16 +192,20 @@
                 <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Visibility="{Binding FifoVisibility}" Width="128" HorizontalAlignment="Left"
                          ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
-                <Grid x:Name="DeviceIdRow" Visibility="{Binding DeviceIdVisibility}" ColumnDefinitions="*,104" ColumnSpacing="8">
-                    <ComboBox Header="{Binding DeviceAccessLabel}" ItemsSource="{Binding DeviceAccessOptions}"
-                              SelectedIndex="{Binding DeviceAccessIndex, Mode=TwoWay}" />
-                    <TextBox Grid.Column="1" Header="{Binding ObjectIdLabel}" Text="{Binding ObjectIdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="104" />
+                <Grid x:Name="DeviceIdRow" Visibility="{Binding DeviceIdVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding ObjectIdLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Grid.Column="1" Text="{Binding DeviceAccessLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding ObjectIdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ObjectIdLabel}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding DeviceAccessOptions}"
+                              SelectedIndex="{Binding DeviceAccessIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding DeviceAccessLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 </Grid>
-                <Grid x:Name="CustomRow" Visibility="{Binding CustomVisibility}" ColumnDefinitions="104,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding CompactFunctionLabel}" Text="{Binding CustomFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="104"
-                             ToolTipService.ToolTip="{Binding CustomFunctionLabel}" />
-                    <TextBox Grid.Column="1" Header="{Binding CustomDataLabel}" Text="{Binding CustomDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource PacketListInput}" />
+                <Grid x:Name="CustomRow" Visibility="{Binding CustomVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{Binding CompactFunctionLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBlock Text="{Binding CustomDataLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <TextBox Text="{Binding CustomFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTipService.ToolTip="{Binding CustomFunctionLabel}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding CompactFunctionLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding CustomDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource PacketListInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding CustomDataLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding CompactNumberHelp}" Style="{StaticResource FieldHelp}" ToolTipService.ToolTip="{Binding NumberHelp}" />
                 <TextBlock Text="{Binding UnitHelp}" Style="{StaticResource FieldHelp}" />

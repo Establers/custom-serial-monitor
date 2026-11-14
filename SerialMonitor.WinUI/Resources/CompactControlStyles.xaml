@@ -504,6 +504,19 @@
     </Style>
 
     <infra:NonEmptyTextVisibilityConverter x:Key="NonEmptyTextVisibility" />
+    <Style x:Key="ModbusFormGridStyle" TargetType="Grid">
+        <Setter Property="ColumnSpacing" Value="8" />
+        <Setter Property="RowSpacing" Value="4" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Tag" Value="ModbusFormGrid" />
+    </Style>
+    <Style x:Key="ModbusFieldLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="LineHeight" Value="16" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
     <DataTemplate x:Key="ModbusDialogTitleTemplate">
         <TextBlock Text="{Binding}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
     </DataTemplate>

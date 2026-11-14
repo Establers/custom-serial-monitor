@@ -14,6 +14,7 @@ public sealed partial class ModbusPacketBuilderViewModel
     public Visibility DiagnosticSingleDataVisibility => Show(DiagnosticSubFunction != 0);
     public Visibility DiagnosticMultipleDataVisibility => Show(DiagnosticSubFunction == 0);
     public int DiagnosticSelectorColumnSpan => DiagnosticSubFunction == 0 ? 2 : 1;
+    public int DiagnosticSelectorColumn => DiagnosticSubFunction == 0 ? 0 : 1;
     public string ScalarValueLabel => UiText.Get("ModbusBuilderScalarValue", "Value (0–65535)");
     public string WriteQuantityLabel => UiText.Get("ModbusBuilderWriteQuantity", "Write quantity (auto)");
     public string CompactFunctionLabel => UiText.Get("ModbusBuilderCompactFunction", "Function (1–127)");

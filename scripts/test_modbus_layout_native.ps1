@@ -46,7 +46,8 @@ try {
         throw (Get-Content -LiteralPath (Join-Path $diagnostics.FullName 'last_runtime_error.txt') -Raw)
     }
     $payloadHashes | Select-Object Path,Hash | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'payload-hashes.json')
-    Write-Output "PASS: $($report.cases.Count) native Modbus layout cases. Report: $result"
+    $formGridCount = @($report.cases | ForEach-Object { $_.formGrids }).Count
+    Write-Output "PASS: $($report.cases.Count) native Modbus layout cases, $formGridCount shared form grids. Report: $result"
 } finally {
     if ($process -and -not $process.HasExited) { Stop-Process -InputObject $process -Force }
     if ($process) { $process.Dispose() }
