@@ -5,7 +5,7 @@
     xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
     Style="{StaticResource DefaultContentDialogStyle}" FontSize="13"
     Title="{Binding Title}" PrimaryButtonText="{Binding ApplyLabel}" CloseButtonText="{Binding CancelLabel}"
-    DefaultButton="Primary" PrimaryButtonClick="Apply_Click"
+    DefaultButton="Primary" PrimaryButtonClick="Apply_Click" Unloaded="Dialog_Unloaded"
     PrimaryButtonStyle="{StaticResource AccentButtonStyle}" CloseButtonStyle="{StaticResource DefaultButtonStyle}">
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">640</x:Double>
@@ -42,6 +42,7 @@
         </Expander>
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
             <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
+                      SelectionChanged="EditorSelection_Changed"
                       Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
             <Button Grid.Column="1" Content="{Binding NewCommandLabel}" Click="NewCommand_Click" Style="{StaticResource CommandAction}" />
             <Button Grid.Column="2" Content="{Binding DuplicateCommandLabel}" Click="DuplicateCommand_Click" Style="{StaticResource CommandAction}" />
@@ -50,6 +51,7 @@
         </Grid>
         <TextBox Grid.Row="2" Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <ListView x:Name="StepList" Grid.Row="3" ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
+                  SelectionChanged="EditorSelection_Changed"
                   DisplayMemberPath="DisplayName" SelectionMode="Single" MinHeight="44" MaxHeight="88"
                   AutomationProperties.Name="{Binding StepsLabel}" HorizontalContentAlignment="Stretch">
             <ListView.ItemContainerStyle>
