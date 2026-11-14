@@ -30,17 +30,18 @@ internal static class Program
                 Console.WriteLine($"PASS Offline: independent fixtures + GUI v3 import + manifest {manifest.Version}/{manifest.BuildId}; hardwareVerified=false");
                 return 0;
             }
-            if (args is not ["live", _, _, _, _] && args is not ["commands-live", _, _, _, _])
-                throw new ArgumentException("offline MANIFEST GUI_V3_FILE | live PORT MANIFEST NEW_EVIDENCE_DIR GUI_V3_FILE | commands-live PORT MANIFEST NEW_EVIDENCE_DIR UNUSED_GUI_PATH");
+            if (args is not ["live", _, _, _, _] && args is not ["commands-live", _, _, _, _] && args is not ["scenarios-live", _, _, _, _])
+                throw new ArgumentException("offline MANIFEST GUI_V3_FILE | live PORT MANIFEST NEW_EVIDENCE_DIR GUI_V3_FILE | commands-live/scenarios-live PORT MANIFEST NEW_EVIDENCE_DIR UNUSED_GUI_PATH");
             Require(Regex.IsMatch(args[1], @"^COM[1-9][0-9]*$", RegexOptions.IgnoreCase), "Live requires an explicit Windows COM port.");
-            if (args[0] == "commands-live") sourceInputs = await CaptureCommandSourceInputs(stop.Token);
+            if (args[0] != "live") sourceInputs = await CaptureCommandSourceInputs(stop.Token);
             var directory = Path.GetFullPath(args[3]);
             Require(!Directory.Exists(directory) && !File.Exists(directory), "Evidence directory must be new; existing evidence is never overwritten.");
             Directory.CreateDirectory(directory);
             evidence = new Evidence(directory);
             manifest = BuildManifest.Load(args[2]);
             await using var live = new LiveCheck(args[1], manifest, evidence, args[4], stop.Token);
-            if (args[0] == "commands-live") await live.RunCommands();
+            if (args[0] == "scenarios-live") await ScenarioContext.RunAsync(live.RunUserScenarios);
+            else if (args[0] == "commands-live") await live.RunCommands();
             else await live.Run();
             return 0;
         }
@@ -61,12 +62,14 @@ internal static class Program
                     validatorSha256 = Hash(typeof(Program).Assembly.Location),
                     coreAssemblySha256 = Hash(typeof(SequenceRunSession).Assembly.Location),
                     mode = args[0],
-                    guiSequencePath = args[0] == "commands-live" ? null : Path.GetFullPath(args[4]),
-                    guiSequenceSha256 = args[0] != "commands-live" && File.Exists(args[4]) ? Hash(args[4]) : null,
-                    failureCleanup = args[0] == "commands-live"
-                        ? "Disconnect only after unexpected failure; never reset/flash/replay uncertain writes. Original first four RAM words and first16 coils are restored only by the final-baseline-restored PASS case after every fault has been independently inspected. Firmware counters are intentionally not reset/restored."
+                    guiSequencePath = args[0] == "live" ? Path.GetFullPath(args[4]) : null,
+                    guiSequenceSha256 = args[0] == "live" && File.Exists(args[4]) ? Hash(args[4]) : null,
+                    failureCleanup = args[0] != "live"
+                        ? "Disconnect only after unexpected failure; never reset/flash/replay uncertain writes. Original first four RAM words and first16 coils are restored only by the final restoration PASS case after every fault has been independently inspected. Firmware counters are intentionally not reset/restored."
                         : "Disconnect only; firmware state is reset/left quiet only by the final-clean-state PASS case. After any failure inspect evidence and explicitly recover the known fixture; no uncertain write is replayed.",
-                    scope = args[0] == "commands-live"
+                    scope = args[0] == "scenarios-live"
+                        ? "Actual UART using production SerialService, ModbusRtuMonitorService and ModbusRtuViewModel command paths. Offline configuration, read, raw/engineering writes, five groups with one known exception, queued writes, atomic commands, stop/drain, recent results and private profile save. Independent wire oracle and firmware write counter. No Computer Use, GUI controls/rendering, real multi-device bus, optical LED observation, MCU/RTU RESET or flashing."
+                        : args[0] == "commands-live"
                         ? "Direct UART through actual SerialService and ModbusRtuMonitorService.ExecuteCommandAsync/GetCommandSnapshot (command definitions, separate status checks, sequential writes, stop, faults and active group polling). Independent full-wire oracle, firmware counter deltas and RAM/coil sentinel checks. No generic sequence replay, GUI controls/rendering, physical button actuation/optical LED measurement, reset, flash or electrical RS-485 timing test. Fifth path argument is unused."
                         : "Direct UART through actual SerialService and ModbusRtuMonitorService; exact GUI file replayed twice through actual CommandSequenceRunner and linked production SequenceRunObserver plus actual core SequenceRunSession/RX matcher, with independent full-wire oracle. GUI controls/rendering, physical button actuation and electrical RS-485 timing are not exercised. Headless validation never retries TX."
                 }, passed);
@@ -83,6 +86,8 @@ internal static class Program
         {
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Program.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Commands.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/UserScenarios.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/ScenarioContext.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Oracle.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Evidence.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/ModbusMonitorCheck.csproj",
@@ -92,6 +97,10 @@ internal static class Program
             "SerialMonitor.WinUI/Services/ModbusRtuMonitorService.Commands.cs",
             "SerialMonitor.WinUI/Services/ModbusReceiveInbox.cs",
             "SerialMonitor.WinUI/Models/ModbusCommandSettings.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Groups.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Commands.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Items.cs",
             "SerialMonitor.Core/Modbus/ModbusResponseDecoder.cs",
             "SerialMonitor.Core/Modbus/ModbusItemCodec.cs"
         };
