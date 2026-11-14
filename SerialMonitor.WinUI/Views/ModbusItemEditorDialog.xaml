@@ -3,11 +3,14 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
-    Style="{StaticResource DefaultContentDialogStyle}" FontSize="13"
+    Style="{StaticResource DefaultContentDialogStyle}" FontSize="12"
     Title="{Binding Title}" PrimaryButtonText="{Binding ApplyLabel}" CloseButtonText="{Binding CancelLabel}"
     DefaultButton="Primary" PrimaryButtonClick="Apply_Click"
     PrimaryButtonStyle="{StaticResource AccentButtonStyle}" CloseButtonStyle="{StaticResource DefaultButtonStyle}">
     <ContentDialog.Resources>
+        <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
+        <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
+        <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
         <x:Double x:Key="ContentDialogMaxWidth">600</x:Double>
         <DataTemplate x:Key="FieldHeader">
             <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
@@ -15,17 +18,19 @@
         <Style x:Key="ItemInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource ItemInput}" />
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
@@ -35,10 +40,10 @@
         </Style>
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </ContentDialog.Resources>
-    <Grid RowDefinitions="*,Auto" RowSpacing="8" MinWidth="300" MaxHeight="520">
+    <Grid RowDefinitions="*,Auto" RowSpacing="6" MinWidth="300" MaxHeight="520">
         <ScrollViewer x:Name="EditorScroll" MaxHeight="440" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch" MinHeight="0">
-            <StackPanel x:Name="EditorPanel" Spacing="8" Margin="0,0,20,0">
+            <StackPanel x:Name="EditorPanel" Spacing="6" Margin="0,0,20,0">
                 <TextBlock Text="{Binding RangeSummary}" FontFamily="Consolas" FontSize="12" />
                 <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock Text="{Binding ListLabel}" FontWeight="SemiBold" />
@@ -58,21 +63,21 @@
                     <Button Grid.Column="1" Content="{Binding RemoveLabel}" Click="Remove_Click" Style="{StaticResource ItemAction}" />
                     <Button Grid.Column="3" Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ItemAction}" />
                 </Grid>
-                <Grid ColumnDefinitions="125,*" ColumnSpacing="12">
+                <Grid ColumnDefinitions="125,*" ColumnSpacing="8">
                     <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
                     <TextBox Grid.Column="1" Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" />
                     <ComboBox Grid.Column="1" Header="{Binding AccessLabel}" ItemsSource="{Binding AccessOptions}" SelectedIndex="{Binding AccessIndex, Mode=TwoWay}" IsEnabled="{Binding CanChooseAccess}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <TextBox Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" FontFamily="Consolas" />
                     <TextBox Grid.Column="1" Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                    <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" />
-                    <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Style="{StaticResource CompactCheckBoxStyle}" />
+                    <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                 </Grid>
                 <TextBox x:Name="ValueNamesInput" Header="{Binding ValueNamesLabel}" Text="{Binding ValueNamesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="120" FontFamily="Consolas"

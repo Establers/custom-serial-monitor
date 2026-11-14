@@ -8,7 +8,7 @@
     <UserControl.Resources>
         <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-        <x:Double x:Key="ExpanderChevronButtonSize">20</x:Double>
+        <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
         <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="6,1" />
@@ -46,9 +46,9 @@
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}"
-                              ToolTipService.ToolTip="{Binding SwapBytesHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" />
+                              ToolTipService.ToolTip="{Binding SwapBytesHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" Style="{StaticResource CompactCheckBoxStyle}" />
                     <CheckBox Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}"
-                              IsEnabled="{Binding IsWordSwapEnabled}" ToolTipService.ToolTip="{Binding SwapWordsHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" />
+                              IsEnabled="{Binding IsWordSwapEnabled}" ToolTipService.ToolTip="{Binding SwapWordsHelp}" FontSize="11" MinWidth="0" MinHeight="24" Height="24" Padding="4,0,0,0" Style="{StaticResource CompactCheckBoxStyle}" />
                 </StackPanel>
                 <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
