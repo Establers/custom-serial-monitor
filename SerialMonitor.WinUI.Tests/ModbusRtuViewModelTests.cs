@@ -462,12 +462,10 @@ public sealed class ModbusRtuViewModelTests
         });
         var protocol = Markup("Views/ProtocolView.xaml");
         Assert.Empty(protocol.Descendants(p + "RadioButton"));
-        var selector = Assert.Single(protocol.Descendants(p + "ComboBox").Where(e => (string?)e.Attribute(x + "Name") == "PresentationSelector"));
+        var selector = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "PresentationSelector"));
         Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)selector.Attribute("SelectedIndex"));
         Assert.Equal("{Binding PresentationOptions}", (string?)selector.Attribute("ItemsSource"));
         Assert.Equal("Label", (string?)selector.Attribute("DisplayMemberPath"));
-        Assert.Contains(selector.Descendants(p + "Setter"), setter =>
-            (string?)setter.Attribute("Property") == "IsEnabled" && (string?)setter.Attribute("Value") == "{Binding IsEnabled}");
         var activeStop = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "MonitorStopButton"));
         Assert.Equal("{Binding StopCommand}", (string?)activeStop.Attribute("Command"));
         Assert.DoesNotContain(activeStop.Ancestors(), e => e.Name == p + "ScrollViewer" || e.Name == p + "Expander" || e.Name == p + "Flyout");

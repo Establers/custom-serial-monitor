@@ -49,16 +49,11 @@
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto">
                 <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
-                    <ComboBox x:Name="PresentationSelector" ItemsSource="{Binding PresentationOptions}" DisplayMemberPath="Label"
+                    <views:ProtocolViewSelector x:Name="PresentationSelector" ItemsSource="{Binding PresentationOptions}" DisplayMemberPath="Label"
                               SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" MinWidth="0" MinHeight="24" Height="24"
-                              Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="{Binding ViewSelectionLabel}">
-                        <ComboBox.ItemContainerStyle>
-                            <Style TargetType="ComboBoxItem">
-                                <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
-                            </Style>
-                        </ComboBox.ItemContainerStyle>
-                    </ComboBox>
+                              Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="{Binding ViewSelectionLabel}"
+                              Style="{StaticResource CompactComboBoxStyle}" />
                     <TextBlock Grid.Column="1" Text="{Binding WorkspaceHeader}" Style="{StaticResource CellText}"
                                ToolTipService.ToolTip="{Binding WorkspaceHeaderHelp}" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">

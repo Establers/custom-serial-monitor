@@ -15,6 +15,7 @@ public static class StartupHook
     private static readonly HashSet<string> SeenIssues = [];
     private static readonly Dictionary<string, object> TrimmedText = [];
     private static object? Startup;
+    private static long? FinalWrittenByteCount;
     private static string Case = "startup";
     private static object Host = null!, Root = null!;
     private static Type FindType(string name) => AppDomain.CurrentDomain.GetAssemblies()
@@ -51,7 +52,7 @@ public static class StartupHook
     private static void Save(string? fatal = null)
     {
         if (Startup is null) Issue("required application startup state was not captured before layout fixtures");
-        File.WriteAllText(Output + ".tmp", JsonSerializer.Serialize(new { startup = Startup, cases = Results, issues = Issues, trimmedText = TrimmedText.Values, fatal }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Output + ".tmp", JsonSerializer.Serialize(new { startup = Startup, finalSerialWrittenByteCount = FinalWrittenByteCount, cases = Results, issues = Issues, trimmedText = TrimmedText.Values, fatal }, new JsonSerializerOptions { WriteIndented = true }));
         File.Move(Output + ".tmp", Output, true);
     }
     private static T StartupProperty<T>(object source, string name) => P(source, name) is T value
@@ -448,12 +449,104 @@ public static class StartupHook
             Issue("closed default-view selector has no visible device-monitor caption: " + expected);
         return new { expected, selectedIndex, dropDownOpen, selectorBounds = Geometry(selectorBounds), captions };
     }
+    private static async Task<object> CheckViewOptionAvailability(object view)
+    {
+        var model = P(view, "DataContext") ?? throw new InvalidOperationException("Protocol view has no data context.");
+        var selector = Field(view, "PresentationSelector");
+        var source = P(model, "PresentationOptions") ?? throw new InvalidOperationException("Protocol view has no presentation options.");
+        var options = ((IEnumerable)source).Cast<object>().ToArray();
+        if (options.Length != 4)
+        {
+            Issue("presentation availability requires four stable source options");
+            return new { optionCount = options.Length };
+        }
+        var original = options.Select(option => StartupProperty<bool>(option, "IsEnabled")).ToArray();
+        if (original.Any(enabled => !enabled)) Issue("idle presentation options were not all enabled before the binding probe");
+        var monitor = P(model, "Modbus") ?? throw new InvalidOperationException("Presentation availability probe has no Modbus view-model.");
+        var admission = monitor.GetType().GetField("_operationAdmitted", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Presentation availability probe cannot find the monitor admission flag.");
+        if (admission.GetValue(monitor) is not bool originalAdmission || originalAdmission || StartupProperty<bool>(monitor, "IsBusy"))
+            throw new InvalidOperationException("Presentation availability probe requires an idle monitor with no admitted operation.");
+        var phases = new List<object>();
+        async Task Capture(string phase, bool[] expected, bool expectedBusy = false)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            object?[] containers = [];
+            bool?[] actual = [];
+            bool[] sourceEnabled = [];
+            bool[] visible = [];
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                await Settle(selector);
+                containers = Enumerable.Range(0, 4).Select(index => Call(selector, "ContainerFromIndex", index)).ToArray();
+                actual = containers.Select(container => container is null ? (bool?)null : StartupProperty<bool>(container, "IsEnabled")).ToArray();
+                visible = containers.Select(container => container is not null && Visible(container)).ToArray();
+                sourceEnabled = options.Select(option => StartupProperty<bool>(option, "IsEnabled")).ToArray();
+                if (StartupProperty<bool>(selector, "IsDropDownOpen") && visible.All(value => value) &&
+                    actual.Select((value, index) => value == expected[index]).All(value => value) && sourceEnabled.SequenceEqual(expected)) break;
+            }
+            var currentSource = P(model, "PresentationOptions");
+            var currentOptions = currentSource is IEnumerable entries ? entries.Cast<object>().ToArray() : [];
+            var stableSource = ReferenceEquals(source, currentSource) && currentOptions.Length == options.Length &&
+                currentOptions.Select((option, index) => ReferenceEquals(option, options[index])).All(value => value);
+            var selectedIndex = StartupProperty<int>(selector, "SelectedIndex");
+            var modelSelectedViewIndex = StartupProperty<int>(model, "SelectedViewIndex");
+            var dropDownOpen = StartupProperty<bool>(selector, "IsDropDownOpen");
+            var modbusBusy = StartupProperty<bool>(monitor, "IsBusy");
+            phases.Add(new
+            {
+                phase, expected, sourceEnabled, containerIsEnabled = actual, containersVisible = visible,
+                stableSource, selectedIndex, modelSelectedViewIndex, dropDownOpen, modbusBusy, waitMilliseconds = timer.ElapsedMilliseconds
+            });
+            if (!stableSource) Issue("presentation options changed identity during availability phase " + phase);
+            if (!dropDownOpen || containers.Any(container => container is null) || visible.Any(value => !value))
+                Issue("four visible native presentation containers were not realized during availability phase " + phase);
+            if (!sourceEnabled.SequenceEqual(expected)) Issue("source presentation availability did not match phase " + phase);
+            if (actual.Where((value, index) => value != expected[index]).Any())
+                Issue("native presentation container IsEnabled did not follow source phase " + phase);
+            if (selectedIndex != 2 || modelSelectedViewIndex != 2)
+                Issue("presentation selection changed during availability phase " + phase);
+            if (modbusBusy != expectedBusy) Issue("monitor busy state did not match availability phase " + phase);
+        }
+        try
+        {
+            S(selector, "IsDropDownOpen", true);
+            await Capture("idle", [true, true, true, true]);
+            // Hold the real busy calculation across the app's periodic Refresh.
+            // Admission alone runs no service operation and sends no bytes.
+            admission.SetValue(monitor, true);
+            Call(monitor, "Refresh");
+            await Capture("protocol-options-disabled", [false, true, true, false], expectedBusy: true);
+            admission.SetValue(monitor, originalAdmission);
+            Call(monitor, "Refresh");
+            await Capture("restored", [true, true, true, true]);
+        }
+        finally
+        {
+            admission.SetValue(monitor, originalAdmission);
+            S(selector, "IsDropDownOpen", false);
+            Call(monitor, "Refresh");
+            if (StartupProperty<int>(selector, "SelectedIndex") != 2 || StartupProperty<int>(model, "SelectedViewIndex") != 2)
+            {
+                Issue("presentation selection changed before availability cleanup");
+                S(model, "SelectedViewIndex", 2);
+                S(selector, "SelectedIndex", 2);
+            }
+            await Settle(selector);
+        }
+        var closed = !StartupProperty<bool>(selector, "IsDropDownOpen");
+        var finalSelectedIndex = StartupProperty<int>(selector, "SelectedIndex");
+        if (!closed || finalSelectedIndex != 2 || StartupProperty<int>(model, "SelectedViewIndex") != 2)
+            Issue("presentation availability probe did not leave the device view selected with its popup closed");
+        return new { simulatedAdmissionOnly = true, originalAdmission, original, phases, closed, finalSelectedIndex };
+    }
     private static async Task Probe(object root, string name)
     {
         Case = name;
         var before = Issues.Count;
         await Settle(root);
         var closedViewCaption = name.StartsWith("default-view", StringComparison.Ordinal) ? CheckClosedViewCaption(root) : null;
+        var viewOptionAvailability = name.StartsWith("default-view", StringComparison.Ordinal) ? await CheckViewOptionAvailability(root) : null;
         CheckTextAndButtons(root);
         var formGrids = CheckFormGrids(root);
         if ((name.StartsWith("items-") || name.StartsWith("groups-") || name.StartsWith("commands-") ||
@@ -472,7 +565,7 @@ public static class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, formGrids, scrolls, issues = Issues.Count - before });
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, viewOptionAvailability, formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -633,6 +726,8 @@ public static class StartupHook
                     Call(P(Root, "Children")!, "Clear");
                 }
             }
+            FinalWrittenByteCount = StartupProperty<long>(Field(startupModel, "_serialService"), "WrittenByteCount");
+            if (FinalWrittenByteCount != 0) throw new InvalidOperationException("Native layout and admission-only probes unexpectedly wrote serial bytes.");
             if (P(Field(mainWindow, "_viewModel"), "IsConnected") is true) throw new InvalidOperationException("Layout child unexpectedly connected a serial port.");
             Save();
             Environment.Exit(Issues.Count == 0 ? 0 : 1);
