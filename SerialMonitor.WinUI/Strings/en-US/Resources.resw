@@ -1574,4 +1574,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandRecent" xml:space="preserve"><value>Recent command</value></data>
 <data name="ModbusCommandAdvanced" xml:space="preserve"><value>Value type, scaling and communication options</value></data>
 <data name="ModbusCommandChooseInterpretation" xml:space="preserve"><value>Choose a value type in the advanced options.</value></data>
+<data name="ModbusMonitorDetails" xml:space="preserve"><value>Communication details</value></data>
+<data name="ModbusMonitorMoreActions" xml:space="preserve"><value>More actions</value></data>
+<data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>Usage details and precautions</value></data>
+<data name="ModbusCommandActionsWithResult" xml:space="preserve"><value>Commands / result…</value></data>
 </root>

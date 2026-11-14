@@ -250,6 +250,7 @@ public sealed class ModbusPollingViewModelTests
         model.Refresh();
         Assert.Contains("Groups 5 · Errors 1 · Current 3 · Waiting/stale 0 · Disabled 1", model.PollingHealthSummary);
         Assert.Contains("Device 5", model.PollingHealthSummary);
+        Assert.Equal(model.PollingHealthSummary, model.MonitorSummary);
         Assert.StartsWith("Error · Device 5", model.PollingGroups[4].SelectionLabel);
         Assert.Contains(nameof(ModbusPollingGroupRow.SelectionLabel), notifications);
         Assert.Equal("g1", model.SelectedPollingGroup?.Id);

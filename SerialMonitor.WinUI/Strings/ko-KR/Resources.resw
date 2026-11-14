@@ -1572,4 +1572,8 @@
 <data name="ModbusCommandRecent" xml:space="preserve"><value>최근 명령</value></data>
 <data name="ModbusCommandAdvanced" xml:space="preserve"><value>자료형·배율·통신 옵션</value></data>
 <data name="ModbusCommandChooseInterpretation" xml:space="preserve"><value>고급 옵션에서 자료형을 선택하세요.</value></data>
+<data name="ModbusMonitorDetails" xml:space="preserve"><value>통신 상태 자세히</value></data>
+<data name="ModbusMonitorMoreActions" xml:space="preserve"><value>더 보기</value></data>
+<data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>사용 방법·주의 사항</value></data>
+<data name="ModbusCommandActionsWithResult" xml:space="preserve"><value>명령·결과…</value></data>
 </root>

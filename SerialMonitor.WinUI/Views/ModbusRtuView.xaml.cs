@@ -14,7 +14,22 @@ public sealed partial class ModbusRtuView : UserControl
     public ModbusRtuView() => InitializeComponent();
     private void View_Loaded(object sender, RoutedEventArgs args)
     {
+        FitToolbar(ActualWidth);
         Model?.Refresh();
+    }
+    private void View_SizeChanged(object sender, SizeChangedEventArgs args) => FitToolbar(args.NewSize.Width);
+    private void FitToolbar(double width)
+    {
+        if (width <= 0) return;
+        PollingGroupSelector.Width = Math.Clamp(width * 0.25, 110, 240);
+        var overflow = width < 760;
+        WriteButton.Visibility = GuideButton.Visibility = overflow ? Visibility.Collapsed : Visibility.Visible;
+        MonitorMoreButton.Visibility = overflow ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private void SummaryFlyout_Opening(object sender, object args)
+    {
+        SummaryPanel.DataContext = Model;
+        FitEditor(SummaryScroll, SummaryPanel, 420, 460);
     }
     private void SettingsFlyout_Opening(object sender, object args)
     {
@@ -36,7 +51,17 @@ public sealed partial class ModbusRtuView : UserControl
         if (Model?.NeedsPollingGroup == true) Groups_Click(sender, args);
         else SettingsFlyout.ShowAt(SettingsButton);
     }
-    private void ShowCommands_Click(object sender, RoutedEventArgs args) => CommandsFlyout.ShowAt(CommandsButton);
+    private void MoreFlyout_Opening(object sender, object args) => MorePanel.DataContext = Model;
+    private void ShowWriteFromOverflow_Click(object sender, RoutedEventArgs args)
+    {
+        MonitorMoreFlyout.Hide();
+        WriteFlyout.ShowAt(MonitorMoreButton);
+    }
+    private void ShowGuideFromOverflow_Click(object sender, RoutedEventArgs args)
+    {
+        MonitorMoreFlyout.Hide();
+        GuideFlyout.ShowAt(MonitorMoreButton);
+    }
     private async void Items_Click(object sender, RoutedEventArgs args)
     {
         if (_itemDialogOpen || _groupDialogOpen || _commandDialogOpen || Model is not { IsSettingsEnabled: true } model) return;

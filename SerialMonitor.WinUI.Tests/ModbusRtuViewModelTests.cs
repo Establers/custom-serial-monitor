@@ -329,11 +329,51 @@ public sealed class ModbusRtuViewModelTests
     }
 
     [Fact]
+    public async Task ToolbarSummaryKeepsErrorsAndConnectionRestrictionsAheadOfReadStatistics()
+    {
+        var service = new FakeMonitor();
+        var available = true;
+        var model = new ModbusRtuViewModel(service, () => available, () => Task.CompletedTask, () => { }, () => "Sequence owns this connection");
+        Assert.Equal(model.MonitorDetailsLabel, model.MonitorSummary);
+        var changed = new List<string?>();
+        model.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        await model.RunAsync(false);
+        Assert.NotEmpty(model.Statistics);
+        Assert.Equal(model.Statistics, model.MonitorSummary);
+        available = false;
+        model.RefreshAvailability();
+        Assert.Equal("Sequence owns this connection", model.MonitorSummary);
+        available = true;
+        model.AddressText = "65536";
+        await model.RunAsync(false);
+        Assert.NotEmpty(model.Error);
+        available = false;
+        model.RefreshAvailability();
+        Assert.Equal(model.Error, model.MonitorSummary);
+        Assert.Contains(nameof(model.MonitorSummary), changed);
+        Assert.Single(service.Reads);
+        Assert.Empty(service.Writes);
+        available = true;
+        model.AddressText = "0";
+        await model.RunAsync(false);
+        Assert.Empty(model.Error);
+        Assert.Equal(model.Statistics, model.MonitorSummary);
+    }
+
+    [Fact]
     public void SourceLayoutKeepsSharedStopOutsideEditorsAndUsesOneViewMenu()
     {
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var monitor = Markup("Views/ModbusRtuView.xaml");
+        var workspace = Assert.Single(monitor.Root!.Elements(p + "Grid"));
+        Assert.Equal("Auto,*", (string?)workspace.Attribute("RowDefinitions"));
+        var toolbar = workspace.Elements(p + "Border").First().Element(p + "Grid")!;
+        Assert.Null(toolbar.Attribute("RowDefinitions"));
+        Assert.Contains(toolbar.Elements(), element => (string?)element.Attribute(x + "Name") == "PollingGroupSelector");
+        Assert.All(monitor.Descendants(p + "TextBlock").Where(element =>
+            (string?)element.Attribute("Text") == "{Binding RecentCommandSummary}"), result =>
+            Assert.Contains(result.Ancestors(), parent => parent.Name == p + "Flyout"));
         Assert.All(monitor.Descendants(p + "Expander"), detail =>
             Assert.Contains(detail.Ancestors(), parent => parent.Name == p + "Flyout"));
         Assert.All(monitor.Descendants(p + "TextBox"), input =>
