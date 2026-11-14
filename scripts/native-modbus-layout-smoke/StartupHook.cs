@@ -173,6 +173,11 @@ public static class StartupHook
             }
             if (e.GetType().Name == "TextBlock" && P(e, "Text") is string text && text.Length > 0)
             {
+                // Geometry alone can pass when a headerless control's inherited
+                // HeaderTemplate renders its entire view-model as extra text.
+                // Check the real visual output as well as its measured bounds.
+                if (text.StartsWith("SerialMonitor.WinUI.ViewModels.", StringComparison.Ordinal))
+                    Issue("internal view-model type rendered in the UI: " + text);
                 if (N(e, "MaxLines") > 0 || P(e, "TextTrimming")?.ToString() != "None")
                 {
                     var natural = MeasureText(e, text, double.PositiveInfinity);

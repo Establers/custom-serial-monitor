@@ -7,7 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $app = (Resolve-Path -LiteralPath $AppPath).Path
-$payloadHashes = @(Get-FileHash -LiteralPath $app, (Join-Path (Split-Path -Parent $app) 'SerialMonitor.WinUI.dll'))
+$managedApp = [IO.Path]::ChangeExtension($app, '.dll')
+if (-not (Test-Path -LiteralPath $managedApp)) {
+    $managedApp = Join-Path (Split-Path -Parent $app) 'SerialMonitor.WinUI.dll'
+}
+$payloadHashes = @(Get-FileHash -LiteralPath $app, $managedApp)
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts/modbus-layout-native' }
 $output = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) ([guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $output -Force | Out-Null
