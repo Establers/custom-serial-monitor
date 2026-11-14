@@ -70,11 +70,28 @@ Python 독립 검산기는 원시 TX/RX의 CRC·길이·기능·주소·값, 단
 로컬 생성물(Git 제외):
 
 - [사용자 흐름 원본](../artifacts/modbus-user-journeys-20261114/live-01/report.json), [UART](../artifacts/modbus-user-journeys-20261114/live-01/wire.jsonl)
-- [강화된 독립 검산](../artifacts/modbus-user-journeys-20261114/audit-checks-01/unchanged/independent-audit.json), [부정 검사 6건](../artifacts/modbus-user-journeys-20261114/audit-checks-01/results.json)
+- [강화된 독립 검산](../artifacts/modbus-user-journeys-20261114/audit-checks-02/unchanged/independent-audit.json), [검산기 검증 6건: 정상 대조 1·부정 5](../artifacts/modbus-user-journeys-20261114/audit-checks-02/results.json)
 - [명령 경계](../artifacts/modbus-user-journeys-20261114/commands-01/report.json), [독립 검산](../artifacts/modbus-user-journeys-20261114/commands-01/independent-audit.json)
 - [자동 회귀 549건](../artifacts/modbus-user-journeys-20261114/results/user-journeys.trx)
 
 사용자 기본 프로필은 읽거나 덮어쓰지 않았다. 실기 저장은 증거 폴더의 `user-profile.json`만 사용했다. 별도 GUI 검증 세션의 앱/프로필 조작과 분리했다. 실제 다중 슬레이브·광학 LED·물리 버튼·RS-485 전기 특성·장기 부하는 이번 범위에 없다.
+
+검산기 사본의 출력 폴더는 입력 증거 폴더 바깥만 허용한다. 입력 안을 지정하면 복사/파일 생성 전에 거부함을 확인했다.
+
+## 최신 소스 통합 확인
+
+폼 정렬 수정 `91f1031`과 이번 수정/검증을 `fbfd6a0`에서 통합해 main에 반영했다.
+
+- 전체 Release 솔루션 빌드: 경고 0, 오류 0.
+- 전체 솔루션 자동 검사: Core 723 PASS, WinUI 2,328 PASS / 조건부 17 SKIP, 실패 0. 합계 3,051 PASS.
+  [집계](../artifacts/modbus-user-journeys-20261114/integrated-results/summary.json),
+  [Core TRX](../artifacts/modbus-user-journeys-20261114/integrated-results/core-tests.trx),
+  [WinUI TRX](../artifacts/modbus-user-journeys-20261114/integrated-results/winui-tests.trx).
+- 최종 포터블과 ZIP 재생성 및 payload 검사 통과. 실행 파일은
+  `release/SerialMonitorPortable/SerialMonitor.WinUI.exe`, DLL SHA256은
+  `0222A732EC5C5C91E97AFDA1675BE93E6254F31EA56B0688B19942169CE5B6FA`.
+
+별도 UI 담당 세션의 `91f1031` 검증은 실제 WinUI 레이아웃 측정 82사례, 공통 폼 140건, 스크롤 끝 도달 62건 통과다. 이 측정과 Computer Use 클릭/육안 확인은 구분한다. [정렬 검증 기록](modbus-numeric-field-layout.md#최종-검증-2026-11-14)을 참고한다.
 
 ## 재검증
 

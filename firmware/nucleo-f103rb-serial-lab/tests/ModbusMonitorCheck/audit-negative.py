@@ -11,6 +11,8 @@ from pathlib import Path
 
 
 def main(source, output):
+    if output == source or source in output.parents:
+        raise ValueError("Output directory must be outside the input evidence directory.")
     output.mkdir()  # Refuse to overwrite any previous experiment.
     auditor = Path(__file__).with_name("audit-live.py")
     lines = [json.loads(line) for line in (source / "wire.jsonl").read_text(encoding="utf-8-sig").splitlines()]
