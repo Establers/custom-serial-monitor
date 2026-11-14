@@ -38,7 +38,8 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
             return UiText.Get("ModbusValuesHelp", "+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.");
         }
     }
-    public Visibility Visibility => _frame is null ? Visibility.Collapsed : Visibility.Visible;
+    // Error/exception reasons are already visible in the packet summary.
+    public Visibility Visibility => _frame is { Status: ModbusFrameStatus.Decoded } ? Visibility.Visible : Visibility.Collapsed;
     public Visibility EditorVisibility => _canInterpret ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => string.IsNullOrEmpty(ValidationError) ? Visibility.Collapsed : Visibility.Visible;
     public Visibility ValuesVisibility => string.IsNullOrEmpty(ValuesText) ? Visibility.Collapsed : Visibility.Visible;

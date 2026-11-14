@@ -23,7 +23,7 @@ public sealed class ProtocolViewModelTests
         var selectedId = viewModel.SelectedFrame.Id;
         Assert.Equal(Visibility.Collapsed, viewModel.EmptyStateVisibility);
         Assert.Equal(Visibility.Visible, viewModel.DetailsVisibility);
-        Assert.Contains("Start address (base 0): 0", viewModel.Details);
+        Assert.Contains("Start address (base 0): 0", viewModel.PacketSummary);
         viewModel.IsVisible = false;
         Assert.Empty(viewModel.Frames);
         Assert.Equal(Visibility.Collapsed, viewModel.DetailsVisibility);

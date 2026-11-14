@@ -29,6 +29,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     private string _errorSummary = string.Empty;
     private string _otherSummary = string.Empty;
     private string _details = SelectionPrompt;
+    private string _packetSummary = string.Empty;
     private ModbusRtuViewModel? _modbus;
     private bool _isRegisterMonitorSelected;
 
@@ -83,7 +84,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public ModbusValueInterpreterViewModel ValueInterpreter { get; } = new();
     public BulkObservableCollection<ProtocolFrameRow> Frames { get; } = new();
     public event EventHandler? LatestRequested;
-    private static string SelectionPrompt => UiText.Get("ProtocolSelectHint", "Select a packet in the list to inspect its raw HEX, fields and CRC.");
+    private static string SelectionPrompt => UiText.Get("ProtocolSelectHint", "Select a packet to see its summary and values. Expand diagnostics for CRC details and raw HEX.");
     public string TabTitle => UiText.Get("ProtocolTitle", "Protocol");
     public string DisabledLabel => UiText.Get("ProtocolDisabled", "Not in use");
     public IReadOnlyList<string> ProtocolOptions { get; } = [UiText.Get("ProtocolDisabled", "Not in use"), "Modbus RTU", "BACnet MS/TP"];
@@ -95,6 +96,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public string BuildPacketToolTip => UiText.Get("ModbusBuilderButtonHelp", "Build a Modbus RTU request with automatic CRC and copy its HEX.");
     public Visibility PacketBuilderVisibility => SelectedProtocolIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     public string DetailsLabel => UiText.Get("ProtocolDetails", "Packet details");
+    public string RawDetailsLabel => UiText.Get("ProtocolRawDetails", "Diagnostics · CRC / raw HEX");
     public string PacketsLabel => UiText.Get("ProtocolPackets", "Packets");
     public string TimeLabel => UiText.Get("ProtocolTime", "Time");
     public string FunctionLabel => IsMstp ? UiText.Get("ProtocolMstpFrameType", "Frame type") : UiText.Get("ProtocolFunction", "Function");
@@ -134,6 +136,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     }
     public string HeaderMetadata => $"{RetentionLabel}   ·   {StatisticsPeriod}";
     public string Details { get => _details; private set => SetProperty(ref _details, value); }
+    public string PacketSummary { get => _packetSummary; private set => SetProperty(ref _packetSummary, value); }
     public string Activity { get => _activity; private set => SetProperty(ref _activity, value); }
     public string RetainedSummary { get => _retainedSummary; private set => SetProperty(ref _retainedSummary, value); }
     public string TrafficSummary { get => _trafficSummary; private set => SetProperty(ref _trafficSummary, value); }
@@ -264,7 +267,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             if (SetProperty(ref _selectedFrame, value))
             {
                 IsFollowingLatest = false;
-                Details = value.Frame.Describe();
+                UpdatePacketDetails(value);
                 NotifyPresentationState();
             }
         }
@@ -335,6 +338,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             foreach (var packet in packets) if (packet.Id > lastId) Frames.Add(new ProtocolFrameRow(packet));
         }
         var selected = Frames.FirstOrDefault(frame => frame.Id == _selectedId);
+        if (selected is not null && !ReferenceEquals(selected, _selectedFrame)) UpdatePacketDetails(selected);
         _selectedFrame = selected;
         if (selected is null && _selectedId is not null)
         {
@@ -355,6 +359,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
 
     private void NotifyPresentationState()
     {
+        if (_selectedFrame is null) PacketSummary = string.Empty;
         if (RegisterMonitorVisibility != Visibility.Visible)
             ValueInterpreter.SetFrame(SelectedProtocolIndex == 1 ? _selectedFrame?.Frame as ModbusRtuFrame : null);
         OnPropertyChanged(nameof(HasFrames));
@@ -363,6 +368,12 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         OnPropertyChanged(nameof(SelectionHintVisibility));
         OnPropertyChanged(nameof(EmptyTitle));
         OnPropertyChanged(nameof(EmptyLabel));
+    }
+
+    private void UpdatePacketDetails(ProtocolFrameRow row)
+    {
+        PacketSummary = ProtocolPacketPresentation.Summary(row);
+        Details = ProtocolPacketPresentation.Diagnostics(row.Frame);
     }
 
     public void Clear()
