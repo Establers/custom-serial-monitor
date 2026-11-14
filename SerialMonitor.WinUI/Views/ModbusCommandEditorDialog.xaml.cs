@@ -19,6 +19,13 @@ public sealed partial class ModbusCommandEditorDialog : ContentDialog
         DataContext = Model;
     }
 
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        if (GetTemplateChild("CommandSpace") is FrameworkElement commandSpace)
+            commandSpace.Margin = StepEditorPanel.Margin;
+    }
+
     private void EditorSelection_Changed(object sender, SelectionChangedEventArgs args)
     {
         if (_restoringSelection || _restoreQueued || !IsLoaded) return;

@@ -6,7 +6,6 @@
     SizeChanged="View_SizeChanged"
     HorizontalContentAlignment="Stretch">
     <UserControl.Resources>
-        <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
         <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
@@ -21,7 +20,7 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </UserControl.Resources>
     <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
-              MinWidth="0" MinHeight="24" Padding="6,4" CornerRadius="4"
+              Style="{StaticResource CompactExpanderStyle}" MinWidth="0" MinHeight="24" Padding="0,4" CornerRadius="4"
               Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
         <Expander.HeaderTemplate>
@@ -57,7 +56,7 @@
                 </ScrollViewer>
                 <TextBlock Text="{Binding RemainderText}" Visibility="{Binding RemainderVisibility}" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
-            <TextBlock Text="{Binding Help}" ToolTipService.ToolTip="{Binding Help}" FontSize="10" MaxLines="1" TextTrimming="CharacterEllipsis"
+            <TextBlock Text="{Binding Help}" Visibility="{Binding Help, Converter={StaticResource NonEmptyTextVisibility}}" ToolTipService.ToolTip="{Binding Help}" FontSize="10" MaxLines="1" TextTrimming="CharacterEllipsis"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
     </Expander>

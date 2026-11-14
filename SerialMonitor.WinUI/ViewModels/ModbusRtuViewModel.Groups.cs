@@ -271,6 +271,7 @@ public sealed partial class ModbusRtuViewModel
 
     private void NotifyPollingPresentation()
     {
+        OnPropertyChanged(nameof(TargetSettingsSummary));
         foreach (var name in new[] { nameof(SelectedPollingGroup), nameof(PollingGroupsVisibility), nameof(StartLabel), nameof(RequestSummary), nameof(IsGroupSelectionEnabled), nameof(NeedsPollingGroup), nameof(EmptySetupLabel) })
             OnPropertyChanged(name);
     }

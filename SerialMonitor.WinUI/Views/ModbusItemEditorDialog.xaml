@@ -6,14 +6,20 @@
     Style="{StaticResource DefaultContentDialogStyle}" FontSize="12"
     Title="{Binding Title}" PrimaryButtonText="{Binding ApplyLabel}" CloseButtonText="{Binding CancelLabel}"
     DefaultButton="Primary" PrimaryButtonClick="Apply_Click"
-    PrimaryButtonStyle="{StaticResource AccentButtonStyle}" CloseButtonStyle="{StaticResource DefaultButtonStyle}">
+    TitleTemplate="{StaticResource ModbusDialogTitleTemplate}"
+    PrimaryButtonStyle="{StaticResource ModbusAccentButtonStyle}" CloseButtonStyle="{StaticResource ModbusActionButtonStyle}">
     <ContentDialog.Resources>
+        <Thickness x:Key="ContentDialogPadding">12</Thickness>
+        <Thickness x:Key="ContentDialogTitleMargin">0,0,0,6</Thickness>
+        <x:Double x:Key="ContentDialogButtonSpacing">8</x:Double>
+        <x:Double x:Key="ContentDialogButtonHeight">24</x:Double>
+        <x:Double x:Key="ContentDialogButtonMinHeight">24</x:Double>
         <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
         <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
         <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
-        <x:Double x:Key="ContentDialogMaxWidth">600</x:Double>
+        <x:Double x:Key="ContentDialogMaxWidth">460</x:Double>
         <DataTemplate x:Key="FieldHeader">
-            <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
+            <TextBlock Text="{Binding}" FontSize="11" LineHeight="15" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
         <Style x:Key="ItemInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
@@ -25,6 +31,12 @@
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource ItemInput}" />
+        <Style x:Key="ItemNumberInput" TargetType="TextBox" BasedOn="{StaticResource ItemInput}">
+            <Setter Property="MaxWidth" Value="128" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="FontFamily" Value="Consolas" />
+        </Style>
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="Padding" Value="5,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -34,26 +46,26 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
-        <Style x:Key="ItemAction" TargetType="Button" BasedOn="{StaticResource CompactActionButtonStyle}">
+        <Style x:Key="ItemAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="8,0" />
         </Style>
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </ContentDialog.Resources>
-    <Grid RowDefinitions="*,Auto" RowSpacing="6" MinWidth="300" MaxHeight="520">
+    <Grid RowDefinitions="*,Auto" RowSpacing="0" MinWidth="300" MaxHeight="520">
         <ScrollViewer x:Name="EditorScroll" MaxHeight="440" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch" MinHeight="0">
-            <StackPanel x:Name="EditorPanel" Spacing="6" Margin="0,0,20,0">
+            <StackPanel x:Name="EditorPanel" Spacing="4" Margin="0,0,20,0">
                 <TextBlock Text="{Binding RangeSummary}" FontFamily="Consolas" FontSize="12" />
                 <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock Text="{Binding ListLabel}" FontWeight="SemiBold" />
                 <ListView x:Name="ItemList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                          DisplayMemberPath="Summary" SelectionMode="Single" MinHeight="44" MaxHeight="104"
+                          DisplayMemberPath="Summary" SelectionMode="Single" MinHeight="24" MaxHeight="96" Padding="0"
                           AutomationProperties.Name="{Binding ListLabel}" HorizontalContentAlignment="Stretch">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
-                            <Setter Property="MinHeight" Value="28" />
-                            <Setter Property="Padding" Value="6,3" />
+                            <Setter Property="MinHeight" Value="24" />
+                            <Setter Property="Padding" Value="5,1" />
                             <Setter Property="FontSize" Value="12" />
                         </Style>
                     </ListView.ItemContainerStyle>
@@ -63,31 +75,31 @@
                     <Button Grid.Column="1" Content="{Binding RemoveLabel}" Click="Remove_Click" Style="{StaticResource ItemAction}" />
                     <Button Grid.Column="3" Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource ItemAction}" />
                 </Grid>
-                <Grid ColumnDefinitions="125,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <TextBox Grid.Column="1" Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ItemNumberInput}" />
+                    <TextBox Grid.Column="1" Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
                 </Grid>
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" />
                     <ComboBox Grid.Column="1" Header="{Binding AccessLabel}" ItemsSource="{Binding AccessOptions}" SelectedIndex="{Binding AccessIndex, Mode=TwoWay}" IsEnabled="{Binding CanChooseAccess}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" FontFamily="Consolas" />
-                    <TextBox Grid.Column="1" Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <Grid ColumnDefinitions="144,*" ColumnSpacing="8">
+                    <TextBox Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource ItemNumberInput}" MaxWidth="144" />
+                    <TextBox Grid.Column="1" Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
                 </Grid>
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Style="{StaticResource CompactCheckBoxStyle}" />
                     <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                 </Grid>
                 <TextBox x:Name="ValueNamesInput" Header="{Binding ValueNamesLabel}" Text="{Binding ValueNamesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="120" FontFamily="Consolas"
+                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="104" FontFamily="Consolas"
                          VerticalContentAlignment="Top" Padding="8,4,24,4" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                 <TextBlock Text="{Binding ValueNamesHelp}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Button Content="{Binding SaveItemLabel}" Click="SaveItem_Click" Style="{StaticResource ItemAction}" HorizontalAlignment="Right" />
-                <TextBlock Text="{Binding DraftHelp}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock Text="{Binding DraftHelp}" Visibility="{Binding DraftHelp, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </ScrollViewer>
-        <ScrollViewer Grid.Row="1" MaxHeight="64" VerticalScrollBarVisibility="Auto" Visibility="{Binding ErrorVisibility}">
+        <ScrollViewer Grid.Row="1" Margin="0,6,20,0" MaxHeight="64" VerticalScrollBarVisibility="Auto" Visibility="{Binding ErrorVisibility}">
             <TextBlock Text="{Binding Error}" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12" Foreground="{ThemeResource ErrorTextBrush}" />
         </ScrollViewer>
     </Grid>

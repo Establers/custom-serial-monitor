@@ -5,6 +5,9 @@ public sealed partial class ModbusRtuViewModel
     public string MonitorDetailsLabel => T("Details", "Communication details");
     public string MoreActionsLabel => T("MoreActions", "More actions");
     public string UsageDetailsLabel => T("UsageDetails", "Usage details and precautions");
+    public string TargetSettingsSummary => _pollingSettings is not null && SelectedPollingGroup is null
+        ? P("SelectGroup", "Select a group")
+        : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
     public string CommandsMenuLabel => RecentCommandSummary.Length == 0
         ? CommandsLabel : C("ActionsWithResult", "Commands / result…");
 

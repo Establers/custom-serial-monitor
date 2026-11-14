@@ -9,6 +9,34 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class ModbusCommandHeaderTests
 {
+    [Fact]
+    public async Task TargetSettingsKeepTheirReadAreaWhileANamedCommandOwnsTheActivityHeader()
+    {
+        var service = new HeaderMonitor();
+        var model = Model(service);
+        var settings = Settings();
+        settings.Commands[0].Name = "NUCLEO RAM sequence";
+        model.ApplySavedCommandSettings(settings);
+        var target = model.TargetSettingsSummary;
+        Assert.Equal("ID 1 · FC 03 · 0 + 10 · 1000 ms", target);
+
+        var run = model.ExecuteSelectedCommandAsync();
+        model.Refresh();
+        Assert.Contains("NUCLEO RAM sequence", model.RequestSummary);
+        Assert.Equal(target, model.TargetSettingsSummary);
+        service.CompleteCommand(ModbusCommandState.Verified);
+        await run;
+        Assert.Equal(target, model.TargetSettingsSummary);
+        Assert.Contains("NUCLEO RAM sequence", model.RequestSummary);
+
+        var changed = new List<string?>();
+        model.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        model.AddressText = "42";
+        Assert.Contains("42 + 10", model.TargetSettingsSummary);
+        Assert.Contains(nameof(model.TargetSettingsSummary), changed);
+        Assert.Equal("NUCLEO RAM sequence", model.SelectedCommand!.Definition!.Name);
+    }
+
     [Theory]
     [InlineData(ModbusCommandState.Acknowledged, false)]
     [InlineData(ModbusCommandState.Verified, false)]
