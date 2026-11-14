@@ -3,14 +3,14 @@ namespace SerialMonitor.WinUI.ViewModels;
 public sealed partial class ModbusRtuViewModel
 {
     public string GuideLabel => T("Guide", "Usage guide");
-    public string GuideTitle => T("GuideTitle", "Register monitor guide");
+    public string GuideTitle => T("GuideTitle", "Device monitoring & control guide");
     public string GuidePurpose => T("GuidePurpose", "View values that a Modbus device exposes at numbered addresses, such as temperatures, status and settings. Read repeatedly to watch changes, or edit values that the device allows you to write.");
     public string GuideModesTitle => T("GuideModesTitle", "Choose a view");
-    public string GuideModesHelp => T("GuideModesHelp", "Packet analysis decodes requests and responses already sent. Read/write sends requests to the device when you run an action. Switching views or opening this guide does not start communication.");
+    public string GuideModesHelp => T("GuideModesHelp", "Device monitoring & control is the default view for requested values and command results. Packet analysis inspects RX/TX packets. Data sent by the device without a request can be inspected in the log or packet analysis. Switching views does not start communication.");
     public string GuideStartTitle => T("GuideStartTitle", "Start with one read");
     public string GuideConnectStep => T("GuideConnectStep", "1. Connect using the device's COM port, baud rate and parity. Have its register map ready.");
     public string GuideSetupStep => T("GuideSetupStep", "2. Set the unit ID, read function, start address and quantity. For example, ID 1 / FC03 / address 0 / quantity 10 reads addresses 0–9. Addresses start at 0: holding register 40001 corresponds to address 0.");
-    public string GuideReadStep => T("GuideReadStep", "3. Use Read once to check the values and status, then Start polling. Polling means reading repeatedly at the configured interval. Use Stop to end it.");
+    public string GuideReadStep => T("GuideReadStep", "3. Use Read once to check the values, then Start polling to read repeatedly and update the table. The interval is the minimum wait after a response before the next read. Stop keeps the last values.");
     public string GuideGroupsTitle => T("GuideGroupsTitle", "Read separate areas or multiple devices");
     public string GuideGroupsHelp => T("GuideGroupsHelp", "Polling groups lets you register multiple named unit IDs, read areas and intervals. Start enabled groups polls the enabled groups in turn. Select a group to see its table. Read once and Direct write target the selected group. All groups on the same COM connection share its communication settings.");
     public string GuideDisplayTitle => T("GuideDisplayTitle", "Display type and multiplier");

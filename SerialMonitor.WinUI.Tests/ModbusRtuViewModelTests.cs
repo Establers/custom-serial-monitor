@@ -233,6 +233,79 @@ public sealed class ModbusRtuViewModelTests
     }
 
     [Fact]
+    public async Task PresentationOptionsHaveStableLabelsBeforeSelectingAView()
+    {
+        var service = new FakeMonitor();
+        await using var analyzer = new ProtocolAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { Modbus = Model(service) };
+        var options = protocol.PresentationOptions;
+        Assert.Equal(new[] { protocol.DisabledLabel, protocol.ModbusPacketViewLabel,
+            protocol.ModbusReadWriteViewLabel, protocol.MstpPacketViewLabel }, options.Select(option => option.Label));
+        Assert.All(options, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
+
+        protocol.SelectedViewIndex = 2;
+        protocol.IsVisible = true;
+        protocol.Refresh(force: true);
+        protocol.SelectedViewIndex = 1;
+        Assert.Same(options, protocol.PresentationOptions);
+        Assert.All(options, option => Assert.True(option.IsEnabled));
+        Assert.Empty(service.Reads);
+        Assert.Empty(service.Writes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PresentationOptionsFollowBusyStateWithoutReplacingTheMenu(bool createWhileBusy)
+    {
+        var service = new FakeMonitor { HoldRun = true };
+        var monitor = Model(service);
+        await using var analyzer = new ProtocolAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { Modbus = monitor, SelectedViewIndex = 2 };
+        var notifications = new System.Collections.Concurrent.ConcurrentQueue<(int Index, bool Enabled)>();
+        IReadOnlyList<ProtocolViewOption>? options = createWhileBusy ? null : protocol.PresentationOptions;
+        if (options is not null) Observe(options);
+        var run = monitor.RunAsync(true);
+        try
+        {
+            monitor.Refresh();
+            if (options is null) { options = protocol.PresentationOptions; Observe(options); }
+            Assert.True(monitor.IsBusy);
+            Assert.Equal(new[] { false, true, true, false }, options.Select(option => option.IsEnabled));
+            Assert.Same(options, protocol.PresentationOptions);
+            if (!createWhileBusy)
+            {
+                Assert.Contains((0, false), notifications);
+                Assert.Contains((3, false), notifications);
+            }
+            protocol.SelectedViewIndex = 0;
+            Assert.Equal(2, protocol.SelectedViewIndex);
+            protocol.SelectedViewIndex = 3;
+            Assert.Equal(2, protocol.SelectedViewIndex);
+            protocol.SelectedViewIndex = 1;
+            Assert.Equal(1, protocol.SelectedViewIndex);
+            Assert.True(monitor.IsBusy);
+        }
+        finally { await monitor.StopAsync(); await run; }
+        Assert.Same(options, protocol.PresentationOptions);
+        Assert.All(options!, option => Assert.True(option.IsEnabled));
+        Assert.Contains((0, true), notifications);
+        Assert.Contains((3, true), notifications);
+        Assert.Single(service.Reads);
+        Assert.Empty(service.Writes);
+
+        void Observe(IReadOnlyList<ProtocolViewOption> observed)
+        {
+            foreach (var (option, index) in observed.Select((option, index) => (option, index)))
+                option.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(ProtocolViewOption.IsEnabled))
+                        notifications.Enqueue((index, option.IsEnabled));
+                };
+        }
+    }
+
+    [Fact]
     public async Task SharedHeaderFollowsMonitorTargetAndUnsubscribesReplacedModel()
     {
         await using var analyzer = new ProtocolAnalyzer();
@@ -391,8 +464,10 @@ public sealed class ModbusRtuViewModelTests
         Assert.Empty(protocol.Descendants(p + "RadioButton"));
         var selector = Assert.Single(protocol.Descendants(p + "ComboBox").Where(e => (string?)e.Attribute(x + "Name") == "PresentationSelector"));
         Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)selector.Attribute("SelectedIndex"));
-        Assert.Equal(4, selector.Elements(p + "ComboBoxItem").Count());
-        Assert.All(selector.Elements(p + "ComboBoxItem"), option => Assert.NotNull(option.Attribute("IsEnabled")));
+        Assert.Equal("{Binding PresentationOptions}", (string?)selector.Attribute("ItemsSource"));
+        Assert.Equal("Label", (string?)selector.Attribute("DisplayMemberPath"));
+        Assert.Contains(selector.Descendants(p + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "IsEnabled" && (string?)setter.Attribute("Value") == "{Binding IsEnabled}");
         var activeStop = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "MonitorStopButton"));
         Assert.Equal("{Binding StopCommand}", (string?)activeStop.Attribute("Command"));
         Assert.DoesNotContain(activeStop.Ancestors(), e => e.Name == p + "ScrollViewer" || e.Name == p + "Expander" || e.Name == p + "Flyout");

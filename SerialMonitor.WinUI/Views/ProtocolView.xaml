@@ -49,13 +49,15 @@
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto">
                 <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
-                    <ComboBox x:Name="PresentationSelector" SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
+                    <ComboBox x:Name="PresentationSelector" ItemsSource="{Binding PresentationOptions}" DisplayMemberPath="Label"
+                              SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" MinWidth="0" MinHeight="24" Height="24"
                               Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="{Binding ViewSelectionLabel}">
-                        <ComboBoxItem Content="{Binding DisabledLabel}" IsEnabled="{Binding IsProtocolSelectionEnabled}" />
-                        <ComboBoxItem Content="{Binding ModbusPacketViewLabel}" IsEnabled="{Binding IsModbusViewSelectionEnabled}" />
-                        <ComboBoxItem Content="{Binding ModbusReadWriteViewLabel}" IsEnabled="{Binding IsModbusViewSelectionEnabled}" />
-                        <ComboBoxItem Content="{Binding MstpPacketViewLabel}" IsEnabled="{Binding IsProtocolSelectionEnabled}" />
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
                     </ComboBox>
                     <TextBlock Grid.Column="1" Text="{Binding WorkspaceHeader}" Style="{StaticResource CellText}"
                                ToolTipService.ToolTip="{Binding WorkspaceHeaderHelp}" />

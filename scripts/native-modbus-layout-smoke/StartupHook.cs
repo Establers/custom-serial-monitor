@@ -14,6 +14,7 @@ public static class StartupHook
     private static readonly List<string> Issues = [];
     private static readonly HashSet<string> SeenIssues = [];
     private static readonly Dictionary<string, object> TrimmedText = [];
+    private static object? Startup;
     private static string Case = "startup";
     private static object Host = null!, Root = null!;
     private static Type FindType(string name) => AppDomain.CurrentDomain.GetAssemblies()
@@ -49,8 +50,36 @@ public static class StartupHook
     }
     private static void Save(string? fatal = null)
     {
-        File.WriteAllText(Output + ".tmp", JsonSerializer.Serialize(new { cases = Results, issues = Issues, trimmedText = TrimmedText.Values, fatal }, new JsonSerializerOptions { WriteIndented = true }));
+        if (Startup is null) Issue("required application startup state was not captured before layout fixtures");
+        File.WriteAllText(Output + ".tmp", JsonSerializer.Serialize(new { startup = Startup, cases = Results, issues = Issues, trimmedText = TrimmedText.Values, fatal }, new JsonSerializerOptions { WriteIndented = true }));
         File.Move(Output + ".tmp", Output, true);
+    }
+    private static T StartupProperty<T>(object source, string name) => P(source, name) is T value
+        ? value : throw new InvalidOperationException($"Application startup property {source.GetType().Name}.{name} is missing or has an unexpected type.");
+    private static void VerifyStartup(object mainModel)
+    {
+        var protocol = P(mainModel, "Protocol") ?? throw new InvalidOperationException("Application startup has no Protocol view-model.");
+        var monitor = P(mainModel, "Modbus") ?? throw new InvalidOperationException("Application startup has no Modbus view-model.");
+        var analyzer = P(protocol, "Analyzer") ?? throw new InvalidOperationException("Application startup has no protocol analyzer.");
+        var serial = Field(mainModel, "_serialService");
+        var connected = StartupProperty<bool>(mainModel, "IsConnected");
+        var selectedViewIndex = StartupProperty<int>(protocol, "SelectedViewIndex");
+        var selectedProtocolIndex = StartupProperty<int>(protocol, "SelectedProtocolIndex");
+        var isRegisterMonitorSelected = StartupProperty<bool>(protocol, "IsRegisterMonitorSelected");
+        var analyzerEnabled = StartupProperty<bool>(analyzer, "Enabled");
+        var modbusBusy = StartupProperty<bool>(monitor, "IsBusy");
+        var writtenByteCount = StartupProperty<long>(serial, "WrittenByteCount");
+        var passed = !connected && selectedViewIndex == 2 && selectedProtocolIndex == 1 &&
+            isRegisterMonitorSelected && analyzerEnabled && !modbusBusy && writtenByteCount == 0;
+        Startup = new
+        {
+            passed, connected, selectedViewIndex, selectedProtocolIndex, isRegisterMonitorSelected,
+            analyzerEnabled, modbusBusy, writtenByteCount,
+            deviceViewLabel = P(protocol, "ModbusReadWriteViewLabel"),
+            packetViewLabel = P(protocol, "ModbusPacketViewLabel")
+        };
+        if (!passed)
+            throw new InvalidOperationException("Application startup must select the Modbus device-monitor view with passive analysis enabled, no active Modbus operation and zero written serial bytes.");
     }
     public static void Initialize() => _ = Task.Run(async () =>
     {
@@ -369,11 +398,62 @@ public static class StartupHook
         }
         return measurements;
     }
+    private static object CheckClosedViewCaption(object view)
+    {
+        var model = P(view, "DataContext") ?? throw new InvalidOperationException("Default Protocol view has no data context.");
+        var expected = StartupProperty<string>(model, "ModbusReadWriteViewLabel");
+        var selector = Field(view, "PresentationSelector");
+        var selectedIndex = StartupProperty<int>(selector, "SelectedIndex");
+        var dropDownOpen = StartupProperty<bool>(selector, "IsDropDownOpen");
+        if (selectedIndex != 2 || StartupProperty<int>(model, "SelectedViewIndex") != 2)
+            Issue("default-view selector does not select the device-monitor view");
+        if (dropDownOpen) Issue("default-view selector was already open before its closed caption was inspected");
+        if (string.IsNullOrWhiteSpace(expected)) Issue("default-view expected caption is empty");
+        Rect Bounds(object element) => (Rect)Call(Call(element, "TransformToVisual", view)!, "TransformBounds",
+            new Rect(0, 0, N(element, "ActualWidth"), N(element, "ActualHeight")))!;
+        object Geometry(Rect bounds) => new { left = bounds.Left, top = bounds.Top, width = bounds.Width, height = bounds.Height };
+        var selectorBounds = Bounds(selector);
+        var getParent = FindType("Microsoft.UI.Xaml.Media.VisualTreeHelper").GetMethod("GetParent")!;
+        bool InClosedSelector(object element)
+        {
+            // Popup items can retain nonzero layout geometry while closed.
+            // Only accept text in the visible selection presenter itself.
+            object? current = element;
+            var insideSelector = false;
+            for (var depth = 0; current is not null && depth < 128; depth++, current = getParent.Invoke(null, [current]))
+            {
+                if (current.GetType().Name is "ComboBoxItem" or "Popup" or "PopupRoot") return false;
+                if (P(current, "Visibility")?.ToString() == "Collapsed" || P(current, "Opacity") is double opacity && opacity <= 0) return false;
+                if (ReferenceEquals(current, selector)) insideSelector = true;
+                if (ReferenceEquals(current, view)) return insideSelector;
+            }
+            return false;
+        }
+        var captions = new List<object>();
+        foreach (var text in Tree(selector).Where(e => e.GetType().Name == "TextBlock" &&
+            P(e, "Text") is string actual && actual == expected && Visible(e) && InClosedSelector(e)))
+        {
+            var bounds = Bounds(text);
+            var left = Math.Max(0, Math.Max(bounds.Left, selectorBounds.Left));
+            var top = Math.Max(0, Math.Max(bounds.Top, selectorBounds.Top));
+            var right = Math.Min(N(view, "ActualWidth"), Math.Min(bounds.Right, selectorBounds.Right));
+            var bottom = Math.Min(N(view, "ActualHeight"), Math.Min(bounds.Bottom, selectorBounds.Bottom));
+            var visibleBounds = new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+            var needed = MeasureText(text, expected, double.PositiveInfinity);
+            if (P(text, "IsTextTrimmed") is true || visibleBounds.Width <= 0 || visibleBounds.Height <= 0 ||
+                visibleBounds.Width + 2 < needed.Width || visibleBounds.Height + 2 < needed.Height) continue;
+            captions.Add(new { text = P(text, "Text"), bounds = Geometry(bounds), visibleBounds = Geometry(visibleBounds) });
+        }
+        if (dropDownOpen || !Visible(selector) || captions.Count == 0)
+            Issue("closed default-view selector has no visible device-monitor caption: " + expected);
+        return new { expected, selectedIndex, dropDownOpen, selectorBounds = Geometry(selectorBounds), captions };
+    }
     private static async Task Probe(object root, string name)
     {
         Case = name;
         var before = Issues.Count;
         await Settle(root);
+        var closedViewCaption = name.StartsWith("default-view", StringComparison.Ordinal) ? CheckClosedViewCaption(root) : null;
         CheckTextAndButtons(root);
         var formGrids = CheckFormGrids(root);
         if ((name.StartsWith("items-") || name.StartsWith("groups-") || name.StartsWith("commands-") ||
@@ -392,7 +472,7 @@ public static class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), formGrids, scrolls, issues = Issues.Count - before });
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -477,7 +557,9 @@ public static class StartupHook
         try
         {
             await Task.Delay(600);
-            if (P(Field(mainWindow, "_viewModel"), "IsConnected") is true) throw new InvalidOperationException("Layout tests require a disconnected child instance.");
+            var startupModel = Field(mainWindow, "_viewModel");
+            if (P(startupModel, "IsConnected") is true) throw new InvalidOperationException("Layout tests require a disconnected child instance.");
+            VerifyStartup(startupModel);
             Host = New("Microsoft.UI.Xaml.Window");
             Root = New("Microsoft.UI.Xaml.Controls.Grid");
             S(Host, "Content", Root); Call(Host, "Activate");
@@ -486,6 +568,14 @@ public static class StartupHook
                 Call(P(Host, "AppWindow")!, "Resize", size);
                 await Settle(Root);
                 var suffix = $"-{size.Width}x{size.Height}";
+                var defaultViewName = "default-view" + suffix;
+                var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (string.IsNullOrEmpty(filter) || defaultViewName.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    var defaultProtocolModel = P(startupModel, "Protocol")!;
+                    S(defaultProtocolModel, "SelectedViewIndex", 2);
+                    await View(New("SerialMonitor.WinUI.Views.ProtocolView"), defaultViewName, defaultProtocolModel);
+                }
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-long" + suffix,
                     m => { S(m, "NameText", "긴 항목 / " + new string('N', 80)); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-long" + suffix);

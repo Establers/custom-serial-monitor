@@ -1337,14 +1337,14 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorTableAddress" xml:space="preserve"><value>Address (base 0)</value></data>
 <data name="ModbusMonitorEmpty" xml:space="preserve"><value>Connect the device, open Target settings, then use Read once to check its values. Addresses follow the device register map. Open ? for help.</value></data>
 <data name="ModbusMonitorGuide" xml:space="preserve"><value>Usage guide</value></data>
-<data name="ModbusMonitorGuideTitle" xml:space="preserve"><value>Register monitor guide</value></data>
+<data name="ModbusMonitorGuideTitle" xml:space="preserve"><value>Device monitoring &amp; control guide</value></data>
 <data name="ModbusMonitorGuidePurpose" xml:space="preserve"><value>View values that a Modbus device exposes at numbered addresses, such as temperatures, status and settings. Read repeatedly to watch changes, or edit values that the device allows you to write.</value></data>
 <data name="ModbusMonitorGuideModesTitle" xml:space="preserve"><value>Choose a view</value></data>
-<data name="ModbusMonitorGuideModesHelp" xml:space="preserve"><value>Packet analysis decodes requests and responses already sent. Read/write sends requests to the device when you run an action. Switching views or opening this guide does not start communication.</value></data>
+<data name="ModbusMonitorGuideModesHelp" xml:space="preserve"><value>Device monitoring &amp; control is the default view for requested values and command results. Packet analysis inspects RX/TX packets. Data sent by the device without a request can be inspected in the log or packet analysis. Switching views does not start communication.</value></data>
 <data name="ModbusMonitorGuideStartTitle" xml:space="preserve"><value>Start with one read</value></data>
 <data name="ModbusMonitorGuideConnectStep" xml:space="preserve"><value>1. Connect using the device's COM port, baud rate and parity. Have its register map ready.</value></data>
 <data name="ModbusMonitorGuideSetupStep" xml:space="preserve"><value>2. Set the unit ID, read function, start address and quantity. For example, ID 1 / FC03 / address 0 / quantity 10 reads addresses 0–9. Addresses start at 0: holding register 40001 corresponds to address 0.</value></data>
-<data name="ModbusMonitorGuideReadStep" xml:space="preserve"><value>3. Use Read once to check the values and status, then Start polling. Polling means reading repeatedly at the configured interval. Use Stop to end it.</value></data>
+<data name="ModbusMonitorGuideReadStep" xml:space="preserve"><value>3. Use Read once to check the values, then Start polling to read repeatedly and update the table. The interval is the minimum wait after a response before the next read. Stop keeps the last values.</value></data>
 <data name="ModbusMonitorGuideGroupsTitle" xml:space="preserve"><value>Read separate areas or multiple devices</value></data>
 <data name="ModbusMonitorGuideGroupsHelp" xml:space="preserve"><value>Polling groups lets you register multiple named unit IDs, read areas and intervals. Start enabled groups polls the enabled groups in turn. Select a group to see its table. Read once and Direct write target the selected group. All groups on the same COM connection share its communication settings.</value></data>
 <data name="ModbusMonitorGuideDisplayTitle" xml:space="preserve"><value>Display type and multiplier</value></data>
@@ -1451,6 +1451,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusPollingSaveGroup" xml:space="preserve"><value>Add / update group</value></data>
 <data name="ModbusPollingName" xml:space="preserve"><value>Group name</value></data>
 <data name="ModbusPollingEnabled" xml:space="preserve"><value>Include in polling</value></data>
+<data name="ModbusPollingDisabled" xml:space="preserve"><value>Disabled</value></data>
 <data name="ModbusPollingUnsavedDraft" xml:space="preserve"><value>Add/update this group before selecting another. Apply also saves the current draft; New discards it.</value></data>
 <data name="ModbusPollingInvalidItems" xml:space="preserve"><value>Invalid saved items · open Item definitions to correct them</value></data>
 <data name="ModbusPollingItemsCount" xml:space="preserve"><value>Defined items: {0}</value></data>
@@ -1469,8 +1470,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusPollingCopySuffix" xml:space="preserve"><value> copy</value></data>
 <data name="ProtocolViewSelection" xml:space="preserve"><value>Protocol and view</value></data>
 <data name="ProtocolMoreActions" xml:space="preserve"><value>More actions</value></data>
-<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · Packet analysis</value></data>
-<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · Read/write values</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Packet analysis</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Device monitoring &amp; control</value></data>
 <data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · Packet analysis</value></data>
 <data name="ModbusCommandEditorTitle" xml:space="preserve"><value>Command definitions</value></data>
 <data name="ModbusCommandApply" xml:space="preserve"><value>Apply to monitor</value></data>

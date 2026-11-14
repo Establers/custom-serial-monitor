@@ -5,7 +5,7 @@ namespace SerialMonitor.WinUI.ViewModels;
 
 public sealed partial class MainViewModel
 {
-    public ProtocolViewModel Protocol { get; } = new(new ProtocolAnalyzer());
+    public ProtocolViewModel Protocol { get; } = new(new ProtocolAnalyzer()) { SelectedViewIndex = 2 };
 
     private void InitializeProtocolAnalysis()
     {
