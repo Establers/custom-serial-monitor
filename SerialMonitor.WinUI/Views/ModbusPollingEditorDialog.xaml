@@ -28,7 +28,6 @@
             <Setter Property="Padding" Value="5,2" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource GroupInput}" />
         <Style x:Key="GroupNumberInput" TargetType="TextBox" BasedOn="{StaticResource GroupInput}">
@@ -45,7 +44,6 @@
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style x:Key="GroupAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
@@ -82,7 +80,7 @@
                     <Button Grid.Column="2" Content="{Binding RemoveLabel}" Click="Remove_Click" Style="{StaticResource GroupAction}" />
                     <Button Grid.Column="4" Content="{Binding ClearLabel}" Click="Clear_Click" Style="{StaticResource GroupAction}" />
                 </Grid>
-                <TextBox Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <CheckBox Content="{Binding EnabledLabel}" IsChecked="{Binding Enabled, Mode=TwoWay}" Style="{StaticResource CompactCheckBoxStyle}" />
                 <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
