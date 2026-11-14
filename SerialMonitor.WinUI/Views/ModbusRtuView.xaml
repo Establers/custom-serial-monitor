@@ -93,7 +93,7 @@
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="SettingsScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ContentControl x:Name="SettingsEditorRoot" IsEnabled="{Binding IsSettingsEnabled}" HorizontalContentAlignment="Stretch">
-                                    <StackPanel x:Name="SettingsPanel" Width="360" Spacing="6" Margin="0,0,16,0">
+                                    <StackPanel x:Name="SettingsPanel" Width="300" Spacing="6" Margin="0,0,16,0">
                                         <TextBlock Text="{Binding SettingsLabel}" FontSize="14" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding RequestSummary}" FontSize="11" FontFamily="Consolas"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -160,15 +160,18 @@
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="WriteScroll" MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ContentControl x:Name="WriteEditorRoot" IsEnabled="{Binding IsWriteEditorEnabled}" HorizontalContentAlignment="Stretch">
-                                        <StackPanel x:Name="WritePanel" Width="400" Spacing="6" Margin="0,0,16,0">
-                                            <TextBlock Text="{Binding WriteEditorLabel}" FontSize="14" FontWeight="SemiBold" />
-                                            <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
-                                                <Expander.Resources>
-                                                    <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                                                    <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                                                </Expander.Resources>
-                                                <TextBlock Text="{Binding WriteHelp}" Style="{StaticResource GuideBody}" />
-                                            </Expander>
+                                        <StackPanel x:Name="WritePanel" Width="340" Spacing="6" Margin="0,0,8,0">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Text="{Binding WriteEditorLabel}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Content="?" Width="24" Padding="0" Style="{StaticResource Action}"
+                                                        ToolTipService.ToolTip="{Binding UsageDetailsLabel}" AutomationProperties.Name="{Binding UsageDetailsLabel}">
+                                                    <Button.Flyout>
+                                                        <Flyout Opening="WriteHelpFlyout_Opening" FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                                            <TextBlock x:Name="WriteHelpText" Text="{Binding WriteHelp}" Style="{StaticResource GuideBody}" />
+                                                        </Flyout>
+                                                    </Button.Flyout>
+                                                </Button>
+                                            </Grid>
                                             <TextBlock Text="{Binding WriteModeLabel}" Style="{StaticResource FieldLabel}" />
                                             <ComboBox ItemsSource="{Binding WriteModes}" SelectedIndex="{Binding WriteModeIndex, Mode=TwoWay}"
                                                       Style="{StaticResource CompactComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
@@ -176,15 +179,15 @@
                                                 <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                             </ComboBox>
                                             <TextBlock Text="{Binding WriteItemSummary}" FontSize="11" TextWrapping="Wrap" />
-                                            <Grid ColumnDefinitions="125,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                                            <Grid ColumnDefinitions="104,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
                                                 <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource FieldLabel}" />
                                                 <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
                                                 <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
                                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding WriteValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ValuesInput}" AutomationProperties.Name="{Binding WriteValuesLabel}" />
                                             </Grid>
                                             <TextBlock Text="{Binding WritePreview}" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                            <TextBlock Text="{Binding Status}" FontSize="12" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
+                                            <TextBlock Text="{Binding WriteStatus}" Visibility="{Binding WriteStatusVisibility}" FontSize="12" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding WriteError}" Visibility="{Binding WriteErrorVisibility}" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
                                             <Button Content="{Binding WriteLabel}" Command="{Binding WriteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Right" />
                                         </StackPanel>
                                     </ContentControl>
@@ -197,15 +200,18 @@
                             <Flyout x:Name="CommandsFlyout" Placement="BottomEdgeAlignedRight" Opening="CommandsFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="CommandsScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <StackPanel x:Name="CommandsPanel" Width="480" Spacing="5" Margin="0,0,16,0">
-                                        <TextBlock Text="{Binding CommandsLabel}" FontWeight="SemiBold" />
-                                        <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
-                                            <Expander.Resources>
-                                                <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                                                <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                                            </Expander.Resources>
-                                            <TextBlock Text="{Binding CommandHelp}" Style="{StaticResource GuideBody}" />
-                                        </Expander>
+                                    <StackPanel x:Name="CommandsPanel" Width="400" MinWidth="0" Spacing="5" Margin="0,0,8,0">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock Text="{Binding CommandsLabel}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Content="?" Width="24" Padding="0" Style="{StaticResource Action}"
+                                                    ToolTipService.ToolTip="{Binding UsageDetailsLabel}" AutomationProperties.Name="{Binding UsageDetailsLabel}">
+                                                <Button.Flyout>
+                                                    <Flyout Opening="CommandHelpFlyout_Opening" FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                                        <TextBlock x:Name="CommandHelpText" Text="{Binding CommandHelp}" Style="{StaticResource GuideBody}" />
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                        </Grid>
                                         <TextBlock Text="{Binding CommandSelectorLabel}" Style="{StaticResource FieldLabel}" />
                                         <ComboBox ItemsSource="{Binding CommandChoices}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                                                   DisplayMemberPath="DisplayName" IsEnabled="{Binding IsCommandSelectionEnabled}"
@@ -221,14 +227,19 @@
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
-                                            <TextBlock Text="{Binding CommandPreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
+                                            <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
                                         </Expander>
                                         <Button Content="{Binding ExecuteCommandLabel}" Command="{Binding ExecuteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                         <Button Content="{Binding StopAllLabel}" Command="{Binding StopCommand}" Visibility="{Binding BusyVisibility}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                         <TextBlock Text="{Binding Status}" Visibility="{Binding BusyVisibility}" Style="{StaticResource GuideBody}" />
                                         <Button Content="{Binding CommandEditorLabel}" Click="Commands_Click" IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
-                                        <TextBlock Text="{Binding RecentCommandSummary}" Visibility="{Binding RecentCommandVisibility}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding RecentCommandResults}" Visibility="{Binding RecentCommandVisibility}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
+                                        <StackPanel Visibility="{Binding RecentCommandVisibility}" Spacing="5" MinWidth="0">
+                                            <TextBlock Text="{Binding RecentCommandCaption}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding RecentCommandSummary}" />
+                                            <TextBlock Text="{Binding RecentCommandAlert}" Visibility="{Binding RecentCommandAlertVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
+                                            <Expander Header="{Binding CommandResultDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                                                <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" />
+                                            </Expander>
+                                        </StackPanel>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Flyout>

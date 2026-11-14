@@ -34,12 +34,19 @@ public sealed partial class ModbusRtuView : UserControl
     private void SettingsFlyout_Opening(object sender, object args)
     {
         SettingsEditorRoot.DataContext = Model;
-        FitEditor(SettingsScroll, SettingsPanel, 360, 460);
+        FitEditor(SettingsScroll, SettingsPanel, 300, 460);
     }
     private void WriteFlyout_Opening(object sender, object args)
     {
         WriteEditorRoot.DataContext = Model;
-        FitEditor(WriteScroll, WritePanel, 400, 360);
+        FitEditor(WriteScroll, WritePanel, 340, 360);
+    }
+    private void WriteHelpFlyout_Opening(object sender, object args) => FitHelp(WriteHelpText);
+    private void CommandHelpFlyout_Opening(object sender, object args) => FitHelp(CommandHelpText);
+    private void FitHelp(TextBlock text)
+    {
+        text.DataContext = Model;
+        text.Width = Math.Min(340, Math.Max(160, (XamlRoot?.Size.Width ?? 400) - 64));
     }
     private void GuideFlyout_Opening(object sender, object args)
     {
@@ -122,7 +129,7 @@ public sealed partial class ModbusRtuView : UserControl
     private void CommandsFlyout_Opening(object sender, object args)
     {
         CommandsPanel.DataContext = Model;
-        FitEditor(CommandsScroll, CommandsPanel, 480, 460);
+        FitEditor(CommandsScroll, CommandsPanel, 400, 460);
         Model?.Refresh();
     }
     private async void Commands_Click(object sender, RoutedEventArgs args)

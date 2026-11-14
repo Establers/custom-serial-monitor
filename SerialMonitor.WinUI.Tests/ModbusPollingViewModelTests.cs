@@ -272,13 +272,13 @@ public sealed class ModbusPollingViewModelTests
         var model = Model(new GroupMonitor());
         model.ApplySavedPollingSettings(Workspace());
         await model.RunAsync(false);
-        Assert.StartsWith("Read OK", model.SelectedPollingGroup!.SelectionLabel);
+        Assert.Equal(model.SelectedPollingGroup!.DisplayName, model.SelectedPollingGroup.SelectionLabel);
         Assert.Contains("Read complete", model.SelectedPollingGroup.StatusText);
         model.UnitText = "9";
         model.CreatePersistablePollingSettingsSnapshot();
         model.Refresh();
         Assert.Contains("ID 9", model.SelectedPollingGroup.SelectionLabel);
-        Assert.StartsWith("Ready", model.SelectedPollingGroup.SelectionLabel);
+        Assert.Equal(model.SelectedPollingGroup.DisplayName, model.SelectedPollingGroup.SelectionLabel);
         Assert.Contains("Current 0", model.PollingHealthSummary);
     }
 

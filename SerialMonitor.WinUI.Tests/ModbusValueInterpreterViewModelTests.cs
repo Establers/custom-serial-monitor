@@ -154,6 +154,178 @@ public sealed class ModbusValueInterpreterViewModelTests
     }
 
     [Theory]
+    [InlineData(ModbusFrameKind.Request)]
+    [InlineData(ModbusFrameKind.Response)]
+    [InlineData(ModbusFrameKind.RequestOrResponse)]
+    public void SingleRegisterWriteOrEchoInterpretsKnownValueWithoutChangingItsRole(ModbusFrameKind kind)
+    {
+        var bytes = Convert.FromHexString("01061010000FCCCB");
+        var frame = new ModbusRtuFrame(1, 1, DateTimeOffset.UnixEpoch, ProtocolDirection.Rx,
+            bytes, kind, ModbusCrcStatus.Valid);
+        var model = new ModbusValueInterpreterViewModel();
+
+        model.SetFrame(frame);
+
+        Assert.Equal(Visibility.Visible, model.EditorVisibility);
+        Assert.Equal("+0: 15", model.ValuesText);
+        Assert.Contains("4112", model.Help);
+        Assert.Contains("0x1010", model.Help);
+        Assert.Contains("requested or echoed", model.Help);
+        Assert.Contains("not a separate readback", model.Help);
+        Assert.Empty(model.RemainderText);
+        Assert.Equal(kind, frame.Kind);
+        Assert.Equal(bytes, frame.Bytes.ToArray());
+        Assert.False(ModbusRegisterInterpreter.CanInterpret(frame));
+    }
+
+    [Fact]
+    public void SingleRegisterWriteSupportsSignedByteSwapAndScaleWithoutBorrowingAddressBytes()
+    {
+        var model = new ModbusValueInterpreterViewModel();
+        model.SetFrame(SingleWrite(address: 0xFFFF, value: 0xFF85, unit: 247));
+        Assert.Equal("+0: 65413", model.ValuesText);
+        Assert.Contains("65535", model.Help);
+        Assert.Contains("0xFFFF", model.Help);
+        model.FormatIndex = 1;
+        Assert.Equal("+0: -123", model.ValuesText);
+        model.ScaleText = "2";
+        Assert.Equal("+0: -246 (raw -123)", model.ValuesText);
+        model.SwapBytes = true;
+        Assert.Equal("+0: -62466 (raw -31233)", model.ValuesText);
+        model.SwapWords = true;
+        Assert.False(model.IsWordSwapEnabled);
+        Assert.Equal("+0: -62466 (raw -31233)", model.ValuesText);
+        model.OffsetText = "1";
+        Assert.Empty(model.ValuesText);
+        Assert.NotEmpty(model.ValidationError);
+        model.OffsetText = "0";
+        Assert.Empty(model.ValidationError);
+        Assert.NotEmpty(model.ValuesText);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void SingleRegisterWriteCannotSupplyThePartnerOfAnyThirtyTwoBitType(int format)
+    {
+        var model = new ModbusValueInterpreterViewModel { FormatIndex = format };
+        model.SetFrame(SingleWrite(value: 0x41C8));
+        Assert.Equal(Visibility.Visible, model.EditorVisibility);
+        Assert.Empty(model.ValuesText);
+        Assert.Empty(model.ValidationError);
+        Assert.Contains("+0", model.RemainderText);
+        Assert.Contains("no partner", model.RemainderText);
+        model.SwapBytes = model.SwapWords = true;
+        Assert.Empty(model.ValuesText);
+        Assert.Contains("no partner", model.RemainderText);
+        model.SetFrame(SingleWrite(address: 0x1011, value: 0));
+        Assert.Empty(model.ValuesText);
+        Assert.Contains("no partner", model.RemainderText);
+        model.FormatIndex = 0;
+        Assert.Equal("+0: 0", model.ValuesText);
+        Assert.Empty(model.RemainderText);
+    }
+
+    [Fact]
+    public void BroadcastSingleRegisterWriteDoesNotBecomeAnAcknowledgedResponse()
+    {
+        var frame = SingleWrite(unit: 0);
+        var model = new ModbusValueInterpreterViewModel();
+        model.SetFrame(frame);
+        Assert.Equal("+0: 15", model.ValuesText);
+        Assert.Equal((byte)0, frame.UnitId);
+        Assert.Equal(ModbusFrameKind.RequestOrResponse, frame.Kind);
+        Assert.Contains("not a separate readback", model.Help);
+        Assert.False(ModbusRegisterInterpreter.CanInterpret(frame));
+    }
+
+    [Fact]
+    public void InvalidSingleRegisterWriteMetadataCrcAndLengthsClearPreviousValues()
+    {
+        var valid = SingleWrite();
+        var corrupt = valid.Bytes.ToArray();
+        corrupt[^1] ^= 1;
+        var invalidFrames = new[]
+        {
+            valid with { Bytes = corrupt },
+            valid with { CrcStatus = ModbusCrcStatus.Invalid },
+            valid with { CrcStatus = ModbusCrcStatus.Unavailable },
+            valid with { Kind = ModbusFrameKind.Incomplete },
+            valid with { Kind = ModbusFrameKind.Undecoded },
+            valid with { Kind = ModbusFrameKind.Exception },
+            SingleWrite(unit: 248),
+            Frame(Convert.FromHexString("01061010"), ModbusFrameKind.RequestOrResponse),
+            Frame(Convert.FromHexString("01061010000F00"), ModbusFrameKind.RequestOrResponse)
+        };
+        var model = new ModbusValueInterpreterViewModel();
+        foreach (var invalid in invalidFrames)
+        {
+            model.SetFrame(valid);
+            Assert.Equal("+0: 15", model.ValuesText);
+            model.SetFrame(invalid);
+            Assert.Empty(model.ValuesText);
+            Assert.Empty(model.RemainderText);
+            Assert.Equal(Visibility.Collapsed, model.EditorVisibility);
+            Assert.NotEmpty(model.Help);
+        }
+    }
+
+    [Theory]
+    [InlineData("01051010FF00")]
+    [InlineData("010800000001")]
+    [InlineData("01161010FF0000FF")]
+    [InlineData("011010100002")]
+    public void OtherWriteAndDiagnosticPayloadsAreNotProjectedAsRegisterValues(string body)
+    {
+        var model = new ModbusValueInterpreterViewModel();
+        model.SetFrame(SingleWrite());
+        Assert.NotEmpty(model.ValuesText);
+        model.SetFrame(Frame(Convert.FromHexString(body), ModbusFrameKind.RequestOrResponse));
+        Assert.Empty(model.ValuesText);
+        Assert.Equal(Visibility.Collapsed, model.EditorVisibility);
+        Assert.DoesNotContain("ambiguous", model.Help);
+        Assert.Contains(body.StartsWith("0105", StringComparison.Ordinal) ? "Coil write request/echo" : "unavailable for this function", model.Help);
+    }
+
+    [Theory]
+    [InlineData(ModbusFrameKind.Request)]
+    [InlineData(ModbusFrameKind.Response)]
+    [InlineData(ModbusFrameKind.RequestOrResponse)]
+    public void CoilWriteExplainsRegisterInterpretationScopeWithoutChangingCaptureRole(ModbusFrameKind kind)
+    {
+        var frame = Frame(Convert.FromHexString("01051000FF00"), kind);
+        var model = new ModbusValueInterpreterViewModel();
+        model.SetFrame(frame);
+        Assert.Contains("Coil write request/echo", model.Help);
+        Assert.Contains("register interpretation is unavailable", model.Help);
+        Assert.DoesNotContain("ambiguous", model.Help);
+        Assert.Equal(kind, frame.Kind);
+        Assert.Empty(model.ValuesText);
+        Assert.Equal(Visibility.Collapsed, model.EditorVisibility);
+    }
+
+    [Theory]
+    [InlineData(ProtocolDirection.Tx, ModbusFrameKind.Request)]
+    [InlineData(ProtocolDirection.Rx, ModbusFrameKind.RequestOrResponse)]
+    public async Task AnalyzerKeepsSingleRegisterWriteCaptureRoleWhileInterpreterShowsItsValue(
+        ProtocolDirection direction, ModbusFrameKind expectedKind)
+    {
+        await using var analyzer = new ModbusRtuAnalyzer();
+        var model = new ProtocolViewModel(analyzer) { IsVisible = true, SelectedProtocolIndex = 1 };
+        analyzer.TryEnqueue(Convert.FromHexString("01061010000FCCCB"), direction, 1, DateTimeOffset.Now);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (analyzer.Snapshot().RetainedCount < 1) await Task.Delay(5, timeout.Token);
+        model.Refresh();
+        model.SelectedFrame = Assert.Single(model.Frames);
+        var frame = (ModbusRtuFrame)model.SelectedFrame.Frame;
+        Assert.Equal(expectedKind, frame.Kind);
+        Assert.Contains("CRC: Valid", model.Details);
+        Assert.Equal("+0: 15", model.ValueInterpreter.ValuesText);
+        Assert.Contains("not a separate readback", model.ValueInterpreter.Help);
+    }
+
+    [Theory]
     [InlineData(ProtocolDirection.Tx)]
     [InlineData(ProtocolDirection.Rx)]
     public async Task CrcValidRequestAndFollowingResponseExplainTheirRolesWhenSelected(ProtocolDirection requestDirection)
@@ -178,15 +350,15 @@ public sealed class ModbusValueInterpreterViewModelTests
     }
 
     [Fact]
-    public void UnavailableHintsDistinguishExceptionsIncompleteAmbiguousAndUnsupportedDataFromCrcErrors()
+    public void UnavailableHintsDistinguishExceptionsIncompleteAndFunctionScopeFromCrcErrors()
     {
         var model = new ModbusValueInterpreterViewModel();
         var frames = new[]
         {
             (Frame(Convert.FromHexString("018302"), ModbusFrameKind.Exception), "Exception response"),
-            (Frame(Convert.FromHexString("010600000001"), ModbusFrameKind.RequestOrResponse), "ambiguous"),
+            (Frame(Convert.FromHexString("010800000001"), ModbusFrameKind.RequestOrResponse), "unavailable for this function"),
             (Response("00FA") with { CrcStatus = ModbusCrcStatus.Unavailable, Kind = ModbusFrameKind.Incomplete }, "Incomplete frame"),
-            (Frame(Convert.FromHexString("01010101"), ModbusFrameKind.Response), "supports FC03"),
+            (Frame(Convert.FromHexString("01010101"), ModbusFrameKind.Response), "unavailable for this function"),
             (Frame(Convert.FromHexString("01030400FA"), ModbusFrameKind.Response), "invalid address, length or data layout")
         };
         foreach (var (frame, reason) in frames)
@@ -274,6 +446,9 @@ public sealed class ModbusValueInterpreterViewModelTests
         var body = new byte[] { 1, 3, (byte)payload.Length }.Concat(payload).ToArray();
         return Frame(body, ModbusFrameKind.Response);
     }
+
+    private static ModbusRtuFrame SingleWrite(ushort address = 0x1010, ushort value = 15, byte unit = 1) =>
+        Frame([unit, 6, (byte)(address >> 8), (byte)address, (byte)(value >> 8), (byte)value], ModbusFrameKind.RequestOrResponse);
 
     private static ModbusRtuFrame Frame(byte[] body, ModbusFrameKind kind)
     {

@@ -53,6 +53,7 @@ public sealed partial class ModbusRtuViewModel
 
     private void ResetPollingContext()
     {
+        ClearWriteFeedback();
         _pollingSettings = null;
         _acceptPollingSnapshots = false;
         _selectedPollingGroup = null;
@@ -136,6 +137,7 @@ public sealed partial class ModbusRtuViewModel
 
     private void LoadSelectedGroup()
     {
+        ClearWriteFeedback();
         _settingsRevision++;
         _displaySettings = null;
         Rows.Clear();
@@ -285,7 +287,7 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
     public string Name => Definition?.Name ?? "";
     public bool IsEnabled => Definition?.Enabled == true;
     public bool HasError => _configurationError is not null || Snapshot?.State is ModbusMonitorState.Error or ModbusMonitorState.Disconnected || !string.IsNullOrWhiteSpace(Snapshot?.Error);
-    public string SelectionLabel => $"{SelectionState} · {DisplayName}";
+    public string SelectionLabel => HasError || !IsEnabled ? $"{SelectionState} · {DisplayName}" : DisplayName;
     private string SelectionState => HasError ? UiText.Get("ModbusPollingStateError", "Error")
         : !IsEnabled ? UiText.Get("ModbusPollingDisabled", "Disabled")
         : Snapshot?.ValuesCurrent == true ? UiText.Get("ModbusPollingStateCurrent", "Read OK")

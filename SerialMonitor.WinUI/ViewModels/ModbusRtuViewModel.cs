@@ -111,8 +111,8 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string IntervalText { get => _interval; set => SetSetting(ref _interval, value, nameof(IntervalText)); }
     public string TimeoutText { get => _timeout; set => SetSetting(ref _timeout, value, nameof(TimeoutText)); }
     public string ScaleText { get => _scale; set => SetSetting(ref _scale, value, nameof(ScaleText)); }
-    public string WriteAddressText { get => _writeAddress; set { if (!_writeAdmitted && SetProperty(ref _writeAddress, value ?? "")) NotifyWritePresentation(); } }
-    public string WriteValuesText { get => _writeValues; set { if (!_writeAdmitted && SetProperty(ref _writeValues, value ?? "")) NotifyWritePresentation(); } }
+    public string WriteAddressText { get => _writeAddress; set { if (!_writeAdmitted && SetProperty(ref _writeAddress, value ?? "")) { ClearWriteFeedback(); NotifyWritePresentation(); } } }
+    public string WriteValuesText { get => _writeValues; set { if (!_writeAdmitted && SetProperty(ref _writeValues, value ?? "")) { ClearWriteFeedback(); NotifyWritePresentation(); } } }
     public int FunctionIndex
     {
         get => _functionIndex;
@@ -137,6 +137,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         {
             if (!SetProperty(ref _selectedRow, value)) return;
             if (_writeAdmitted) { _selectionChangedDuringWrite = true; NotifyWritePresentation(); return; }
+            ClearWriteFeedback();
             SynchronizeSelectedRowEditor();
         }
     }
@@ -163,6 +164,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     }
     private void SettingsChanged()
     {
+        ClearWriteFeedback();
         ReleaseCommandHeader();
         _settingsRevision++;
         // Until the next explicit read, old service values must not acquire new addresses or formats.
@@ -319,7 +321,12 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     public async Task WriteAsync()
     {
-        if (!CanWrite()) { Error = T("WriteUnavailable", "Writing is available for FC01 and FC03 when this connection is free or polling here."); return; }
+        if (!CanWrite())
+        {
+            Error = T("WriteUnavailable", "Writing is available for FC01 and FC03 when this connection is free or polling here.");
+            if (!_writeAdmitted) RejectWriteFeedback(Error);
+            return;
+        }
         ModbusMonitorSettings settings;
         int address;
         ushort[] values;
@@ -328,7 +335,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             settings = CreateSettingsSnapshot();
             (address, values) = BuildWriteValues(settings);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { Error = ex.Message; return; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { Error = ex.Message; RejectWriteFeedback(ex.Message); return; }
         CaptureSelectedGroupDraft(strict: false);
         var groupId = SelectedPollingGroup?.Id;
         var groupWrite = _groupRunAdmitted;
@@ -340,6 +347,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         _lastPersistableSettings = settings.Clone();
         var needsDisplayContext = _displaySettings is null;
         if (needsDisplayContext) RebuildRows(settings);
+        ClearWriteFeedback();
+        var feedbackRevision = groupWrite ? GetSelectedSnapshot().Revision : _service.GetSnapshot().Revision;
+        Exception? writeFailure = null;
+        var writeCanceled = false;
         PublishAvailability();
         try
         {
@@ -348,19 +359,23 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
                 : _service.WriteAsync(settings, address, values, CancellationToken.None);
             if (!groupWrite) _singleGroupId = groupId;
             if (needsDisplayContext) _displaySettings = settings;
+            AcceptWriteFeedback(feedbackRevision);
+            Refresh();
             await writing;
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Write", ex); }
+        catch (OperationCanceledException) { writeCanceled = true; }
+        catch (Exception ex) { writeFailure = ex; Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Write", ex); }
         finally
         {
             Refresh();
+            CompleteWriteFeedback(writeFailure, writeCanceled);
             // The captured in-flight request stays immutable. Once its readback
             // is reflected in the rows, align any newly selected row's editor.
             if (_selectionChangedDuringWrite)
             {
                 _selectionChangedDuringWrite = false;
                 SynchronizeSelectedRowEditor();
+                ClearWriteFeedback();
             }
             _writeAdmitted = false;
             PublishAvailability();
@@ -372,6 +387,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         RefreshCommandState();
         RefreshPollingGroups();
         var snapshot = GetSelectedSnapshot();
+        RefreshWriteFeedback(snapshot);
         var ageSecond = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (_displaySettings is not null && (_lastRevision != snapshot.Revision || _lastAgeSecond != ageSecond))
         {

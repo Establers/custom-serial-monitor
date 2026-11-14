@@ -224,6 +224,14 @@ public sealed class ModbusCommandHeaderTests
         await run;
         var summary = model.RecentCommandSummary;
         var details = model.RecentCommandResults;
+        var caption = model.RecentCommandCaption;
+        Assert.Contains("first", caption);
+        Assert.DoesNotContain("ID ", caption);
+        Assert.DoesNotContain("FC ", caption);
+        Assert.Contains("ID 2", details);
+        Assert.Contains("300", details);
+        if (state == ModbusCommandState.Acknowledged) Assert.Contains("completion unchecked", caption);
+        if (state == ModbusCommandState.Canceled) Assert.NotEmpty(model.RecentCommandAlert);
         Assert.Contains("Recent command: first · 1/1 · ID 2 · FC 06 · 300", summary);
         Assert.Contains(model.CommandStatus, summary);
         Assert.NotEmpty(details);
@@ -232,15 +240,21 @@ public sealed class ModbusCommandHeaderTests
         Assert.Empty(model.CommandResults);
         Assert.Equal(summary, model.RecentCommandSummary);
         Assert.Equal(details, model.RecentCommandResults);
+        Assert.Equal(caption, model.RecentCommandCaption);
         Assert.Equal(Visibility.Visible, model.RecentCommandVisibility);
         Assert.NotEqual(model.CommandsLabel, model.CommandsMenuLabel);
         Assert.Contains("ID 7", model.CommandTargetPreview);
         Assert.DoesNotContain("HEX:", model.CommandTargetPreview);
         Assert.Contains("HEX:", model.CommandPreview);
+        Assert.DoesNotContain("ID ", model.CommandWirePreview);
+        Assert.DoesNotContain("Read back", model.CommandWirePreview);
+        Assert.StartsWith("1. ", model.CommandWirePreview);
         Assert.False(model.IsBusy);
         model.ApplySavedCommandSettings(Settings());
         Assert.Equal(Visibility.Collapsed, model.RecentCommandVisibility);
         Assert.Empty(model.RecentCommandResults);
+        Assert.Empty(model.RecentCommandCaption);
+        Assert.Empty(model.RecentCommandAlert);
         Assert.Equal(model.CommandsLabel, model.CommandsMenuLabel);
     }
 

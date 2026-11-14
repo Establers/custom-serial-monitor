@@ -1237,12 +1237,11 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ModbusValuesSwapBytesHelp" xml:space="preserve"><value>Swap bytes within each register: AB CD → BA DC.</value></data>
   <data name="ModbusValuesSwapWordsHelp" xml:space="preserve"><value>Swap the two registers of each 32-bit value: AB CD → CD AB.</value></data>
   <data name="ModbusValuesHelp" xml:space="preserve"><value>+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.</value></data>
-  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>Register value interpretation supports FC03, FC04 and FC17 read responses.</value></data>
+  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>Register value interpretation is unavailable for this function.</value></data>
   <data name="ModbusValuesRequest" xml:space="preserve"><value>Request packet; select the corresponding register read response to interpret values.</value></data>
   <data name="ModbusValuesCrcError" xml:space="preserve"><value>CRC error; values cannot be interpreted.</value></data>
   <data name="ModbusValuesIncomplete" xml:space="preserve"><value>Incomplete frame; register data cannot be established.</value></data>
   <data name="ModbusValuesException" xml:space="preserve"><value>Exception response; no normal register values are present.</value></data>
-  <data name="ModbusValuesAmbiguous" xml:space="preserve"><value>The request/response role is ambiguous; values are not interpreted.</value></data>
   <data name="ModbusValuesInvalidResponse" xml:space="preserve"><value>The register read response has an invalid address, length or data layout.</value></data>
   <data name="ModbusValuesOffsetError" xml:space="preserve"><value>Enter a register offset from 0 to {0}.</value></data>
   <data name="ModbusValuesScaleError" xml:space="preserve"><value>Enter a finite multiplier, e.g. 1, 0.1 or -1.</value></data>
@@ -1578,4 +1577,17 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorMoreActions" xml:space="preserve"><value>More actions</value></data>
 <data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>Usage details and precautions</value></data>
 <data name="ModbusCommandActionsWithResult" xml:space="preserve"><value>Commands / result…</value></data>
+<data name="ModbusValuesSingleWriteHelp" xml:space="preserve"><value>FC06 · Address {0} (0x{1}) · write/echo value, not a readback.</value></data>
+<data name="ModbusValuesInvalidSingleWrite" xml:space="preserve"><value>FC06 requires a complete 8-byte write request or echo with a valid device address.</value></data>
+<data name="ModbusValuesCoilWrite" xml:space="preserve"><value>Coil write request/echo; register interpretation is unavailable.</value></data>
+<data name="ModbusMonitorWriteCanceled" xml:space="preserve"><value>Write stopped · sent values may have taken effect; inspect before retrying</value></data>
+<data name="ModbusCommandResultDetails" xml:space="preserve"><value>Step details</value></data>
+<data name="ModbusCommandShortQueued" xml:space="preserve"><value>Queued</value></data>
+<data name="ModbusCommandShortRunning" xml:space="preserve"><value>Running</value></data>
+<data name="ModbusCommandShortVerified" xml:space="preserve"><value>Verified</value></data>
+<data name="ModbusCommandShortAcknowledged" xml:space="preserve"><value>ACK received · completion unchecked</value></data>
+<data name="ModbusCommandShortNotVerified" xml:space="preserve"><value>Condition not met</value></data>
+<data name="ModbusCommandShortCanceled" xml:space="preserve"><value>Stopped</value></data>
+<data name="ModbusCommandShortFailed" xml:space="preserve"><value>Failed</value></data>
+<data name="ModbusCommandStoppedWarning" xml:space="preserve"><value>Sent writes may already have taken effect.</value></data>
 </root>

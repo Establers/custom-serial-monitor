@@ -23,6 +23,7 @@ public sealed partial class ModbusRtuViewModel
         set
         {
             if (_writeAdmitted || value is < 0 or > 1 || !SetProperty(ref _writeModeIndex, value)) return;
+            ClearWriteFeedback();
             // Switching formats is explicit; no reinterpretation of an old draft.
             _writeValues = "";
             if (SelectedRow is not null) SynchronizeSelectedRowEditor();

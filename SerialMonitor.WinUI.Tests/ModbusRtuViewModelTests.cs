@@ -372,7 +372,7 @@ public sealed class ModbusRtuViewModelTests
         Assert.Null(toolbar.Attribute("RowDefinitions"));
         Assert.Contains(toolbar.Elements(), element => (string?)element.Attribute(x + "Name") == "PollingGroupSelector");
         Assert.All(monitor.Descendants(p + "TextBlock").Where(element =>
-            (string?)element.Attribute("Text") == "{Binding RecentCommandSummary}"), result =>
+            (string?)element.Attribute("Text") == "{Binding RecentCommandCaption}"), result =>
             Assert.Contains(result.Ancestors(), parent => parent.Name == p + "Flyout"));
         Assert.All(monitor.Descendants(p + "Expander"), detail =>
             Assert.Contains(detail.Ancestors(), parent => parent.Name == p + "Flyout"));

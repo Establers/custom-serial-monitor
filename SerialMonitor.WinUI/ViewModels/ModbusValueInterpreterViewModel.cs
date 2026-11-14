@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using Microsoft.UI.Xaml;
 using SerialMonitor.Core.Protocols;
@@ -22,9 +23,21 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     public string SwapWordsLabel => UiText.Get("ModbusValuesSwapWords", "Swap words");
     public string SwapBytesHelp => UiText.Get("ModbusValuesSwapBytesHelp", "Swap bytes within each register: AB CD → BA DC.");
     public string SwapWordsHelp => UiText.Get("ModbusValuesSwapWordsHelp", "Swap the two registers of each 32-bit value: AB CD → CD AB.");
-    public string Help => _canInterpret
-        ? UiText.Get("ModbusValuesHelp", "+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.")
-        : UnavailableHelp();
+    public string Help
+    {
+        get
+        {
+            if (!_canInterpret) return UnavailableHelp();
+            if (_frame is { FunctionCode: 6 } frame)
+            {
+                var address = BinaryPrimitives.ReadUInt16BigEndian(frame.Bytes.Span.Slice(2, 2));
+                return UiText.Format("ModbusValuesSingleWriteHelp",
+                    "FC06 contains one requested or echoed register value at address {0} (0x{1}). The packet role remains as shown; this is not a separate readback.",
+                    address, address.ToString("X4", CultureInfo.InvariantCulture));
+            }
+            return UiText.Get("ModbusValuesHelp", "+0 is the first register in this response, not a device address. Displayed value = decoded value × multiplier.");
+        }
+    }
     public Visibility Visibility => _frame is null ? Visibility.Collapsed : Visibility.Visible;
     public Visibility EditorVisibility => _canInterpret ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => string.IsNullOrEmpty(ValidationError) ? Visibility.Collapsed : Visibility.Visible;
@@ -66,7 +79,8 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
     {
         if (ReferenceEquals(_frame, frame)) return;
         _frame = frame;
-        _canInterpret = frame is not null && ModbusRegisterInterpreter.CanInterpret(frame);
+        _canInterpret = frame is not null &&
+            (ModbusRegisterInterpreter.CanInterpret(frame) || CanInterpretSingleRegisterWrite(frame));
         foreach (var property in new[] { nameof(Visibility), nameof(EditorVisibility), nameof(Help) }) OnPropertyChanged(property);
         Rebuild();
     }
@@ -81,26 +95,56 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
                 return UiText.Get("ModbusValuesIncomplete", "Incomplete frame; register data cannot be established.");
             if (frame.Length is >= 4 and <= ModbusRtuFrame.MaximumBytes && ModbusRtuCrc.Compute(frame.Bytes.Span) != 0)
                 return UiText.Get("ModbusValuesCrcError", "CRC error; values cannot be interpreted.");
+            if (frame.FunctionCode == 6)
+                return UiText.Get("ModbusValuesInvalidSingleWrite", "FC06 requires a complete 8-byte single-register write request or echo with a valid device address.");
             switch (frame.Kind)
             {
+                case ModbusFrameKind.Request or ModbusFrameKind.Response or ModbusFrameKind.RequestOrResponse when frame.FunctionCode == 5:
+                    return UiText.Get("ModbusValuesCoilWrite", "Coil write request/echo; register interpretation is unavailable.");
                 case ModbusFrameKind.Request:
                     return UiText.Get("ModbusValuesRequest", "Request packet; select the corresponding register read response to interpret values.");
                 case ModbusFrameKind.Exception:
                     return UiText.Get("ModbusValuesException", "Exception response; no normal register values are present.");
                 case ModbusFrameKind.RequestOrResponse:
-                    return UiText.Get("ModbusValuesAmbiguous", "The request/response role is ambiguous; values are not interpreted.");
+                    return UnsupportedHelp();
                 case ModbusFrameKind.Response when frame.FunctionCode is 3 or 4 or 23:
                     return UiText.Get("ModbusValuesInvalidResponse", "The register read response has an invalid address, length or data layout.");
             }
         }
-        return UiText.Get("ModbusValuesUnsupported", "Register value interpretation supports FC03, FC04 and FC17 read responses.");
+        return UnsupportedHelp();
+    }
+
+    private static string UnsupportedHelp() => UiText.Get("ModbusValuesUnsupported", "Register value interpretation is unavailable for this function.");
+
+    // FC06 echoes its address and one value, so the payload is known even when
+    // capture alone cannot distinguish a request from its response. Do not turn
+    // this projection into a read response or infer an acknowledgement, including
+    // for Unit 0 broadcasts, which never have a normal Modbus response.
+    private static bool CanInterpretSingleRegisterWrite(ModbusRtuFrame frame)
+    {
+        var bytes = frame.Bytes.Span;
+        return frame.CrcStatus == ModbusCrcStatus.Valid && bytes.Length == 8 &&
+            bytes[0] <= 247 && bytes[1] == 6 &&
+            frame.Kind is ModbusFrameKind.Request or ModbusFrameKind.Response or ModbusFrameKind.RequestOrResponse &&
+            ModbusRtuCrc.Compute(bytes) == 0;
+    }
+
+    private static ModbusValueInterpretation InterpretSingleRegisterWrite(ModbusRtuFrame frame,
+        ModbusValueType type, bool swapBytes, double scale)
+    {
+        if (type is not (ModbusValueType.UInt16 or ModbusValueType.Int16)) return new([], 1);
+        var bytes = frame.Bytes.Span.Slice(4, 2);
+        var word = swapBytes ? BinaryPrimitives.ReadUInt16LittleEndian(bytes) : BinaryPrimitives.ReadUInt16BigEndian(bytes);
+        double raw = type == ModbusValueType.Int16 ? unchecked((short)word) : word;
+        return new([new(0, 1, raw, raw * scale)], 0);
     }
 
     private void Rebuild()
     {
         ValuesText = RemainderText = ValidationError = string.Empty;
         if (!_canInterpret || _frame is null) return;
-        var registerCount = _frame.Bytes.Span[2] / 2;
+        var isSingleWrite = _frame.FunctionCode == 6;
+        var registerCount = isSingleWrite ? 1 : _frame.Bytes.Span[2] / 2;
         if (!int.TryParse(OffsetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var offset) || offset < 0 || offset >= registerCount)
         {
             ValidationError = UiText.Format("ModbusValuesOffsetError", "Enter a register offset from 0 to {0}.", registerCount - 1);
@@ -113,7 +157,9 @@ public sealed class ModbusValueInterpreterViewModel : ViewModelBase
             return;
         }
         var type = (ModbusValueType)FormatIndex;
-        var result = ModbusRegisterInterpreter.Interpret(_frame, type, offset, SwapBytes, SwapWords && IsWordSwapEnabled, scale);
+        var result = isSingleWrite
+            ? InterpretSingleRegisterWrite(_frame, type, SwapBytes, scale)
+            : ModbusRegisterInterpreter.Interpret(_frame, type, offset, SwapBytes, SwapWords && IsWordSwapEnabled, scale);
         ValuesText = string.Join(Environment.NewLine, result.Values.Select(value =>
         {
             var position = value.RegisterCount == 1 ? $"+{value.RegisterOffset}" : $"+{value.RegisterOffset}–+{value.RegisterOffset + 1}";

@@ -1235,12 +1235,11 @@
   <data name="ModbusValuesSwapBytesHelp" xml:space="preserve"><value>각 레지스터 안의 바이트를 교환합니다: AB CD → BA DC.</value></data>
   <data name="ModbusValuesSwapWordsHelp" xml:space="preserve"><value>32비트 값을 구성하는 두 레지스터를 교환합니다: AB CD → CD AB.</value></data>
   <data name="ModbusValuesHelp" xml:space="preserve"><value>+0은 이 응답의 첫 레지스터이며 장치 주소가 아닙니다. 표시값 = 해석값 × 배율입니다.</value></data>
-  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>레지스터 값 해석은 FC03·04·17 읽기 응답에서 지원합니다.</value></data>
+  <data name="ModbusValuesUnsupported" xml:space="preserve"><value>이 기능은 레지스터 값 해석을 지원하지 않습니다.</value></data>
   <data name="ModbusValuesRequest" xml:space="preserve"><value>요청 패킷입니다. 값을 보려면 대응하는 레지스터 읽기 응답을 선택하세요.</value></data>
   <data name="ModbusValuesCrcError" xml:space="preserve"><value>CRC 오류로 값을 해석할 수 없습니다.</value></data>
   <data name="ModbusValuesIncomplete" xml:space="preserve"><value>불완전한 프레임이라 레지스터 데이터를 확인할 수 없습니다.</value></data>
   <data name="ModbusValuesException" xml:space="preserve"><value>예외 응답입니다. 정상 레지스터 값 데이터가 없습니다.</value></data>
-  <data name="ModbusValuesAmbiguous" xml:space="preserve"><value>요청·응답 구분이 불확실해 값을 해석하지 않습니다.</value></data>
   <data name="ModbusValuesInvalidResponse" xml:space="preserve"><value>레지스터 읽기 응답의 주소·길이·데이터 형식이 유효하지 않습니다.</value></data>
   <data name="ModbusValuesOffsetError" xml:space="preserve"><value>시작 위치는 0부터 {0}까지의 레지스터 위치로 입력하세요.</value></data>
   <data name="ModbusValuesScaleError" xml:space="preserve"><value>1, 0.1, -1처럼 유한한 배율을 입력하세요.</value></data>
@@ -1576,4 +1575,17 @@
 <data name="ModbusMonitorMoreActions" xml:space="preserve"><value>더 보기</value></data>
 <data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>사용 방법·주의 사항</value></data>
 <data name="ModbusCommandActionsWithResult" xml:space="preserve"><value>명령·결과…</value></data>
+<data name="ModbusValuesSingleWriteHelp" xml:space="preserve"><value>FC06 · 주소 {0} (0x{1}) · 쓰기 요청/반환 값(재조회 값 아님)</value></data>
+<data name="ModbusValuesInvalidSingleWrite" xml:space="preserve"><value>FC06은 유효한 장치 주소를 가진 8바이트 쓰기 요청 또는 반환 패킷이어야 합니다.</value></data>
+<data name="ModbusValuesCoilWrite" xml:space="preserve"><value>코일 쓰기 요청/반환 값입니다. 레지스터 해석 대상은 아닙니다.</value></data>
+<data name="ModbusMonitorWriteCanceled" xml:space="preserve"><value>쓰기 정지 · 이미 보낸 값은 반영됐을 수 있으므로 확인 후 다시 실행하세요.</value></data>
+<data name="ModbusCommandResultDetails" xml:space="preserve"><value>단계별 상세</value></data>
+<data name="ModbusCommandShortQueued" xml:space="preserve"><value>대기 중</value></data>
+<data name="ModbusCommandShortRunning" xml:space="preserve"><value>실행 중</value></data>
+<data name="ModbusCommandShortVerified" xml:space="preserve"><value>검증 완료</value></data>
+<data name="ModbusCommandShortAcknowledged" xml:space="preserve"><value>응답 수신 · 동작 완료 미확인</value></data>
+<data name="ModbusCommandShortNotVerified" xml:space="preserve"><value>조건 미충족</value></data>
+<data name="ModbusCommandShortCanceled" xml:space="preserve"><value>정지됨</value></data>
+<data name="ModbusCommandShortFailed" xml:space="preserve"><value>실패</value></data>
+<data name="ModbusCommandStoppedWarning" xml:space="preserve"><value>이미 보낸 쓰기는 장치에 반영됐을 수 있습니다.</value></data>
 </root>
