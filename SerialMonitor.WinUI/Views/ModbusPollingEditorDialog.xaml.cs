@@ -19,6 +19,13 @@ public sealed partial class ModbusPollingEditorDialog : ContentDialog
     }
 
     public void ClearItemEditorRequest() => ItemEditorSettings = null;
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        if (GetTemplateChild("CommandSpace") is FrameworkElement commandSpace)
+            commandSpace.Margin = EditorPanel.Margin;
+    }
+
     private void New_Click(object sender, RoutedEventArgs args) => Model.NewGroup();
     private void Duplicate_Click(object sender, RoutedEventArgs args) => Model.DuplicateGroup();
     private void SaveGroup_Click(object sender, RoutedEventArgs args) => Model.SaveGroup();

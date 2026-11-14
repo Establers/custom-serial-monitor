@@ -18,6 +18,13 @@ public sealed partial class ModbusItemEditorDialog : ContentDialog
         DataContext = Model;
     }
 
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        if (GetTemplateChild("CommandSpace") is FrameworkElement commandSpace)
+            commandSpace.Margin = EditorPanel.Margin;
+    }
+
     private void New_Click(object sender, RoutedEventArgs args) => Model.NewItem();
     private void SaveItem_Click(object sender, RoutedEventArgs args) => Model.SaveItem();
     private void Remove_Click(object sender, RoutedEventArgs args) => Model.RemoveItem();

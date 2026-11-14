@@ -12,6 +12,7 @@
     Unloaded="View_Unloaded"
     SizeChanged="View_SizeChanged">
     <UserControl.Resources>
+        <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
         <Style x:Key="CellText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -29,7 +30,7 @@
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
-        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource CompactActionButtonStyle}">
+        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="Padding" Value="8,0" />
         </Style>
         <Style x:Key="ToolbarToggle" TargetType="ToggleButton" BasedOn="{StaticResource SearchOptionToggleStyle}">
@@ -49,7 +50,7 @@
             <Grid RowDefinitions="Auto,Auto">
                 <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
                     <ComboBox x:Name="PresentationSelector" SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
-                              HorizontalAlignment="Stretch" MinWidth="0" MinHeight="26" Height="26"
+                              HorizontalAlignment="Stretch" MinWidth="0" MinHeight="24" Height="24"
                               Padding="8,0,28,0" FontSize="12" AutomationProperties.Name="{Binding ViewSelectionLabel}">
                         <ComboBoxItem Content="{Binding DisabledLabel}" IsEnabled="{Binding IsProtocolSelectionEnabled}" />
                         <ComboBoxItem Content="{Binding ModbusPacketViewLabel}" IsEnabled="{Binding IsModbusViewSelectionEnabled}" />
@@ -73,9 +74,9 @@
                             <Button.Flyout>
                                 <Flyout x:Name="FilterFlyout" Opening="FilterFlyout_Opening" Placement="BottomEdgeAlignedRight"
                                         FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
-                                    <StackPanel x:Name="FilterEditorPanel" Width="320" Spacing="10">
+                                    <StackPanel x:Name="FilterEditorPanel" Width="320" Spacing="6">
                                         <TextBlock Text="{Binding FilterTitle}" FontSize="14" FontWeight="SemiBold" />
-                                        <Grid ColumnDefinitions="84,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
+                                        <Grid ColumnDefinitions="84,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                                             <TextBlock Text="{Binding FilterUnitLabel}" FontSize="12" VerticalAlignment="Center" />
                                             <TextBox Grid.Column="1" Text="{Binding FilterUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                      PlaceholderText="{Binding FilterUnitPlaceholder}" MaxLength="3" FontSize="12" KeyDown="FilterInput_KeyDown" />
@@ -94,8 +95,8 @@
                                         <TextBlock Text="{Binding FilterValidationError}" Visibility="{Binding FilterValidationVisibility}"
                                                    FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                            <Button Content="{Binding ResetFiltersLabel}" Click="ResetFilters_Click" FontSize="12" />
-                                            <Button Grid.Column="1" Content="{Binding ApplyFiltersLabel}" Click="ApplyFilters_Click" FontSize="12" Style="{StaticResource AccentButtonStyle}" />
+                                            <Button Content="{Binding ResetFiltersLabel}" Click="ResetFilters_Click" Style="{StaticResource ModbusActionButtonStyle}" />
+                                            <Button Grid.Column="1" Content="{Binding ApplyFiltersLabel}" Click="ApplyFilters_Click" Style="{StaticResource ModbusAccentButtonStyle}" />
                                         </Grid>
                                     </StackPanel>
                                 </Flyout>

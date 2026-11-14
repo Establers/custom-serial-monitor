@@ -12,7 +12,7 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="MaxLines" Value="1" />
         </Style>
-        <Style x:Key="Action" TargetType="Button" BasedOn="{StaticResource CompactActionButtonStyle}">
+        <Style x:Key="Action" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="8,0" />
         </Style>
@@ -66,7 +66,7 @@
                         <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                     </ComboBox>
                     <Button Grid.Column="1" Style="{StaticResource Action}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                            Padding="2,0" Background="Transparent" BorderThickness="0" MinWidth="0"
+                            Padding="5,0" MinWidth="0"
                             ToolTipService.ToolTip="{Binding MonitorSummary}" AutomationProperties.Name="{Binding MonitorDetailsLabel}">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
                             <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource ErrorTextBrush}" Visibility="{Binding ErrorVisibility}" />
@@ -80,8 +80,8 @@
                                         <TextBlock Text="{Binding MonitorDetailsLabel}" FontSize="14" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
                                         <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" Style="{StaticResource GuideBody}" />
-                                        <TextBlock Text="{Binding PollingSummary}" Visibility="{Binding PollingGroupsVisibility}" Style="{StaticResource GuideBody}" />
-                                        <TextBlock Text="{Binding Statistics}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding PollingSummary}" Visibility="{Binding PollingSummary, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding Statistics}" Visibility="{Binding Statistics, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource GuideBody}" />
                                     </StackPanel>
                                 </ScrollViewer>
                             </Flyout>
@@ -95,7 +95,7 @@
                                     <ContentControl x:Name="SettingsEditorRoot" IsEnabled="{Binding IsSettingsEnabled}" HorizontalContentAlignment="Stretch">
                                     <StackPanel x:Name="SettingsPanel" Width="360" Spacing="6" Margin="0,0,16,0">
                                         <TextBlock Text="{Binding SettingsLabel}" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding RequestSummary}" FontSize="11" FontFamily="Consolas"
+                                        <TextBlock Text="{Binding TargetSettingsSummary}" FontSize="11" FontFamily="Consolas"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <ContentControl IsEnabled="{Binding IsTargetSettingsEnabled}" HorizontalContentAlignment="Stretch">
                                         <StackPanel Spacing="4">
@@ -175,15 +175,15 @@
                                                       AutomationProperties.Name="{Binding WriteModeLabel}">
                                                 <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                             </ComboBox>
-                                            <TextBlock Text="{Binding WriteItemSummary}" FontSize="11" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding WriteItemSummary}" Visibility="{Binding WriteItemSummary, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" TextWrapping="Wrap" />
                                             <Grid ColumnDefinitions="125,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
                                                 <TextBlock Text="{Binding WriteAddressLabel}" Style="{StaticResource FieldLabel}" />
                                                 <TextBlock Grid.Column="1" Text="{Binding WriteValuesLabel}" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" MaxLines="2" />
                                                 <TextBox Grid.Row="1" Text="{Binding WriteAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Input}" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteAddressLabel}" />
                                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding WriteValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ValuesInput}" AutomationProperties.Name="{Binding WriteValuesLabel}" />
                                             </Grid>
-                                            <TextBlock Text="{Binding WritePreview}" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                            <TextBlock Text="{Binding Status}" FontSize="12" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding WritePreview}" Visibility="{Binding WritePreview, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                            <TextBlock Text="{Binding Status}" Visibility="{Binding Status, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="12" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ErrorTextBrush}" />
                                             <Button Content="{Binding WriteLabel}" Command="{Binding WriteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Right" />
                                         </StackPanel>

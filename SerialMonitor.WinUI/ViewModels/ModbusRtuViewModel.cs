@@ -104,7 +104,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public string Status { get => _commandOwnsHeader && !_stopRequested && CommandStatus.Length > 0 ? CommandStatus : _status; private set => SetProperty(ref _status, value); }
     public string Error { get => _error; private set { if (SetProperty(ref _error, value)) { OnPropertyChanged(nameof(ErrorVisibility)); NotifyMonitorSummary(); } } }
     public string Statistics { get => _statistics; private set { if (SetProperty(ref _statistics, value)) NotifyMonitorSummary(); } }
-    public string RequestSummary => _commandOwnsHeader ? _commandTargetSummary : _pollingSettings is not null && SelectedPollingGroup is null ? P("SelectGroup", "Select a group") : $"ID {UnitText} · FC {FunctionIndex + 1:00} · {AddressText} + {QuantityText} · {IntervalText} ms";
+    public string RequestSummary => _commandOwnsHeader ? _commandTargetSummary : TargetSettingsSummary;
     public string UnitText { get => _unit; set => SetSetting(ref _unit, value, nameof(UnitText)); }
     public string AddressText { get => _address; set => SetSetting(ref _address, value, nameof(AddressText)); }
     public string QuantityText { get => _quantity; set => SetSetting(ref _quantity, value, nameof(QuantityText)); }
@@ -173,6 +173,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         _lastServiceError = null;
         Error = "";
         OnPropertyChanged(nameof(RequestSummary));
+        OnPropertyChanged(nameof(TargetSettingsSummary));
         NotifyWritePresentation();
         RefreshAvailability();
     }
