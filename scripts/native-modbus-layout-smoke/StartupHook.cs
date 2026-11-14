@@ -296,16 +296,39 @@ public static class StartupHook
         int Cell(object element, string property) => (int)gridType.GetMethod("Get" + property)!.Invoke(null, [element])!;
         Rect Bounds(object element, object relativeTo) => (Rect)Call(Call(element, "TransformToVisual", relativeTo)!,
             "TransformBounds", new Rect(0, 0, N(element, "ActualWidth"), N(element, "ActualHeight")))!;
-        double? leftRail = null, formWidth = null;
+        var getParent = FindType("Microsoft.UI.Xaml.Media.VisualTreeHelper").GetMethod("GetParent")!;
+        object FormScope(object element)
+        {
+            for (var current = getParent.Invoke(null, [element]); current is not null && !ReferenceEquals(current, root); current = getParent.Invoke(null, [current]))
+                if (current.GetType().Name == "Expander") return current;
+            return root;
+        }
+        var rails = new Dictionary<object, (double Left, double Width)>();
         foreach (var grid in Tree(root).Where(e => e.GetType().Name == "Grid" && P(e, "Tag")?.ToString() == "ModbusFormGrid" && Visible(e)))
         {
             var columns = ((IEnumerable)P(grid, "ColumnDefinitions")!).Cast<object>().ToArray();
             var left = Bounds(grid, root).Left;
-            leftRail ??= left;
-            formWidth ??= N(grid, "ActualWidth");
-            if (Math.Abs(left - leftRail.Value) > 2) Issue($"form left rail differs: {left:F1}/{leftRail:F1}");
-            if (Math.Abs(N(grid, "ActualWidth") - formWidth.Value) > 2) Issue("form right rails do not align");
-            if (Math.Abs(N(columns[0], "ActualWidth") - 128) > 1) Issue("form first column is not 128 DIP");
+            var scope = FormScope(grid);
+            if (!rails.TryGetValue(scope, out var rail)) rails[scope] = rail = (left, N(grid, "ActualWidth"));
+            if (Math.Abs(left - rail.Left) > 2) Issue($"form left rail differs: {left:F1}/{rail.Left:F1}");
+            if (Math.Abs(N(grid, "ActualWidth") - rail.Width) > 2) Issue("form right rails do not align");
+            var balanced = P(grid, "Name")?.ToString() == "TargetSettingsForm";
+            if (balanced)
+            {
+                if (columns.Length != 2 || Math.Abs(N(columns[0], "ActualWidth") - N(columns[1], "ActualWidth")) > 1)
+                    Issue("target settings columns do not have equal widths");
+                var items = Tree(root).FirstOrDefault(e => P(e, "Name")?.ToString() == "ItemsButton");
+                var groups = Tree(root).FirstOrDefault(e => P(e, "Name")?.ToString() == "GroupsButton");
+                if (items is not null && groups is not null)
+                {
+                    var formBounds = Bounds(grid, root);
+                    if (Math.Abs(formBounds.Left - Bounds(items, root).Left) > 1 || Math.Abs(formBounds.Right - Bounds(groups, root).Right) > 1)
+                        Issue("target settings inputs do not align with the footer buttons");
+                    if (Math.Abs(N(columns[0], "ActualWidth") - N(items, "ActualWidth")) > 1 || Math.Abs(N(columns[1], "ActualWidth") - N(groups, "ActualWidth")) > 1)
+                        Issue("target settings columns do not match the footer button widths");
+                }
+            }
+            else if (Math.Abs(N(columns[0], "ActualWidth") - 128) > 1) Issue("form first column is not 128 DIP");
             if (Math.Abs(N(grid, "ColumnSpacing") - 8) > 1 || Math.Abs(N(grid, "RowSpacing") - 4) > 1)
                 Issue("form spacing differs from the shared grid");
             var children = ((IEnumerable)P(grid, "Children")!).Cast<object>().Where(Visible).ToArray();
@@ -334,6 +357,8 @@ public static class StartupHook
                 var allocatedWidth = columns.Skip(column).Take(span).Sum(c => N(c, "ActualWidth")) + (span - 1) * 8;
                 if (fieldBounds.Width > allocatedWidth + 2)
                     Issue("form input exceeds its allocated column");
+                if (balanced && Math.Abs(fieldBounds.Width - allocatedWidth) > 1)
+                    Issue("target settings input does not fill its column");
                 if (P(input, "Header") is not null) Issue("paired form input still has a separate native header");
                 if (input.GetType().Name is "TextBox" or "ComboBox" && P(input, "AcceptsReturn") is not true && N(input, "ActualHeight") > 26)
                     Issue($"headerless compact input is taller than 24 DIP: {N(input, "ActualHeight"):F1}");

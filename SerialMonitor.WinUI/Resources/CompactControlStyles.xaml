@@ -521,6 +521,10 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="HeaderTemplate" Value="{StaticResource CompactExpanderHeaderTemplate}" />
     </Style>
+    <Style x:Key="ModbusExpanderStyle" TargetType="Expander" BasedOn="{StaticResource CompactExpanderStyle}">
+        <Setter Property="infra:ExpanderHeaderLayout.Padding" Value="5,0,5,0" />
+        <Setter Property="Padding" Value="5,4,5,4" />
+    </Style>
 
     <infra:NonEmptyTextVisibilityConverter x:Key="NonEmptyTextVisibility" />
     <Style x:Key="ModbusFormGridStyle" TargetType="Grid">

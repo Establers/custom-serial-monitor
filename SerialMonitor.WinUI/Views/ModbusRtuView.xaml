@@ -38,8 +38,7 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
         <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource ModbusFieldLabelStyle}" />
         <Style x:Key="NumberInput" TargetType="TextBox" BasedOn="{StaticResource Input}">
-            <Setter Property="Width" Value="128" />
-            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
@@ -99,11 +98,11 @@
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <ContentControl IsEnabled="{Binding IsTargetSettingsEnabled}" HorizontalContentAlignment="Stretch">
                                         <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="128,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
+                                        <Grid x:Name="TargetSettingsForm" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding UnitLabel}" />
-                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusFunctionComboBoxStyle}" FontSize="12" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
@@ -127,18 +126,18 @@
                                             <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
                                         </Grid>
                                         <Border Height="1" Background="{ThemeResource AppSurfaceBorderBrush}" Margin="0,2" />
-                                        <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegisterFunction}" Style="{StaticResource CompactCheckBoxStyle}" />
                                             <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding IsWordSwapEnabled}" Style="{StaticResource CompactCheckBoxStyle}" />
                                         </Grid>
                                         </StackPanel>
                                         </ContentControl>
-                                        <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                                        <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                                             <Expander.Resources>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
-                                            <StackPanel Spacing="6" Margin="5,0,5,0">
+                                            <StackPanel Spacing="6">
                                                 <TextBlock Text="{Binding SetupHelp}" Style="{StaticResource GuideBody}" />
                                                 <TextBlock Text="{Binding OwnershipHelp}" Style="{StaticResource GuideBody}" />
                                             </StackPanel>
@@ -224,12 +223,12 @@
                                         <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                             <TextBlock Text="{Binding CommandTargetPreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" Margin="5,0,5,0" />
                                         </ScrollViewer>
-                                        <Expander Header="{Binding WirePreviewLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                                        <Expander Header="{Binding WirePreviewLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                                             <Expander.Resources>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
-                                            <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" Margin="5,0,5,0" />
+                                            <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
                                         </Expander>
                                         <Button Content="{Binding ExecuteCommandLabel}" Command="{Binding ExecuteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                         <Button Content="{Binding StopAllLabel}" Command="{Binding StopCommand}" Visibility="{Binding BusyVisibility}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
@@ -238,8 +237,8 @@
                                         <StackPanel Visibility="{Binding RecentCommandVisibility}" Spacing="5" MinWidth="0">
                                             <TextBlock Text="{Binding RecentCommandCaption}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding RecentCommandSummary}" />
                                             <TextBlock Text="{Binding RecentCommandAlert}" Visibility="{Binding RecentCommandAlertVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
-                                            <Expander Header="{Binding CommandResultDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
-                                                <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" Margin="5,0,5,0" />
+                                            <Expander Header="{Binding CommandResultDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
+                                                <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" />
                                             </Expander>
                                         </StackPanel>
                                     </StackPanel>

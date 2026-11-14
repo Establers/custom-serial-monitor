@@ -46,7 +46,7 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </ContentDialog.Resources>
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="0" MinWidth="340" MaxHeight="620">
-        <Expander Header="{Binding HelpLabel}" Margin="0,0,20,0" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+        <Expander Header="{Binding HelpLabel}" Margin="0,0,20,0" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
             <Expander.Resources>
                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
@@ -112,7 +112,7 @@
                     <TextBox Grid.Column="1" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Width="176" MaxWidth="176" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ValueLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding InterpretationSummary}" Visibility="{Binding InterpretationSummary, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                     <Expander.Resources>
                         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
@@ -134,7 +134,7 @@
                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding CanSwapBytes}" Style="{StaticResource CompactCheckBoxStyle}" />
                             <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                         </Grid>
-                        <Expander Header="{Binding ValueNamesLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                        <Expander Header="{Binding ValueNamesLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                             <Expander.Resources>
                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
@@ -173,7 +173,7 @@
                         <TextBox Grid.Column="1" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding VerificationIntervalLabel}" />
                     </Grid>
                 </StackPanel>
-                <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
+                <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                     <Expander.Resources>
                         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>

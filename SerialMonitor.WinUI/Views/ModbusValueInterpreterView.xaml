@@ -20,7 +20,7 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </UserControl.Resources>
     <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
-              Style="{StaticResource CompactExpanderStyle}" MinWidth="0" MinHeight="24" Padding="0,4" CornerRadius="4"
+              Style="{StaticResource ModbusExpanderStyle}" MinWidth="0" MinHeight="24" CornerRadius="4"
               Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
         <Expander.HeaderTemplate>
