@@ -11,7 +11,7 @@
         <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
         <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
         <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
-        <x:Double x:Key="ContentDialogMaxWidth">600</x:Double>
+        <x:Double x:Key="ContentDialogMaxWidth">460</x:Double>
         <DataTemplate x:Key="FieldHeader">
             <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
@@ -25,6 +25,12 @@
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource GroupInput}" />
+        <Style x:Key="GroupNumberInput" TargetType="TextBox" BasedOn="{StaticResource GroupInput}">
+            <Setter Property="MaxWidth" Value="128" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="FontFamily" Value="Consolas" />
+        </Style>
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="Padding" Value="5,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -65,21 +71,21 @@
                 </Grid>
                 <TextBox Header="{Binding NameLabel}" Text="{Binding NameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <CheckBox Content="{Binding EnabledLabel}" IsChecked="{Binding Enabled, Mode=TwoWay}" Style="{StaticResource CompactCheckBoxStyle}" />
-                <Grid ColumnDefinitions="125,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <ComboBox Grid.Column="1" Header="{Binding FunctionLabel}" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" />
+                <Grid ColumnDefinitions="104,*" ColumnSpacing="8">
+                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" Width="104" />
+                    <ComboBox Grid.Column="1" Header="{Binding FunctionLabel}" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" VerticalAlignment="Bottom" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <TextBox Grid.Column="1" Header="{Binding QuantityLabel}" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                <Grid ColumnDefinitions="128,112" ColumnSpacing="8" HorizontalAlignment="Left">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" />
+                    <TextBox Grid.Column="1" Header="{Binding QuantityLabel}" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" Width="112" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding IntervalLabel}" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <TextBox Grid.Column="1" Header="{Binding TimeoutLabel}" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                <Grid ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
+                    <TextBox Header="{Binding IntervalLabel}" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" />
+                    <TextBox Grid.Column="1" Header="{Binding TimeoutLabel}" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" />
-                    <TextBox Grid.Column="1" Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" FontFamily="Consolas" />
+                <Grid ColumnDefinitions="128,144" ColumnSpacing="8" HorizontalAlignment="Left">
+                    <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" VerticalAlignment="Bottom" />
+                    <TextBox Grid.Column="1" Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource GroupNumberInput}" MaxWidth="144" />
                 </Grid>
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Style="{StaticResource CompactCheckBoxStyle}" />

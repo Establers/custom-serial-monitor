@@ -11,7 +11,7 @@
         <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
         <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
         <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
-        <x:Double x:Key="ContentDialogMaxWidth">640</x:Double>
+        <x:Double x:Key="ContentDialogMaxWidth">480</x:Double>
         <DataTemplate x:Key="FieldHeader">
             <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
@@ -25,6 +25,12 @@
             <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource CommandInput}" />
+        <Style x:Key="CommandNumberInput" TargetType="TextBox" BasedOn="{StaticResource CommandInput}">
+            <Setter Property="MaxWidth" Value="128" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="FontFamily" Value="Consolas" />
+        </Style>
         <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="Padding" Value="5,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -86,13 +92,13 @@
                       HorizontalContentAlignment="Stretch" MinHeight="0">
             <StackPanel x:Name="StepEditorPanel" Spacing="4" Margin="0,0,20,0">
                 <TextBox Header="{Binding StepNameLabel}" Text="{Binding StepNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <Grid ColumnDefinitions="125,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <ComboBox Grid.Column="1" Header="{Binding AreaLabel}" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" />
+                <Grid ColumnDefinitions="104,*" ColumnSpacing="8">
+                    <TextBox Header="{Binding UnitLabel}" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Width="104" />
+                    <ComboBox Grid.Column="1" Header="{Binding AreaLabel}" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" VerticalAlignment="Bottom" />
                 </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                    <TextBox Grid.Column="1" Header="{Binding ValueLabel}" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                <Grid ColumnDefinitions="128,176" ColumnSpacing="8" HorizontalAlignment="Left">
+                    <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
+                    <TextBox Grid.Column="1" Header="{Binding ValueLabel}" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="176" />
                 </Grid>
                 <TextBlock Text="{Binding InterpretationSummary}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
@@ -101,13 +107,13 @@
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                     </Expander.Resources>
                     <StackPanel Spacing="6">
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                            <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding CanEditFormat}" />
-                            <TextBox Grid.Column="1" Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditScale}" FontFamily="Consolas" />
+                        <Grid ColumnDefinitions="128,144" ColumnSpacing="8" HorizontalAlignment="Left">
+                            <ComboBox Header="{Binding FormatLabel}" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding CanEditFormat}" VerticalAlignment="Bottom" />
+                            <TextBox Grid.Column="1" Header="{Binding ScaleLabel}" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditScale}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
                         </Grid>
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                            <TextBox Header="{Binding EngineeringUnitLabel}" Text="{Binding EngineeringUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBox Grid.Column="1" Header="{Binding TimeoutLabel}" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                        <Grid ColumnDefinitions="*,128" ColumnSpacing="8">
+                            <TextBox Header="{Binding EngineeringUnitLabel}" Text="{Binding EngineeringUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
+                            <TextBox Grid.Column="1" Header="{Binding TimeoutLabel}" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
                         </Grid>
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding CanSwapBytes}" Style="{StaticResource CompactCheckBoxStyle}" />
@@ -129,17 +135,17 @@
                 <ComboBox Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" />
                 <TextBlock Text="{Binding VerificationHelp}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <StackPanel x:Name="StatusFields" Spacing="6" Visibility="{Binding StatusVisibility}">
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <ComboBox Header="{Binding StatusFunctionLabel}" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" />
-                        <TextBox Grid.Column="1" Header="{Binding StatusAddressLabel}" Text="{Binding StatusAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                    <Grid ColumnDefinitions="*,128" ColumnSpacing="8">
+                        <ComboBox Header="{Binding StatusFunctionLabel}" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" VerticalAlignment="Bottom" />
+                        <TextBox Grid.Column="1" Header="{Binding StatusAddressLabel}" Text="{Binding StatusAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <TextBox Header="{Binding MaskLabel}" Text="{Binding MaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                        <TextBox Grid.Column="1" Header="{Binding ExpectedLabel}" Text="{Binding ExpectedText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                    <Grid ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
+                        <TextBox Header="{Binding MaskLabel}" Text="{Binding MaskText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
+                        <TextBox Grid.Column="1" Header="{Binding ExpectedLabel}" Text="{Binding ExpectedText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <TextBox Header="{Binding VerificationTimeoutLabel}" Text="{Binding VerificationTimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
-                        <TextBox Grid.Column="1" Header="{Binding VerificationIntervalLabel}" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                    <Grid ColumnDefinitions="144,144" ColumnSpacing="8" HorizontalAlignment="Left">
+                        <TextBox Header="{Binding VerificationTimeoutLabel}" Text="{Binding VerificationTimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
+                        <TextBox Grid.Column="1" Header="{Binding VerificationIntervalLabel}" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" MaxWidth="144" />
                     </Grid>
                 </StackPanel>
                 <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
