@@ -142,6 +142,7 @@ public sealed partial class ModbusRtuViewModel
         _displaySettings = null;
         Rows.Clear();
         SelectedRow = null;
+        OnPropertyChanged(nameof(EmptyVisibility));
         Statistics = "";
         Error = "";
         if (SelectedPollingGroup?.Definition?.Settings is { } settings)

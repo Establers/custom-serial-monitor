@@ -119,7 +119,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         set
         {
             if ((!IsSettingsEnabled && !_loadingPollingGroup) || value is < 0 or > 3 || !SetProperty(ref _functionIndex, value)) return;
-            SettingsChanged();
+            SettingsChanged(resetWriteDraft: true);
             foreach (var name in new[] { nameof(IsCoilFunction), nameof(IsRegisterFunction), nameof(IsWritableFunction), nameof(WriteVisibility), nameof(ReadOnlyVisibility), nameof(WriteValuesLabel), nameof(IsWordSwapEnabled), nameof(WriteAvailabilityHelp) }) OnPropertyChanged(name);
         }
     }
@@ -160,9 +160,10 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 
     private void SetSetting(ref string field, string? value, string property)
     {
-        if ((IsSettingsEnabled || _loadingPollingGroup) && SetProperty(ref field, value ?? "", property)) SettingsChanged();
+        if ((IsSettingsEnabled || _loadingPollingGroup) && SetProperty(ref field, value ?? "", property))
+            SettingsChanged(resetWriteDraft: property is nameof(UnitText) or nameof(AddressText) or nameof(QuantityText));
     }
-    private void SettingsChanged()
+    private void SettingsChanged(bool resetWriteDraft = false)
     {
         ClearWriteFeedback();
         ReleaseCommandHeader();
@@ -170,6 +171,13 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         // Until the next explicit read, old service values must not acquire new addresses or formats.
         _displaySettings = null;
         if (Rows.Count > 0) { Rows.Clear(); SelectedRow = null; OnPropertyChanged(nameof(EmptyVisibility)); }
+        if (resetWriteDraft)
+        {
+            // An explicit target edit must not carry a prior device's write
+            // value into the new area. Timing/display edits keep the draft.
+            WriteAddressText = AddressText;
+            WriteValuesText = "";
+        }
         Status = T("Ready", "Ready · settings do not start communication");
         Statistics = "";
         _lastServiceError = null;
