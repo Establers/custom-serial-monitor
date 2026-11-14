@@ -29,7 +29,6 @@
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource CompactFieldHeader}" />
         </Style>
         <Style x:Key="PacketListInput" TargetType="TextBox" BasedOn="{StaticResource CompactInput}">
             <Setter Property="VerticalContentAlignment" Value="Top" />
@@ -55,7 +54,6 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource CompactFieldHeader}" />
         </Style>
         <Style x:Key="FieldHelp" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
@@ -150,7 +148,7 @@
                     <TextBox Grid.Column="1" Text="{Binding WriteQuantityText}" IsReadOnly="True" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding WriteQuantityLabel}" />
                 </Grid>
                 <StackPanel Visibility="{Binding ValuesVisibility}" Spacing="4">
-                    <TextBox Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding ValuesLabel}" Text="{Binding ValuesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource PacketListInput}" />
                     <TextBlock Text="{Binding ValuesHelp}" Style="{StaticResource FieldHelp}" />
                 </StackPanel>
@@ -164,7 +162,7 @@
                         <ComboBox Grid.Column="{Binding DiagnosticSelectorColumn}" ItemsSource="{Binding DiagnosticOptions}" MaxDropDownHeight="280"
                                   SelectedIndex="{Binding DiagnosticIndex, Mode=TwoWay}" Grid.ColumnSpan="{Binding DiagnosticSelectorColumnSpan}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding DiagnosticLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                     </Grid>
-                    <TextBox Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding DiagnosticDataLabel}" Text="{Binding DiagnosticDataText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding DiagnosticMultipleDataVisibility}" Style="{StaticResource PacketListInput}" />
                     <TextBlock Text="{Binding DiagnosticDataHelp}" Style="{StaticResource FieldHelp}" />
                 </StackPanel>
@@ -180,16 +178,16 @@
                              ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" Style="{StaticResource CompactInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="OR mask" />
                 </Grid>
                 <StackPanel Visibility="{Binding FileReadVisibility}" Spacing="4">
-                    <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding FileRecordsLabel}" Text="{Binding FileReadText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource PacketListInput}" />
                     <TextBlock Text="{Binding FileReadHelp}" Style="{StaticResource FieldHelp}" />
                 </StackPanel>
                 <StackPanel Visibility="{Binding FileWriteVisibility}" Spacing="4">
-                    <TextBox Header="{Binding FileRecordsLabel}" Text="{Binding FileWriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding FileRecordsLabel}" Text="{Binding FileWriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource PacketListInput}" />
                     <TextBlock Text="{Binding FileWriteHelp}" Style="{StaticResource FieldHelp}" />
                 </StackPanel>
-                <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Visibility="{Binding FifoVisibility}" Width="128" HorizontalAlignment="Left"
                          ToolTipService.ToolTip="0–65535 / 0x0000–0xFFFF" />
                 <Grid x:Name="DeviceIdRow" Visibility="{Binding DeviceIdVisibility}" ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
@@ -216,7 +214,7 @@
             <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" FontSize="11" TextWrapping="Wrap"
                        MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ValidationError}"
                        Foreground="{ThemeResource ErrorTextBrush}" />
-            <TextBox Header="{Binding PreviewLabel}" Text="{Binding Preview}" IsReadOnly="True"
+            <TextBox HeaderTemplate="{StaticResource CompactFieldHeader}" Header="{Binding PreviewLabel}" Text="{Binding Preview}" IsReadOnly="True"
                      Style="{StaticResource PacketListInput}" VerticalContentAlignment="Center" MinHeight="24" MaxHeight="72" />
             <TextBlock Text="{Binding Summary}" Visibility="{Binding Summary, Converter={StaticResource NonEmptyTextVisibility}}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
             <TextBlock x:Name="CopyStatus" Visibility="{Binding Text, ElementName=CopyStatus, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" TextWrapping="Wrap" />

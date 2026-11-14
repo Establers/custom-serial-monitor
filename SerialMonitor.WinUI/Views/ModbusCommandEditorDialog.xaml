@@ -28,7 +28,6 @@
             <Setter Property="Padding" Value="5,2" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource CommandInput}" />
         <Style x:Key="CommandNumberInput" TargetType="TextBox" BasedOn="{StaticResource CommandInput}">
@@ -45,7 +44,6 @@
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style x:Key="CommandAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
@@ -65,13 +63,13 @@
         <Grid Grid.Row="1" Margin="0,4,20,0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
             <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                       SelectionChanged="EditorSelection_Changed"
-                      Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
+                      HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
             <Button Grid.Column="1" Content="{Binding NewCommandLabel}" Click="NewCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="2" Content="{Binding DuplicateCommandLabel}" Click="DuplicateCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="3" Content="{Binding RemoveCommandLabel}" Click="RemoveCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="4" Content="{Binding ClearCommandsLabel}" Click="ClearCommands_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
         </Grid>
-        <TextBox Grid.Row="2" Margin="0,4,20,0" Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBox Grid.Row="2" Margin="0,4,20,0" HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <ListView x:Name="StepList" Grid.Row="3" Margin="0,4,20,0" ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                   SelectionChanged="EditorSelection_Changed"
                   SelectionMode="Single" MinHeight="24" MaxHeight="78"
@@ -104,7 +102,7 @@
         <ScrollViewer x:Name="StepEditorScroll" Grid.Row="5" Margin="0,4,0,0" MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch" MinHeight="0">
             <StackPanel x:Name="StepEditorPanel" Spacing="4" Margin="0,0,20,0">
-                <TextBox Header="{Binding StepNameLabel}" Text="{Binding StepNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding StepNameLabel}" Text="{Binding StepNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBlock Text="{Binding AreaLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
@@ -153,7 +151,7 @@
                         </Expander>
                     </StackPanel>
                 </Expander>
-                <ComboBox Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                <ComboBox HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 <TextBlock Text="{Binding VerificationHelp}" Visibility="{Binding VerificationHelp, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <StackPanel x:Name="StatusFields" Spacing="6" Visibility="{Binding StatusVisibility}">
                     <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">

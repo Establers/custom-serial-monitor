@@ -173,6 +173,8 @@ public static class StartupHook
             }
             if (e.GetType().Name == "TextBlock" && P(e, "Text") is string text && text.Length > 0)
             {
+                if (text.StartsWith("SerialMonitor.WinUI.ViewModels.", StringComparison.Ordinal))
+                    Issue("internal ViewModel text leaked into the form: " + text);
                 if (N(e, "MaxLines") > 0 || P(e, "TextTrimming")?.ToString() != "None")
                 {
                     var natural = MeasureText(e, text, double.PositiveInfinity);
@@ -330,6 +332,8 @@ public static class StartupHook
                 if (fieldBounds.Width > allocatedWidth + 2)
                     Issue("form input exceeds its allocated column");
                 if (P(input, "Header") is not null) Issue("paired form input still has a separate native header");
+                if (input.GetType().Name is "TextBox" or "ComboBox" && P(input, "AcceptsReturn") is not true && N(input, "ActualHeight") > 26)
+                    Issue($"headerless compact input is taller than 24 DIP: {N(input, "ActualHeight"):F1}");
                 var automation = FindType("Microsoft.UI.Xaml.Automation.AutomationProperties").GetMethod("GetName")!.Invoke(null, [input]);
                 if (automation?.ToString() != P(label, "Text")?.ToString()) Issue("form input lost its accessible label");
             }

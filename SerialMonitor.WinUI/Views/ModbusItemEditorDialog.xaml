@@ -28,7 +28,6 @@
             <Setter Property="Padding" Value="5,2" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource ItemInput}" />
         <Style x:Key="ItemNumberInput" TargetType="TextBox" BasedOn="{StaticResource ItemInput}">
@@ -45,7 +44,6 @@
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HeaderTemplate" Value="{StaticResource FieldHeader}" />
         </Style>
         <Style x:Key="ItemAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
@@ -104,7 +102,7 @@
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Style="{StaticResource CompactCheckBoxStyle}" />
                     <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                 </Grid>
-                <TextBox x:Name="ValueNamesInput" Header="{Binding ValueNamesLabel}" Text="{Binding ValueNamesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox x:Name="ValueNamesInput" HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding ValueNamesLabel}" Text="{Binding ValueNamesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="104" FontFamily="Consolas"
                          VerticalContentAlignment="Top" Padding="8,4,24,4" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                 <TextBlock Text="{Binding ValueNamesHelp}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
