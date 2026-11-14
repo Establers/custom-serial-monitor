@@ -65,12 +65,12 @@ COM3 STMicroelectronics STLink VCP, 115200 / 8N1 / no handshake / idle 40ms. 쓰
 
 Python 독립 검산기는 원시 TX/RX의 CRC·길이·기능·주소·값, 단계별 쓰기→결과 조회→후속 쓰기 순서, 카운터와 최종 복원을 대조한다. 프리셋 13단계의 결과 조회를 포함한 46개 TX 전체 순서를 고정한 독립 계약으로 검사했다. 최종 값만 맞고 중간 검증이 빠진 경우를 통과시키지 않는다.
 
-원본은 보존했다. 강화한 검산기는 원본과 동일한 증거 사본에서 통과했다. CRC 손상·응답 삭제·쓰기 복제·중간 단계 재조회 삭제·FC04 상태를 FC01 코일 조회로 치환한 사본 5종은 모두 거절했다. 뒤 두 사본은 단계별 검증 순서 조건에서 거절됐다. 부정 검사는 장치에 접근하지 않는다.
+원본은 보존했다. 강화한 검산기는 원본과 바이트까지 동일한 대조 사본에서 통과했다(`wire.jsonl`, `report.json`, `user-profile.json` 대조). CRC 손상·응답 삭제·쓰기 복제·중간 단계 재조회 삭제·FC04 상태를 FC01 코일 조회로 치환한 사본 5종은 모두 거절했다. 뒤 두 사본은 단계별 검증 순서 조건에서 거절됐다. 부정 검사는 장치에 접근하지 않는다.
 
 로컬 생성물(Git 제외):
 
 - [사용자 흐름 원본](../artifacts/modbus-user-journeys-20261114/live-01/report.json), [UART](../artifacts/modbus-user-journeys-20261114/live-01/wire.jsonl)
-- [강화된 독립 검산](../artifacts/modbus-user-journeys-20261114/audit-checks-02/unchanged/independent-audit.json), [검산기 검증 6건: 정상 대조 1·부정 5](../artifacts/modbus-user-journeys-20261114/audit-checks-02/results.json)
+- [강화된 독립 검산](../artifacts/modbus-user-journeys-20261114/audit-checks-03/unchanged/independent-audit.json), [검산기 검증 6건: 정상 대조 1·부정 5](../artifacts/modbus-user-journeys-20261114/audit-checks-03/results.json)
 - [명령 경계](../artifacts/modbus-user-journeys-20261114/commands-01/report.json), [독립 검산](../artifacts/modbus-user-journeys-20261114/commands-01/independent-audit.json)
 - [자동 회귀 549건](../artifacts/modbus-user-journeys-20261114/results/user-journeys.trx)
 

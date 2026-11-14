@@ -50,10 +50,11 @@ def main(source, output):
             tx["hex"] = "010110000001F90A"
             rx["hex"] = "010101019048"
             copied[status] = [tx, rx]
-        with (root / "wire.jsonl").open("w", encoding="utf-8") as stream:
-            for pair in copied:
-                for entry in pair:
-                    stream.write(json.dumps(entry) + "\n")
+        if mode != "unchanged":
+            with (root / "wire.jsonl").open("w", encoding="utf-8") as stream:
+                for pair in copied:
+                    for entry in pair:
+                        stream.write(json.dumps(entry) + "\n")
         run = subprocess.run([sys.executable, str(auditor), str(root)], capture_output=True, text=True)
         accepted = run.returncode == 0
         expected = mode == "unchanged"
