@@ -4318,7 +4318,6 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             catch (Exception ex)
             {
                 _shutdownFileFlushError = $"Shutdown file flush failed: {ex.Message}";
-                cleanupErrors.Add(_shutdownFileFlushError);
             }
         }
         catch (OperationCanceledException ex)
@@ -4331,6 +4330,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
+            RecordShutdownFileLogFailure(cleanupErrors);
             _lastShutdownCompletedTimeText = FormatDiagnosticTime(DateTimeOffset.Now);
             _shutdownCleanupResult = cleanupErrors.Count == 0
                 ? "Shutdown cleanup completed."
@@ -4348,6 +4348,18 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             SetStatus(_shutdownCleanupResult);
             RefreshStatusBar();
         }
+    }
+
+    private void RecordShutdownFileLogFailure(ICollection<string> cleanupErrors)
+    {
+        var failure = FileLogShutdownStatus.DescribeFailure(_fileLogWriter);
+        if (failure is not null)
+            _shutdownFileFlushError = string.IsNullOrWhiteSpace(_shutdownFileFlushError)
+                ? failure
+                : $"{_shutdownFileFlushError} {failure}";
+
+        if (!string.IsNullOrWhiteSpace(_shutdownFileFlushError))
+            cleanupErrors.Add(_shutdownFileFlushError);
     }
 
     private bool TryBeginShutdown()

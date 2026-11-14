@@ -835,6 +835,11 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 
 ## Log File Actions
 
+- [ ] Close while the live logger has a storage failure (for example, a controlled
+  disk-full test). Confirm `last_shutdown.txt` reports the file error and accepted,
+  flushed, unconfirmed, abandoned and rejected counts instead of a clean shutdown.
+  Repeat with successful logging and confirm `File flush error: (none)`.
+
 - [ ] With live file logging enabled, close the main window during RX. Confirm
   the main window and any open Sequence Results window disappear immediately,
   while the process stays alive to finish accepted RX, flush the live log, save

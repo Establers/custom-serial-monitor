@@ -12,6 +12,118 @@ namespace SerialMonitor.WinUI.Tests;
 public sealed class ShutdownRegressionTests
 {
     [Fact]
+    public async Task DiskFullWithoutAStopExceptionStillReportsUnsavedLogsInTheShutdownRecord()
+    {
+        var root = Path.Combine(Path.GetTempPath(), nameof(ShutdownRegressionTests), Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var writer = new FileLogWriter((_, _) => new DiskFullStream());
+            await writer.StartAsync(root, default);
+            Assert.True(writer.TryEnqueue(LogLine.System("must be accounted for")));
+            await writer.StopAsync(default); // The worker records the fault without throwing here.
+            Assert.Equal(FileLogWriterState.Faulted, writer.State);
+            Assert.Equal(1, writer.AbandonedLineCount);
+            Assert.False(writer.TryEnqueue(LogLine.System("rejected after the fault")));
+
+            // The production disconnect and final stop can run back-to-back.
+            // A second stop restores Stopped but must not hide the loss.
+            await writer.StopAsync(default);
+            Assert.Equal(FileLogWriterState.Stopped, writer.State);
+
+            var model = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+            Set(model, "_fileLogWriter", writer);
+            Set(model, "_shutdownFileFlushError", string.Empty);
+            var errors = new List<string>();
+            Invoke(model, "RecordShutdownFileLogFailure", errors);
+
+            var failure = Assert.Single(errors);
+            Assert.Contains("unconfirmed: 1", failure);
+            Assert.Contains("abandoned: 1", failure);
+            Assert.Contains("rejected: 1", failure);
+            Assert.Contains("disk full", failure);
+            Assert.Equal(failure, model.ShutdownFileFlushError);
+            Assert.Contains("File flush error: " + failure, (string)Invoke(model, "BuildShutdownRecord", errors)!);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task AHealthyRestartDoesNotHidePreviouslyLostAcceptedLogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), nameof(ShutdownRegressionTests), Guid.NewGuid().ToString("N"));
+        try
+        {
+            var opens = 0;
+            await using var writer = new FileLogWriter((_, _) => ++opens == 1 ? new DiskFullStream() : new MemoryStream());
+            await writer.StartAsync(root, default);
+            Assert.True(writer.TryEnqueue(LogLine.System("lost before restart")));
+            await writer.StopAsync(default);
+            await writer.StartAsync(root, default);
+            Assert.True(writer.TryEnqueue(LogLine.System("saved after restart")));
+            await writer.StopAsync(default);
+            Assert.Null(writer.LastFault);
+            Assert.Null(writer.LastFileError);
+            Assert.Equal(2, writer.AcceptedLineCount);
+            Assert.Equal(1, writer.DurableLineCount);
+
+            var failure = FileLogShutdownStatus.DescribeFailure(writer);
+            Assert.NotNull(failure);
+            Assert.Contains("unconfirmed: 1", failure);
+            Assert.Contains("abandoned: 1", failure);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task SuccessfullyFlushedLogsLeaveTheShutdownFileErrorEmpty()
+    {
+        var root = Path.Combine(Path.GetTempPath(), nameof(ShutdownRegressionTests), Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var writer = new FileLogWriter();
+            await writer.StartAsync(root, default);
+            Assert.True(writer.TryEnqueue(LogLine.System("saved successfully")));
+            await writer.StopAsync(default);
+            Assert.Equal(1, writer.DurableLineCount);
+
+            var model = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+            Set(model, "_fileLogWriter", writer);
+            Set(model, "_shutdownFileFlushError", string.Empty);
+            var errors = new List<string>();
+            Invoke(model, "RecordShutdownFileLogFailure", errors);
+
+            Assert.Empty(errors);
+            Assert.Empty(model.ShutdownFileFlushError);
+            Assert.Contains("File flush error: (none)", (string)Invoke(model, "BuildShutdownRecord", errors)!);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task AFlushExceptionRemainsInOneErrorEntryAlongsideTheUnsavedCounts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), nameof(ShutdownRegressionTests), Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var writer = new FileLogWriter((_, _) => new DiskFullStream());
+            await writer.StartAsync(root, default);
+            Assert.True(writer.TryEnqueue(LogLine.System("unsaved")));
+            await writer.StopAsync(default);
+
+            var model = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+            Set(model, "_fileLogWriter", writer);
+            Set(model, "_shutdownFileFlushError", "Shutdown file flush failed: A task was canceled.");
+            var errors = new List<string>();
+            Invoke(model, "RecordShutdownFileLogFailure", errors);
+
+            var failure = Assert.Single(errors);
+            Assert.StartsWith("Shutdown file flush failed: A task was canceled.", failure);
+            Assert.Contains("unconfirmed: 1", failure);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task AutomationHostStopFailureStillDisposesCaptureAndRemovesRxSubscriptions()
     {
         var root = Path.Combine(Path.GetTempPath(), nameof(ShutdownRegressionTests), Guid.NewGuid().ToString("N"));
@@ -166,5 +278,11 @@ public sealed class ShutdownRegressionTests
             { RemovedSubscriptions++; return null; }
             throw new NotSupportedException(method.Name);
         }
+    }
+
+    private sealed class DiskFullStream : MemoryStream
+    {
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException(new IOException("Injected disk full", unchecked((int)0x80070070)));
     }
 }
