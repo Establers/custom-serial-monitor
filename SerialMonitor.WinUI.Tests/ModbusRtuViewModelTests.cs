@@ -376,6 +376,12 @@ public sealed class ModbusRtuViewModelTests
             Assert.Contains(result.Ancestors(), parent => parent.Name == p + "Flyout"));
         Assert.All(monitor.Descendants(p + "Expander"), detail =>
             Assert.Contains(detail.Ancestors(), parent => parent.Name == p + "Flyout"));
+        var settingsPanel = Assert.Single(monitor.Descendants().Where(element =>
+            (string?)element.Attribute(x + "Name") == "SettingsPanel"));
+        Assert.Contains(settingsPanel.Descendants(p + "TextBlock"), label =>
+            (string?)label.Attribute("Text") == "{Binding TargetSettingsSummary}");
+        Assert.DoesNotContain(settingsPanel.Descendants(p + "TextBlock"), label =>
+            (string?)label.Attribute("Text") == "{Binding RequestSummary}");
         Assert.All(monitor.Descendants(p + "TextBox"), input =>
         {
             Assert.Null(input.Attribute("MaxLength"));

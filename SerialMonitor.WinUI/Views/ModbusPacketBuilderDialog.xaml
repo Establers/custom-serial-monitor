@@ -18,7 +18,7 @@
         <Thickness x:Key="ComboBoxTopHeaderMargin">0,0,0,2</Thickness>
         <Thickness x:Key="TextBoxTopHeaderMargin">0,0,0,2</Thickness>
         <DataTemplate x:Key="CompactFieldHeader">
-            <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
+            <TextBlock Text="{Binding}" FontSize="11" LineHeight="15" TextWrapping="Wrap" FontFamily="{ThemeResource ContentControlThemeFontFamily}" />
         </DataTemplate>
         <Style x:Key="CompactInput" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="infra:TextBoxContentAlignment.IsEnabled" Value="True" />
@@ -97,7 +97,7 @@
                               SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" MaxDropDownHeight="360"
                               ToolTipService.ToolTip="{Binding FunctionHelp}" />
                 </Grid>
-                <TextBlock Text="{Binding FunctionHelp}" Style="{StaticResource FieldHelp}" />
+                <TextBlock Text="{Binding FunctionHelp}" Visibility="{Binding FunctionHelp, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource FieldHelp}" />
 
                 <Grid x:Name="ReadRow" Visibility="{Binding ReadRangeVisibility}" ColumnDefinitions="128,128" ColumnSpacing="8" HorizontalAlignment="Left">
                     <TextBox Header="{Binding AddressLabel}" Text="{Binding AddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -198,8 +198,8 @@
                        Foreground="{ThemeResource ErrorTextBrush}" />
             <TextBox Header="{Binding PreviewLabel}" Text="{Binding Preview}" IsReadOnly="True"
                      Style="{StaticResource PacketListInput}" VerticalContentAlignment="Center" MinHeight="24" MaxHeight="72" />
-            <TextBlock Text="{Binding Summary}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
-            <TextBlock x:Name="CopyStatus" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Summary}" Visibility="{Binding Summary, Converter={StaticResource NonEmptyTextVisibility}}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock x:Name="CopyStatus" Visibility="{Binding Text, ElementName=CopyStatus, Converter={StaticResource NonEmptyTextVisibility}}" FontSize="11" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
 </ContentDialog>
