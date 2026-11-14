@@ -1,5 +1,8 @@
 # 2026-11-14 명령·결과 확인 실물 UART 검증
 
+최신 사용자 동작/ViewModel 경로 13개와 명령 실행기 16개 재검증은
+[사용자 시나리오 실물 검증](MODBUS-USER-SCENARIO-VALIDATION.md)에 기록했다 (Computer Use 미사용).
+
 COM3의 NUCLEO-F103RB / SERIAL-LAB/1에서 **16개 사례가 모두 통과**했다.
 대상은 실제 `ID?`·`BUILD?` 응답으로 확인한 FW **1.7.1 / 22F524185C55784C**이며,
 115200 / 8N1 / handshake None / native idle 40ms를 사용했다.
