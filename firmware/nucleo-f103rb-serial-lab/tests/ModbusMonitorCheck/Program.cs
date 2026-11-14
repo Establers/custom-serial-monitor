@@ -62,10 +62,11 @@ internal static class Program
                     validatorSha256 = Hash(typeof(Program).Assembly.Location),
                     coreAssemblySha256 = Hash(typeof(SequenceRunSession).Assembly.Location),
                     mode = args[0],
+                    scenarioContract = args[0] == "scenarios-live" ? "user-journeys-v2" : null,
                     guiSequencePath = args[0] == "live" ? Path.GetFullPath(args[4]) : null,
                     guiSequenceSha256 = args[0] == "live" && File.Exists(args[4]) ? Hash(args[4]) : null,
                     failureCleanup = args[0] != "live"
-                        ? "Disconnect only after unexpected failure; never reset/flash/replay uncertain writes. Original first four RAM words and first16 coils are restored only by the final restoration PASS case after every fault has been independently inspected. Firmware counters are intentionally not reset/restored."
+                        ? "Disconnect only after unexpected failure; never reset/flash/replay uncertain writes. Captured RAM and coil ranges are restored only by the final restoration PASS case after every fault has been independently inspected. Firmware counters are intentionally not reset/restored."
                         : "Disconnect only; firmware state is reset/left quiet only by the final-clean-state PASS case. After any failure inspect evidence and explicitly recover the known fixture; no uncertain write is replayed.",
                     scope = args[0] == "scenarios-live"
                         ? "Actual UART using production SerialService, ModbusRtuMonitorService and ModbusRtuViewModel command paths. Offline configuration, read, raw/engineering writes, five groups with one known exception, queued writes, atomic commands, stop/drain, recent results and private profile save. Independent wire oracle and firmware write counter. No Computer Use, GUI controls/rendering, real multi-device bus, optical LED observation, MCU/RTU RESET or flashing."
@@ -87,6 +88,8 @@ internal static class Program
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Program.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Commands.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/UserScenarios.cs",
+            "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/UserScenarios.Presets.cs",
+            "firmware/nucleo-f103rb-serial-lab/presets/modbus-commands.json",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/ScenarioContext.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Oracle.cs",
             "firmware/nucleo-f103rb-serial-lab/tests/ModbusMonitorCheck/Evidence.cs",
@@ -101,6 +104,8 @@ internal static class Program
             "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Groups.cs",
             "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Commands.cs",
             "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.Items.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusRtuViewModel.WriteFeedback.cs",
+            "SerialMonitor.WinUI/ViewModels/ModbusValueInterpreterViewModel.cs",
             "SerialMonitor.Core/Modbus/ModbusResponseDecoder.cs",
             "SerialMonitor.Core/Modbus/ModbusItemCodec.cs"
         };

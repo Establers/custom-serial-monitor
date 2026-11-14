@@ -34,6 +34,7 @@ internal sealed partial class LiveCheck
             await CommandText("RTU FAULT CLEAR", "OK RTU FAULT CLEAR\r\n");
             await CommandText("RTU", "OK RTU\r\n");
             _scenarioRam = await CommandRead(3, Bank, 4);
+            _scenarioPresetRam = await CommandRead(3, Bank + 0x10, 10);
             _scenarioCoils = await CommandRead(1, Bank, 16);
             _scenarioInitialWrites = await CommandWriteCounter();
             await ScenarioEvidence("baseline");
@@ -204,11 +205,15 @@ internal sealed partial class LiveCheck
                 (await CommandRead(3, Bank + 3, 1))[0] == before, "Stop lost ACK, failed to release ownership, or sent the next write.");
             await ScenarioEvidence("stopped");
         });
+        Add("scenario-preset-profile-save-reload-no-transmit", SaveLoadPresetScenario);
+        Add("scenario-installed-presets-actual-execution", ExecuteInstalledPresetScenario);
         Add("scenario-restoration-and-final-quiet-state", async () =>
         {
             await CommandRawWrite(16, Bank, _scenarioRam); _scenarioWrites++;
+            await CommandRawWrite(16, Bank + 0x10, _scenarioPresetRam); _scenarioWrites++;
             await CommandRawWrite(15, Bank, _scenarioCoils); _scenarioWrites++;
             Require((await CommandRead(3, Bank, 4)).SequenceEqual(_scenarioRam) && (await CommandRead(1, Bank, 16)).SequenceEqual(_scenarioCoils), "Original RAM/coils not restored.");
+            Require((await CommandRead(3, Bank + 0x10, 10)).SequenceEqual(_scenarioPresetRam), "Original preset scratch RAM not restored.");
             Require((await CommandRead(4, Bank + 7, 1))[0] == _scenarioCoils[0] && (await CommandRead(2, Bank + 1, 1))[0] == _scenarioCoils[0], "LED state readbacks do not match the restored coil.");
             var writes = await CommandWriteCounter();
             Require(unchecked(writes - _scenarioInitialWrites) == _scenarioWrites, "Firmware write counter differs from the exact planned writes (duplicate/missing write).");
@@ -216,7 +221,7 @@ internal sealed partial class LiveCheck
             var status = await CommandTextValue("RTU STATUS?");
             Require(status.Contains("fault=NONE", StringComparison.Ordinal) && status.Contains("pending=0", StringComparison.Ordinal), "Final board state not quiet.");
             await CommandText("RTU", "OK RTU\r\n");
-            await CommandEvidence("restoration", new { ram = _scenarioRam, coils = _scenarioCoils, initialWrites = _scenarioInitialWrites,
+            await CommandEvidence("restoration", new { ram = _scenarioRam, presetRam = _scenarioPresetRam, coils = _scenarioCoils, initialWrites = _scenarioInitialWrites,
                 finalWrites = writes, expectedWriteDelta = _scenarioWrites, status, resetIssued = false, privateProfileSaves = _scenarioSaves });
         });
         foreach (var item in _cases) evidence.Results.Add(new(item.Name, "not_run"));
@@ -286,6 +291,12 @@ internal sealed partial class LiveCheck
     private async Task SaveScenarioProfile()
     {
         _scenarioSaves++;
+        var profiles = new ProfileService();
+        var profile = profiles.CreateDefaultProfile();
+        profile.ModbusSettings = ScenarioModel.CreatePersistableSettingsSnapshot();
+        profile.ModbusPolling = ScenarioModel.CreatePersistablePollingSettingsSnapshot();
+        profile.ModbusCommands = ScenarioModel.CreatePersistableCommandSettingsSnapshot();
+        await profiles.SaveAsync(ScenarioProfilePath, profile, CommandToken);
         await CommandEvidence("private-profile-" + _scenarioSaves, new { monitor = ScenarioModel.CreatePersistableSettingsSnapshot(),
             groups = ScenarioModel.CreatePersistablePollingSettingsSnapshot(), commands = ScenarioModel.CreatePersistableCommandSettingsSnapshot() });
     }
@@ -293,6 +304,7 @@ internal sealed partial class LiveCheck
     {
         ScenarioModel.Status, ScenarioModel.Error, ScenarioModel.RequestSummary, ScenarioModel.IsBusy,
         ScenarioModel.PollingHealthSummary, ScenarioModel.RecentCommandSummary, ScenarioModel.RecentCommandResults,
+        ScenarioModel.WriteStatus, ScenarioModel.WriteError, ScenarioModel.RecentCommandCaption,
         selectedGroup = ScenarioModel.SelectedPollingGroup?.Id,
         rows = ScenarioModel.Rows.Select(row => new { row.Address, row.RawValues, row.RawText, row.ValueText, row.StatusText }).ToArray(),
         monitor = ScenarioMaster.GetSnapshot(), groups = ScenarioMaster.GetPollingSnapshot(), command = ScenarioMaster.GetCommandSnapshot()
