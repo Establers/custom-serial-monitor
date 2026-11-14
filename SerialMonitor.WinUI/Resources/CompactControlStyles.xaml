@@ -470,6 +470,20 @@
                 Value="Center" />
     </Style>
 
+    <!-- Keep Modbus selectors on the same 24-DIP native template as the
+         toolbar. DefaultComboBoxStyle adds an oversized outer focus surface. -->
+    <Style x:Key="ModbusComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource CompactComboBoxStyle}">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+    </Style>
+    <Style x:Key="ModbusToolbarComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource CompactButtonBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CompactButtonBorderBrush}" />
+    </Style>
+
     <Style x:Key="CompactCheckBoxStyle"
            TargetType="CheckBox">
         <Setter Property="Height"

@@ -37,14 +37,7 @@
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
-        <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
-            <Setter Property="Padding" Value="5,0" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="24" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}" />
         <Style x:Key="ItemAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="8,0" />

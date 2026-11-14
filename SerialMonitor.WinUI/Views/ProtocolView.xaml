@@ -79,16 +79,21 @@
                                         <Grid ColumnDefinitions="84,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                                             <TextBlock Text="{Binding FilterUnitLabel}" FontSize="12" VerticalAlignment="Center" />
                                             <TextBox Grid.Column="1" Text="{Binding FilterUnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                     PlaceholderText="{Binding FilterUnitPlaceholder}" MaxLength="3" FontSize="12" KeyDown="FilterInput_KeyDown" />
+                                                     Style="{StaticResource CompactTextBoxStyle}" PlaceholderText="{Binding FilterUnitPlaceholder}" MaxLength="3" FontSize="12" KeyDown="FilterInput_KeyDown" />
                                             <TextBlock Grid.Row="1" Text="{Binding FilterFunctionLabel}" FontSize="12" VerticalAlignment="Center" />
                                             <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FilterFunctionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                     PlaceholderText="{Binding FilterFunctionPlaceholder}" MaxLength="4" FontSize="12" KeyDown="FilterInput_KeyDown" />
+                                                     Style="{StaticResource CompactTextBoxStyle}" PlaceholderText="{Binding FilterFunctionPlaceholder}" MaxLength="4" FontSize="12" KeyDown="FilterInput_KeyDown" />
                                             <TextBlock Grid.Row="2" Text="{Binding FilterDirectionLabel}" FontSize="12" VerticalAlignment="Center" />
                                             <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding FilterDirectionOptions}"
-                                                      SelectedIndex="{Binding FilterDirectionIndex, Mode=TwoWay}" FontSize="12" HorizontalAlignment="Stretch" />
+                                                      SelectedIndex="{Binding FilterDirectionIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" HorizontalAlignment="Stretch">
+                                                <!-- Flyout content does not inherit the view's size resource. -->
+                                                <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
+                                            </ComboBox>
                                             <TextBlock Grid.Row="3" Text="{Binding FilterStateLabel}" FontSize="12" VerticalAlignment="Center" />
                                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding FilterStatusOptions}"
-                                                      SelectedIndex="{Binding FilterStatusIndex, Mode=TwoWay}" FontSize="12" HorizontalAlignment="Stretch" />
+                                                      SelectedIndex="{Binding FilterStatusIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" HorizontalAlignment="Stretch">
+                                                <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
+                                            </ComboBox>
                                         </Grid>
                                         <TextBlock Text="{Binding FilterFunctionHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <TextBlock Text="{Binding FilterScopeHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

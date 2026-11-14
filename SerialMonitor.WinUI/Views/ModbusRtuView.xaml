@@ -34,10 +34,7 @@
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
         </Style>
-        <Style TargetType="ComboBox" BasedOn="{StaticResource CompactComboBoxStyle}">
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}" />
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
         <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource ModbusFieldLabelStyle}" />
         <Style x:Key="NumberInput" TargetType="TextBox" BasedOn="{StaticResource Input}">
@@ -63,7 +60,7 @@
                     <ComboBox x:Name="PollingGroupSelector" Width="220" ItemsSource="{Binding PollingGroups}"
                               SelectedItem="{Binding SelectedPollingGroup, Mode=TwoWay}" DisplayMemberPath="SelectionLabel"
                               IsEnabled="{Binding IsGroupSelectionEnabled}" FontSize="12" MinWidth="0" MaxDropDownHeight="280"
-                              Style="{StaticResource CompactComboBoxStyle}" Visibility="{Binding PollingGroupsVisibility}"
+                              Style="{StaticResource ModbusToolbarComboBoxStyle}" Visibility="{Binding PollingGroupsVisibility}"
                               ToolTipService.ToolTip="{Binding SelectedPollingGroup.Summary}"
                               AutomationProperties.Name="{Binding GroupSelectorLabel}">
                         <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
@@ -106,7 +103,7 @@
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding UnitLabel}" />
-                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
@@ -121,7 +118,7 @@
                                             <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding TimeoutLabel}" />
                                             <TextBlock Grid.Row="6" Text="{Binding FormatLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource CompactComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
+                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <!-- The native arrow otherwise keeps the closed field 32 pixels tall. -->
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
@@ -178,7 +175,7 @@
                                             <StackPanel Spacing="4">
                                             <TextBlock Text="{Binding WriteModeLabel}" Style="{StaticResource FieldLabel}" />
                                             <ComboBox ItemsSource="{Binding WriteModes}" SelectedIndex="{Binding WriteModeIndex, Mode=TwoWay}"
-                                                      Style="{StaticResource CompactComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
+                                                      Style="{StaticResource ModbusComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
                                                       AutomationProperties.Name="{Binding WriteModeLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                             </ComboBox>
@@ -220,7 +217,7 @@
                                         <TextBlock Text="{Binding CommandSelectorLabel}" Style="{StaticResource FieldLabel}" />
                                         <ComboBox ItemsSource="{Binding CommandChoices}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                                                   DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" IsEnabled="{Binding IsCommandSelectionEnabled}"
-                                                  Style="{StaticResource CompactComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
+                                                  Style="{StaticResource ModbusComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
                                                   AutomationProperties.Name="{Binding CommandSelectorLabel}" MaxDropDownHeight="240">
                                             <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                         </ComboBox>

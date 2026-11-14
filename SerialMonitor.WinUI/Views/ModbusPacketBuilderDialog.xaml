@@ -47,14 +47,7 @@
             <Setter Property="VerticalAlignment" Value="Top" />
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource PacketNumberInput}" />
-        <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="24" />
-            <Setter Property="Padding" Value="5,0" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}" />
         <Style x:Key="FieldHelp" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="TextWrapping" Value="Wrap" />

@@ -37,14 +37,7 @@
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
-        <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
-            <Setter Property="Padding" Value="5,0" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="24" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}" />
         <Style x:Key="CommandAction" TargetType="Button" BasedOn="{StaticResource ModbusActionButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="7,0" />
@@ -61,9 +54,12 @@
             <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </Expander>
         <Grid Grid.Row="1" Margin="0,4,20,0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
-            <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
-                      SelectionChanged="EditorSelection_Changed"
-                      HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding CommandsLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
+                          SelectionChanged="EditorSelection_Changed"
+                          DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
+            </StackPanel>
             <Button Grid.Column="1" Content="{Binding NewCommandLabel}" Click="NewCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="2" Content="{Binding DuplicateCommandLabel}" Click="DuplicateCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="3" Content="{Binding RemoveCommandLabel}" Click="RemoveCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
@@ -151,7 +147,11 @@
                         </Expander>
                     </StackPanel>
                 </Expander>
-                <ComboBox HeaderTemplate="{StaticResource FieldHeader}" Header="{Binding VerificationLabel}" ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding VerificationLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
+                    <ComboBox ItemsSource="{Binding VerificationModes}" SelectedIndex="{Binding VerificationIndex, Mode=TwoWay}"
+                              AutomationProperties.Name="{Binding VerificationLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                </StackPanel>
                 <TextBlock Text="{Binding VerificationHelp}" Visibility="{Binding VerificationHelp, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <StackPanel x:Name="StatusFields" Spacing="6" Visibility="{Binding StatusVisibility}">
                     <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
