@@ -1101,7 +1101,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="ProtocolMstpFilterHelp" xml:space="preserve"><value>Exact frame type in HEX: 03 Test Request, 04 Test Response, 00 Token.</value></data>
   <data name="ProtocolMstpCrcDetails" xml:space="preserve"><value> · header {0:N0} / data {1:N0}</value></data>
   <data name="ProtocolChoose" xml:space="preserve"><value>Select a protocol above to start analyzing new RX/TX.</value></data>
-  <data name="ProtocolSelectHint" xml:space="preserve"><value>Select a packet in the list to inspect its raw HEX, fields and CRC.</value></data>
+  <data name="ProtocolSelectHint" xml:space="preserve"><value>Select a packet to see its summary and values. Expand diagnostics for CRC details and raw HEX.</value></data>
   <data name="ProtocolSelectionExpired" xml:space="preserve"><value>The selected packet has expired from recent history.</value></data>
   <data name="ProtocolRunning" xml:space="preserve"><value>Analyzing</value></data>
   <data name="ProtocolStatusFormat" xml:space="preserve"><value>{0} · retained {1:N0}/{2:N0} · expired {3:N0} · analysis drops {4:N0} chunks ({5:N0} B)</value></data>
@@ -1590,4 +1590,21 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandShortCanceled" xml:space="preserve"><value>Stopped</value></data>
 <data name="ModbusCommandShortFailed" xml:space="preserve"><value>Failed</value></data>
 <data name="ModbusCommandStoppedWarning" xml:space="preserve"><value>Sent writes may already have taken effect.</value></data>
+<data name="ProtocolRawDetails" xml:space="preserve"><value>Diagnostics · CRC / raw HEX</value></data>
+<data name="ProtocolPacketDeviceFormat" xml:space="preserve"><value>Device {0} · {1} ({2})</value></data>
+<data name="ProtocolPacketMacFormat" xml:space="preserve"><value>Source {0} → destination {1}</value></data>
+<data name="ProtocolPacketCrcWarning" xml:space="preserve"><value>CRC mismatch; values cannot be interpreted.</value></data>
+<data name="ProtocolPacketIncompleteWarning" xml:space="preserve"><value>Incomplete data; fields and values could not be established.</value></data>
+<data name="ProtocolPacketUndecodedWarning" xml:space="preserve"><value>Frame not decoded; no value interpretation is applied.</value></data>
+<data name="ProtocolPacketMstpScope" xml:space="preserve"><value>MS/TP frame only; application data is not decoded.</value></data>
+<data name="ProtocolPacketRequest" xml:space="preserve"><value>Request</value></data>
+<data name="ProtocolPacketResponse" xml:space="preserve"><value>Response</value></data>
+<data name="ProtocolPacketRequestOrResponse" xml:space="preserve"><value>Request / response (same layout)</value></data>
+<data name="ProtocolPacketExceptionResponse" xml:space="preserve"><value>Exception response</value></data>
+<data name="ProtocolPacketRegistersFormat" xml:space="preserve"><value>Registers: {0}</value></data>
+<data name="ProtocolPacketRangeFormat" xml:space="preserve"><value>Start address (base 0): {0} · quantity: {1}</value></data>
+<data name="ProtocolPacketReadRangeFormat" xml:space="preserve"><value>Read address (base 0): {0} · quantity: {1}</value></data>
+<data name="ProtocolPacketWriteRangeFormat" xml:space="preserve"><value>Write address (base 0): {0} · quantity: {1}</value></data>
+<data name="ProtocolPacketAddressFormat" xml:space="preserve"><value>Address (base 0): {0}</value></data>
+<data name="ProtocolPacketCoilFormat" xml:space="preserve"><value>Coil: {0}</value></data>
 </root>

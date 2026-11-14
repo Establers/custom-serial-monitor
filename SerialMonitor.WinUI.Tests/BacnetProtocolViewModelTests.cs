@@ -23,6 +23,9 @@ public sealed class BacnetProtocolViewModelTests
         var row=Assert.Single(model.Frames);Assert.Equal("1",row.UnitText);Assert.Equal("04",row.FunctionCodeText);
         Assert.Equal("Test Response",row.FunctionText); model.SelectedFrame=row;
         Assert.Contains("Source MAC: 1; destination MAC: 2",model.Details);
+        Assert.Contains("Source 1 → destination 2",model.PacketSummary);
+        Assert.Contains("Test Response",model.PacketSummary);
+        Assert.DoesNotContain("55 FF",model.PacketSummary);
         model.FilterFunctionText="84";Assert.True(model.TryApplyFilters());Assert.Empty(model.Frames);
         model.FilterFunctionText="04";Assert.True(model.TryApplyFilters());Assert.Single(model.Frames);
         var badHeader=(byte[])Response.Clone();badHeader[7]^=1;await Push(analyzer,badHeader);

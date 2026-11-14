@@ -229,9 +229,15 @@
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalContentAlignment="Top">
                         <StackPanel Padding="9,7" Spacing="8">
+                            <TextBlock Text="{Binding PacketSummary}" Visibility="{Binding DetailsVisibility}" IsTextSelectionEnabled="True"
+                                       FontSize="12" LineHeight="17" TextWrapping="Wrap" />
                             <views:ModbusValueInterpreterView DataContext="{Binding ValueInterpreter}" />
-                            <TextBlock Text="{Binding Details}" Visibility="{Binding DetailsVisibility}" IsTextSelectionEnabled="True" VerticalAlignment="Top"
-                                       FontFamily="Consolas" FontSize="12" LineHeight="17" TextWrapping="Wrap" />
+                            <Expander x:Name="RawDetailsExpander" Header="{Binding RawDetailsLabel}" IsExpanded="False"
+                                      Visibility="{Binding DetailsVisibility}" Style="{StaticResource CompactExpanderStyle}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                <TextBlock Text="{Binding Details}" IsTextSelectionEnabled="True" VerticalAlignment="Top"
+                                           FontFamily="Consolas" FontSize="11" LineHeight="16" TextWrapping="Wrap" />
+                            </Expander>
                             <TextBlock Text="{Binding Details}" Visibility="{Binding SelectionHintVisibility}" FontSize="11"
                                        TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
