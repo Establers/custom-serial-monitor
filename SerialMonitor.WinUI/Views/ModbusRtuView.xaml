@@ -214,7 +214,7 @@
                                         </Grid>
                                         <TextBlock Text="{Binding CommandSelectorLabel}" Style="{StaticResource FieldLabel}" />
                                         <ComboBox ItemsSource="{Binding CommandChoices}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
-                                                  DisplayMemberPath="DisplayName" IsEnabled="{Binding IsCommandSelectionEnabled}"
+                                                  DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" IsEnabled="{Binding IsCommandSelectionEnabled}"
                                                   Style="{StaticResource CompactComboBoxStyle}" HorizontalAlignment="Stretch" MinWidth="0"
                                                   AutomationProperties.Name="{Binding CommandSelectorLabel}" MaxDropDownHeight="240">
                                             <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>

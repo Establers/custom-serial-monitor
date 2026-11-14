@@ -64,7 +64,7 @@
         <Grid Grid.Row="1" Margin="0,4,20,0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
             <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                       SelectionChanged="EditorSelection_Changed"
-                      Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
+                      Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" ToolTipService.ToolTip="{Binding SelectedCommand.DisplayName}" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
             <Button Grid.Column="1" Content="{Binding NewCommandLabel}" Click="NewCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="2" Content="{Binding DuplicateCommandLabel}" Click="DuplicateCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
             <Button Grid.Column="3" Content="{Binding RemoveCommandLabel}" Click="RemoveCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
@@ -73,15 +73,21 @@
         <TextBox Grid.Row="2" Margin="0,4,20,0" Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <ListView x:Name="StepList" Grid.Row="3" Margin="0,4,20,0" ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                   SelectionChanged="EditorSelection_Changed"
-                  DisplayMemberPath="DisplayName" SelectionMode="Single" MinHeight="24" MaxHeight="78"
+                  SelectionMode="Single" MinHeight="24" MaxHeight="78"
                   AutomationProperties.Name="{Binding StepsLabel}" HorizontalContentAlignment="Stretch">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="MinHeight" Value="24" />
                     <Setter Property="Padding" Value="5,1" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="FontSize" Value="12" />
                 </Style>
             </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding DisplayName}" ToolTipService.ToolTip="{Binding DisplayName}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" FontSize="12" VerticalAlignment="Center" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
         </ListView>
         <Grid Grid.Row="4" Margin="0,4,20,0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="4">
             <Button Content="{Binding NewStepLabel}" Click="NewStep_Click" Style="{StaticResource CommandAction}" />

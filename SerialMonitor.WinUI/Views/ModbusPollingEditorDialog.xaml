@@ -59,15 +59,21 @@
                 <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock Text="{Binding ListLabel}" FontWeight="SemiBold" />
                 <ListView x:Name="GroupList" ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
-                          DisplayMemberPath="DisplayName" SelectionMode="Single" MinHeight="24" MaxHeight="96" Padding="0"
+                          SelectionMode="Single" MinHeight="24" MaxHeight="96" Padding="0"
                           AutomationProperties.Name="{Binding ListLabel}" HorizontalContentAlignment="Stretch">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="MinHeight" Value="24" />
                             <Setter Property="Padding" Value="5,1" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="FontSize" Value="12" />
                         </Style>
                     </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}" ToolTipService.ToolTip="{Binding DisplayName}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" FontSize="12" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
                 </ListView>
                 <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="6">
                     <Button Content="{Binding NewLabel}" Click="New_Click" Style="{StaticResource GroupAction}" />
