@@ -227,11 +227,13 @@ public sealed class ModbusCommandHeaderTests
         Assert.Contains("Recent command: first · 1/1 · ID 2 · FC 06 · 300", summary);
         Assert.Contains(model.CommandStatus, summary);
         Assert.NotEmpty(details);
+        Assert.NotEqual(model.CommandsLabel, model.CommandsMenuLabel);
         model.SelectedCommand = model.CommandChoices[1];
         Assert.Empty(model.CommandResults);
         Assert.Equal(summary, model.RecentCommandSummary);
         Assert.Equal(details, model.RecentCommandResults);
         Assert.Equal(Visibility.Visible, model.RecentCommandVisibility);
+        Assert.NotEqual(model.CommandsLabel, model.CommandsMenuLabel);
         Assert.Contains("ID 7", model.CommandTargetPreview);
         Assert.DoesNotContain("HEX:", model.CommandTargetPreview);
         Assert.Contains("HEX:", model.CommandPreview);
@@ -239,6 +241,7 @@ public sealed class ModbusCommandHeaderTests
         model.ApplySavedCommandSettings(Settings());
         Assert.Equal(Visibility.Collapsed, model.RecentCommandVisibility);
         Assert.Empty(model.RecentCommandResults);
+        Assert.Equal(model.CommandsLabel, model.CommandsMenuLabel);
     }
 
     [Fact]

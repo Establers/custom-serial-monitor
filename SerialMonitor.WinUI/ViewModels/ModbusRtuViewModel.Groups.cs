@@ -20,7 +20,7 @@ public sealed partial class ModbusRtuViewModel
     public string GroupSelectorLabel => P("Selector", "Selected group");
     public ObservableCollection<ModbusPollingGroupRow> PollingGroups { get; } = [];
     public string PollingSummary { get => _pollingSummary; private set => SetProperty(ref _pollingSummary, value); }
-    public string PollingHealthSummary { get => _pollingHealthSummary; private set => SetProperty(ref _pollingHealthSummary, value); }
+    public string PollingHealthSummary { get => _pollingHealthSummary; private set { if (SetProperty(ref _pollingHealthSummary, value)) NotifyMonitorSummary(); } }
     public bool NeedsPollingGroup => _pollingSettings is not null && SelectedPollingGroup?.Definition?.Settings is null;
     public string EmptySetupLabel => NeedsPollingGroup ? GroupEditorLabel : SettingsLabel;
     public bool IsGroupSelectionEnabled => !_writeAdmitted && (!_operationAdmitted || _groupRunAdmitted);

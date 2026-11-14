@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:infra="using:SerialMonitor.WinUI.Infrastructure"
     HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
-    Loaded="View_Loaded">
+    Loaded="View_Loaded" SizeChanged="View_SizeChanged">
     <UserControl.Resources>
         <Style x:Key="Cell" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" />
@@ -54,13 +54,40 @@
             <Setter Property="Margin" Value="0,6,0,0" />
         </Style>
     </UserControl.Resources>
-    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
+    <Grid RowDefinitions="Auto,*" RowSpacing="5" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
-            <Grid RowDefinitions="Auto,Auto">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
-                    <TextBlock Text="{Binding Statistics}" Style="{StaticResource Cell}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding Statistics}" />
-                    <Button x:Name="SettingsButton" Grid.Column="1" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="5" MinWidth="0">
+                    <ComboBox x:Name="PollingGroupSelector" Width="220" ItemsSource="{Binding PollingGroups}"
+                              SelectedItem="{Binding SelectedPollingGroup, Mode=TwoWay}" DisplayMemberPath="SelectionLabel"
+                              IsEnabled="{Binding IsGroupSelectionEnabled}" FontSize="12" MinWidth="0" MaxDropDownHeight="280"
+                              Style="{StaticResource CompactComboBoxStyle}" Visibility="{Binding PollingGroupsVisibility}"
+                              ToolTipService.ToolTip="{Binding SelectedPollingGroup.Summary}"
+                              AutomationProperties.Name="{Binding GroupSelectorLabel}">
+                        <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
+                    </ComboBox>
+                    <Button Grid.Column="1" Style="{StaticResource Action}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Padding="2,0" Background="Transparent" BorderThickness="0" MinWidth="0"
+                            ToolTipService.ToolTip="{Binding MonitorSummary}" AutomationProperties.Name="{Binding MonitorDetailsLabel}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                            <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource ErrorTextBrush}" Visibility="{Binding ErrorVisibility}" />
+                            <TextBlock Grid.Column="1" Text="{Binding MonitorSummary}" Style="{StaticResource Cell}" FontSize="11" />
+                            <FontIcon Grid.Column="2" Glyph="&#xE70D;" FontSize="9" />
+                        </Grid>
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="SummaryFlyout_Opening" FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                <ScrollViewer x:Name="SummaryScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="SummaryPanel" Width="420" Spacing="8" Margin="0,0,16,0">
+                                        <TextBlock Text="{Binding MonitorDetailsLabel}" FontSize="14" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
+                                        <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding PollingSummary}" Visibility="{Binding PollingGroupsVisibility}" Style="{StaticResource GuideBody}" />
+                                        <TextBlock Text="{Binding Statistics}" Style="{StaticResource GuideBody}" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button x:Name="SettingsButton" Grid.Column="2" Content="{Binding SettingsLabel}" Style="{StaticResource Action}" IsEnabled="{Binding IsSettingsEnabled}">
                         <Button.Flyout>
                             <Flyout x:Name="SettingsFlyout" Placement="BottomEdgeAlignedRight" Opening="SettingsFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
@@ -106,8 +133,12 @@
                                         </StackPanel>
                                         </StackPanel>
                                         </ContentControl>
-                                        <TextBlock Text="{Binding SetupHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Text="{Binding OwnershipHelp}" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock Text="{Binding SetupHelp}" Style="{StaticResource GuideBody}" />
+                                                <TextBlock Text="{Binding OwnershipHelp}" Style="{StaticResource GuideBody}" />
+                                            </StackPanel>
+                                        </Expander>
                                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                             <Button x:Name="ItemsButton" Content="{Binding ItemsEditorLabel}" Click="Items_Click" IsEnabled="{Binding IsTargetSettingsEnabled}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                             <Button x:Name="GroupsButton" Grid.Column="1" Content="{Binding GroupEditorLabel}" Click="Groups_Click" IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
@@ -119,15 +150,17 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button Grid.Column="2" Content="{Binding WriteEditorLabel}" IsEnabled="{Binding IsWritableFunction}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}">
+                    <Button x:Name="WriteButton" Grid.Column="3" Content="{Binding WriteEditorLabel}" IsEnabled="{Binding IsWritableFunction}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}">
                         <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedRight" Opening="WriteFlyout_Opening"
+                            <Flyout x:Name="WriteFlyout" Placement="BottomEdgeAlignedRight" Opening="WriteFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="WriteScroll" MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ContentControl x:Name="WriteEditorRoot" IsEnabled="{Binding IsWriteEditorEnabled}" HorizontalContentAlignment="Stretch">
                                         <StackPanel x:Name="WritePanel" Width="400" Spacing="8" Margin="0,0,16,0">
                                             <TextBlock Text="{Binding WriteEditorLabel}" FontSize="14" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding WriteHelp}" FontSize="11" TextWrapping="Wrap" />
+                                            <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                                <TextBlock Text="{Binding WriteHelp}" Style="{StaticResource GuideBody}" />
+                                            </Expander>
                                             <ComboBox Header="{Binding WriteModeLabel}" ItemsSource="{Binding WriteModes}" SelectedIndex="{Binding WriteModeIndex, Mode=TwoWay}" FontSize="12" />
                                             <TextBlock Text="{Binding WriteItemSummary}" FontSize="11" TextWrapping="Wrap" />
                                             <Grid ColumnDefinitions="125,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
@@ -146,14 +179,16 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button x:Name="CommandsButton" Grid.Column="3" Content="{Binding CommandsLabel}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding RecentCommandSummary}">
+                    <Button x:Name="CommandsButton" Grid.Column="4" Content="{Binding CommandsMenuLabel}" Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding RecentCommandSummary}">
                         <Button.Flyout>
                             <Flyout x:Name="CommandsFlyout" Placement="BottomEdgeAlignedRight" Opening="CommandsFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="CommandsScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel x:Name="CommandsPanel" Width="480" Spacing="7" Margin="0,0,16,0">
                                         <TextBlock Text="{Binding CommandsLabel}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding CommandHelp}" Style="{StaticResource GuideBody}" />
+                                        <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                            <TextBlock Text="{Binding CommandHelp}" Style="{StaticResource GuideBody}" />
+                                        </Expander>
                                         <TextBlock Text="{Binding CommandSelectorLabel}" Style="{StaticResource FieldLabel}" />
                                         <ComboBox ItemsSource="{Binding CommandChoices}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                                                   DisplayMemberPath="DisplayName" IsEnabled="{Binding IsCommandSelectionEnabled}"
@@ -178,11 +213,11 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button x:Name="GuideButton" Grid.Column="4" Content="?" Width="24" Padding="0"
+                    <Button x:Name="GuideButton" Grid.Column="5" Content="?" Width="24" Padding="0"
                             Style="{StaticResource Action}" ToolTipService.ToolTip="{Binding GuideLabel}"
                             AutomationProperties.Name="{Binding GuideLabel}">
                         <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedRight" Opening="GuideFlyout_Opening"
+                            <Flyout x:Name="GuideFlyout" Placement="BottomEdgeAlignedRight" Opening="GuideFlyout_Opening"
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="GuideScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel x:Name="GuidePanel" Width="420" Spacing="6" Margin="0,0,16,0">
@@ -210,39 +245,27 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
+                    <Button x:Name="MonitorMoreButton" Grid.Column="6" Content="⋯" Visibility="Collapsed" Style="{StaticResource Action}"
+                            AutomationProperties.Name="{Binding MoreActionsLabel}" ToolTipService.ToolTip="{Binding MoreActionsLabel}">
+                        <Button.Flyout>
+                            <Flyout x:Name="MonitorMoreFlyout" Placement="BottomEdgeAlignedRight" Opening="MoreFlyout_Opening"
+                                    FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                <StackPanel x:Name="MorePanel" Spacing="4">
+                                    <Button Content="{Binding WriteEditorLabel}" Click="ShowWriteFromOverflow_Click" IsEnabled="{Binding IsWritableFunction}"
+                                            Style="{StaticResource Action}" HorizontalAlignment="Stretch" ToolTipService.ToolTip="{Binding WriteAvailabilityHelp}" />
+                                    <Button Content="{Binding GuideLabel}" Click="ShowGuideFromOverflow_Click" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="6" Margin="0,4,0,0" Visibility="{Binding PollingGroupsVisibility}">
-                    <TextBlock Text="{Binding GroupSelectorLabel}" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
-                    <ComboBox x:Name="PollingGroupSelector" Grid.Column="1" ItemsSource="{Binding PollingGroups}"
-                              SelectedItem="{Binding SelectedPollingGroup, Mode=TwoWay}" DisplayMemberPath="SelectionLabel"
-                              IsEnabled="{Binding IsGroupSelectionEnabled}" FontSize="12" MinWidth="0" MaxDropDownHeight="280"
-                              Style="{StaticResource CompactComboBoxStyle}"
-                              Visibility="{Binding PollingGroupsVisibility}"
-                              AutomationProperties.Name="{Binding GroupSelectorLabel}">
-                        <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
-                    </ComboBox>
-                </Grid>
-            </Grid>
         </Border>
-        <StackPanel Grid.Row="1" Spacing="3">
-            <TextBlock Text="{Binding PollingHealthSummary}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
-                       Visibility="{Binding PollingGroupsVisibility}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{Binding PollingSummary}" />
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Visibility="{Binding RecentCommandVisibility}">
-                <TextBlock Text="{Binding RecentCommandSummary}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding RecentCommandSummary}" />
-                <Button Grid.Column="1" Content="{Binding CommandsLabel}" Click="ShowCommands_Click" Style="{StaticResource Action}" />
-            </Grid>
-            <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding AvailabilityText}" />
-            <ScrollViewer MaxHeight="55" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="{Binding ErrorVisibility}">
-                <TextBlock Text="{Binding Error}" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{ThemeResource ErrorTextBrush}" />
-            </ScrollViewer>
-        </StackPanel>
-        <Border Grid.Row="2" Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" MinHeight="0">
+        <Border Grid.Row="1" Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" MinHeight="0">
             <Grid MinHeight="0">
                 <ScrollViewer x:Name="TableScroll" HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
-                    <Grid MinWidth="780" RowDefinitions="Auto,*" MinHeight="0">
+                    <Grid MinWidth="660" RowDefinitions="Auto,*" MinHeight="0">
                         <Border Background="{ThemeResource InspectorHeaderBrush}" Padding="8,5,24,5">
-                            <Grid ColumnDefinitions="110,110,125,*,105,100" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="90,100,*,1.4*,90,88" ColumnSpacing="8">
                                 <TextBlock Text="{Binding TableAddressLabel}" Style="{StaticResource Cell}" FontSize="11" />
                                 <TextBlock Grid.Column="1" Text="{Binding RawLabel}" Style="{StaticResource Cell}" FontSize="11" />
                                 <TextBlock Grid.Column="2" Text="{Binding TableNameLabel}" Style="{StaticResource Cell}" FontSize="11" />
@@ -265,7 +288,7 @@
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid ColumnDefinitions="110,110,125,*,105,100" ColumnSpacing="8">
+                                    <Grid ColumnDefinitions="90,100,*,1.4*,90,88" ColumnSpacing="8">
                                         <TextBlock Text="{Binding AddressText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
                                         <TextBlock Grid.Column="1" Text="{Binding RawText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding RawText}" />
                                         <TextBlock Grid.Column="2" Text="{Binding NameText}" Style="{StaticResource Cell}" ToolTipService.ToolTip="{Binding NameText}" />

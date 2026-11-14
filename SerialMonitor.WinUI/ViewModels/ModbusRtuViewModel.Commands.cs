@@ -26,7 +26,7 @@ public sealed partial class ModbusRtuViewModel
     public string CommandHelp => C("RunHelp", "Commands use fixed unit IDs and addresses, independently of the selected monitoring group. Check the target, value and result check before running. Writes are never retried. Stop also stops polling.");
     public string StopAllLabel => C("StopAll", "Stop command and polling");
     public string WirePreviewLabel => C("WirePreview", "RTU packet details (HEX)");
-    public string RecentCommandSummary { get => _recentCommandSummary; private set { if (SetProperty(ref _recentCommandSummary, value)) OnPropertyChanged(nameof(RecentCommandVisibility)); } }
+    public string RecentCommandSummary { get => _recentCommandSummary; private set { if (SetProperty(ref _recentCommandSummary, value)) { OnPropertyChanged(nameof(RecentCommandVisibility)); OnPropertyChanged(nameof(CommandsMenuLabel)); } } }
     public string RecentCommandResults { get => _recentCommandResults; private set => SetProperty(ref _recentCommandResults, value); }
     public Visibility RecentCommandVisibility => RecentCommandSummary.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public string CommandStatus
