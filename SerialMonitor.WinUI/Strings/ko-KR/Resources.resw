@@ -1474,7 +1474,7 @@
 <data name="ModbusCommandEditorTitle" xml:space="preserve"><value>명령 정의</value></data>
 <data name="ModbusCommandApply" xml:space="preserve"><value>모니터에 적용</value></data>
 <data name="ModbusCommandCancel" xml:space="preserve"><value>취소</value></data>
-<data name="ModbusCommandEditorHelp" xml:space="preserve"><value>대상·쓸 값·결과 확인부터 설정하세요. 자료형과 배율은 고급 옵션에서 지정합니다. 모니터에 적용은 현재 초안까지 반영하며 송신하지 않습니다. 다음 실행에도 사용하려면 프로필 저장을 누르세요.</value></data>
+<data name="ModbusCommandEditorHelp" xml:space="preserve"><value>명령·단계를 선택하거나 새로 만들 때 유효한 편집 내용이 자동으로 반영됩니다. 잘못된 입력은 고친 뒤 이동하세요. 적용은 송신하지 않으며, 다음 실행에도 사용하려면 프로필을 저장하세요.</value></data>
 <data name="ModbusCommandList" xml:space="preserve"><value>명령</value></data>
 <data name="ModbusCommandSteps" xml:space="preserve"><value>단계 (실행 순서)</value></data>
 <data name="ModbusCommandNew" xml:space="preserve"><value>새 명령</value></data>
@@ -1504,7 +1504,7 @@
 <data name="ModbusCommandVerificationInterval" xml:space="preserve"><value>확인 주기 (100–60000 ms)</value></data>
 <data name="ModbusCommandValueNames" xml:space="preserve"><value>값 이름 (선택)</value></data>
 <data name="ModbusCommandValueNamesHelp" xml:space="preserve"><value>배율 적용 전 해석한 숫자를 한 줄에 숫자 = 이름 형식으로 입력합니다. 예: 0=수동, 1=자동을 각각 다른 줄에 입력합니다.</value></data>
-<data name="ModbusCommandUnsavedDraft" xml:space="preserve"><value>다른 명령을 선택하기 전에 현재 단계와 명령을 추가/수정하세요. 적용 버튼도 현재 편집 내용을 저장하며, 새 명령·새 단계는 해당 편집 내용을 비웁니다.</value></data>
+<data name="ModbusCommandUnsavedDraft" xml:space="preserve"><value>다른 명령·단계 선택, 새로 만들기, 적용 시 유효한 편집 내용이 자동 반영됩니다. 잘못된 입력은 고칠 때까지 그대로 보존됩니다.</value></data>
 <data name="ModbusCommandReadBackHelp" xml:space="preserve"><value>쓰기 응답 후 쓴 주소를 다시 읽어 원시 값을 비교합니다. 자동으로 초기화되는 명령 대신 유지되는 설정값에 사용하세요.</value></data>
 <data name="ModbusCommandStatusHelp" xml:space="preserve"><value>쓰기 응답 후 같은 장치 ID의 상태 레지스터/비트 하나를 읽어 (원시 값 &amp; 마스크)가 기대 값과 같아질 때까지 확인합니다. 읽기만 반복하며 쓰기를 다시 보내지 않습니다.</value></data>
 <data name="ModbusCommandAcknowledgementHelp" xml:space="preserve"><value>쓰기 응답만 확인합니다. 응답을 받았더라도 장치 동작 완료를 의미하지 않습니다. 재조회하지 않으므로 쓰기 전용 또는 자동 초기화 명령에 사용할 수 있습니다.</value></data>
@@ -1514,8 +1514,8 @@
 <data name="ModbusCommandReadBack" xml:space="preserve"><value>쓴 값 재조회</value></data>
 <data name="ModbusCommandStatus" xml:space="preserve"><value>별도 상태 주소 확인</value></data>
 <data name="ModbusCommandAcknowledgementOnly" xml:space="preserve"><value>쓰기 응답만 확인</value></data>
-<data name="ModbusCommandSaveBeforeCommandSelection" xml:space="preserve"><value>현재 명령을 먼저 추가/수정하거나, 새 명령을 눌러 편집 내용을 비우세요.</value></data>
-<data name="ModbusCommandSaveBeforeStepSelection" xml:space="preserve"><value>현재 단계를 먼저 추가/수정하거나, 새 단계를 눌러 편집 내용을 비우세요.</value></data>
+<data name="ModbusCommandSaveBeforeCommandSelection" xml:space="preserve"><value>현재 명령의 입력을 고친 뒤 다른 명령을 선택하거나 새로 만드세요. 편집 내용은 보존됩니다.</value></data>
+<data name="ModbusCommandSaveBeforeStepSelection" xml:space="preserve"><value>현재 단계의 입력을 고친 뒤 다른 단계를 선택하거나 새로 만드세요. 편집 내용은 보존됩니다.</value></data>
 <data name="ModbusCommandInvalidCommand" xml:space="preserve"><value>저장된 명령이 올바르지 않습니다. 정의를 수정하거나 해당 명령을 삭제하세요.</value></data>
 <data name="ModbusCommandInvalidStep" xml:space="preserve"><value>저장된 단계가 올바르지 않습니다. 내용을 수정하거나 해당 단계를 삭제하세요.</value></data>
 <data name="ModbusCommandInvalidWriteFields" xml:space="preserve"><value>장치 ID·쓰기 영역·주소·자료형·제한 시간·결과 확인 방식을 끝까지 입력하세요. 주소는 0x HEX도 사용할 수 있습니다.</value></data>

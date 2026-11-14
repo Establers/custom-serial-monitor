@@ -1476,7 +1476,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandEditorTitle" xml:space="preserve"><value>Command definitions</value></data>
 <data name="ModbusCommandApply" xml:space="preserve"><value>Apply to monitor</value></data>
 <data name="ModbusCommandCancel" xml:space="preserve"><value>Cancel</value></data>
-<data name="ModbusCommandEditorHelp" xml:space="preserve"><value>Define the target, value and result check first. Open advanced options for value type and scaling. Apply to monitor includes the current draft without sending; use Save profile to keep it for later.</value></data>
+<data name="ModbusCommandEditorHelp" xml:space="preserve"><value>Valid edits are included when you select another command or step, choose New, or apply. Correct invalid fields before moving on. Applying never sends; use Save profile to keep definitions for later.</value></data>
 <data name="ModbusCommandList" xml:space="preserve"><value>Commands</value></data>
 <data name="ModbusCommandSteps" xml:space="preserve"><value>Steps (execution order)</value></data>
 <data name="ModbusCommandNew" xml:space="preserve"><value>New command</value></data>
@@ -1506,7 +1506,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandVerificationInterval" xml:space="preserve"><value>Check interval (100–60000 ms)</value></data>
 <data name="ModbusCommandValueNames" xml:space="preserve"><value>Value names (optional)</value></data>
 <data name="ModbusCommandValueNamesHelp" xml:space="preserve"><value>One decoded number = name per line, before the multiplier. Example: 0=Manual and 1=Automatic on separate lines.</value></data>
-<data name="ModbusCommandUnsavedDraft" xml:space="preserve"><value>Add/update the current step and command before switching commands. Apply also saves the current draft. New discards its draft.</value></data>
+<data name="ModbusCommandUnsavedDraft" xml:space="preserve"><value>Current edits are included automatically when moving to another command or step, choosing New, or applying. Invalid edits stay here until corrected.</value></data>
 <data name="ModbusCommandReadBackHelp" xml:space="preserve"><value>After the write response, read the written address and compare the raw values. Use this for persistent settings, not self-clearing commands.</value></data>
 <data name="ModbusCommandStatusHelp" xml:space="preserve"><value>After the write response, read one status register/bit from the same unit until (raw value &amp; mask) equals the expected value. Only reads repeat; the write is not sent again.</value></data>
 <data name="ModbusCommandAcknowledgementHelp" xml:space="preserve"><value>Only the write response is checked. Acknowledged does not mean the device action has completed. No readback is sent; this supports write-only or self-clearing commands.</value></data>
@@ -1516,8 +1516,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandReadBack" xml:space="preserve"><value>Read back written values</value></data>
 <data name="ModbusCommandStatus" xml:space="preserve"><value>Check another status address</value></data>
 <data name="ModbusCommandAcknowledgementOnly" xml:space="preserve"><value>Write response only</value></data>
-<data name="ModbusCommandSaveBeforeCommandSelection" xml:space="preserve"><value>Add/update the current command first, or choose New command to discard its draft.</value></data>
-<data name="ModbusCommandSaveBeforeStepSelection" xml:space="preserve"><value>Add/update the current step first, or choose New step to discard its draft.</value></data>
+<data name="ModbusCommandSaveBeforeCommandSelection" xml:space="preserve"><value>Correct the current command before selecting another command or creating a new one. Your draft is preserved.</value></data>
+<data name="ModbusCommandSaveBeforeStepSelection" xml:space="preserve"><value>Correct the current step before selecting another step or creating a new one. Your draft is preserved.</value></data>
 <data name="ModbusCommandInvalidCommand" xml:space="preserve"><value>This saved command is invalid. Correct its definition or remove it.</value></data>
 <data name="ModbusCommandInvalidStep" xml:space="preserve"><value>This saved step is invalid. Correct its fields or remove it.</value></data>
 <data name="ModbusCommandInvalidWriteFields" xml:space="preserve"><value>Enter a complete unit, write area, address, type, timeout and result-check mode. Addresses also accept 0x HEX.</value></data>

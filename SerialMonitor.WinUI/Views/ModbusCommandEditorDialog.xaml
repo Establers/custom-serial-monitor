@@ -37,7 +37,9 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </ContentDialog.Resources>
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="7" MinWidth="340" MaxHeight="620">
-        <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Expander Header="{Binding HelpLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Expander>
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
             <ComboBox x:Name="CommandList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedCommand, Mode=TwoWay}"
                       Header="{Binding CommandsLabel}" DisplayMemberPath="DisplayName" AutomationProperties.Name="{Binding CommandsLabel}" MaxDropDownHeight="260" />
@@ -46,10 +48,7 @@
             <Button Grid.Column="3" Content="{Binding RemoveCommandLabel}" Click="RemoveCommand_Click" Style="{StaticResource CommandAction}" />
             <Button Grid.Column="4" Content="{Binding ClearCommandsLabel}" Click="ClearCommands_Click" Style="{StaticResource CommandAction}" />
         </Grid>
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <TextBox Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            <Button Grid.Column="1" Content="{Binding SaveCommandLabel}" Click="SaveCommand_Click" Style="{StaticResource CommandAction}" VerticalAlignment="Bottom" />
-        </Grid>
+        <TextBox Grid.Row="2" Header="{Binding CommandNameLabel}" Text="{Binding CommandNameText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <ListView x:Name="StepList" Grid.Row="3" ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                   DisplayMemberPath="DisplayName" SelectionMode="Single" MinHeight="44" MaxHeight="88"
                   AutomationProperties.Name="{Binding StepsLabel}" HorizontalContentAlignment="Stretch">
@@ -61,7 +60,7 @@
                 </Style>
             </ListView.ItemContainerStyle>
         </ListView>
-        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="5">
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="5">
             <Button Content="{Binding NewStepLabel}" Click="NewStep_Click" Style="{StaticResource CommandAction}" />
             <Button Grid.Column="1" Content="{Binding DuplicateCommandLabel}" Click="DuplicateStep_Click" Style="{StaticResource CommandAction}"
                     ToolTipService.ToolTip="{Binding DuplicateStepLabel}" AutomationProperties.Name="{Binding DuplicateStepLabel}" />
@@ -71,7 +70,6 @@
                     ToolTipService.ToolTip="{Binding MoveUpLabel}" AutomationProperties.Name="{Binding MoveUpLabel}" />
             <Button Grid.Column="4" Content="↓" Click="MoveDown_Click" Style="{StaticResource CommandAction}"
                     ToolTipService.ToolTip="{Binding MoveDownLabel}" AutomationProperties.Name="{Binding MoveDownLabel}" />
-            <Button Grid.Column="6" Content="{Binding SaveStepLabel}" Click="SaveStep_Click" Style="{StaticResource CommandAction}" />
         </Grid>
         <ScrollViewer x:Name="StepEditorScroll" Grid.Row="5" MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch" MinHeight="0">
@@ -125,7 +123,9 @@
                         <TextBox Grid.Column="1" Header="{Binding VerificationIntervalLabel}" Text="{Binding VerificationIntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
                     </Grid>
                 </StackPanel>
-                <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" IsTextSelectionEnabled="True" />
+                <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" IsTextSelectionEnabled="True" />
+                </Expander>
                 <TextBlock Text="{Binding DraftHelp}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </ScrollViewer>

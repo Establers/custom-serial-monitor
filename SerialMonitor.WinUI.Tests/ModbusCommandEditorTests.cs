@@ -83,24 +83,177 @@ public sealed class ModbusCommandEditorTests
     }
 
     [Fact]
-    public void DirtyStepAndCommandCannotDisappearWhenSelectionChanges()
+    public void ValidDraftsAreIncludedAutomaticallyWhenStepOrCommandSelectionChanges()
     {
         var original = Settings();
         original.Commands[0].Steps.Add(Step("Next", "7"));
         var editor = new ModbusCommandEditorViewModel(original);
-        var firstStep = editor.SelectedStep;
+        editor.CommandNameText = "Edited command";
         editor.ValueText = "15";
         editor.SelectedStep = editor.Steps[1];
-        Assert.Same(firstStep, editor.SelectedStep);
-        Assert.Equal("15", editor.ValueText);
-        Assert.NotEmpty(editor.Error);
-        Assert.True(editor.SaveStep(), editor.Error);
-        var firstCommand = editor.SelectedCommand;
-        editor.SelectedCommand = editor.Items[1];
-        Assert.Same(firstCommand, editor.SelectedCommand);
-        Assert.True(editor.SaveCommand(), editor.Error);
+        Assert.Equal("7", editor.ValueText);
+        Assert.Equal("15", editor.Steps[0].Definition!.Value);
+        editor.ValueText = "8";
         editor.SelectedCommand = editor.Items[1];
         Assert.Equal("Second", editor.CommandNameText);
+        Assert.Equal("Edited command", editor.Items[0].Definition!.Name);
+        Assert.Equal(new[] { "15", "8" }, editor.Items[0].Definition!.Steps.Select(step => step.Value));
+        Assert.Equal("6", original.Commands[0].Steps[0].Value);
+        Assert.Equal("First", original.Commands[0].Name);
+        Assert.Empty(editor.Error);
+    }
+
+    [Fact]
+    public void InvalidCurrentStepBlocksSelectionAndNewWithoutDiscardingItsInput()
+    {
+        var original = Settings();
+        original.Commands[0].Steps.Add(Step("Next", "7"));
+        var editor = new ModbusCommandEditorViewModel(original);
+        var selectedCommand = editor.SelectedCommand;
+        var selectedStep = editor.SelectedStep;
+        editor.ValueText = "65536";
+        editor.SelectedStep = editor.Steps[1];
+        editor.SelectedCommand = editor.Items[1];
+        editor.NewStep();
+        editor.NewCommand();
+        Assert.Same(selectedCommand, editor.SelectedCommand);
+        Assert.Same(selectedStep, editor.SelectedStep);
+        Assert.Equal("65536", editor.ValueText);
+        Assert.Equal("6", editor.Steps[0].Definition!.Value);
+        Assert.Equal(2, editor.Items.Count);
+        Assert.Equal(2, editor.Steps.Count);
+        Assert.NotEmpty(editor.Error);
+        editor.ValueText = "15";
+        editor.NewStep();
+        Assert.Null(editor.SelectedStep);
+        Assert.Empty(editor.ValueText);
+        Assert.Equal("15", editor.Steps[0].Definition!.Value);
+        Assert.Empty(editor.Error);
+        editor.NewCommand();
+        Assert.Equal("15", editor.Items[0].Definition!.Steps[0].Value);
+        Assert.Null(editor.SelectedCommand);
+        Assert.Equal(2, editor.CreateSettings().Commands.Count);
+    }
+
+    [Fact]
+    public void NewNavigationIncludesValidWorkWithoutAddingPristineEmptyDrafts()
+    {
+        var editor = new ModbusCommandEditorViewModel(new());
+        editor.NewCommand();
+        editor.NewStep();
+        Assert.Empty(editor.CreateSettings().Commands);
+        editor.ValueText = "6";
+        editor.NewStep();
+        Assert.Single(editor.Steps);
+        Assert.Empty(editor.ValueText);
+        editor.ValueText = "7";
+        editor.NewStep();
+        Assert.Equal(2, editor.Steps.Count);
+        editor.NewStep();
+        Assert.Equal(2, editor.Steps.Count);
+        editor.ValueText = "15";
+        editor.NewCommand();
+        var first = Assert.Single(editor.Items).Definition!;
+        Assert.Equal(new[] { "6", "7", "15" }, first.Steps.Select(step => step.Value));
+        Assert.Null(editor.SelectedCommand);
+        Assert.Empty(editor.ValueText);
+        Assert.Single(editor.CreateSettings().Commands);
+        editor.ValueText = "0";
+        editor.NewCommand();
+        Assert.Equal(2, editor.Items.Count);
+        Assert.NotEqual(editor.Items[0].Definition!.Id, editor.Items[1].Definition!.Id);
+        Assert.Equal(2, editor.CreateSettings().Commands.Count);
+    }
+
+    [Fact]
+    public void InvalidCommandNameBlocksLeavingTheCommandButDoesNotDiscardStepDrafts()
+    {
+        var editor = new ModbusCommandEditorViewModel(Settings());
+        var selected = editor.SelectedCommand;
+        editor.CommandNameText = new string('n', 129);
+        editor.ValueText = "15";
+        editor.SelectedCommand = editor.Items[1];
+        editor.NewCommand();
+        Assert.Same(selected, editor.SelectedCommand);
+        Assert.Equal(129, editor.CommandNameText.Length);
+        Assert.Equal("15", editor.ValueText);
+        Assert.False(editor.TryApply(out _));
+        editor.CommandNameText = "Fixed";
+        editor.SelectedCommand = editor.Items[1];
+        Assert.Equal("Fixed", editor.Items[0].Definition!.Name);
+        Assert.Equal("15", editor.Items[0].Definition!.Steps[0].Value);
+        Assert.Equal("Second", editor.CommandNameText);
+    }
+
+    [Fact]
+    public void MultipleInvalidImportedStepsCanBeRepairedWithoutWholeCommandNavigationDeadlock()
+    {
+        var original = Settings();
+        original.Commands[0].Steps = [Step("First broken", "6"), Step("Second broken", "7")];
+        original.Commands[0].Steps.ForEach(step => step.Item = null!);
+        var editor = new ModbusCommandEditorViewModel(original);
+        void Repair(int address, string value)
+        {
+            editor.AreaIndex = 1;
+            editor.AddressText = address.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            editor.FormatIndex = 0;
+            editor.ScaleText = "1";
+            editor.ValueNamesText = "";
+            editor.ValueText = value;
+        }
+        Repair(100, "15");
+        editor.SelectedStep = editor.Steps[1];
+        Assert.Equal("Second broken", editor.StepNameText);
+        Assert.Equal(100, editor.Steps[0].Definition!.Item.Address);
+        Assert.False(editor.TryApply(out _));
+        Assert.Null(editor.Steps[1].Definition!.Item);
+        Repair(200, "16");
+        editor.NewStep();
+        Assert.Null(editor.SelectedStep);
+        Assert.Empty(editor.ValueText);
+        Assert.True(editor.TryApply(out var repaired), editor.Error);
+        Assert.Equal(new[] { 100, 200 }, repaired.Commands[0].Steps.Select(step => step.Item.Address));
+        Assert.All(original.Commands[0].Steps, step => Assert.Null(step.Item));
+    }
+
+    [Fact]
+    public void BindingSelectionReentryDuringPrivateListUpdatesCannotRedirectOrDuplicateDrafts()
+    {
+        var original = Settings();
+        original.Commands[0].Steps.Add(Step("Next", "7"));
+        var editor = new ModbusCommandEditorViewModel(original);
+        editor.Items.CollectionChanged += (_, _) => { editor.SelectedCommand = null; editor.SelectedStep = null; };
+        editor.Steps.CollectionChanged += (_, _) => { editor.SelectedStep = null; editor.SelectedCommand = editor.Items.LastOrDefault(); };
+        editor.ValueText = "15";
+        editor.SelectedStep = editor.Steps[1];
+        Assert.Equal("Next", editor.StepNameText);
+        Assert.Equal("7", editor.ValueText);
+        Assert.Equal("first", editor.SelectedCommand!.Definition!.Id);
+        editor.SelectedCommand = editor.Items[1];
+        Assert.Equal("second", editor.SelectedCommand!.Definition!.Id);
+        Assert.Equal("0", editor.ValueText);
+        Assert.Equal(2, editor.Items.Count);
+        Assert.Equal(new[] { "15", "7" }, editor.Items[0].Definition!.Steps.Select(step => step.Value));
+        Assert.Equal("second", editor.CreateSettings().SelectedCommandId);
+        Assert.Equal("6", original.Commands[0].Steps[0].Value);
+    }
+
+    [Fact]
+    public void CancelingAfterAutomaticDraftInclusionStillLeavesTheCallerConfigurationUntouched()
+    {
+        var original = Settings();
+        var editor = new ModbusCommandEditorViewModel(original);
+        editor.ValueText = "15";
+        editor.NewStep();
+        editor.ValueText = "7";
+        editor.SelectedCommand = editor.Items[1];
+        Assert.Equal(new[] { "15", "7" }, editor.Items[0].Definition!.Steps.Select(step => step.Value));
+        Assert.Single(original.Commands[0].Steps);
+        Assert.Equal("6", original.Commands[0].Steps[0].Value);
+        Assert.Equal("first", original.SelectedCommandId);
+        var returned = editor.CreateSettings();
+        returned.Commands[0].Steps[0].Item.Address = 999;
+        Assert.Equal(20, editor.CreateSettings().Commands[0].Steps[0].Item.Address);
     }
 
     [Fact]
@@ -367,6 +520,12 @@ public sealed class ModbusCommandEditorTests
         Assert.DoesNotContain(markup.Descendants(p + "Button"), element => ((string?)element.Attribute("Click"))?.Contains("Run", StringComparison.Ordinal) == true);
         Assert.Contains(markup.Descendants(p + "TextBlock"), element => (string?)element.Attribute("Text") == "{Binding VerificationHelp}");
         Assert.Contains(markup.Descendants(p + "StackPanel"), element => (string?)element.Attribute("Visibility") == "{Binding StatusVisibility}");
+        Assert.DoesNotContain(markup.Descendants(p + "Button"), element =>
+            (string?)element.Attribute("Click") is "SaveCommand_Click" or "SaveStep_Click");
+        var preview = Assert.Single(markup.Descendants(p + "TextBlock").Where(element => (string?)element.Attribute("Text") == "{Binding Preview}"));
+        var expander = Assert.Single(preview.Ancestors(p + "Expander"));
+        Assert.Equal("{Binding WirePreviewLabel}", (string?)expander.Attribute("Header"));
+        Assert.NotEqual("True", (string?)expander.Attribute("IsExpanded"));
     }
 
     [Fact]

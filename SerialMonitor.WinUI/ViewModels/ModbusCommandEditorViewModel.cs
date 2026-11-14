@@ -16,7 +16,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     private ModbusCommandStepEditorEntry? _selectedStep;
     private string? _selectedCommandId;
     private string _commandId = Guid.NewGuid().ToString("N");
-    private bool _loading, _commandDirty, _stepDirty, _invalidMetadata;
+    private bool _loading, _navigating, _commandDirty, _stepDirty, _invalidMetadata;
     private string _commandName = "", _stepName = "", _unit = "1", _address = "0", _value = "", _scale = "1", _engineeringUnit = "", _valueNames = "", _timeout = "1000";
     private string _statusAddress = "0", _mask = "0xFFFF", _expected = "0", _verificationTimeout = "3000", _verificationInterval = "100", _error = "";
     private string _itemName = "";
@@ -43,7 +43,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     public string Title => T("EditorTitle", "Command definitions");
     public string ApplyLabel => T("Apply", "Apply to monitor");
     public string CancelLabel => T("Cancel", "Cancel");
-    public string Help => T("EditorHelp", "Define the target, value and result check first. Open advanced options for value type and scaling. Apply to monitor includes the current draft without sending; use Save profile to keep it for later.");
+    public string Help => T("EditorHelp", "Valid edits are included when you select another command or step, choose New, or apply. Correct invalid fields before moving on. Applying never sends; use Save profile to keep definitions for later.");
     public string CommandsLabel => T("List", "Commands");
     public string StepsLabel => T("Steps", "Steps (execution order)");
     public string NewCommandLabel => T("New", "New command");
@@ -78,6 +78,8 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     public string VerificationIntervalLabel => T("VerificationInterval", "Check interval (100–60000 ms)");
     public string ValueNamesLabel => T("ValueNames", "Value names (optional)");
     public string AdvancedLabel => T("Advanced", "Value type, scaling and communication options");
+    public string WirePreviewLabel => T("WirePreview", "RTU packet details (HEX)");
+    public string HelpLabel => M("Guide", "How to use");
     public string InterpretationSummary => FormatIndex is >= 0 and < 5
         ? $"{Formats[FormatIndex]} · ×{ScaleText}" + (EngineeringUnitText.Length == 0 ? "" : " · " + EngineeringUnitText)
             + (SwapBytes ? " · " + SwapBytesLabel : "") + (SwapWords ? " · " + SwapWordsLabel : "")
@@ -85,7 +87,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     public bool IsAdvancedExpanded { get => _isAdvancedExpanded; set => SetProperty(ref _isAdvancedExpanded, value); }
     public string ValueNamesHelp => T("ValueNamesHelp", "One decoded number = name per line, before the multiplier. Example: 0=Manual and 1=Automatic on separate lines.");
     public string DraftHelp => _stepDirty || _commandDirty
-        ? T("UnsavedDraft", "Add/update the current step and command before switching commands. Apply also saves the current draft. New discards its draft.") : "";
+        ? T("UnsavedDraft", "Current edits are included automatically when moving to another command or step, choosing New, or applying. Invalid edits stay here until corrected.") : "";
     public string VerificationHelp => VerificationIndex switch
     {
         0 => T("ReadBackHelp", "After the write response, read the written address and compare the raw values. Use this for persistent settings, not self-clearing commands."),
@@ -113,19 +115,20 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         get => _selectedCommand;
         set
         {
-            if (ReferenceEquals(_selectedCommand, value)) return;
-            if (!_loading && (_commandDirty || _stepDirty))
+            if (_loading || _navigating || ReferenceEquals(_selectedCommand, value) || (value is not null && !Items.Contains(value))) return;
+            _navigating = true;
+            try
             {
-                Error = T("SaveBeforeCommandSelection", "Add/update the current command first, or choose New command to discard its draft.");
-                OnPropertyChanged();
-                return;
+                if (!CommitNavigationDraft()) { OnPropertyChanged(); return; }
+                if (value is null) { ResetCommandDraft(); return; }
+                SetSelectedCommand(value);
+                if (value is not null)
+                {
+                    _selectedCommandId = value.Definition?.Id;
+                    LoadCommand(value.Definition);
+                }
             }
-            if (!SetProperty(ref _selectedCommand, value)) return;
-            if (!_loading && value is not null)
-            {
-                _selectedCommandId = value.Definition?.Id;
-                LoadCommand(value.Definition);
-            }
+            finally { _navigating = false; }
         }
     }
     public ModbusCommandStepEditorEntry? SelectedStep
@@ -133,17 +136,28 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         get => _selectedStep;
         set
         {
-            if (ReferenceEquals(_selectedStep, value)) return;
-            if (!_loading && _stepDirty)
+            if (_loading || _navigating || ReferenceEquals(_selectedStep, value) || (value is not null && !Steps.Contains(value))) return;
+            var index = value is null ? -1 : Steps.IndexOf(value);
+            _navigating = true;
+            try
             {
-                Error = T("SaveBeforeStepSelection", "Add/update the current step first, or choose New step to discard its draft.");
-                OnPropertyChanged();
-                return;
+                if (!CommitStepNavigationDraft()) { OnPropertyChanged(); return; }
+                if (index < 0) { ResetStepDraft(); return; }
+                // Saving replaces the current row. Resolve the requested
+                // position again instead of retaining a detached row.
+                var selected = Steps[index];
+                SetSelectedStep(selected);
+                if (selected is not null) LoadStep(selected.Definition);
             }
-            if (!SetProperty(ref _selectedStep, value)) return;
-            if (!_loading && value is not null) LoadStep(value.Definition);
+            finally { _navigating = false; }
         }
     }
+    private void SetSelectedCommand(ModbusCommandEditorEntry? value) => SetProperty(ref _selectedCommand, value, nameof(SelectedCommand));
+    private void SetSelectedStep(ModbusCommandStepEditorEntry? value) => SetProperty(ref _selectedStep, value, nameof(SelectedStep));
+    private bool CommitNavigationDraft() => !(_commandDirty || _stepDirty) || SaveCommand();
+    // Other imported steps may still need repair. Moving inside this command
+    // validates only the current step and keeps the entire private draft.
+    private bool CommitStepNavigationDraft() => !_stepDirty || SaveStep();
     public string CommandNameText
     {
         get => _commandName;
@@ -203,17 +217,23 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         }
     }
 
-    public void NewCommand() => ResetCommandDraft();
+    public void NewCommand()
+    {
+        if (_loading || _navigating) return;
+        _navigating = true;
+        try { if (CommitNavigationDraft()) ResetCommandDraft(); }
+        finally { _navigating = false; }
+    }
     private void ResetCommandDraft()
     {
         _loading = true;
         try
         {
-            SelectedCommand = null;
+            SetSelectedCommand(null);
             _commandId = Guid.NewGuid().ToString("N");
             CommandNameText = UiText.Format("ModbusCommandNewName", "Command {0}", Items.Count + 1);
             Steps.Clear();
-            SelectedStep = null;
+            SetSelectedStep(null);
             ResetStepFields();
             Error = "";
         }
@@ -226,14 +246,15 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         {
             _commandId = command?.Id ?? "";
             CommandNameText = command?.Name ?? "";
-            SelectedStep = null;
+            SetSelectedStep(null);
             Steps.Clear();
             if (command?.Steps is null) Steps.Add(new(null));
             else foreach (var step in command.Steps) Steps.Add(new(step?.Clone()));
             if (Steps.Count > 0)
             {
-                SelectedStep = Steps[Math.Clamp(stepIndex, 0, Steps.Count - 1)];
-                LoadStepFields(SelectedStep.Definition);
+                var selected = Steps[Math.Clamp(stepIndex, 0, Steps.Count - 1)];
+                SetSelectedStep(selected);
+                LoadStepFields(selected.Definition);
             }
             else ResetStepFields();
             Error = command is null || command.HasInvalidMetadata
@@ -243,8 +264,15 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     }
     public void NewStep()
     {
+        if (_loading || _navigating) return;
+        _navigating = true;
+        try { if (CommitStepNavigationDraft()) ResetStepDraft(); }
+        finally { _navigating = false; }
+    }
+    private void ResetStepDraft()
+    {
         _loading = true;
-        try { SelectedStep = null; ResetStepFields(); Error = ""; }
+        try { SetSelectedStep(null); ResetStepFields(); Error = ""; }
         finally { _loading = false; _stepDirty = false; NotifyStepPresentation(); }
     }
     private void ResetStepFields()
@@ -377,7 +405,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
             try
             {
                 if (index < 0) Steps.Add(replacement); else Steps[index] = replacement;
-                SelectedStep = replacement;
+                SetSelectedStep(replacement);
                 LoadStepFields(step);
             }
             finally { _loading = false; }
@@ -408,7 +436,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
             try
             {
                 if (index < 0) Items.Add(replacement); else Items[index] = replacement;
-                SelectedCommand = replacement;
+                SetSelectedCommand(replacement);
                 _selectedCommandId = command.Id;
             }
             finally { _loading = false; }
@@ -434,7 +462,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
                 ? copy.Name + suffix : UiText.Format("ModbusCommandNewName", "Command {0}", Items.Count + 1);
             var entry = new ModbusCommandEditorEntry(copy);
             _loading = true;
-            try { Items.Add(entry); SelectedCommand = entry; _selectedCommandId = copy.Id; }
+            try { Items.Add(entry); SetSelectedCommand(entry); _selectedCommandId = copy.Id; }
             finally { _loading = false; }
             _invalidMetadata = false;
             LoadCommand(copy);
@@ -453,7 +481,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
                 throw new ArgumentException(T("TooManySteps", "At most 32 steps are allowed in a command."));
             var entry = new ModbusCommandStepEditorEntry(selected.Clone());
             _loading = true;
-            try { Steps.Insert(Steps.IndexOf(SelectedStep!) + 1, entry); SelectedStep = entry; LoadStepFields(entry.Definition); }
+            try { Steps.Insert(Steps.IndexOf(SelectedStep!) + 1, entry); SetSelectedStep(entry); LoadStepFields(entry.Definition); }
             finally { _loading = false; }
             _stepDirty = false; _commandDirty = true; Error = ""; NotifyStepPresentation();
             return true;
@@ -464,7 +492,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     {
         if (SelectedCommand is not { } selected) return;
         _loading = true;
-        try { Items.Remove(selected); SelectedCommand = null; }
+        try { Items.Remove(selected); SetSelectedCommand(null); }
         finally { _loading = false; }
         _invalidMetadata = false;
         ResetCommandDraft();
@@ -474,7 +502,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
     public void ClearCommands()
     {
         _loading = true;
-        try { Items.Clear(); SelectedCommand = null; _selectedCommandId = null; }
+        try { Items.Clear(); SetSelectedCommand(null); _selectedCommandId = null; }
         finally { _loading = false; }
         _invalidMetadata = false;
         ResetCommandDraft();
@@ -484,10 +512,19 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         if (SelectedStep is not { } selected) return;
         var index = Steps.IndexOf(selected);
         _loading = true;
-        try { Steps.Remove(selected); SelectedStep = null; }
-        finally { _loading = false; }
-        NewStep();
-        if (Steps.Count > 0) SelectedStep = Steps[Math.Min(index, Steps.Count - 1)];
+        try
+        {
+            Steps.Remove(selected);
+            SetSelectedStep(null);
+            ResetStepFields();
+            if (Steps.Count > 0)
+            {
+                SetSelectedStep(Steps[Math.Min(index, Steps.Count - 1)]);
+                LoadStepFields(SelectedStep!.Definition);
+            }
+            Error = "";
+        }
+        finally { _loading = false; _stepDirty = false; }
         _commandDirty = true;
         NotifyStepPresentation();
     }
@@ -500,7 +537,7 @@ public sealed class ModbusCommandEditorViewModel : ViewModelBase
         var next = index + offset;
         if (next < 0 || next >= Steps.Count) return false;
         _loading = true;
-        try { Steps.Move(index, next); SelectedStep = selected; }
+        try { Steps.Move(index, next); SetSelectedStep(selected); }
         finally { _loading = false; }
         _commandDirty = true;
         NotifyStepPresentation();
