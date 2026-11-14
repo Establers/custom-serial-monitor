@@ -135,7 +135,6 @@
                                         </ContentControl>
                                         <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                                             <Expander.Resources>
-                                                <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
@@ -165,7 +164,6 @@
                                             <TextBlock Text="{Binding WriteEditorLabel}" FontSize="14" FontWeight="SemiBold" />
                                             <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                                                 <Expander.Resources>
-                                                    <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                                                     <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                     <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                                 </Expander.Resources>
@@ -203,7 +201,6 @@
                                         <TextBlock Text="{Binding CommandsLabel}" FontWeight="SemiBold" />
                                         <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                                             <Expander.Resources>
-                                                <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
@@ -221,7 +218,6 @@
                                         </ScrollViewer>
                                         <Expander Header="{Binding WirePreviewLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                                             <Expander.Resources>
-                                                <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>

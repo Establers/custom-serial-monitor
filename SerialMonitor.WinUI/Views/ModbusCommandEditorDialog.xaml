@@ -44,7 +44,6 @@
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="4" MinWidth="340" MaxHeight="620">
         <Expander Header="{Binding HelpLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
             <Expander.Resources>
-                <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
             </Expander.Resources>
@@ -98,7 +97,6 @@
                 <TextBlock Text="{Binding InterpretationSummary}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                     <Expander.Resources>
-                        <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                     </Expander.Resources>
@@ -117,7 +115,6 @@
                         </Grid>
                         <Expander Header="{Binding ValueNamesLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                             <Expander.Resources>
-                                <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                             </Expander.Resources>
@@ -147,7 +144,6 @@
                 </StackPanel>
                 <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                     <Expander.Resources>
-                        <Thickness x:Key="ExpanderHeaderPadding">6,0,0,0</Thickness>
                         <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                         <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                     </Expander.Resources>
