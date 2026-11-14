@@ -79,7 +79,7 @@
                     <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBlock Text="{Binding FunctionLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBox Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GroupNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
-                    <ComboBox Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusFunctionComboBoxStyle}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 </Grid>
                 <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />

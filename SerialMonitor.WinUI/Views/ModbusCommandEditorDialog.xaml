@@ -103,7 +103,7 @@
                     <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBlock Text="{Binding AreaLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBox Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
-                    <ComboBox Grid.Column="1" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AreaLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Areas}" SelectedIndex="{Binding AreaIndex, Mode=TwoWay}" Style="{StaticResource ModbusFunctionComboBoxStyle}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding AreaLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                 </Grid>
                 <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{Binding AddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
@@ -158,7 +158,7 @@
                         <TextBlock Text="{Binding StatusAddressLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                         <TextBlock Grid.Column="1" Text="{Binding StatusFunctionLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                         <TextBox Text="{Binding StatusAddressText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CommandNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding StatusAddressLabel}" />
-                        <ComboBox Grid.Column="1" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding StatusFunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding StatusFunctions}" SelectedIndex="{Binding StatusFunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusFunctionComboBoxStyle}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding StatusFunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
                     </Grid>
                     <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                         <TextBlock Text="{Binding MaskLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />

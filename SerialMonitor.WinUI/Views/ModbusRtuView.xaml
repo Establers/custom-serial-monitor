@@ -103,7 +103,7 @@
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding UnitLabel}" />
-                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
+                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Functions}" SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" Style="{StaticResource ModbusFunctionComboBoxStyle}" FontSize="12" AutomationProperties.Name="{Binding FunctionLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
@@ -138,7 +138,7 @@
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
-                                            <StackPanel Spacing="6">
+                                            <StackPanel Spacing="6" Margin="5,0,5,0">
                                                 <TextBlock Text="{Binding SetupHelp}" Style="{StaticResource GuideBody}" />
                                                 <TextBlock Text="{Binding OwnershipHelp}" Style="{StaticResource GuideBody}" />
                                             </StackPanel>
@@ -222,14 +222,14 @@
                                             <ComboBox.Resources><x:Double x:Key="ComboBoxMinHeight">24</x:Double></ComboBox.Resources>
                                         </ComboBox>
                                         <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                            <TextBlock Text="{Binding CommandTargetPreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
+                                            <TextBlock Text="{Binding CommandTargetPreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" Margin="5,0,5,0" />
                                         </ScrollViewer>
                                         <Expander Header="{Binding WirePreviewLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
                                             <Expander.Resources>
                                                 <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
                                                 <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
                                             </Expander.Resources>
-                                            <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
+                                            <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" Margin="5,0,5,0" />
                                         </Expander>
                                         <Button Content="{Binding ExecuteCommandLabel}" Command="{Binding ExecuteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
                                         <Button Content="{Binding StopAllLabel}" Command="{Binding StopCommand}" Visibility="{Binding BusyVisibility}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />
@@ -239,7 +239,7 @@
                                             <TextBlock Text="{Binding RecentCommandCaption}" Style="{StaticResource GuideBody}" FontWeight="SemiBold" ToolTipService.ToolTip="{Binding RecentCommandSummary}" />
                                             <TextBlock Text="{Binding RecentCommandAlert}" Visibility="{Binding RecentCommandAlertVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
                                             <Expander Header="{Binding CommandResultDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource CompactExpanderStyle}">
-                                                <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" />
+                                                <TextBlock Text="{Binding RecentCommandResults}" Style="{StaticResource GuideBody}" Margin="5,0,5,0" />
                                             </Expander>
                                         </StackPanel>
                                     </StackPanel>

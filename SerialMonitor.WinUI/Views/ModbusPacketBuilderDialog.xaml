@@ -88,8 +88,9 @@
                     <TextBlock Text="{Binding FunctionLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBox Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
                     <ComboBox Grid.Column="1" ItemsSource="{Binding FunctionOptions}"
+                              Style="{StaticResource ModbusFunctionComboBoxStyle}"
                               SelectedIndex="{Binding FunctionIndex, Mode=TwoWay}" MaxDropDownHeight="360"
-                              ToolTipService.ToolTip="{Binding FunctionHelp}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FunctionLabel}" />
+                              ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FunctionLabel}" />
                 </Grid>
                 <TextBlock Text="{Binding FunctionHelp}" Visibility="{Binding FunctionHelp, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource FieldHelp}" />
 
