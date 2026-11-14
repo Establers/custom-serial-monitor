@@ -153,6 +153,13 @@ public static class StartupHook
                 savedName = (P(item, "Summary") ?? P(item, "DisplayName")) as string;
             if (e.GetType().Name == "ComboBox" && P(e, "SelectedItem") is { } selected && P(e, "DisplayMemberPath") is string path && path.Length > 0)
                 savedName = P(selected, path) as string;
+            if (e.GetType().Name == "ComboBox" && P(e, "SelectedItem") is string option &&
+                MeasureText(e, option, double.PositiveInfinity).Width > N(e, "ActualWidth") - 40 + 2)
+            {
+                var tooltip = HasTooltip(e, option);
+                TrimmedText[Case + ":" + option] = new { name = Case, text = option, tooltip };
+                if (!tooltip) Issue("long selected option has no full-text tooltip: " + option);
+            }
             if (savedName?.Contains("긴 ", StringComparison.Ordinal) == true)
             {
                 var needed = MeasureText(e, savedName, double.PositiveInfinity);
@@ -277,12 +284,69 @@ public static class StartupHook
             }
         }
     }
+    private static List<object> CheckFormGrids(object root)
+    {
+        var measurements = new List<object>();
+        var gridType = FindType("Microsoft.UI.Xaml.Controls.Grid");
+        int Cell(object element, string property) => (int)gridType.GetMethod("Get" + property)!.Invoke(null, [element])!;
+        Rect Bounds(object element, object relativeTo) => (Rect)Call(Call(element, "TransformToVisual", relativeTo)!,
+            "TransformBounds", new Rect(0, 0, N(element, "ActualWidth"), N(element, "ActualHeight")))!;
+        double? leftRail = null, formWidth = null;
+        foreach (var grid in Tree(root).Where(e => e.GetType().Name == "Grid" && P(e, "Tag")?.ToString() == "ModbusFormGrid" && Visible(e)))
+        {
+            var columns = ((IEnumerable)P(grid, "ColumnDefinitions")!).Cast<object>().ToArray();
+            var left = Bounds(grid, root).Left;
+            leftRail ??= left;
+            formWidth ??= N(grid, "ActualWidth");
+            if (Math.Abs(left - leftRail.Value) > 2) Issue($"form left rail differs: {left:F1}/{leftRail:F1}");
+            if (Math.Abs(N(grid, "ActualWidth") - formWidth.Value) > 2) Issue("form right rails do not align");
+            if (Math.Abs(N(columns[0], "ActualWidth") - 128) > 1) Issue("form first column is not 128 DIP");
+            if (Math.Abs(N(grid, "ColumnSpacing") - 8) > 1 || Math.Abs(N(grid, "RowSpacing") - 4) > 1)
+                Issue("form spacing differs from the shared grid");
+            var children = ((IEnumerable)P(grid, "Children")!).Cast<object>().Where(Visible).ToArray();
+            foreach (var row in children.GroupBy(e => Cell(e, "Row")))
+            {
+                var tops = row.Select(e => Bounds(e, grid).Top).ToArray();
+                if (tops.Max() - tops.Min() > 2) Issue("form row controls do not share a top edge");
+                if (row.Key % 2 == 1)
+                {
+                    var labels = children.Where(e => Cell(e, "Row") == row.Key - 1).ToArray();
+                    if (labels.Length > 0 && Math.Abs(tops.Min() - labels.Max(e => Bounds(e, grid).Bottom) - 4) > 1)
+                        Issue("form label/input gap is not 4 DIP");
+                }
+            }
+            foreach (var input in children.Where(e => e.GetType().Name is "TextBox" or "ComboBox" or "ToggleSwitch"))
+            {
+                var column = Cell(input, "Column");
+                var label = children.FirstOrDefault(e => e.GetType().Name == "TextBlock" &&
+                    Cell(e, "Column") == column && Cell(e, "Row") == Cell(input, "Row") - 1);
+                if (label is null) { Issue("form control has no label in the preceding row"); continue; }
+                var fieldBounds = Bounds(input, grid); var labelBounds = Bounds(label, grid);
+                var expectedLeft = columns.Take(column).Sum(c => N(c, "ActualWidth")) + column * 8;
+                if (Math.Abs(fieldBounds.Left - expectedLeft) > 1 || Math.Abs(labelBounds.Left - expectedLeft) > 1)
+                    Issue($"form label/input left edges differ at column {column}");
+                var span = Cell(input, "ColumnSpan");
+                var allocatedWidth = columns.Skip(column).Take(span).Sum(c => N(c, "ActualWidth")) + (span - 1) * 8;
+                if (fieldBounds.Width > allocatedWidth + 2)
+                    Issue("form input exceeds its allocated column");
+                if (P(input, "Header") is not null) Issue("paired form input still has a separate native header");
+                var automation = FindType("Microsoft.UI.Xaml.Automation.AutomationProperties").GetMethod("GetName")!.Invoke(null, [input]);
+                if (automation?.ToString() != P(label, "Text")?.ToString()) Issue("form input lost its accessible label");
+            }
+            measurements.Add(new { left, width = N(grid, "ActualWidth"), firstColumn = N(columns[0], "ActualWidth"), fields = children.Count(e => Cell(e, "Row") % 2 == 1) });
+        }
+        return measurements;
+    }
     private static async Task Probe(object root, string name)
     {
         Case = name;
         var before = Issues.Count;
         await Settle(root);
         CheckTextAndButtons(root);
+        var formGrids = CheckFormGrids(root);
+        if ((name.StartsWith("items-") || name.StartsWith("groups-") || name.StartsWith("commands-") ||
+             name.StartsWith("packet-") || name.StartsWith("SettingsFlyout")) && formGrids.Count == 0)
+            Issue("expected a shared form grid but none was measured");
         await CheckNumericInputs(root);
         var scrolls = await CheckScrolls(root);
         var surface = Tree(root).FirstOrDefault(e => P(e, "Name")?.ToString() == "BackgroundElement") ?? root;
@@ -296,7 +360,7 @@ public static class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), scrolls, issues = Issues.Count - before });
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -413,6 +477,10 @@ public static class StartupHook
                         });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPacketBuilderDialog"), "packet-error" + suffix,
                     m => S(m, "UnitText", "999999"));
+                await Dialog(New("SerialMonitor.WinUI.Views.ModbusPacketBuilderDialog"), "packet-diagnostic-scalar" + suffix,
+                    m => { Call(m, "SelectFunction", (byte)8); S(m, "DiagnosticIndex", 7); });
+                await Dialog(New("SerialMonitor.WinUI.Views.ModbusPacketBuilderDialog"), "packet-device-long" + suffix,
+                    m => { Call(m, "SelectFunction", (byte)43); S(m, "DeviceAccessIndex", 3); S(m, "ObjectIdText", "255"); });
 
                 if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER")))
                 {

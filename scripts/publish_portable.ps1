@@ -146,6 +146,12 @@ if ($runningProcesses.Count -gt 0) {
         }
     }
     else {
+        $portablePrefix = $portableDirFull.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        foreach ($process in $runningProcesses) {
+            if ($process.Path -and $process.Path.StartsWith($portablePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Portable output is in use by PID=$($process.Id). Close that Serial Monitor instance before publishing: $portableDirFull"
+            }
+        }
         Write-Warning "Serial Monitor is currently running: $processList"
         Write-Warning "Close it first if publish fails due locked files, or rerun this script with -StopRunning after saving app state."
     }

@@ -43,13 +43,14 @@ public sealed class ModbusPacketBuilderLayoutTests
     public void ScalarFieldsShareRowsAndReadWriteRangesHaveSeparateRows()
     {
         var markup = Markup();
-        foreach (var name in new[] { "ReadRow", "SingleCoilRow", "SingleRegisterRow", "WriteRow", "ReadWriteRow", "DeviceIdRow", "CustomRow", "DiagnosticRow" })
+        foreach (var name in new[] { "ReadRow", "SingleCoilRow", "SingleRegisterRow", "WriteRow", "ReadWriteRow", "DeviceIdRow", "CustomRow" })
         {
             var row = Named(markup, name);
             Assert.Equal(2, ((string)row.Attribute("ColumnDefinitions")!).Split(',').Length);
             Assert.Contains(row.Elements(), input => (string?)input.Attribute("Grid.Column") == "1");
         }
-        Assert.Equal("*,*,*", (string?)Named(markup, "MaskRow").Attribute("ColumnDefinitions"));
+        Assert.Equal("128,*,*", (string?)Named(markup, "MaskRow").Attribute("ColumnDefinitions"));
+        Assert.Equal("{Binding DiagnosticSelectorColumn}", (string?)Named(markup, "DiagnosticRow").Element(Presentation + "ComboBox")!.Attribute("Grid.Column"));
         Assert.NotSame(Named(markup, "ReadRow"), Named(markup, "ReadWriteRow"));
         Assert.All(markup.Descendants(Presentation + "TextBox").Where(input => Binding(input) == nameof(ModbusPacketBuilderViewModel.WriteQuantityText)),
             input => Assert.Equal("True", (string?)input.Attribute("IsReadOnly")));
@@ -78,6 +79,7 @@ public sealed class ModbusPacketBuilderLayoutTests
             model.DiagnosticIndex = index;
             Assert.Equal(1, VisibleFields(Markup(), model).Count(field => field == nameof(model.DiagnosticDataText)));
             Assert.Equal(index == 0 ? 2 : 1, model.DiagnosticSelectorColumnSpan);
+            Assert.Equal(index == 0 ? 0 : 1, model.DiagnosticSelectorColumn);
             Assert.Equal(index == 0 ? Visibility.Collapsed : Visibility.Visible, model.DiagnosticSingleDataVisibility);
         }
     }
