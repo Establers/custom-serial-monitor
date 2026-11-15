@@ -32,7 +32,7 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
         {
             Changed(null, EventArgs.Empty);
             var framer = new ModbusRequestFramer();
-            long lastChunk = 0, lastWrite = 0;
+            long lastChunk = 0, lastWriteStarted = 0, lastWriteCompleted = 0;
             byte[]? previousResponse = null;
             await foreach (var chunk in queue.Reader.ReadAllAsync(token).ConfigureAwait(false))
             {
@@ -46,16 +46,22 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                     if (Volatile.Read(ref overflow) != 0) throw new IOException("시뮬레이터 수신 대기열 초과로 응답을 중지했어요.");
                     // FC05/06 echoes are indistinguishable from identical requests.
                     // Stop on a rapid echo instead of creating a self-sustaining TX loop.
+                    // Compare RX time, not dequeue time: a retry queued before TX
+                    // cannot be its echo, and a real echo may be processed much later.
                     if (previousResponse is not null && request.AsSpan().SequenceEqual(previousResponse) &&
-                        Stopwatch.GetElapsedTime(lastWrite).TotalMilliseconds < 100)
+                        chunk.ReceivedTimestamp >= lastWriteStarted &&
+                        Stopwatch.GetElapsedTime(lastWriteCompleted, chunk.ReceivedTimestamp).TotalMilliseconds < 100)
                         throw new IOException("쓰기 응답의 로컬 에코 또는 너무 빠른 중복 요청을 감지했어요. 어댑터 에코를 끄고 요청 간격을 100ms 이상으로 설정하세요.");
                     var response = engine.Respond(request);
                     if (response is null) continue;
                     if (definition.ResponseDelayMs > 0) await Task.Delay(definition.ResponseDelayMs, token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
                     if (Volatile.Read(ref overflow) != 0) throw new IOException("시뮬레이터 수신 대기열 초과로 응답을 중지했어요.");
+                    // RX can arrive while SendAsync is still completing.
+                    lastWriteStarted = Stopwatch.GetTimestamp();
                     await lease.SendAsync(response, token).ConfigureAwait(false);
-                    previousResponse = response; lastWrite = Stopwatch.GetTimestamp();
+                    lastWriteCompleted = Stopwatch.GetTimestamp();
+                    previousResponse = response;
                     transmitted(response, lease.Generation); responded();
                 }
             }

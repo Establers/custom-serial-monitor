@@ -136,4 +136,78 @@ public sealed class ModbusSensorServiceTests
         await Assert.ThrowsAsync<IOException>(() => run.WaitAsync(TimeSpan.FromSeconds(3)));
         Assert.Single(device.Sent); Assert.Null(device.Owner);
     }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task RequestsReceivedBeforeReplyAreNotLocalEchoes(bool coalesced)
+    {
+        var serial = DispatchProxy.Create<ISerialService, ModbusRtuMonitorServiceTests.TestSerial>();
+        var device = (ModbusRtuMonitorServiceTests.TestSerial)(object)serial;
+        var replies = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
+        var service = new ModbusSensorService(serial, (bytes, _) => replies.Writer.TryWrite(bytes));
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var run = service.RunAsync(Definition(500), () => {}, stop.Token);
+        var write = ModbusRtuRequestBuilder.WriteSingle(1, 6, 0, 100);
+        try
+        {
+            device.Emit(coalesced ? write.Concat(write).ToArray() : write);
+            if (!coalesced)
+            {
+                await Task.Delay(150);
+                Assert.Empty(device.Sent);
+                device.Emit(write);
+            }
+            Assert.Equal(write, await replies.Reader.ReadAsync(stop.Token));
+            Assert.Equal(write, await replies.Reader.ReadAsync(stop.Token));
+            Assert.False(run.IsCompleted);
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await run.WaitAsync(TimeSpan.FromSeconds(2)); } catch (OperationCanceledException) { }
+        }
+        Assert.Equal(2, device.Sent.Count); Assert.Null(device.Owner);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(150)]
+    public async Task EchoReceivedDuringSendIsDetectedEvenWhenProcessedLater(int echoDelayMs)
+    {
+        var serial = DispatchProxy.Create<ISerialService, ModbusRtuMonitorServiceTests.TestSerial>();
+        var device = (ModbusRtuMonitorServiceTests.TestSerial)(object)serial;
+        device.OnSend = async bytes => { await Task.Delay(echoDelayMs); device.Emit(bytes); await Task.Delay(150); };
+        var service = new ModbusSensorService(serial, (_, _) => {});
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var run = service.RunAsync(Definition(), () => {}, stop.Token);
+        device.Emit(ModbusRtuRequestBuilder.WriteSingle(1, 6, 0, 100));
+        await Assert.ThrowsAsync<IOException>(() => run.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Single(device.Sent); Assert.Null(device.Owner);
+    }
+
+    [Fact] public async Task ShortUnsupportedRequestRepliesWithoutBreakingSubsequentReads()
+    {
+        var serial = DispatchProxy.Create<ISerialService, ModbusRtuMonitorServiceTests.TestSerial>();
+        var device = (ModbusRtuMonitorServiceTests.TestSerial)(object)serial;
+        var replies = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
+        var service = new ModbusSensorService(serial, (bytes, _) => replies.Writer.TryWrite(bytes));
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var run = service.RunAsync(Definition(), () => {}, stop.Token);
+        try
+        {
+            device.Emit(Convert.FromHexString("00074072"), endsAtIdleBoundary: true); // Broadcast.
+            device.Emit(Convert.FromHexString("02074112"), endsAtIdleBoundary: true); // Other unit.
+            device.Emit(Convert.FromHexString("010741E3"), endsAtIdleBoundary: true); // Bad CRC.
+            device.Emit(Convert.FromHexString("0107"));
+            device.Emit(Convert.FromHexString("41E2"), endsAtIdleBoundary: true);
+            device.Emit(ModbusRtuRequestBuilder.Read(1, 3, 0, 1), endsAtIdleBoundary: true);
+            Assert.Equal("0187018230", Convert.ToHexString(await replies.Reader.ReadAsync(stop.Token)));
+            Assert.Equal("01030200FA3807", Convert.ToHexString(await replies.Reader.ReadAsync(stop.Token)));
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await run.WaitAsync(TimeSpan.FromSeconds(2)); } catch (OperationCanceledException) { }
+        }
+        Assert.Equal(2, device.Sent.Count); Assert.Null(device.Owner);
+    }
 }

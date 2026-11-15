@@ -102,6 +102,55 @@ public sealed class ModbusSensorTests
     }
 
     [Theory]
+    [InlineData(7)] [InlineData(11)] [InlineData(12)] [InlineData(17)] [InlineData(43)]
+    public void ShortUnsupportedRequestsSurviveSplitsAndCoalescing(byte function)
+    {
+        byte[] payload = function == 43 ? [1, 43, 14, 1, 0] : [1, function];
+        var request = Packet(payload);
+        var read = ModbusRtuRequestBuilder.Read(1, 3, 0, 1);
+        for (var split = 1; split < request.Length; split++)
+        {
+            var framer = new ModbusRequestFramer();
+            Assert.Empty(framer.Feed(request[..split]));
+            var frames = framer.Feed(request[split..].Concat(read).ToArray(), true).ToArray();
+            Assert.Equal(2, frames.Length);
+            Assert.Equal(request, frames[0]); Assert.Equal(read, frames[1]);
+            var response = new ModbusSensorEngine(Definition()).Respond(frames[0])!;
+            Assert.Equal(Packet([1, (byte)(function | 128), 1]), response);
+        }
+    }
+
+    [Fact] public void ShortRequestRecoveryPreservesCrcAndIdleBoundaries()
+    {
+        var request = Convert.FromHexString("010741E2");
+        var corrupt = request.ToArray(); corrupt[^1] ^= 1;
+        var framer = new ModbusRequestFramer();
+        Assert.Empty(framer.Feed(corrupt, true));
+        Assert.Empty(framer.Feed(request[..2], true));
+        Assert.Empty(framer.Feed(request[2..], true));
+        byte[] noise = [1, 16, 0, 0, 0, 100, 200];
+        Assert.Equal(request, Assert.Single(framer.Feed(noise.Concat(request).ToArray(), true)));
+    }
+
+    [Fact] public void MultipleWriteDoesNotExtractShortRequestFromItsPayload()
+    {
+        var write = ModbusRtuRequestBuilder.WriteMultiple(1, 16, 0, new ushort[] { 0x0107, 0x41E2 });
+        for (var split = 1; split < write.Length; split++)
+        {
+            var framer = new ModbusRequestFramer();
+            Assert.Empty(framer.Feed(write[..split]));
+            Assert.Equal(write, Assert.Single(framer.Feed(write[split..], true)));
+        }
+    }
+
+    private static byte[] Packet(byte[] payload)
+    {
+        var packet = new byte[payload.Length + 2]; payload.CopyTo(packet, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(payload.Length), ModbusRtuCrc.Compute(payload));
+        return packet;
+    }
+
+    [Theory]
     [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)]
     public void EveryReadAreaHasItsOwnAddressSpace(byte area)
     {

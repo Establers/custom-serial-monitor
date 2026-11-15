@@ -99,9 +99,22 @@ public sealed class ModbusRequestFramer
     }
     private IEnumerable<byte[]> Drain(bool endOfFrame)
     {
-        while (_buffer.Count >= 8)
+        while (_buffer.Count >= 4)
         {
-            var length = _buffer[1] is 15 or 16 ? 9 + _buffer[6] : 8;
+            // Unsupported standard functions still need framing so the engine
+            // can return Illegal Function instead of making the master time out.
+            if (_buffer[1] is 15 or 16 && _buffer.Count < 7)
+            {
+                if (!endOfFrame) yield break;
+                _buffer.RemoveAt(0); continue;
+            }
+            var length = _buffer[1] switch
+            {
+                7 or 11 or 12 or 17 => 4,
+                43 when _buffer[2] == 14 => 7,
+                15 or 16 => 9 + _buffer[6],
+                _ => 8
+            };
             if (length > 256) { _buffer.RemoveAt(0); continue; }
             if (_buffer.Count < length)
             {
