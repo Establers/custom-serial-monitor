@@ -35,7 +35,17 @@ public static class ExpanderHeaderLayout
         if (expander.IsLoaded) ApplyLayout(expander);
     }
 
-    private static void OnLoaded(object sender, RoutedEventArgs args) => ApplyLayout((Expander)sender);
+    private static void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        var expander = (Expander)sender;
+        ApplyLayout(expander);
+        // On first display the header may be materialized after the parent's
+        // Loaded event. Reapply once after that layout turn, without polling.
+        expander.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (expander.IsLoaded) ApplyLayout(expander);
+        });
+    }
 
     private static void ApplyLayout(Expander expander)
     {
@@ -48,6 +58,9 @@ public static class ExpanderHeaderLayout
         if (!double.IsFinite(size) || size <= 0) return;
         header.MinHeight = expander.MinHeight;
         header.FontSize = expander.FontSize;
+        // The header's template can still be deferred when the Expander loads.
+        // Materialize it before looking for the native chevron border.
+        header.ApplyTemplate();
         // Detached flyouts must not depend on a view's resource scope to get
         // the same native chevron dimensions as inline sections.
         if (FindChevron(header) is not { } chevron) return;

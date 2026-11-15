@@ -872,6 +872,32 @@ public static class StartupHook
                 var suffix = $"-{size.Width}x{size.Height}";
                 var defaultViewName = "default-view" + suffix;
                 var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (string.IsNullOrEmpty(filter) || filter == "packet-details")
+                {
+                    var packetModel = P(startupModel, "Protocol")!;
+                    S(packetModel, "SelectedViewIndex", 1);
+                    var packetView = New("SerialMonitor.WinUI.Views.ProtocolView");
+                    await View(packetView, "details-collapsed" + suffix, packetModel);
+                    S(packetModel, "SelectedFrame", New("SerialMonitor.WinUI.ViewModels.ProtocolFrameRow", ResponseFrame()));
+                    var rawDetails = Field(packetView, "RawDetailsExpander");
+                    foreach (var expanded in new[] { false, true, false })
+                    {
+                        S(rawDetails, "IsExpanded", expanded);
+                        await Settle(packetView);
+                        if (P(rawDetails, "IsLoaded") is not true || !Visible(rawDetails))
+                            Issue("packet details fixture is not loaded and visible");
+                        var header = Tree(rawDetails).First(e => P(e, "Name")?.ToString() == "ExpanderHeader");
+                        var chevron = Tree(header).First(e => P(e, "Name")?.ToString() == "ExpandCollapseChevronBorder");
+                        var height = N(header, "ActualHeight");
+                        var chevronWidth = N(chevron, "ActualWidth");
+                        var chevronHeight = N(chevron, "ActualHeight");
+                        if (height < 23 || height > 26 || Math.Abs(chevronWidth - 16) > 1 || Math.Abs(chevronHeight - 16) > 1)
+                            Issue($"packet detail header is not compact: expanded={expanded}, height={height}, chevron={chevronWidth}x{chevronHeight}");
+                        Results.Add(new { name = "packet-details-geometry" + suffix, expanded, height, chevronWidth, chevronHeight });
+                        Save();
+                    }
+                    if (filter == "packet-details") continue;
+                }
                 if (string.IsNullOrEmpty(filter) || defaultViewName.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 {
                     var defaultProtocolModel = P(startupModel, "Protocol")!;
