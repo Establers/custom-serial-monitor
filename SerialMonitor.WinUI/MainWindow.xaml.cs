@@ -241,6 +241,8 @@ public sealed partial class MainWindow : Window
         }
 
         _closeCleanupStarted = true;
+        CancelInspectorDockDrag();
+        FinishInspectorResize(InspectorResizeHandle, releasePointerCapture: true);
         // Hiding keeps the window/dispatcher alive until RX drain, file flush,
         // profile persistence and WebView cleanup have finished.
         HideWindowForShutdown(AppWindow);
@@ -275,7 +277,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            await _viewModel.ShutdownAsync(TimeSpan.FromSeconds(8));
+            await Task.WhenAll(_viewModel.ShutdownAsync(TimeSpan.FromSeconds(8)), FlushInspectorLayoutAsync());
         }
         catch (Exception ex)
         {
@@ -357,6 +359,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _inspectorLayoutLifetime.Cancel();
         _terminalOutputTimer?.Stop();
         _sequenceResultsWindow?.Close();
         DisposeLogNavigationUi();
@@ -522,7 +525,7 @@ public sealed partial class MainWindow : Window
     private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
         _ = _updates.InitializeAsync();
-        await Task.WhenAll(_viewModel.InitializeAsync(), _portAlias.InitializeAsync());
+        await Task.WhenAll(_viewModel.InitializeAsync(), _portAlias.InitializeAsync(), InitializeInspectorLayoutAsync());
         if (IsClosingOrClosed) return;
         ApplySelectedTheme();
         ApplyTitleBarTheme();

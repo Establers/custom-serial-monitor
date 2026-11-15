@@ -1677,13 +1677,36 @@
                             PointerCaptureLost="InspectorDockHandle_PointerCaptureLost"
                             PointerCanceled="InspectorDockHandle_PointerCaptureLost"
                             KeyDown="InspectorDockHandle_KeyDown">
-                            <FontIcon Glyph="&#xE759;" FontSize="12" />
+                            <Grid ColumnDefinitions="2,2" RowDefinitions="2,2,2" ColumnSpacing="3" RowSpacing="3"
+                                  IsHitTestVisible="False">
+                                <Ellipse Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Ellipse Grid.Column="1" Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Ellipse Grid.Row="1" Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Ellipse Grid.Row="1" Grid.Column="1" Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Ellipse Grid.Row="2" Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Ellipse Grid.Row="2" Grid.Column="1" Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
                             <FlyoutBase.AttachedFlyout>
-                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuFlyoutItem x:Uid="InspectorDockLeft" Text="Dock left" Tag="Left" Click="InspectorDockMenu_Click" />
-                                    <MenuFlyoutItem x:Uid="InspectorDockRight" Text="Dock right" Tag="Right" Click="InspectorDockMenu_Click" />
-                                    <MenuFlyoutItem x:Uid="InspectorDockBottom" Text="Dock below" Tag="Bottom" Click="InspectorDockMenu_Click" />
-                                </MenuFlyout>
+                                <Flyout x:Name="InspectorDockFlyout" Placement="BottomEdgeAlignedLeft"
+                                        FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <Button x:Uid="InspectorDockLeft" Tag="Left" Click="InspectorDockMenu_Click"
+                                                Style="{StaticResource ToolbarIconButtonStyle}" AutomationProperties.Name="Left"
+                                                infra:AppToolTipService.ToolTip="Left">
+                                            <FontIcon Glyph="&#xE76B;" FontSize="12" />
+                                        </Button>
+                                        <Button x:Uid="InspectorDockBottom" Tag="Bottom" Click="InspectorDockMenu_Click"
+                                                Style="{StaticResource ToolbarIconButtonStyle}" AutomationProperties.Name="Bottom"
+                                                infra:AppToolTipService.ToolTip="Bottom">
+                                            <FontIcon Glyph="&#xE70D;" FontSize="12" />
+                                        </Button>
+                                        <Button x:Uid="InspectorDockRight" Tag="Right" Click="InspectorDockMenu_Click"
+                                                Style="{StaticResource ToolbarIconButtonStyle}" AutomationProperties.Name="Right"
+                                                infra:AppToolTipService.ToolTip="Right">
+                                            <FontIcon Glyph="&#xE76C;" FontSize="12" />
+                                        </Button>
+                                    </StackPanel>
+                                </Flyout>
                             </FlyoutBase.AttachedFlyout>
                         </infra:PanelMoveHandleControl>
                     </TabView.TabStripHeader>
@@ -3887,20 +3910,20 @@
                 <Border x:Name="InspectorDockPreview" Background="{ThemeResource SystemControlHighlightAccentBrush}"
                         BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}" BorderThickness="2"
                         Opacity="0.22" HorizontalAlignment="Left" VerticalAlignment="Top" />
-                <Border x:Name="InspectorDockLeftTarget" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
-                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
-                    <TextBlock x:Uid="InspectorDockLeftLabel" Text="Dock left" />
+                <Border x:Name="InspectorDockLeftTarget" x:Uid="InspectorDockLeftTarget"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Style="{StaticResource InspectorDockTargetStyle}" AutomationProperties.Name="Left">
+                    <FontIcon Glyph="&#xE76B;" FontSize="16" />
                 </Border>
-                <Border x:Name="InspectorDockRightTarget" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
-                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
-                    <TextBlock x:Uid="InspectorDockRightLabel" Text="Dock right" />
+                <Border x:Name="InspectorDockRightTarget" x:Uid="InspectorDockRightTarget"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Style="{StaticResource InspectorDockTargetStyle}" AutomationProperties.Name="Right">
+                    <FontIcon Glyph="&#xE76C;" FontSize="16" />
                 </Border>
-                <Border x:Name="InspectorDockBottomTarget" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
-                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
-                    <TextBlock x:Uid="InspectorDockBottomLabel" Text="Dock below" />
+                <Border x:Name="InspectorDockBottomTarget" x:Uid="InspectorDockBottomTarget"
+                        HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Style="{StaticResource InspectorDockTargetStyle}" AutomationProperties.Name="Bottom">
+                    <FontIcon Glyph="&#xE70D;" FontSize="16" />
                 </Border>
             </Grid>
         </Grid>

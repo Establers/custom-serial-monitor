@@ -102,6 +102,7 @@ public sealed partial class MainWindow
         BeginXtermResizeTransition();
         ApplyInspectorLayout();
         QueueXtermFit();
+        QueueInspectorLayoutSave();
     }
 
     private void InspectorDockHandle_PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -170,7 +171,8 @@ public sealed partial class MainWindow
 
     private void InspectorDockMenu_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is MenuFlyoutItem { Tag: string value } && Enum.TryParse<InspectorDockPosition>(value, out var position))
+        InspectorDockFlyout.Hide();
+        if (sender is FrameworkElement { Tag: string value } && Enum.TryParse<InspectorDockPosition>(value, out var position))
             DockInspector(position);
     }
 

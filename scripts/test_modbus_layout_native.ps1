@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$AppPath,
     [string]$OutputDirectory,
-    [string]$CaseFilter
+    [string]$CaseFilter,
+    [string]$InspectorLayoutPath
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -17,6 +18,8 @@ $output = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) ([guid]::NewGuid(
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $profile = Join-Path $env:LOCALAPPDATA 'SerialMonitor/profiles/default.json'
 $profileHash = if (Test-Path -LiteralPath $profile) { (Get-FileHash -LiteralPath $profile).Hash }
+$userLayout = Join-Path $env:LOCALAPPDATA 'SerialMonitor/inspector-layout.json'
+$userLayoutHash = if (Test-Path -LiteralPath $userLayout) { (Get-FileHash -LiteralPath $userLayout).Hash }
 $project = Join-Path $PSScriptRoot 'native-modbus-layout-smoke/NativeModbusLayoutHook.csproj'
 dotnet build $project -c Release --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Native Modbus layout hook build failed.' }
@@ -28,6 +31,7 @@ $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
 $start.WorkingDirectory = Split-Path -Parent $app
 $start.Environment['DOTNET_STARTUP_HOOKS'] = $hook
 $start.Environment['SERIAL_MODBUS_LAYOUT_RESULT'] = $result
+$start.Environment['SERIAL_MONITOR_LAYOUT_PATH'] = if ($InspectorLayoutPath) { [IO.Path]::GetFullPath($InspectorLayoutPath) } else { Join-Path $output 'inspector-layout.json' }
 $start.Environment['SERIAL_MODBUS_LAYOUT_COMMANDS'] = Join-Path $repo 'firmware/nucleo-f103rb-serial-lab/presets/modbus-commands.json'
 if ($CaseFilter) { $start.Environment['SERIAL_MODBUS_LAYOUT_FILTER'] = $CaseFilter }
 $process = $null
@@ -47,6 +51,7 @@ try {
         if ((Get-FileHash -LiteralPath $hash.Path).Hash -ne $hash.Hash) { throw 'Portable payload changed during the layout test.' }
     }
     if ($profileHash -and (Get-FileHash -LiteralPath $profile).Hash -ne $profileHash) { throw 'Shared profile changed during the test.' }
+    if ($userLayoutHash -and (Get-FileHash -LiteralPath $userLayout).Hash -ne $userLayoutHash) { throw 'Shared inspector layout changed during the test.' }
     $diagnostics = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'SerialMonitor/diagnostics') -Directory -Filter "instance-$($process.Id)-*" | Select-Object -First 1
     if ($diagnostics -and (Test-Path -LiteralPath (Join-Path $diagnostics.FullName 'last_runtime_error.txt'))) {
         throw (Get-Content -LiteralPath (Join-Path $diagnostics.FullName 'last_runtime_error.txt') -Raw)

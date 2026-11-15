@@ -242,11 +242,13 @@ public sealed partial class MainWindow
         BeginXtermResizeTransition();
         ApplyInspectorLayout();
         QueueXtermFit();
+        QueueInspectorLayoutSave();
     }
 
     private void CommitInspectorResize(double inspectorHeight)
     {
         ApplyInspectorResize(inspectorHeight, persistExpandedHeight: true);
+        QueueInspectorLayoutSave();
         QueueXtermFit();
         var generation = Interlocked.Read(ref _xtermResizeShieldGeneration);
         _ = HideXtermResizeShieldAsync(generation);

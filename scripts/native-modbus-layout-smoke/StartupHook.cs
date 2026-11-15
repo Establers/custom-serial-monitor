@@ -979,9 +979,12 @@ public static partial class StartupHook
             var startupModel = Field(mainWindow, "_viewModel");
             if (P(startupModel, "IsConnected") is true) throw new InvalidOperationException("Layout tests require a disconnected child instance.");
             VerifyStartup(startupModel);
-            if (Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER") == "inspector-docking")
+            if (Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER")?.StartsWith("inspector-", StringComparison.Ordinal) == true)
             {
-                await RunInspectorDocking(mainWindow);
+                if (Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER") == "inspector-docking")
+                    await RunInspectorDocking(mainWindow);
+                else await RunInspectorPersistence(mainWindow);
+                await (Task)mainWindow.GetType().GetMethod("FlushInspectorLayoutAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(mainWindow, null)!;
                 FinalWrittenByteCount = StartupProperty<long>(Field(startupModel, "_serialService"), "WrittenByteCount");
                 if (FinalWrittenByteCount != 0 || P(startupModel, "IsConnected") is true)
                     Issue("Docking unexpectedly affected the serial connection.");

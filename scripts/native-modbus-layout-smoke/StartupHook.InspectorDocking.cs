@@ -4,8 +4,51 @@ using Windows.Graphics;
 
 public static partial class StartupHook
 {
+    private static async Task RunInspectorPersistence(object window)
+    {
+        var type = window.GetType();
+        Task InvokeTask(string name) => (Task)type.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null)!;
+        await InvokeTask("InitializeInspectorLayoutAsync");
+        var panel = Field(window, "InspectorPanel");
+        var dock = type.GetMethod("DockInspector", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var resize = type.GetMethod("CommitInspectorResize", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var toggle = type.GetMethod("ToggleInspectorCollapsed", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Case = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER")!;
+        if (Case == "inspector-save")
+        {
+            dock.Invoke(window, [Enum.Parse(dock.GetParameters()[0].ParameterType, "Bottom")]);
+            resize.Invoke(window, [187.5d]);
+            await Settle(panel);
+            dock.Invoke(window, [Enum.Parse(dock.GetParameters()[0].ParameterType, "Right")]);
+            resize.Invoke(window, [421.25d]);
+        }
+        else if (Case is "inspector-restore" or "inspector-restore-collapsed")
+        {
+            await Settle(panel);
+            if (Field(window, "_inspectorDockPosition").ToString() != "Right" ||
+                Math.Abs((double)Field(window, "_lastExpandedInspectorHeight") - 187.5) > 1 ||
+                Math.Abs((double)Field(window, "_lastExpandedInspectorWidth") - 421.25) > 1)
+                Issue("A fresh process did not restore the last position and both saved sizes.");
+            var collapsed = Case == "inspector-restore-collapsed";
+            if ((bool)Field(window, "_isInspectorCollapsed") != collapsed) Issue("A fresh process did not restore collapse state.");
+            if (!collapsed && Math.Abs(N(panel, "ActualWidth") - 421.25) > 1) Issue("Saved width was not applied to the visible panel.");
+            if (!collapsed) toggle.Invoke(window, null); // The third process must restore this collapsed state.
+            else
+            {
+                toggle.Invoke(window, null);
+                dock.Invoke(window, [Enum.Parse(dock.GetParameters()[0].ParameterType, "Bottom")]);
+                await Settle(panel);
+                if (Math.Abs(N(panel, "ActualHeight") - 187.5) > 1) Issue("Restoring the bottom dock lost its independent height.");
+            }
+        }
+        else throw new InvalidOperationException("Unknown inspector persistence fixture.");
+        await InvokeTask("FlushInspectorLayoutAsync");
+        Results.Add(new { name = Case, width = N(panel, "ActualWidth"), height = N(panel, "ActualHeight") });
+    }
+
     private static async Task RunInspectorDocking(object window)
     {
+        await (Task)window.GetType().GetMethod("InitializeInspectorLayoutAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null)!;
         var workspace = Field(window, "MainContentGrid");
         var panel = Field(window, "InspectorPanel");
         var tabs = Field(window, "InspectorTabView");

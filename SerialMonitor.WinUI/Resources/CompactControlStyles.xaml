@@ -19,21 +19,31 @@
     </Style>
 
     <Style x:Key="PanelMoveHandleStyle" TargetType="infra:PanelMoveHandleControl">
-        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="MinWidth" Value="22" />
         <Setter Property="MinHeight" Value="24" />
-        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="Padding" Value="5,3" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="infra:PanelMoveHandleControl">
-                    <Border Background="{ThemeResource CompactSurfaceBrush}" Padding="{TemplateBinding Padding}"
-                            BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="3">
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="3">
                         <ContentPresenter Content="{TemplateBinding Content}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <Style x:Key="InspectorDockTargetStyle" TargetType="Border">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Margin" Value="12" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Background" Value="{ThemeResource CompactSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource SystemControlHighlightAccentBrush}" />
     </Style>
 
     <ControlTemplate x:Key="CompactCheckBoxTemplate"

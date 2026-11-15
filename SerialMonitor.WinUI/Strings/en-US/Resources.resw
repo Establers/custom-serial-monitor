@@ -1692,28 +1692,40 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="InspectorDockHandle.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
     <value>Drag to dock the whole panel left, right or below. Click for placement options.</value>
   </data>
-  <data name="InspectorDockLeft.Text" xml:space="preserve">
-    <value>Dock left</value>
-  </data>
-  <data name="InspectorDockRight.Text" xml:space="preserve">
-    <value>Dock right</value>
-  </data>
-  <data name="InspectorDockBottom.Text" xml:space="preserve">
-    <value>Dock below</value>
-  </data>
-  <data name="InspectorDockLeftLabel.Text" xml:space="preserve">
-    <value>Dock left</value>
-  </data>
-  <data name="InspectorDockRightLabel.Text" xml:space="preserve">
-    <value>Dock right</value>
-  </data>
-  <data name="InspectorDockBottomLabel.Text" xml:space="preserve">
-    <value>Dock below</value>
-  </data>
   <data name="InspectorDockRestoreToolTip" xml:space="preserve">
     <value>Drag toward the log or double-click to restore the panel.</value>
   </data>
   <data name="InspectorDockResizeToolTip" xml:space="preserve">
     <value>Drag to resize the panel. Double-click to collapse it.</value>
+  </data>
+  <data name="InspectorDockLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="InspectorDockLeft.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="InspectorDockLeftTarget.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="InspectorDockRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="InspectorDockRight.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="InspectorDockRightTarget.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="InspectorDockBottom.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="InspectorDockBottom.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="InspectorDockBottomTarget.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="InspectorLayoutStorageError" xml:space="preserve">
+    <value>Panel placement could not be saved or restored. Changes apply to this session.</value>
   </data>
 </root>
