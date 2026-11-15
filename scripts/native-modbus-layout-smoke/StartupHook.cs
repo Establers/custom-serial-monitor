@@ -7,7 +7,7 @@ using Windows.Graphics;
 
 // Runs native layout assertions in a disposable portable-app child process.
 // No desktop automation, input injection, COM connection or profile saves.
-public static class StartupHook
+public static partial class StartupHook
 {
     private static string Output => Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_RESULT")!;
     private static readonly List<object> Results = [];
@@ -872,6 +872,9 @@ public static class StartupHook
                 var suffix = $"-{size.Width}x{size.Height}";
                 var defaultViewName = "default-view" + suffix;
                 var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (string.IsNullOrEmpty(filter) || filter == "settings-position")
+                    await CheckSettingsFlyoutPosition(startupModel, suffix);
+                if (filter == "settings-position") continue;
                 if (string.IsNullOrEmpty(filter) || filter == "packet-details")
                 {
                     var packetModel = P(startupModel, "Protocol")!;
