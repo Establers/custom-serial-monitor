@@ -274,8 +274,25 @@ public static class StartupHook
             {
                 Call(scroll, "ChangeView", (double?)N(scroll, "ScrollableWidth"), null, null, true);
                 await Settle(scroll);
+                // TextBox may bring its caret back into view after ChangeView.
+                // Exercise its public selection API before judging an internal viewport.
+                object? caretOwner = null;
+                var selectionStart = 0; var selectionLength = 0;
+                if (Math.Abs(N(scroll,"HorizontalOffset")-N(scroll,"ScrollableWidth")) > 2)
+                {
+                    caretOwner = Tree(root).FirstOrDefault(e => e.GetType().Name == "TextBox" && Tree(e).Contains(scroll));
+                    if (caretOwner is not null)
+                    {
+                        selectionStart = (int)P(caretOwner,"SelectionStart")!;
+                        selectionLength = (int)P(caretOwner,"SelectionLength")!;
+                        Call(caretOwner,"Focus",Enum.Parse(FindType("Microsoft.UI.Xaml.FocusState"),"Programmatic"));
+                        Call(caretOwner,"Select",((string)P(caretOwner,"Text")!).Length,0);
+                        await Settle(scroll);
+                    }
+                }
                 if (Math.Abs(N(scroll, "HorizontalOffset") - N(scroll, "ScrollableWidth")) > 2) Issue("cannot reach horizontal scroll end in " + name);
                 measurements.Add(new { name, horizontal = true, viewport = N(scroll, "ViewportWidth"), extent = N(scroll, "ExtentWidth"), reached = N(scroll, "HorizontalOffset") });
+                if (caretOwner is not null) Call(caretOwner,"Select",selectionStart,selectionLength);
                 Call(scroll, "ChangeView", (double?)0, null, null, true);
                 await Settle(scroll);
             }
@@ -704,6 +721,25 @@ public static class StartupHook
                 await Task.Delay(350);
             }
             await Probe(dialog, name);
+            if (name.StartsWith("sensor-value", StringComparison.Ordinal))
+            {
+                var editor = Field(dialog,"ValueEditor");
+                S(editor,"Text","not a number");
+                var primary = Tree(dialog).First(e => e.GetType().Name == "Button" && P(e,"Name")?.ToString() == "PrimaryButton");
+                var peer = New("Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer",primary);
+                var invoke = Call(peer,"GetPattern",Enum.Parse(FindType("Microsoft.UI.Xaml.Automation.Peers.PatternInterface"),"Invoke"))!;
+                void Apply() => FindType("Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider").GetMethod("Invoke")!.Invoke(invoke,null);
+                Apply();
+                for (var attempt=0;attempt<80 && P(Field(dialog,"ErrorText"),"Visibility")?.ToString() != "Visible";attempt++) await Task.Delay(25);
+                if (P(Field(dialog,"ErrorText"),"Visibility")?.ToString() != "Visible" || ((IAsyncInfo)operation).Status != AsyncStatus.Started)
+                    Issue("invalid simulator value did not keep the dialog open");
+                if (P(editor,"Text")?.ToString() != "not a number") Issue("invalid simulator value discarded the draft");
+                await Probe(dialog,name+"-invalid");
+                S(editor,"Text","35"); Apply();
+                for (var attempt=0;attempt<80 && ((IAsyncInfo)operation).Status == AsyncStatus.Started;attempt++) await Task.Delay(25);
+                if (((IAsyncInfo)operation).Status != AsyncStatus.Completed || P(P(dialog,"DataContext")!,"CurrentValue")?.ToString() != "35 °C")
+                    Issue("valid simulator value was not applied to the read-only input");
+            }
             if (name.StartsWith("device-ai-guide", StringComparison.Ordinal))
             {
                 string? copied = null;
@@ -846,6 +882,20 @@ public static class StartupHook
                 S(deviceEditor, "Json", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_ee071.json")) + new string(' ', 120000));
                 await Dialog(deviceEditor, "device-editor-long" + suffix);
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusDeviceAiGuideDialog"), "device-ai-guide" + suffix);
+                var liveDefinition = FindType("SerialMonitor.Core.Modbus.ModbusSensorDefinition").GetMethod("Parse")!.Invoke(null,
+                    ["{\"schemaVersion\":1,\"name\":\"Native\",\"unitId\":1,\"points\":[{\"name\":\"긴 온도 항목 / long sensor temperature label for editing\",\"area\":4,\"address\":25,\"unit\":\"°C\",\"initialValue\":\"25\"}]}"])!;
+                var livePoint = ((IEnumerable)P(liveDefinition,"Points")!).Cast<object>().First();
+                var liveRow = New("SerialMonitor.WinUI.ViewModels.ModbusDevicePointRow",0,livePoint);
+                var liveEngine = New("SerialMonitor.Core.Modbus.ModbusSensorEngine",liveDefinition);
+                var liveDialog = New("SerialMonitor.WinUI.Views.ModbusSensorValueDialog");
+                S(liveDialog,"DataContext",liveRow); S(liveDialog,"Value","25");
+                S(liveDialog,"ApplyValue",(Func<string,Task>)(value => {
+                    Call(liveEngine,"SetPointValue",0,value);
+                    var state = ((IEnumerable)P(Call(liveEngine,"GetSnapshot")!,"Points")!).Cast<object>().First();
+                    liveRow.GetType().GetMethod("Update",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(liveRow,[state]);
+                    return Task.CompletedTask;
+                }));
+                await Dialog(liveDialog,"sensor-value"+suffix);
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-long" + suffix,
                     m => { S(m, "NameText", "긴 항목 / " + new string('N', 80)); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-long" + suffix);
@@ -914,6 +964,11 @@ public static class StartupHook
                     if (N(P(productSelector,"BorderThickness")!,"Left") < 1 || N(productSelector,"ActualWidth") > 481)
                         Issue("product selector has no visible field boundary or exceeds its compact width");
                     var pointsList = Field(deviceView,"PointList");
+                    var firstPoint = ((IEnumerable)P(sensor,"Points")!).Cast<object>().First();
+                    S(pointsList,"SelectedItem",firstPoint); await Settle(deviceView);
+                    if (!ReferenceEquals(P(sensor,"SelectedPoint"),firstPoint)) Issue("simulator point selection is not bound");
+                    if (P(Field(deviceView,"ChangeValueButton"),"IsEnabled") is not false || P(Field(deviceView,"RestoreValuesButton"),"IsEnabled") is not false)
+                        Issue("stopped simulator allows value editing");
                     var beforeFeedback = N(pointsList,"ActualHeight");
                     Call(sensor,"ShowFeedback","제품을 저장했어요."); await Settle(sensorView);
                     if (Math.Abs(N(pointsList,"ActualHeight")-beforeFeedback)>1) Issue("feedback consumed a preview row");

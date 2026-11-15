@@ -77,11 +77,13 @@ public sealed partial class ModbusSensorViewModel : ViewModelBase
     public async Task StartAsync()
     {
         if (!CanEdit || _definition is null || !_available()) return;
+        _liveSession = new(); _liveSnapshot = null; _hasRun = true;
+        foreach (var row in Points) row.ResetPreview();
         _stop = new(); SetBusy(true); Interlocked.Exchange(ref _responses, 0); ClearFeedback(); Refresh(); _changed();
         try
         {
-            var definition = _definition; var token = _stop.Token;
-            _running = Task.Run(() => _service.RunAsync(definition, () => Interlocked.Increment(ref _responses), token));
+            var definition = _definition; var token = _stop.Token; var session = _liveSession;
+            _running = Task.Run(() => _service.RunAsync(definition, () => Interlocked.Increment(ref _responses), token, session));
             await _running; Status = "응답 중지";
         }
         catch (OperationCanceledException) { Status = "응답 중지"; }
@@ -95,6 +97,7 @@ public sealed partial class ModbusSensorViewModel : ViewModelBase
     }
     public void Refresh()
     {
+        RefreshLiveValues();
         if (IsBusy) Status = $"요청 대기 · 응답 {Interlocked.Read(ref _responses)}회";
         var hint = IsBusy || _available() ? "" : _unavailableReason();
         if (_availabilityHint != hint) { _availabilityHint = hint; OnPropertyChanged(nameof(AvailabilityHint)); }
@@ -111,5 +114,6 @@ public sealed partial class ModbusSensorViewModel : ViewModelBase
     {
         if (_busy == value) return;
         _busy = value; OnPropertyChanged(nameof(IsBusy)); RefreshManagement();
+        OnPropertyChanged(nameof(ValueColumnHeader));
     }
 }

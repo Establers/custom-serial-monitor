@@ -95,4 +95,41 @@ public sealed partial class ModbusSensorView : UserControl
         if (sender is not FrameworkElement button) return;
         new Flyout { Content = new ScrollViewer { MaxHeight = 360, Content = new TextBlock { Text = ModbusSensorViewModel.SupportedFunctions, MaxWidth = 420, Margin = new Thickness(0,0,16,0), FontSize = 12, TextWrapping = TextWrapping.Wrap } } }.ShowAt(button);
     }
+    private async void ChangeValue_Click(object sender, RoutedEventArgs args) => await EditValueAsync();
+    private async void Point_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs args) => await EditValueAsync();
+    private bool _valueDialogOpen;
+    private async Task EditValueAsync()
+    {
+        if (_valueDialogOpen || Model is not { CanChangeSelectedValue: true, SelectedPoint: { } row, LiveSession: { } session } model) return;
+        _valueDialogOpen = true;
+        try
+        {
+            await new ModbusSensorValueDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme, DataContext = row,
+                Value = row.InputValue, ApplyValue = value => model.ChangeValueAsync(session, row, value) }.ShowAsync();
+        }
+        catch (Exception ex) { model.ShowFeedback(ex.Message); }
+        finally { _valueDialogOpen = false; }
+    }
+    private async void RestoreSelected_Click(object sender, RoutedEventArgs args)
+    {
+        if (Model is not { CanChangeSelectedValue: true, SelectedPoint: { } row, LiveSession: { } session } model) return;
+        try { await model.RestoreValuesAsync(session, row); }
+        catch (Exception ex) { model.ShowFeedback(ex.Message); }
+    }
+    private async void RestoreAll_Click(object sender, RoutedEventArgs args)
+    {
+        if (Model is not { CanChangeValues: true, LiveSession: { } session } model) return;
+        try
+        {
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "모든 항목을 초기값으로 복원",
+                Content = $"현재 값 {model.Points.Count}개를 제품 JSON의 초기값으로 되돌릴까요? 응답은 계속 진행돼요.",
+                PrimaryButtonText = "모두 복원", CloseButtonText = "취소", DefaultButton = ContentDialogButton.Close,
+                Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
+                TitleTemplate = (DataTemplate)Application.Current.Resources["ModbusDialogTitleTemplate"],
+                PrimaryButtonStyle = (Style)Application.Current.Resources["ModbusAccentButtonStyle"],
+                CloseButtonStyle = (Style)Application.Current.Resources["ModbusActionButtonStyle"] };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary) await model.RestoreValuesAsync(session, null);
+        }
+        catch (Exception ex) { model.ShowFeedback(ex.Message); }
+    }
 }

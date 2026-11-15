@@ -22,24 +22,34 @@
    <Border Grid.Column="3" ToolTipService.ToolTip="{Binding AvailabilityHint}"><Button Content="응답 시작" Command="{Binding StartCommand}" Style="{StaticResource ModbusAccentButtonStyle}" /></Border>
    <Button Grid.Column="4" Content="중지" Command="{Binding StopCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
   </Grid>
-  <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
+  <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="5">
    <TextBlock Text="{Binding ProductSummary}" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" />
-   <Button x:Name="SourceButton" Grid.Column="1" Content="설명·출처" Style="{StaticResource ModbusActionButtonStyle}" IsEnabled="{Binding HasSelectedProduct}">
+   <Button x:Name="ChangeValueButton" Grid.Column="1" Content="값 변경…" Click="ChangeValue_Click" IsEnabled="{Binding CanChangeSelectedValue}" Style="{StaticResource ModbusActionButtonStyle}" ToolTipService.ToolTip="응답 시작 후 표에서 항목을 선택하세요. 읽기 전용 항목도 가상 값을 바꿀 수 있어요." />
+   <Button x:Name="RestoreValuesButton" Grid.Column="2" Content="초기값 복원" IsEnabled="{Binding CanChangeValues}" Style="{StaticResource ModbusActionButtonStyle}">
+    <Button.Flyout><MenuFlyout Opening="Management_Opening">
+     <MenuFlyoutItem Text="선택 항목 복원" Click="RestoreSelected_Click" IsEnabled="{Binding CanChangeSelectedValue}" />
+     <MenuFlyoutItem Text="모든 항목 복원…" Click="RestoreAll_Click" IsEnabled="{Binding CanChangeValues}" />
+    </MenuFlyout></Button.Flyout>
+   </Button>
+   <Button x:Name="SourceButton" Grid.Column="3" Content="설명·출처" Style="{StaticResource ModbusActionButtonStyle}" IsEnabled="{Binding HasSelectedProduct}">
     <Button.Flyout><Flyout x:Name="SourceFlyout"><ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto"><TextBlock Text="{Binding ProductSource}" MaxWidth="420" Margin="0,0,16,0" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12" /></ScrollViewer></Flyout></Button.Flyout>
    </Button>
-   <Button Grid.Column="2" Content="지원 기능" Click="Support_Click" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Button Grid.Column="4" Content="지원 기능" Click="Support_Click" Style="{StaticResource ModbusActionButtonStyle}" />
   </Grid>
-  <Grid Grid.Row="2" ColumnDefinitions="*,125,105,155" Padding="8,3,24,3" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+  <Grid Grid.Row="2" ColumnDefinitions="*,125,110,95" Padding="8,3,24,3" Background="{ThemeResource ControlFillColorSecondaryBrush}">
    <TextBlock Text="항목" FontSize="12" /><TextBlock Grid.Column="1" Text="주소 (0부터)" FontSize="12" />
-   <TextBlock Grid.Column="2" Text="시작할 때 값" FontSize="12" /><TextBlock Grid.Column="3" Text="자료형 · 접근" FontSize="12" />
+   <TextBlock Grid.Column="2" Text="{Binding ValueColumnHeader}" FontSize="12" /><TextBlock Grid.Column="3" Text="마지막 변경" FontSize="12" />
   </Grid>
-  <ListView x:Name="PointList" Grid.Row="3" ItemsSource="{Binding Points}" SelectionMode="None" IsItemClickEnabled="False" MinHeight="0" HorizontalContentAlignment="Stretch">
+  <ListView x:Name="PointList" Grid.Row="3" ItemsSource="{Binding Points}" SelectedItem="{Binding SelectedPoint, Mode=TwoWay}" SelectionMode="Single" IsItemClickEnabled="False" DoubleTapped="Point_DoubleTapped" MinHeight="0" HorizontalContentAlignment="Stretch" AutomationProperties.Name="시뮬레이터 항목과 현재 값">
    <ListView.ItemContainerStyle><StaticResource ResourceKey="ModbusPreviewListItemStyle" /></ListView.ItemContainerStyle>
-   <ListView.ItemTemplate><DataTemplate><Grid ColumnDefinitions="*,125,105,155">
-    <TextBlock Text="{Binding Name}" ToolTipService.ToolTip="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="12" />
+   <ListView.ItemTemplate><DataTemplate><Grid ColumnDefinitions="*,125,110,95">
+    <TextBlock Text="{Binding Name}" ToolTipService.ToolTip="{Binding Details}" TextTrimming="CharacterEllipsis" FontSize="12" />
     <TextBlock Grid.Column="1" Text="{Binding Address}" FontSize="12" />
-    <TextBlock Grid.Column="2" Text="{Binding InitialValue}" ToolTipService.ToolTip="{Binding InitialValue}" TextTrimming="CharacterEllipsis" FontSize="12" />
-    <TextBlock Grid.Column="3" Text="{Binding Format}" ToolTipService.ToolTip="{Binding Details}" TextTrimming="CharacterEllipsis" FontSize="12" />
+    <Grid Grid.Column="2" ToolTipService.ToolTip="{Binding ValueDetails}">
+     <Border Background="{ThemeResource SystemControlHighlightAccentBrush}" Opacity="{Binding HighlightOpacity}" />
+     <TextBlock Text="{Binding CurrentValue}" TextTrimming="CharacterEllipsis" FontSize="12" />
+    </Grid>
+    <TextBlock Grid.Column="3" Text="{Binding ChangeSource}" ToolTipService.ToolTip="{Binding ValueDetails}" TextTrimming="CharacterEllipsis" FontSize="12" />
    </Grid></DataTemplate></ListView.ItemTemplate>
   </ListView>
  </Grid>

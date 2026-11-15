@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading.Channels;
 using SerialMonitor.Core.Modbus;
 using SerialMonitor.WinUI.Models;
 
@@ -8,12 +7,13 @@ namespace SerialMonitor.WinUI.Services;
 public sealed class ModbusSensorService(ISerialService serial, Action<byte[], long> transmitted)
 {
     public const string Owner = "Modbus sensor simulator";
-    public async Task RunAsync(ModbusSensorDefinition definition, Action responded, CancellationToken token)
+    public async Task RunAsync(ModbusSensorDefinition definition, Action responded, CancellationToken token, ModbusSensorSession? session = null)
     {
         var engine = new ModbusSensorEngine(definition);
         await using var lease = serial.AcquireExclusiveSession(Owner);
-        var queue = Channel.CreateBounded<ReceivedByteChunk>(new BoundedChannelOptions(64)
-        { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
+        session ??= new ModbusSensorSession();
+        session.Start(engine.GetSnapshot());
+        var queue = session.Inbox;
         int queuedBytes = 0, overflow = 0;
         long latestReceive = 0;
         var timing = new ModbusResponseTiming(serial.AppliedBaudRate, serial.AppliedConfiguration);
@@ -21,7 +21,7 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
         {
             if (generation != lease.Generation || chunk.Bytes.Length == 0) return;
             Interlocked.Exchange(ref latestReceive, Stopwatch.GetTimestamp());
-            if (Interlocked.Add(ref queuedBytes, chunk.Bytes.Length) > 65536 || !queue.Writer.TryWrite(chunk))
+            if (Interlocked.Add(ref queuedBytes, chunk.Bytes.Length) > 65536 || !queue.Writer.TryWrite(new ModbusSensorSession.Receive(chunk)))
             { Interlocked.Exchange(ref overflow, 1); queue.Writer.TryComplete(new IOException("시뮬레이터 수신 대기열이 가득 찼어요. 응답을 중지했어요.")); }
         }
         void Changed(object? sender, EventArgs args)
@@ -55,8 +55,29 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                     await Task.Delay((int)Math.Clamp(Math.Ceiling(remaining.TotalMilliseconds), 1, 50), token).ConfigureAwait(false);
                 }
             }
-            await foreach (var chunk in queue.Reader.ReadAllAsync(token).ConfigureAwait(false))
+            await foreach (var work in queue.Reader.ReadAllAsync(token).ConfigureAwait(false))
             {
+                if (work is ModbusSensorSession.Edit edit)
+                {
+                    try
+                    {
+                        token.ThrowIfCancellationRequested();
+                        edit.Token.ThrowIfCancellationRequested();
+                        if (!serial.IsConnected || serial.ReceiveSessionGeneration != lease.Generation || Volatile.Read(ref overflow) != 0)
+                            throw new IOException("통신이 중지됐어요. 응답 시작 후 다시 변경하세요.");
+                        if (edit.Value is null) engine.ResetValues(edit.Index);
+                        else engine.SetPointValue(edit.Index!.Value, edit.Value);
+                        session.Publish(engine.GetSnapshot());
+                        edit.Completion.TrySetResult();
+                    }
+                    catch (OperationCanceledException) { edit.Completion.TrySetCanceled(); }
+                    catch (Exception ex) { edit.Completion.TrySetException(ex); }
+                    continue;
+                }
+                token.ThrowIfCancellationRequested();
+                if (!serial.IsConnected || serial.ReceiveSessionGeneration != lease.Generation)
+                    throw new IOException("연결이 바뀌었어요. 장치 응답을 다시 시작하세요.");
+                var chunk = ((ModbusSensorSession.Receive)work).Chunk;
                 Interlocked.Add(ref queuedBytes, -chunk.Bytes.Length);
                 if (lastChunk != 0 && chunk.ReceivedTimestamp > lastChunk &&
                     Stopwatch.GetElapsedTime(lastChunk, chunk.ReceivedTimestamp).TotalMilliseconds > Math.Max(100, serial.AppliedReceiveIdleTimeoutMs * 2)) framer.Clear();
@@ -74,6 +95,7 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                         Stopwatch.GetElapsedTime(lastWriteCompleted, chunk.ReceivedTimestamp).TotalMilliseconds < 100)
                         throw new IOException("쓰기 응답의 로컬 에코 또는 너무 빠른 중복 요청을 감지했어요. 어댑터 에코를 끄고 요청 간격을 100ms 이상으로 설정하세요.");
                     var response = engine.Respond(request);
+                    session.Publish(engine.GetSnapshot());
                     if (response is null) continue;
                     if (definition.ResponseDelayMs > 0) await Task.Delay(definition.ResponseDelayMs, token).ConfigureAwait(false);
                     await WaitForResponseSlot().ConfigureAwait(false);
@@ -88,6 +110,6 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                 }
             }
         }
-        finally { serial.CaptureBytesReceived -= Receive; serial.StatusChanged -= Changed; queue.Writer.TryComplete(); }
+        finally { serial.CaptureBytesReceived -= Receive; serial.StatusChanged -= Changed; session.Complete(); }
     }
 }

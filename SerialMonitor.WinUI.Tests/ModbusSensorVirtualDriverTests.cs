@@ -25,8 +25,9 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
         var definition = ModbusSensorDefinition.Parse(await File.ReadAllTextAsync(
             Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_ee071.json"), token));
         var sensor = new ModbusSensorService(serial, (_, _) => {});
+        var live = new ModbusSensorSession();
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
-        var run = sensor.RunAsync(definition, () => {}, stop.Token);
+        var run = sensor.RunAsync(definition, () => {}, stop.Token, live);
         // The app normally drains these chunks through LogPipeline.
         var drain = Task.Run(async () => { await foreach (var _ in serial.ReceivedBytes.ReadAllAsync(token)) { } }, token);
         try
@@ -45,6 +46,17 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
                 await master.SendBytesAsync(Convert.FromHexString(request), "EE071 test", token);
                 Assert.Equal(expected, Convert.ToHexString(await ReadExact(master, expected.Length/2, token)));
             }
+            var beforeEdit = serial.WrittenByteCount;
+            await live.SetValueAsync(0,"35.5",token);
+            Assert.Equal(beforeEdit,serial.WrittenByteCount);
+            await master.SendBytesAsync(Convert.FromHexString(vectors[0].Item1),"Live temperature",token);
+            var edited = await ReadExact(master,9,token);
+            Assert.Equal("F703040000420E",Convert.ToHexString(edited[..^2]));
+            Assert.Equal(SerialMonitor.Core.Protocols.ModbusRtuCrc.Compute(edited.AsSpan(0,7)),System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(edited.AsSpan(7)));
+            Assert.Equal(ModbusSensorChangeSource.User,live.Snapshot!.Points[0].Source);
+            await live.ResetAsync(0,token);
+            await master.SendBytesAsync(Convert.FromHexString(vectors[0].Item1),"Reset temperature",token);
+            Assert.Equal(vectors[0].Item2,Convert.ToHexString(await ReadExact(master,9,token)));
             // Bad CRC and another unit must not produce a reply.
             await master.SendBytesAsync(Convert.FromHexString("F70300190002015B"), "Bad CRC", token);
             await AssertQuiet(master, token);
@@ -57,7 +69,7 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
             await AssertQuiet(master, token);
             Assert.Equal(written, serial.WrittenByteCount);
             Assert.Equal(0, serial.SerialFrameErrorCount + serial.SerialParityErrorCount + serial.SerialOverrunErrorCount + serial.SerialRxOverErrorCount);
-            output.WriteLine($"60 EE071 exchanges over CNCA0/CNCB0 at 9600 8E1; {written} response bytes; no TX before requests or after stop.");
+            output.WriteLine($"60 EE071 exchanges plus live read-only temperature edit/reset over CNCA0/CNCB0 at 9600 8E1; {written} response bytes; no unsolicited TX.");
         }
         finally
         {

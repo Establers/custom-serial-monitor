@@ -4,7 +4,7 @@ using SerialMonitor.Core.Protocols;
 namespace SerialMonitor.Core.Modbus;
 
 // Single consumer owns this bounded register map. Writes live only until restart.
-public sealed class ModbusSensorEngine
+public sealed partial class ModbusSensorEngine
 {
     private readonly int _unit;
     private readonly Dictionary<(int Area, int Address), (ushort Value, bool Writable)> _cells = [];
@@ -17,6 +17,7 @@ public sealed class ModbusSensorEngine
             var values = ModbusItemCodec.Encode(point.InitialValue, point.Item(), point.Area <= 2);
             for (var i = 0; i < values.Length; i++) _cells.Add((point.Area, point.Address + i), (values[i], point.Writable));
         }
+        InitializeLiveValues(definition);
     }
     public byte[]? Respond(ReadOnlySpan<byte> request)
     {
@@ -63,7 +64,7 @@ public sealed class ModbusSensorEngine
         }
         if (!read)
         {
-            for (var i = 0; i < count; i++) _cells[(area, address + i)] = (values[i], true);
+            for (var i = 0; i < count; i++) SetCell(area, address + i, values[i], ModbusSensorChangeSource.Master);
             return broadcast ? null : Finish(request[..6].ToArray());
         }
         var payload = new byte[3 + (fc <= 2 ? (count + 7) / 8 : count * 2)];
@@ -81,7 +82,7 @@ public sealed class ModbusSensorEngine
             return broadcast ? null : Error(22, 2);
         var andMask = BinaryPrimitives.ReadUInt16BigEndian(request[4..]);
         var orMask = BinaryPrimitives.ReadUInt16BigEndian(request[6..]);
-        _cells[(3, address)] = ((ushort)((cell.Value & andMask) | (orMask & ~andMask)), true);
+        SetCell(3, address, (ushort)((cell.Value & andMask) | (orMask & ~andMask)), ModbusSensorChangeSource.Master);
         return broadcast ? null : request.ToArray();
     }
 
@@ -100,7 +101,7 @@ public sealed class ModbusSensorEngine
         for (var i = 0; i < writeCount; i++)
             if (!_cells.TryGetValue((3, writeAddress + i), out var cell) || !cell.Writable) return Error(23, 2);
         for (var i = 0; i < writeCount; i++)
-            _cells[(3, writeAddress + i)] = (BinaryPrimitives.ReadUInt16BigEndian(request[(11 + i * 2)..]), true);
+            SetCell(3, writeAddress + i, BinaryPrimitives.ReadUInt16BigEndian(request[(11 + i * 2)..]), ModbusSensorChangeSource.Master);
         var payload = new byte[3 + readCount * 2];
         payload[0] = (byte)_unit; payload[1] = 23; payload[2] = (byte)(readCount * 2);
         for (var i = 0; i < readCount; i++)

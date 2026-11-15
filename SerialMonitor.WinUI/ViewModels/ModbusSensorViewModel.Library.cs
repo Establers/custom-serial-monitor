@@ -5,8 +5,6 @@ using SerialMonitor.WinUI.Services;
 
 namespace SerialMonitor.WinUI.ViewModels;
 
-public sealed record ModbusDevicePointRow(string Name, string Address, string InitialValue, string Format, string Details);
-
 public sealed partial class ModbusSensorViewModel
 {
     private readonly IModbusDeviceLibrary _library;
@@ -22,9 +20,9 @@ public sealed partial class ModbusSensorViewModel
     public bool HasSelectedProduct => SelectedProduct is not null;
     public bool CanDeleteSelected => CanManageSelected && SelectedProduct?.IsBuiltIn == false;
     public string Feedback { get => _feedback; private set => SetProperty(ref _feedback, value); }
-    public string HeaderText => IsBusy || Status.StartsWith("응답 중지:", StringComparison.Ordinal) ? Status :
+    public string HeaderText => Status.StartsWith("응답 중지:", StringComparison.Ordinal) ? Status :
         !string.IsNullOrWhiteSpace(Feedback) ? Feedback :
-        !string.IsNullOrWhiteSpace(AvailabilityHint) ? AvailabilityHint : Status;
+        !IsBusy && !string.IsNullOrWhiteSpace(AvailabilityHint) ? AvailabilityHint : Status;
     public string ProductSummary => _definition is null ? "제품을 선택하거나 제품 관리에서 추가하세요." :
         $"장치 ID {_definition.UnitId} · {_definition.Points.Count}개 항목 · 응답 지연 {_definition.ResponseDelayMs} ms";
     public string ProductSource => _definition?.Source ?? "";
@@ -135,10 +133,11 @@ public sealed partial class ModbusSensorViewModel
 
     private void UpdateProductPreview()
     {
-        Points = _definition?.Points.Select(p => new ModbusDevicePointRow(p.Name,
-            $"FC{p.Area:00} · {p.Address}" + (p.Item().RegisterCount == 2 ? $"–{p.Address + 1}" : ""),
-            $"{p.InitialValue} {p.Unit}".TrimEnd(), $"{p.ValueType} · {(p.Writable ? "읽기/쓰기" : "읽기 전용")}",
-            $"{p.ValueType} · 배율 {p.Scale} · 바이트 교환 {(p.SwapBytes ? "켬" : "끔")} · 워드 교환 {(p.SwapWords ? "켬" : "끔")}")).ToArray() ?? [];
+        _liveSession = null; _liveSnapshot = null; _hasRun = false;
+        SelectedPoint = null;
+        Points = _definition?.Points.Select((p, index) => new ModbusDevicePointRow(index, p)).ToArray() ?? [];
+        OnPropertyChanged(nameof(ValueColumnHeader));
+        RefreshLiveValues();
         OnPropertyChanged(nameof(ProductSummary)); OnPropertyChanged(nameof(ProductSource));
     }
 }
