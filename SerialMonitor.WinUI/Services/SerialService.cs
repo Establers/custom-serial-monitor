@@ -439,7 +439,7 @@ public sealed partial class SerialService : ISerialService
         // Bind before either admission or physical-write contention: connection
         // teardown/reopen does not need the admission lock and may overtake us.
         var session = Volatile.Read(ref _currentReceiveSession);
-        using var admission = AdmitSerialOperation(exclusiveSession);
+        using var admission = AdmitSerialOperation(exclusiveSession, transmitting: true);
         if (expectedSessionGeneration.HasValue && session?.Generation != expectedSessionGeneration.Value)
             throw new InvalidOperationException("Transmission belongs to a previous serial connection.");
         await _writeGate.WaitAsync(cancellationToken);

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "연습용 온습도 센서 (실제 제품 아님)",
+  "source": "가상 예제. 실제 제품 주소로 사용하지 마세요.",
+  "unitId": 1,
+  "responseDelayMs": 0,
+  "points": [
+    { "name": "온도", "area": 3, "address": 0, "valueType": "Int16", "scale": 0.1, "unit": "°C", "initialValue": "25.0", "writable": false },
+    { "name": "습도", "area": 3, "address": 1, "valueType": "UInt16", "scale": 0.1, "unit": "%", "initialValue": "50.0", "writable": false },
+    { "name": "설정 온도", "area": 3, "address": 100, "valueType": "Int16", "scale": 0.1, "unit": "°C", "initialValue": "24.0", "writable": true },
+    { "name": "운전 허용", "area": 1, "address": 0, "initialValue": "1", "writable": true }
+  ]
+}

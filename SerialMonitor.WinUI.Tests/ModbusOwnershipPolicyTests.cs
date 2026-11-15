@@ -142,11 +142,13 @@ public sealed class ModbusOwnershipPolicyTests
             Set(model, "_viewPause", new ViewPauseStateMachine());
             typeof(MainViewModel).GetProperty(nameof(MainViewModel.Modbus))!.SetValue(model,
                 new ModbusRtuViewModel(monitor, () => false, () => Task.CompletedTask, () => { }));
+            Set(model, "<Protocol>k__BackingField", new ProtocolViewModel(new SerialMonitor.Core.Protocols.ProtocolAnalyzer()) { SelectedViewIndex = 2 });
             return new(model, serial, bridge, monitor, control);
         }
 
         public async ValueTask DisposeAsync()
         {
+            await Model.Protocol.Analyzer.DisposeAsync();
             await bridge.DisposeAsync();
             await Serial.DisposeAsync();
         }

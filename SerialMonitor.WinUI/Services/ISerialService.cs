@@ -5,6 +5,7 @@ namespace SerialMonitor.WinUI.Services;
 
 public interface ISerialService : IAsyncDisposable
 {
+    void SetTransmitMode(SerialTransmitMode mode) => throw new NotSupportedException("Serial transmit modes are unavailable.");
     event EventHandler<string>? Error;
 
     event EventHandler? StatusChanged;

@@ -57,13 +57,16 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
         else if (args.PropertyName is nameof(ModbusRtuViewModel.Status) or nameof(ModbusRtuViewModel.RequestSummary))
             NotifyWorkspaceHeader();
     }
-    public bool IsProtocolSelectionEnabled => Modbus?.IsBusy != true;
+    public bool IsProtocolSelectionEnabled => Modbus?.IsBusy != true && Sensor?.IsBusy != true;
     public bool IsRegisterMonitorSelected
     {
         get => _isRegisterMonitorSelected;
         set
         {
+            if (!_changingViewSelection && (IsRegisterMonitorSelected != value) &&
+                (!IsProtocolSelectionEnabled || TryChangeRole?.Invoke(value ? 2 : 1) == false)) return;
             if (!SetProperty(ref _isRegisterMonitorSelected, value)) return;
+            if (!_changingViewSelection) _sensorSelected = false;
             OnPropertyChanged(nameof(IsPacketAnalysisSelected));
             OnPropertyChanged(nameof(RegisterMonitorVisibility));
             OnPropertyChanged(nameof(PacketAnalysisVisibility));
@@ -76,7 +79,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
     public bool IsPacketAnalysisSelected { get => !IsRegisterMonitorSelected; set => IsRegisterMonitorSelected = !value; }
     public Visibility ModbusModeSelectorVisibility => SelectedProtocolIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility RegisterMonitorVisibility => SelectedProtocolIndex == 1 && IsRegisterMonitorSelected ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility PacketAnalysisVisibility => RegisterMonitorVisibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility PacketAnalysisVisibility => RegisterMonitorVisibility == Visibility.Visible || IsSensorSelected ? Visibility.Collapsed : Visibility.Visible;
     public string PacketModeLabel => UiText.Get("ModbusMonitorPacketMode", "Packet analysis");
     public string RegisterModeLabel => UiText.Get("ModbusMonitorRegisterMode", "Register monitor");
 
@@ -201,6 +204,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
             var normalized = value is 1 or 2 ? value : 0;
             if (!IsProtocolSelectionEnabled && normalized != _selectedProtocolIndex) return;
             if (_selectedProtocolIndex == normalized) return;
+            if (!_changingViewSelection && TryChangeRole?.Invoke(normalized == 1 ? 1 : normalized == 2 ? 3 : 0) == false) return;
             try
             {
                 bool changed = false;
@@ -212,6 +216,7 @@ public sealed partial class ProtocolViewModel(IProtocolAnalyzer analyzer) : View
                     else if (normalized == 2) throw new InvalidOperationException("This analyzer does not support BACnet MS/TP.");
                 }
                 Analyzer.SetEnabled(normalized > 0); SetProperty(ref _selectedProtocolIndex, normalized);
+                if (!_changingViewSelection) { _sensorSelected = false; _isRegisterMonitorSelected = false; }
                 if (changed)
                 {
                     _displaySource = Array.Empty<IProtocolFrame>(); Frames.Clear();

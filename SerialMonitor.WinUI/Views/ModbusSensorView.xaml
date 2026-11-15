@@ -1,0 +1,21 @@
+<UserControl x:Class="SerialMonitor.WinUI.Views.ModbusSensorView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6" Padding="6">
+  <TextBlock Text="에어컨이 요청하면 이 PC가 센서 대신 응답해요. 실제 센서를 빼고 연결하세요. 통신 속도·패리티·정지 비트는 장치와 맞추세요." TextWrapping="Wrap" FontSize="12" />
+  <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5">
+   <Button Content="JSON 파일…" Click="Import_Click" IsEnabled="{Binding CanEdit}" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Button Content="예제 불러오기" Command="{Binding ExampleCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Button Content="AI 작성 지침 복사" Click="CopyGuide_Click" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Button Content="JSON 확인" Command="{Binding ValidateCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
+  </StackPanel>
+  <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8" MinHeight="0">
+   <TextBox Style="{StaticResource DefaultTextBoxStyle}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" MinHeight="0" Text="{Binding Json, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsBusy}" AcceptsReturn="True" MaxLength="262144" TextWrapping="NoWrap" FontFamily="Consolas" FontSize="12" AutomationProperties.Name="센서 정의 JSON" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"><StackPanel Spacing="6">
+    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold" />
+    <TextBlock Text="{Binding AvailabilityHint}" TextWrapping="Wrap" FontSize="12" />
+    <StackPanel Orientation="Horizontal" Spacing="5"><Button Content="센서 응답 시작" Command="{Binding StartCommand}" Style="{StaticResource ModbusAccentButtonStyle}" /><Button Content="응답 중지" Command="{Binding StopCommand}" Style="{StaticResource ModbusActionButtonStyle}" /></StackPanel>
+    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="12" IsTextSelectionEnabled="True" />
+   </StackPanel></ScrollViewer>
+  </Grid>
+ </Grid>
+</UserControl>

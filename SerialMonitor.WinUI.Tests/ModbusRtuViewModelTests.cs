@@ -152,13 +152,13 @@ public sealed class ModbusRtuViewModelTests
         var canStart = true;
         var model = new ModbusRtuViewModel(service, () => canStart, () => Task.CompletedTask, () => { });
         await using var analyzer = new ProtocolAnalyzer();
-        var protocol = new ProtocolViewModel(analyzer) { Modbus = model, SelectedProtocolIndex = 1 };
+        var protocol = new ProtocolViewModel(analyzer) { Modbus = model, SelectedViewIndex = 2 };
         var run = model.RunAsync(true);
         canStart = false;
         model.Refresh();
         Assert.True(model.IsBusy);
         Assert.False(protocol.IsProtocolSelectionEnabled);
-        Assert.True(protocol.IsModbusViewSelectionEnabled);
+        Assert.False(protocol.IsModbusViewSelectionEnabled);
         protocol.SelectedProtocolIndex = 2;
         Assert.Equal(1, protocol.SelectedProtocolIndex);
         protocol.SelectedViewIndex = 2;
@@ -168,7 +168,8 @@ public sealed class ModbusRtuViewModelTests
         protocol.SelectedViewIndex = 0;
         Assert.Equal(2, protocol.SelectedViewIndex);
         protocol.SelectedViewIndex = 1;
-        Assert.Equal(Visibility.Visible, protocol.PacketAnalysisVisibility);
+        Assert.Equal(2, protocol.SelectedViewIndex);
+        Assert.Equal(Visibility.Collapsed, protocol.PacketAnalysisVisibility);
         Assert.Equal(Visibility.Visible, model.BusyVisibility);
         Assert.Contains(model.RequestSummary, protocol.WorkspaceHeader);
         Assert.Single(service.Reads);
@@ -181,6 +182,7 @@ public sealed class ModbusRtuViewModelTests
         await run;
         Assert.False(model.IsBusy);
         Assert.True(protocol.IsProtocolSelectionEnabled);
+        protocol.SelectedViewIndex = 1;
         Assert.Equal($"{protocol.Activity} · {protocol.RetainedSummary}", protocol.WorkspaceHeader);
         protocol.SelectedViewIndex = 3;
         Assert.Equal(2, protocol.SelectedProtocolIndex);
@@ -191,6 +193,7 @@ public sealed class ModbusRtuViewModelTests
     [InlineData(1, 1, false)]
     [InlineData(2, 1, true)]
     [InlineData(3, 2, false)]
+    [InlineData(4, 1, false)]
     public async Task CombinedViewMenuMapsToProtocolWithoutStartingIo(int choice, int protocolIndex, bool monitorSelected)
     {
         var service = new FakeMonitor();
@@ -215,7 +218,7 @@ public sealed class ModbusRtuViewModelTests
         Assert.False(monitor.IsBusy);
         protocol.SelectedViewIndex = -1;
         Assert.Equal(choice, protocol.SelectedViewIndex);
-        protocol.SelectedViewIndex = 4;
+        protocol.SelectedViewIndex = 5;
         Assert.Equal(choice, protocol.SelectedViewIndex);
     }
 
@@ -240,7 +243,7 @@ public sealed class ModbusRtuViewModelTests
         var protocol = new ProtocolViewModel(analyzer) { Modbus = Model(service) };
         var options = protocol.PresentationOptions;
         Assert.Equal(new[] { protocol.DisabledLabel, protocol.ModbusPacketViewLabel,
-            protocol.ModbusReadWriteViewLabel, protocol.MstpPacketViewLabel }, options.Select(option => option.Label));
+            protocol.ModbusReadWriteViewLabel, protocol.MstpPacketViewLabel, "Modbus RTU · 센서 시뮬레이터" }, options.Select(option => option.Label));
         Assert.All(options, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
 
         protocol.SelectedViewIndex = 2;
@@ -271,7 +274,7 @@ public sealed class ModbusRtuViewModelTests
             monitor.Refresh();
             if (options is null) { options = protocol.PresentationOptions; Observe(options); }
             Assert.True(monitor.IsBusy);
-            Assert.Equal(new[] { false, true, true, false }, options.Select(option => option.IsEnabled));
+            Assert.Equal(new[] { false, false, false, false, false }, options.Select(option => option.IsEnabled));
             Assert.Same(options, protocol.PresentationOptions);
             if (!createWhileBusy)
             {
@@ -283,7 +286,7 @@ public sealed class ModbusRtuViewModelTests
             protocol.SelectedViewIndex = 3;
             Assert.Equal(2, protocol.SelectedViewIndex);
             protocol.SelectedViewIndex = 1;
-            Assert.Equal(1, protocol.SelectedViewIndex);
+            Assert.Equal(2, protocol.SelectedViewIndex);
             Assert.True(monitor.IsBusy);
         }
         finally { await monitor.StopAsync(); await run; }

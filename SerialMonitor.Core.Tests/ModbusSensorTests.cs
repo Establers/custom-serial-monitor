@@ -1,0 +1,87 @@
+using System.Buffers.Binary;
+using System.Text.Json;
+using SerialMonitor.Core.Modbus;
+using SerialMonitor.Core.Protocols;
+
+namespace SerialMonitor.Core.Tests;
+public sealed class ModbusSensorTests
+{
+    private static ModbusSensorDefinition Definition() => new() { SchemaVersion = 1, Name = "Sensor", UnitId = 1,
+        Points = [new() { Name = "Temperature", Area = 3, Address = 0, ValueType = ModbusValueType.Int16, Scale = .1, InitialValue = "-12.3", Writable = true },
+        new() { Name = "Humidity", Area = 3, Address = 1, InitialValue = "50" },
+        new() { Name = "Enable", Area = 1, Address = 0, InitialValue = "1", Writable = true }] };
+    [Fact] public void ReadEncodesScaledSignedValueAndValidCrc()
+    {
+        var response = new ModbusSensorEngine(Definition()).Respond(ModbusRtuRequestBuilder.Read(1, 3, 0, 2))!;
+        Assert.Equal("010304FF850032", Convert.ToHexString(response[..^2])); CheckCrc(response);
+    }
+    [Fact] public void WritesReadBackAndBroadcastDoesNotReply()
+    {
+        var engine = new ModbusSensorEngine(Definition());
+        var write = ModbusRtuRequestBuilder.WriteSingle(1, 6, 0, 250);
+        Assert.Equal(write, engine.Respond(write));
+        Assert.Equal((ushort)250, BinaryPrimitives.ReadUInt16BigEndian(engine.Respond(ModbusRtuRequestBuilder.Read(1,3,0,1))!.AsSpan(3)));
+        Assert.Null(engine.Respond(ModbusRtuRequestBuilder.WriteSingle(0,6,0,100)));
+        Assert.Equal((ushort)100, BinaryPrimitives.ReadUInt16BigEndian(engine.Respond(ModbusRtuRequestBuilder.Read(1,3,0,1))!.AsSpan(3)));
+    }
+    [Fact] public void MultiWriteIsAtomicAndReadonlyIsNotModified()
+    {
+        var engine = new ModbusSensorEngine(Definition());
+        var error = engine.Respond(ModbusRtuRequestBuilder.WriteMultiple(1,16,0,new ushort[]{10,20}))!;
+        Assert.Equal("019002", Convert.ToHexString(error[..^2])); CheckCrc(error);
+        Assert.Equal((ushort)65413, BinaryPrimitives.ReadUInt16BigEndian(engine.Respond(ModbusRtuRequestBuilder.Read(1,3,0,1))!.AsSpan(3)));
+    }
+    [Fact] public void CoilReadAndWriteUsePackedBits()
+    {
+        var engine = new ModbusSensorEngine(Definition());
+        Assert.Equal("01010101", Convert.ToHexString(engine.Respond(ModbusRtuRequestBuilder.Read(1,1,0,1))![..^2]));
+        var write = ModbusRtuRequestBuilder.WriteSingle(1,5,0,0); Assert.Equal(write, engine.Respond(write));
+        Assert.Equal("01010100", Convert.ToHexString(engine.Respond(ModbusRtuRequestBuilder.Read(1,1,0,1))![..^2]));
+    }
+    [Fact] public void CorruptAndOtherUnitRequestsAreSilent()
+    {
+        var engine = new ModbusSensorEngine(Definition());
+        Assert.Null(engine.Respond(ModbusRtuRequestBuilder.Read(2,3,0,1)));
+        var bad = ModbusRtuRequestBuilder.Read(1,3,0,1); bad[^1] ^= 1; Assert.Null(engine.Respond(bad));
+    }
+    [Fact] public void FramingHandlesSplitsCoalescingAndNoiseWithoutUnboundedBuffer()
+    {
+        var framer = new ModbusRequestFramer(); var request = ModbusRtuRequestBuilder.Read(1,3,0,1);
+        Assert.Empty(framer.Feed(Enumerable.Repeat((byte)255, 100000).ToArray()));
+        Assert.Empty(framer.Feed(request[..3]));
+        var frames = framer.Feed(request[3..].Concat(request).ToArray()).ToArray();
+        Assert.Equal(2, frames.Length); Assert.All(frames, frame => Assert.Equal(request, frame));
+    }
+    [Fact] public void JsonRejectsDuplicatesUnknownFieldsMissingAddressAndOverlaps()
+    {
+        var json = JsonSerializer.Serialize(Definition(), ModbusSensorDefinition.JsonOptions);
+        Assert.Equal(3, ModbusSensorDefinition.Parse(json).Points.Count);
+        Assert.ThrowsAny<Exception>(() => ModbusSensorDefinition.Parse(json.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 1, \"schemaVersion\": 1")));
+        Assert.ThrowsAny<Exception>(() => ModbusSensorDefinition.Parse(json.Replace("\"address\": 0,", "")));
+        Assert.ThrowsAny<Exception>(() => ModbusSensorDefinition.Parse(json.Replace("\"name\": \"Sensor\"", "\"script\": \"run\"")));
+        var definition = Definition(); definition.Points[1].Address = 0; Assert.ThrowsAny<Exception>(definition.Validate);
+    }
+    private static void CheckCrc(byte[] packet) => Assert.Equal(ModbusRtuCrc.Compute(packet.AsSpan(0,packet.Length-2)), BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(packet.Length-2)));
+
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)]
+    public void EveryReadAreaHasItsOwnAddressSpace(byte area)
+    {
+        var d = new ModbusSensorDefinition { SchemaVersion = 1, Name = "Areas", UnitId = 1,
+            Points = [new() { Name = "Point", Area = area, Address = 65535, InitialValue = "1" }] };
+        var response = new ModbusSensorEngine(d).Respond(ModbusRtuRequestBuilder.Read(1, area, 65535, 1))!;
+        Assert.Equal(area, response[1]); Assert.Equal(1, response[^3]); CheckCrc(response);
+    }
+    [Theory] [InlineData(15,1)] [InlineData(16,3)]
+    public void MultipleWritesUpdateAllCells(byte function, byte area)
+    {
+        var d = new ModbusSensorDefinition { SchemaVersion = 1, Name = "Writes", UnitId = 1,
+            Points = Enumerable.Range(0,9).Select(i => new ModbusSensorPoint { Name = $"P{i}", Area = area, Address = i, InitialValue = "0", Writable = true }).ToList() };
+        var engine = new ModbusSensorEngine(d);
+        var write = ModbusRtuRequestBuilder.WriteMultiple(1,function,0,Enumerable.Repeat((ushort)1,9).ToArray());
+        var response = engine.Respond(write)!; Assert.Equal(write[..6], response[..6]); CheckCrc(response);
+        var read = engine.Respond(ModbusRtuRequestBuilder.Read(1,area,0,9))!;
+        if (area == 1) Assert.Equal(new byte[]{255,1}, read[3..^2]);
+        else Assert.All(Enumerable.Range(0,9), i => Assert.Equal(1, BinaryPrimitives.ReadUInt16BigEndian(read.AsSpan(3+i*2))));
+    }
+}

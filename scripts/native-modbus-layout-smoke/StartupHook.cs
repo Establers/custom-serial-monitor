@@ -70,8 +70,8 @@ public static class StartupHook
         var analyzerEnabled = StartupProperty<bool>(analyzer, "Enabled");
         var modbusBusy = StartupProperty<bool>(monitor, "IsBusy");
         var writtenByteCount = StartupProperty<long>(serial, "WrittenByteCount");
-        var passed = !connected && selectedViewIndex == 2 && selectedProtocolIndex == 1 &&
-            isRegisterMonitorSelected && analyzerEnabled && !modbusBusy && writtenByteCount == 0;
+        var passed = !connected && selectedViewIndex == 1 && selectedProtocolIndex == 1 &&
+            !isRegisterMonitorSelected && analyzerEnabled && !modbusBusy && writtenByteCount == 0;
         Startup = new
         {
             passed, connected, selectedViewIndex, selectedProtocolIndex, isRegisterMonitorSelected,
@@ -80,7 +80,7 @@ public static class StartupHook
             packetViewLabel = P(protocol, "ModbusPacketViewLabel")
         };
         if (!passed)
-            throw new InvalidOperationException("Application startup must select the Modbus device-monitor view with passive analysis enabled, no active Modbus operation and zero written serial bytes.");
+            throw new InvalidOperationException("Application startup must select the Modbus observation view with passive analysis enabled, no active Modbus operation and zero written serial bytes.");
     }
     public static void Initialize() => _ = Task.Run(async () =>
     {
@@ -162,7 +162,14 @@ public static class StartupHook
         await Task.Delay(100);
         Call(element, "UpdateLayout");
     }
-    private static bool Visible(object e) => P(e, "Visibility")?.ToString() != "Collapsed" && N(e, "ActualWidth") > 0 && N(e, "ActualHeight") > 0;
+    private static bool Visible(object e)
+    {
+        if (N(e, "ActualWidth") <= 0 || N(e, "ActualHeight") <= 0) return false;
+        var parent = FindType("Microsoft.UI.Xaml.Media.VisualTreeHelper").GetMethod("GetParent")!;
+        for (object? current = e; current is not null; current = parent.Invoke(null, [current]))
+            if (P(current, "Visibility")?.ToString() == "Collapsed") return false;
+        return true;
+    }
     private static Size MeasureText(object source, string text, double width)
     {
         var probe = New("Microsoft.UI.Xaml.Controls.TextBlock");
@@ -461,9 +468,9 @@ public static class StartupHook
         var selector = Field(view, "PresentationSelector");
         var source = P(model, "PresentationOptions") ?? throw new InvalidOperationException("Protocol view has no presentation options.");
         var options = ((IEnumerable)source).Cast<object>().ToArray();
-        if (options.Length != 4)
+        if (options.Length != 5)
         {
-            Issue("presentation availability requires four stable source options");
+            Issue("presentation availability requires five stable source options");
             return new { optionCount = options.Length };
         }
         var original = options.Select(option => StartupProperty<bool>(option, "IsEnabled")).ToArray();
@@ -484,11 +491,11 @@ public static class StartupHook
             for (var attempt = 0; attempt < 30; attempt++)
             {
                 await Settle(selector);
-                containers = Enumerable.Range(0, 4).Select(index => Call(selector, "ContainerFromIndex", index)).ToArray();
+                containers = Enumerable.Range(0, 5).Select(index => Call(selector, "ContainerFromIndex", index)).ToArray();
                 actual = containers.Select(container => container is null ? (bool?)null : StartupProperty<bool>(container, "IsEnabled")).ToArray();
                 visible = containers.Select(container => container is not null && Visible(container)).ToArray();
                 sourceEnabled = options.Select(option => StartupProperty<bool>(option, "IsEnabled")).ToArray();
-                if (StartupProperty<bool>(selector, "IsDropDownOpen") && visible.All(value => value) &&
+                if ((expectedBusy || StartupProperty<bool>(selector, "IsDropDownOpen") && visible.All(value => value)) &&
                     actual.Select((value, index) => value == expected[index]).All(value => value) && sourceEnabled.SequenceEqual(expected)) break;
             }
             var currentSource = P(model, "PresentationOptions");
@@ -505,8 +512,8 @@ public static class StartupHook
                 stableSource, selectedIndex, modelSelectedViewIndex, dropDownOpen, modbusBusy, waitMilliseconds = timer.ElapsedMilliseconds
             });
             if (!stableSource) Issue("presentation options changed identity during availability phase " + phase);
-            if (!dropDownOpen || containers.Any(container => container is null) || visible.Any(value => !value))
-                Issue("four visible native presentation containers were not realized during availability phase " + phase);
+            if (containers.Any(container => container is null) || !expectedBusy && (!dropDownOpen || visible.Any(value => !value)))
+                Issue("five visible native presentation containers were not realized during availability phase " + phase);
             if (!sourceEnabled.SequenceEqual(expected)) Issue("source presentation availability did not match phase " + phase);
             if (actual.Where((value, index) => value != expected[index]).Any())
                 Issue("native presentation container IsEnabled did not follow source phase " + phase);
@@ -517,15 +524,16 @@ public static class StartupHook
         try
         {
             S(selector, "IsDropDownOpen", true);
-            await Capture("idle", [true, true, true, true]);
+            await Capture("idle", [true, true, true, true, true]);
             // Hold the real busy calculation across the app's periodic Refresh.
             // Admission alone runs no service operation and sends no bytes.
             admission.SetValue(monitor, true);
             Call(monitor, "Refresh");
-            await Capture("protocol-options-disabled", [false, true, true, false], expectedBusy: true);
+            await Capture("protocol-options-disabled", [false, false, false, false, false], expectedBusy: true);
             admission.SetValue(monitor, originalAdmission);
             Call(monitor, "Refresh");
-            await Capture("restored", [true, true, true, true]);
+            S(selector, "IsDropDownOpen", true);
+            await Capture("restored", [true, true, true, true, true]);
         }
         finally
         {
@@ -830,7 +838,18 @@ public static class StartupHook
                     var protocolModel = P(mainModel, "Protocol")!;
                     S(protocolModel, "SelectedViewIndex", 1);
                     await View(protocol, "protocol" + suffix, protocolModel);
+                    if (P(Field(protocol, "SensorPanel"), "Visibility")?.ToString() != "Collapsed") Issue("sensor editor visible in observation role");
                     await Flyout(protocol, "FilterFlyout", "PresentationSelector", "filter" + suffix);
+                    S(protocolModel, "SelectedViewIndex", 4);
+                    var sensor = P(mainModel, "Sensor")!;
+                    await (Task)Call(sensor, "LoadFileAsync", Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_example.json"))!;
+                    if (!((string)P(sensor, "Summary")!).Contains("25.0")) Issue("sensor JSON preview missing engineering value");
+                    var sensorView = New("SerialMonitor.WinUI.Views.ProtocolView");
+                    await View(sensorView, "sensor-preview" + suffix, protocolModel);
+                    if (P(Field(sensorView, "SensorPanel"), "Visibility")?.ToString() != "Visible") Issue("sensor editor hidden in sensor role");
+                    S(protocolModel, "SelectedViewIndex", 1);
+                    await Settle(sensorView);
+                    if (P(Field(sensorView, "SensorPanel"), "Visibility")?.ToString() != "Collapsed") Issue("sensor editor remains visible after returning to observation");
                     var interpreter = New("SerialMonitor.WinUI.Views.ModbusValueInterpreterView");
                     var values = New("SerialMonitor.WinUI.ViewModels.ModbusValueInterpreterViewModel");
                     Call(values, "SetFrame", ResponseFrame());

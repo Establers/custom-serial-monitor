@@ -1,5 +1,7 @@
 namespace SerialMonitor.WinUI.Services;
 
+public enum SerialTransmitMode { Normal, Observe, DirectTest, Sensor }
+
 public sealed partial class SerialService
 {
     // The physical write gate protects individual writes only. Admission keeps
@@ -7,6 +9,18 @@ public sealed partial class SerialService
     private readonly object _transmitAdmissionGate = new();
     private int _normalOperations;
     private ExclusiveSession? _exclusiveSession;
+    private SerialTransmitMode _transmitMode;
+    public void SetTransmitMode(SerialTransmitMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        lock (_transmitAdmissionGate)
+        {
+            if (_transmitMode == mode) return;
+            if (_exclusiveSession is not null || _normalOperations != 0 || IsRawBridgePriorityEnabled)
+                throw new InvalidOperationException("진행 중인 통신을 중지한 뒤 역할을 바꾸세요.");
+            _transmitMode = mode;
+        }
+    }
 
     public string? ExclusiveSessionOwner
     {
@@ -29,11 +43,14 @@ public sealed partial class SerialService
         }
     }
 
-    private IDisposable AdmitSerialOperation(ExclusiveSession? exclusive = null)
+    private IDisposable AdmitSerialOperation(ExclusiveSession? exclusive = null, bool transmitting = false)
     {
         lock (_transmitAdmissionGate)
         {
             ThrowIfDisposed();
+            if (transmitting && (_transmitMode == SerialTransmitMode.Observe ||
+                _transmitMode == SerialTransmitMode.Sensor && exclusive?.Owner != ModbusSensorService.Owner))
+                throw new InvalidOperationException("현재 역할에서는 송신할 수 없어요. 직접 요청하려면 장치 직접 시험을 선택하세요.");
             if (exclusive is not null)
             {
                 if (!ReferenceEquals(_exclusiveSession, exclusive) || exclusive.Closing)

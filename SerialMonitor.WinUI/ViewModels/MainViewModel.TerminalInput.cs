@@ -15,7 +15,7 @@ public sealed partial class MainViewModel
 
     // Keystrokes and driver changes share the service's write gate. A pending
     // control-line/configuration operation must not tear down the input session.
-    public bool CanEnableTerminalDirectInput => !IsShuttingDown && IsConnected && !IsBusy && !IsModbusBusy && !IsManualTxBusy &&
+    public bool CanEnableTerminalDirectInput => Protocol?.SelectedViewIndex is not (1 or 4) && !IsShuttingDown && IsConnected && !IsBusy && !IsModbusBusy && !IsManualTxBusy &&
         (!IsAutomationBusy || _automationSerialControl) && !IsHexRxViewSelected &&
         IsXtermReady && !IsBridgeActive && !IsBridgeStarting && !IsLogRenderingPaused;
 
