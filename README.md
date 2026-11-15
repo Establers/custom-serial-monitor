@@ -111,6 +111,7 @@ dotnet test SerialMonitor.WinUI\SerialMonitor.WinUI.sln -c Release --no-build -m
 | --- | --- |
 | [시퀀스 작성](docs/sequence_authoring.md) | JSON 규격, AI 요청문, [기본 예제](docs/sequence_examples.json)와 [RX Check 예제](docs/sequence_rx_example.json) |
 | [로깅 동작](docs/logging.md) | 파일 기록, 회전, 내보내기와 오류 처리 |
+| [도구 패널 이동](docs/inspector-docking.md) | 패널 전체 드래그, 좌우·하단 배치와 크기 조절 |
 | [연결 실패 진단](docs/connection-failure-diagnostics.md) | 원본 오류·Windows 오류 코드·확인된 포트 점유 프로그램/PID |
 | [시리얼 제어선](docs/serial-control-lines.md) | CTS·DSR·DCD·RI 상태, 연결 중 DTR/RTS 조작과 RTS 송신 자동 제어 |
 | [아키텍처](docs/architecture.md) | 수신 파이프라인과 백그라운드 처리 구조 |

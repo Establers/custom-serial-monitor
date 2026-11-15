@@ -979,6 +979,16 @@ public static partial class StartupHook
             var startupModel = Field(mainWindow, "_viewModel");
             if (P(startupModel, "IsConnected") is true) throw new InvalidOperationException("Layout tests require a disconnected child instance.");
             VerifyStartup(startupModel);
+            if (Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER") == "inspector-docking")
+            {
+                await RunInspectorDocking(mainWindow);
+                FinalWrittenByteCount = StartupProperty<long>(Field(startupModel, "_serialService"), "WrittenByteCount");
+                if (FinalWrittenByteCount != 0 || P(startupModel, "IsConnected") is true)
+                    Issue("Docking unexpectedly affected the serial connection.");
+                Save();
+                Environment.Exit(Issues.Count == 0 ? 0 : 1);
+                return;
+            }
             Host = New("Microsoft.UI.Xaml.Window");
             Root = New("Microsoft.UI.Xaml.Controls.Grid");
             S(Host, "Content", Root); Call(Host, "Activate");

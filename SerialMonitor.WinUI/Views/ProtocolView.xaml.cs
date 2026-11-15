@@ -28,8 +28,19 @@ public sealed partial class ProtocolView : UserControl
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        // Keep the selector and shared Stop reachable without adding a toolbar
-        // row. Less frequent packet actions remain available in the overflow.
+        // Side docks need a second toolbar row so the selector, packet actions
+        // and shared Stop remain reachable at the minimum panel width.
+        var compactToolbar = args.NewSize.Width < 620;
+        ProtocolToolbar.ColumnDefinitions[0].Width = compactToolbar
+            ? new GridLength(1, GridUnitType.Star) : new GridLength(270);
+        ProtocolToolbar.ColumnDefinitions[1].Width = compactToolbar
+            ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        ProtocolToolbar.ColumnDefinitions[2].Width = compactToolbar ? new GridLength(0) : GridLength.Auto;
+        ProtocolToolbar.RowSpacing = compactToolbar ? 4 : 0;
+        ProtocolWorkspaceHeader.Visibility = compactToolbar ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetRow(ProtocolToolbarActions, compactToolbar ? 1 : 0);
+        Grid.SetColumn(ProtocolToolbarActions, compactToolbar ? 0 : 2);
+        // Less frequent packet actions remain available in the overflow.
         var overflow = args.NewSize.Width < 940;
         PacketBuilderSlot.Visibility = overflow ? Visibility.Collapsed : Visibility.Visible;
         PacketUtilityActions.Visibility = overflow ? Visibility.Collapsed : Visibility.Visible;

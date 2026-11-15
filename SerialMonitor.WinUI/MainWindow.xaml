@@ -973,6 +973,7 @@
         </Border>
 
         <Grid x:Name="MainContentGrid"
+              SizeChanged="InspectorWorkspace_SizeChanged"
               Grid.Row="1"
               RowSpacing="0"
               ColumnSpacing="0">
@@ -989,6 +990,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="LogColumn"
                                   Width="*" />
+                <ColumnDefinition x:Name="InspectorSplitterColumn" Width="0" />
                 <ColumnDefinition x:Name="InspectorColumn"
                                   Width="0" />
             </Grid.ColumnDefinitions>
@@ -1405,7 +1407,7 @@
                 </Border>
             </Grid>
 
-            <Grid Grid.Row="2"
+            <Grid x:Name="CommandsPanel" Grid.Row="2"
                   Grid.Column="0"
                   Margin="0,4"
                   RowSpacing="4"
@@ -1664,6 +1666,27 @@
                          VerticalAlignment="Stretch"
                          Loaded="InspectorTabView_Loaded"
                          SelectionChanged="InspectorTabView_SelectionChanged">
+                    <TabView.TabStripHeader>
+                        <infra:PanelMoveHandleControl x:Name="InspectorDockHandle" x:Uid="InspectorDockHandle"
+                            Style="{StaticResource PanelMoveHandleStyle}"
+                            AutomationProperties.Name="Move panel"
+                            infra:AppToolTipService.ToolTip="Drag to dock the whole panel left, right or below. Click for placement options."
+                            PointerPressed="InspectorDockHandle_PointerPressed"
+                            PointerMoved="InspectorDockHandle_PointerMoved"
+                            PointerReleased="InspectorDockHandle_PointerReleased"
+                            PointerCaptureLost="InspectorDockHandle_PointerCaptureLost"
+                            PointerCanceled="InspectorDockHandle_PointerCaptureLost"
+                            KeyDown="InspectorDockHandle_KeyDown">
+                            <FontIcon Glyph="&#xE759;" FontSize="12" />
+                            <FlyoutBase.AttachedFlyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem x:Uid="InspectorDockLeft" Text="Dock left" Tag="Left" Click="InspectorDockMenu_Click" />
+                                    <MenuFlyoutItem x:Uid="InspectorDockRight" Text="Dock right" Tag="Right" Click="InspectorDockMenu_Click" />
+                                    <MenuFlyoutItem x:Uid="InspectorDockBottom" Text="Dock below" Tag="Bottom" Click="InspectorDockMenu_Click" />
+                                </MenuFlyout>
+                            </FlyoutBase.AttachedFlyout>
+                        </infra:PanelMoveHandleControl>
+                    </TabView.TabStripHeader>
                     <TabView.Resources>
                         <ResourceDictionary>
                             <ResourceDictionary.ThemeDictionaries>
@@ -1911,6 +1934,7 @@
                               RowDefinitions="Auto,Auto,*">
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
+                                <ScrollViewer Style="{StaticResource CompactHorizontalToolbarScrollViewerStyle}">
                                 <Grid ColumnSpacing="4"
                                       ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
                                     <TextBlock Text="Sequence"
@@ -2004,10 +2028,12 @@
                                             AutomationProperties.Name="시퀀스 실행 결과 열기" Click="OpenSequenceResults_Click" />
                                     </StackPanel>
                                 </Grid>
+                                </ScrollViewer>
                             </Border>
 
                             <Border Grid.Row="1"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
+                                <ScrollViewer Style="{StaticResource CompactHorizontalToolbarScrollViewerStyle}">
                                 <Grid ColumnSpacing="4"
                                       ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                                     <TextBlock MinWidth="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
@@ -2064,12 +2090,14 @@
                                         <FontIcon Glyph="&#xE74B;" FontSize="12" />
                                     </Button>
                                 </Grid>
+                                </ScrollViewer>
                             </Border>
 
                             <Border Grid.Row="2"
                                     MinHeight="0"
                                     Style="{StaticResource InspectorTabBodyBorderStyle}">
-                                <Grid RowSpacing="2"
+                                <ScrollViewer Style="{StaticResource CompactHorizontalToolbarScrollViewerStyle}">
+                                <Grid RowSpacing="2" MinWidth="520"
                                       MinHeight="0"
                                       RowDefinitions="Auto,*">
                                     <Grid ColumnSpacing="4"
@@ -2182,6 +2210,7 @@
                                         </ListView.ItemTemplate>
                                     </ListView>
                                 </Grid>
+                                </ScrollViewer>
                             </Border>
                         </Grid>
                     </TabViewItem>
@@ -3814,13 +3843,13 @@
                 </TabView>
             </Grid>
 
-            <Grid Grid.Row="1"
+            <Grid x:Name="InspectorResizeTrack" Grid.Row="1"
                   Grid.Column="0"
                   Background="{ThemeResource CompactSurfaceBrush}"
                   IsHitTestVisible="False">
-                <Border BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
+                <Border x:Name="InspectorResizeTrackBorder" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
                         BorderThickness="0,1,0,1" />
-                <Border Width="36"
+                <Border x:Name="InspectorResizeTrackGrip" Width="36"
                         Height="2"
                         Background="{ThemeResource NavigationButtonForegroundBrush}"
                         CornerRadius="1"
@@ -3853,6 +3882,27 @@
                     </ControlTemplate>
                 </infra:ResizeHandleControl.Template>
             </infra:ResizeHandleControl>
+            <Grid x:Name="InspectorDockOverlay" Grid.RowSpan="4" Grid.ColumnSpan="3"
+                  Canvas.ZIndex="100" IsHitTestVisible="False" Visibility="Collapsed">
+                <Border x:Name="InspectorDockPreview" Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}" BorderThickness="2"
+                        Opacity="0.22" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                <Border x:Name="InspectorDockLeftTarget" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
+                    <TextBlock x:Uid="InspectorDockLeftLabel" Text="Dock left" />
+                </Border>
+                <Border x:Name="InspectorDockRightTarget" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
+                    <TextBlock x:Uid="InspectorDockRightLabel" Text="Dock right" />
+                </Border>
+                <Border x:Name="InspectorDockBottomTarget" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Background="{ThemeResource CompactSurfaceBrush}" BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="2" CornerRadius="4" Padding="12,8" Margin="12">
+                    <TextBlock x:Uid="InspectorDockBottomLabel" Text="Dock below" />
+                </Border>
+            </Grid>
         </Grid>
 
         <Border Grid.Row="2"

@@ -8,6 +8,34 @@
 
     <x:Double x:Key="CompactCheckBoxSpacing">4</x:Double>
 
+    <Style x:Key="CompactHorizontalToolbarScrollViewerStyle" TargetType="ScrollViewer">
+        <Setter Property="infra:HorizontalScrollInset.Enabled" Value="True" />
+        <Setter Property="HorizontalScrollMode" Value="Enabled" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="VerticalScrollMode" Value="Disabled" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="IsTabStop" Value="False" />
+    </Style>
+
+    <Style x:Key="PanelMoveHandleStyle" TargetType="infra:PanelMoveHandleControl">
+        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="infra:PanelMoveHandleControl">
+                    <Border Background="{ThemeResource CompactSurfaceBrush}" Padding="{TemplateBinding Padding}"
+                            BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="3">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <ControlTemplate x:Key="CompactCheckBoxTemplate"
                      TargetType="CheckBox">
         <Grid x:Name="CheckRoot"

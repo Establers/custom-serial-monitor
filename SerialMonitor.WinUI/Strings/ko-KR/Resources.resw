@@ -1684,4 +1684,34 @@
   <data name="SearchOptionWholeWord" xml:space="preserve">
     <value>단어 전체</value>
   </data>
+  <data name="InspectorDockHandle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>패널 이동</value>
+  </data>
+  <data name="InspectorDockHandle.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
+    <value>드래그하여 패널 전체를 좌우·하단에 붙이세요. 클릭하면 위치를 선택할 수 있습니다.</value>
+  </data>
+  <data name="InspectorDockLeft.Text" xml:space="preserve">
+    <value>왼쪽에 붙이기</value>
+  </data>
+  <data name="InspectorDockRight.Text" xml:space="preserve">
+    <value>오른쪽에 붙이기</value>
+  </data>
+  <data name="InspectorDockBottom.Text" xml:space="preserve">
+    <value>하단에 붙이기</value>
+  </data>
+  <data name="InspectorDockLeftLabel.Text" xml:space="preserve">
+    <value>왼쪽에 붙이기</value>
+  </data>
+  <data name="InspectorDockRightLabel.Text" xml:space="preserve">
+    <value>오른쪽에 붙이기</value>
+  </data>
+  <data name="InspectorDockBottomLabel.Text" xml:space="preserve">
+    <value>하단에 붙이기</value>
+  </data>
+  <data name="InspectorDockRestoreToolTip" xml:space="preserve">
+    <value>로그 쪽으로 드래그하거나 두 번 클릭하여 패널을 펼치세요.</value>
+  </data>
+  <data name="InspectorDockResizeToolTip" xml:space="preserve">
+    <value>드래그하여 크기를 조절하세요. 두 번 클릭하면 패널을 접습니다.</value>
+  </data>
 </root>
