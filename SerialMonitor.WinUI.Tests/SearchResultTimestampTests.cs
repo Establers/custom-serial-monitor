@@ -43,10 +43,10 @@ public sealed class SearchResultTimestampTests
 
             Assert.Equal(LocalTime(timestamp), row.TimeText);
             Assert.Equal("RX", row.DirectionText);
-            Assert.Equal(line.PayloadText, row.MessagePreview);
+            Assert.Equal(line.PayloadText, row.MessageText);
             Assert.Equal(2, row.MatchCountInLine);
             Assert.Equal(2, row.MessageSegments.Count(segment => segment.IsMatch));
-            Assert.Equal(line.PayloadText, string.Concat(row.MessageSegments.Select(segment => segment.Text)));
+            Assert.Equal(row.MessagePreview, string.Concat(row.MessageSegments.Select(segment => segment.Text)));
             if (mode == RxDisplayMode.Terminal)
             {
                 Assert.Equal(payload, row.MessagePreview);

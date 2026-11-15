@@ -7,6 +7,36 @@ public sealed class VisibleSearchNavigationTests
 {
     private const int PageSize = 1_000;
 
+    [Theory]
+    [InlineData(1, true, 0)]
+    [InlineData(-1, true, 349)]
+    [InlineData(0, true, 0)]
+    [InlineData(0, false, 149)]
+    public void GrowingResults_NewSearchRestartsWhileRefreshKeepsTheViewedLog(
+        int movement, bool restart, int expectedIndex)
+    {
+        var original = BuildLines(300);
+        Assert.True(original.TryFind(150, 0, out var viewed));
+        var updated = BuildLines(350);
+
+        var selected = VisibleSearchNavigation.ResolveSearchPosition(updated, movement,
+            original.GetLine(viewed).LineId, viewed.PayloadOffset, restart);
+
+        Assert.NotNull(selected);
+        Assert.Equal(expectedIndex, selected.Value.GlobalMatchIndex);
+    }
+
+    [Fact]
+    public void NewSearch_FromLaterPage_SelectsFirstPageEvenWhenOldLogStillMatches()
+    {
+        var updated = BuildLines(2_100);
+        var selected = VisibleSearchNavigation.ResolveSearchPosition(updated, 1, 1_500, 0,
+            restartFromBoundary: true);
+        Assert.NotNull(selected);
+        Assert.Equal(0, VisibleSearchNavigation.GetPageForPosition(updated, selected.Value, PageSize).PageIndex);
+        Assert.Equal(0, selected.Value.GlobalMatchIndex);
+    }
+
     [Fact]
     public void InitialPrevious_SelectsLastMatchingLineAndItsPage()
     {

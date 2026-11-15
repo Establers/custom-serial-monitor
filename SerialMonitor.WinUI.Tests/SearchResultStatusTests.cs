@@ -8,6 +8,58 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class SearchResultStatusTests
 {
+    [Fact]
+    public async Task PageFailure_SurvivesIncomingLogsAndIsClearedBySuccessfulPageBuild()
+    {
+        var model = CreateSearchState(hasPreviousResults: true);
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "READY", 0)], "READY", new VisibleLogSearchOptions());
+        SetField(model, "_activeSearchSnapshot", snapshot);
+        SetField(model, "_lastSearchResultBuildError", "Search result build failed: page unavailable");
+
+        Invoke(model, "MarkSearchResultsStale");
+        Invoke(model, "NotifySearchResultPageProperties");
+        Assert.Contains("page unavailable", model.SearchResultStatusText);
+        Assert.DoesNotContain("Logs changed", model.SearchResultStatusText);
+
+        var build = typeof(MainViewModel).GetMethod("UpdateSearchResultsPageAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.True(await (Task<bool>)build.Invoke(model, [snapshot, 0, 0L, CancellationToken.None, null])!);
+        Assert.Equal(string.Empty, model.LastSearchResultBuildError);
+        Assert.DoesNotContain("page unavailable", model.SearchResultStatusText);
+        Assert.Contains("Logs changed", model.SearchResultStatusText);
+    }
+
+    [Fact]
+    public void IncomingLogsAndEditedCriteria_HaveDifferentInstructionsAndKeepAppliedQuery()
+    {
+        var model = CreateSearchState(hasPreviousResults: true);
+        var snapshot = VisibleLogSearchEngine.Build(
+            [new VisibleLogSearchLine(1, "READY READY", 0)], "READY", new VisibleLogSearchOptions());
+        SetField(model, "_activeSearchSnapshot", snapshot);
+        SetField(model, "_searchMatchCount", 2L);
+
+        Invoke(model, "MarkSearchResultsStale");
+        Assert.Contains("Logs changed", model.SearchResultStatusText);
+        Assert.Contains("1 lines", model.SearchResultCountsText);
+        Assert.Contains("/2", model.SearchResultCountsText);
+
+        model.SearchText = "ERROR";
+        Assert.Contains("Conditions changed", model.SearchResultStatusText);
+        Assert.Contains("READY", model.AppliedSearchCriteriaText);
+        Assert.DoesNotContain("ERROR", model.AppliedSearchCriteriaText);
+        Invoke(model, "MarkSearchResultsStale");
+        Assert.Contains("Conditions changed", model.SearchResultStatusText);
+    }
+
+    [Fact]
+    public void IncomingLogs_BeforeFirstSearch_DoNotClaimThereAreOldResults()
+    {
+        var model = CreateSearchState(hasPreviousResults: false);
+        Invoke(model, "MarkSearchResultsStale");
+        Assert.False(model.AreSearchResultsStale);
+        Assert.Contains("Enter search text", model.SearchResultStatusText);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -23,7 +75,8 @@ public sealed class SearchResultStatusTests
         Invoke(model, "MarkSearchResultsStale");
 
         Assert.True(model.AreSearchResultsStale);
-        Assert.Contains(error, model.SearchResultStatusText, StringComparison.Ordinal);
+        Assert.Contains("Invalid pattern '['.", model.SearchResultStatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Search failed: ", model.SearchResultStatusText, StringComparison.Ordinal);
         Assert.Equal(hasPreviousResults ? 1 : 0, model.SearchResults.Count);
     }
 

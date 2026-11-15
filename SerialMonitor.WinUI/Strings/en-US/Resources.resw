@@ -29,7 +29,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi007.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Search visible log (click Search or press Enter to refresh and move next; Up/Down history)</value>
+    <value>Search retained logs from the first match (Search or Enter; Shift+Enter from the last; F3 next; Up/Down history)</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi008.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
@@ -159,7 +159,7 @@
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi029.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Refresh search results</value>
+    <value>Refresh results and keep the selected log. Changed conditions start at the first result.</value>
     <comment>Static MainWindow UI text.</comment>
   </data>
   <data name="StaticUi030.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
@@ -863,7 +863,7 @@ Elapsed {2} · Remaining {3}</value>
     <value>Search</value>
   </data>
   <data name="SearchVisibleLogButton.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve">
-    <value>Search with current options and move to the next match (Enter)</value>
+    <value>Search with current options from the first match (Enter). F3 moves to the next match.</value>
   </data>
   <data name="SequenceLoad.Text" xml:space="preserve"><value>Load JSON files…</value></data>
   <data name="SequenceExport.Text" xml:space="preserve"><value>Export selected sequence…</value></data>
@@ -1635,4 +1635,55 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorResponseCrcHelp" xml:space="preserve"><value>Response CRC check failed. Check the connection and serial settings, then reconnect the port.</value></data>
 <data name="ModbusMonitorResponseMismatchHelp" xml:space="preserve"><value>The response does not match the request. Check the device ID and other senders, then reconnect the port.</value></data>
 <data name="ModbusMonitorReadRetry" xml:space="preserve"><value>Read failed · Retry interval {0} ms (after receive recovery). {1}</value></data>
+  <data name="SearchCriteriaNone" xml:space="preserve">
+    <value>No search applied</value>
+  </data>
+  <data name="SearchScope" xml:space="preserve">
+    <value>Retained logs · manual refresh</value>
+  </data>
+  <data name="SearchResultCounts" xml:space="preserve">
+    <value>{0:N0} lines · match {2:N0}/{1:N0} · retained logs</value>
+  </data>
+  <data name="SearchResultPage" xml:space="preserve">
+    <value>Page {0:N0}/{1:N0}</value>
+  </data>
+  <data name="SearchStateInitial" xml:space="preserve">
+    <value>Enter search text, then search.</value>
+  </data>
+  <data name="SearchStateRunning" xml:space="preserve">
+    <value>Searching…</value>
+  </data>
+  <data name="SearchStateFailed" xml:space="preserve">
+    <value>Search failed — {0}</value>
+  </data>
+  <data name="SearchPageStateFailed" xml:space="preserve">
+    <value>Could not display results — {0}</value>
+  </data>
+  <data name="SearchStateCriteriaChanged" xml:space="preserve">
+    <value>Conditions changed — search again or Refresh.</value>
+  </data>
+  <data name="SearchStateLogsChanged" xml:space="preserve">
+    <value>Logs changed — Refresh to include the latest logs.</value>
+  </data>
+  <data name="SearchStateNoMatches" xml:space="preserve">
+    <value>No matches. Change the search conditions.</value>
+  </data>
+  <data name="SearchStateCurrent" xml:space="preserve">
+    <value>Manual refresh · Enter on a result opens its source log.</value>
+  </data>
+  <data name="SearchOptionCase" xml:space="preserve">
+    <value>Case sensitive</value>
+  </data>
+  <data name="SearchOptionIgnoreCase" xml:space="preserve">
+    <value>Ignore case</value>
+  </data>
+  <data name="SearchOptionRegex" xml:space="preserve">
+    <value>Regex</value>
+  </data>
+  <data name="SearchOptionLiteral" xml:space="preserve">
+    <value>Literal</value>
+  </data>
+  <data name="SearchOptionWholeWord" xml:space="preserve">
+    <value>Whole word</value>
+  </data>
 </root>

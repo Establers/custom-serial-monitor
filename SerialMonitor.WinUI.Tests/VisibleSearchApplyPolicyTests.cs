@@ -48,7 +48,7 @@ public sealed class VisibleSearchApplyPolicyTests
                 UseRegularExpression: true));
 
         Assert.Equal(
-            "Applied: old search · Aa:On · Word:Off · Regex:On",
+            "“old search” · Case sensitive · Regex",
             text);
     }
 

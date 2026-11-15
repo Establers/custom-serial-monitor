@@ -16,7 +16,8 @@ public sealed class VisibleSearchResult
         string directionText,
         string messagePreview,
         string fullText,
-        IReadOnlyList<EventTextSegment>? messageSegments = null)
+        IReadOnlyList<EventTextSegment>? messageSegments = null,
+        string? messageText = null)
     {
         MatchIndex = matchIndex;
         VisibleLineIndex = visibleLineIndex;
@@ -26,6 +27,7 @@ public sealed class VisibleSearchResult
         TimeText = timeText;
         DirectionText = directionText;
         MessagePreview = messagePreview;
+        MessageText = messageText ?? messagePreview;
         FullText = fullText;
         MessageSegments = messageSegments ?? [new EventTextSegment(messagePreview, isMatch: false)];
     }
@@ -45,6 +47,8 @@ public sealed class VisibleSearchResult
     public string DirectionText { get; }
 
     public string MessagePreview { get; }
+
+    public string MessageText { get; }
 
     public IReadOnlyList<EventTextSegment> MessageSegments { get; }
 
@@ -114,15 +118,9 @@ internal static class VisibleSearchResultParser
         var options = searchOptions ?? new VisibleLogSearchOptions(
             MatchCase: comparison is StringComparison.Ordinal or StringComparison.CurrentCulture or StringComparison.InvariantCulture,
             LiteralComparison: comparison);
-        var messageSegments = searchMatcher is not null
-            ? SearchResultMatchSegmentResolver.Resolve(
-                messagePreview,
-                searchMatcher,
-                cancellationToken)
-            : SearchResultMatchSegmentResolver.Resolve(
-                messagePreview,
-                searchText,
-                options);
+        var matcher = searchMatcher ?? (string.IsNullOrEmpty(searchText)
+            ? null : new VisibleLogSearchMatcher(searchText, options));
+        var preview = SearchResultPreview.Create(messagePreview, matcher, cancellationToken);
 
         return new VisibleSearchResult(
             matchIndex,
@@ -132,9 +130,10 @@ internal static class VisibleSearchResultParser
             matchCountInLine,
             timeText,
             directionText,
-            messagePreview,
+            preview.Text,
             fullText,
-            messageSegments);
+            preview.Segments,
+            messagePreview);
     }
 
     private static bool TrySplitTimestamp(

@@ -722,7 +722,8 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 - [ ] Confirm the magnifying-glass Search button sits immediately left of Prev,
   within the existing search field area, without increasing toolbar padding or gaps.
   Click it and compare with Enter: both refresh the visible-log snapshot using the
-  current options, select the next match, and add the query to search history.
+  current options, select the first match, and add the query to search history.
+  Shift+Enter starts from the last match; F3/Shift+F3 traverse the applied results.
 - [ ] Confirm xterm jumps/selects matches.
 - [ ] Append additional matching logs, then use Next/Prev and F3/Shift+F3/F4;
   confirm the total match count remains the last Enter-search snapshot.
@@ -779,10 +780,31 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 
 ## Search Results Tab
 
+Automated native check (separate process, no serial connection or profile save):
+`./scripts/test_search_native.ps1 -AppPath <built SerialMonitor.WinUI.exe>`.
+The report includes list/source selection checks, buffer eviction, and narrow/wide screenshots.
+
 - [ ] Open Search tab.
+- [ ] Search 300 matching lines, activate result 150, then append 50 more matches.
+  Confirm the count stays 300 until manually searching. Search/Enter must select
+  result 1 of 350 and scroll both the list and source log to it. Refresh instead
+  must retain the selected log; Shift+Enter must select the last result.
+- [ ] Repeat from a page beyond the first with over 1,000 matching lines. Change
+  the query or an option and use Refresh; confirm it selects the first result
+  and its page, even when the previously selected log matches both queries.
+- [ ] Check the header shows the applied query/options, matching-line count,
+  current/total occurrence count, retained-log scope, and page separately.
+  Editing the input must leave the applied query visible until the new search succeeds.
+- [ ] Confirm incoming logs show a logs-changed/refresh instruction; editing the
+  query/options shows a conditions-changed/search instruction. Incoming logs must
+  not overwrite a search failure or conditions-changed instruction.
+- [ ] Search near the end of a very long payload, including regex lookbehind and
+  anchors. The row must show the highlighted match with nearby context and
+  ellipses; its tooltip must retain the entire payload and Enter must select the
+  original match at the correct offset. Check narrow and wide inspector widths.
 - [ ] Confirm result rows are compact and stable.
-- [ ] Confirm repeated matches on one line appear as one row labeled `×N` and
-  double-clicking the row jumps to the first occurrence on that line.
+- [ ] Confirm repeated matches on one line appear as one row, the header counts
+  every occurrence, and double-clicking the row jumps to its first occurrence.
 - [ ] With more than 1,000 matching lines, confirm `Prev` moves toward older
   pages and `Next` moves toward newer pages while each page stays at or below
   1,000 rows.
@@ -792,7 +814,7 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 - [ ] On the newest results page, append more matching logs and click `Next`;
   confirm the search refreshes and moves to the newest available page.
 - [ ] Confirm status appears in the toolbar, not as a result row.
-- [ ] Confirm there is no Auto refresh control and Search results update only after Refresh.
+- [ ] Confirm there is no Auto refresh control. Search/Enter and Refresh explicitly update results; incoming logs only update the status.
 - [ ] Click Refresh and confirm results rebuild.
 - [ ] Double-click a result and confirm xterm jumps/selects it.
 - [ ] Confirm stale/manual status is clear while logs append.

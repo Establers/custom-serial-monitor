@@ -59,10 +59,11 @@ internal static class VisibleSearchNavigation
         VisibleLogSearchSnapshot snapshot,
         int movement,
         long? previousLineId,
-        int? previousPayloadOffset)
+        int? previousPayloadOffset,
+        bool restartFromBoundary = false)
     {
         var restoredPosition = default(VisibleLogSearchPosition);
-        var restored = previousLineId.HasValue && previousPayloadOffset.HasValue &&
+        var restored = !restartFromBoundary && previousLineId.HasValue && previousPayloadOffset.HasValue &&
             snapshot.TryFind(previousLineId.Value, previousPayloadOffset.Value, out restoredPosition);
         VisibleLogSearchPosition selectedPosition;
         bool selected;

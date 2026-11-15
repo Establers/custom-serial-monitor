@@ -24,8 +24,21 @@ internal static class VisibleSearchApplyPolicy
 
     public static string FormatAppliedCriteria(
         string searchText,
-        VisibleLogSearchOptions options) =>
-        $"Applied: {searchText} · Aa:{FormatOption(options.MatchCase)} · Word:{FormatOption(options.MatchWholeWord)} · Regex:{FormatOption(options.UseRegularExpression)}";
+        VisibleLogSearchOptions options)
+    {
+        var labels = new List<string>
+        {
+            options.MatchCase
+                ? UiText.Get("SearchOptionCase", "Case sensitive")
+                : UiText.Get("SearchOptionIgnoreCase", "Ignore case"),
+            options.UseRegularExpression
+                ? UiText.Get("SearchOptionRegex", "Regex")
+                : UiText.Get("SearchOptionLiteral", "Literal")
+        };
+        if (options.MatchWholeWord) labels.Add(UiText.Get("SearchOptionWholeWord", "Whole word"));
+        var displayText = searchText.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        return $"“{displayText}” · {string.Join(" · ", labels)}";
+    }
 
     public static bool CanCommit(
         long expectedSearchGeneration,
@@ -36,5 +49,4 @@ internal static class VisibleSearchApplyPolicy
     public static bool ShouldRequestXterm(VisibleSearchApplyResult result) =>
         result == VisibleSearchApplyResult.Applied;
 
-    private static string FormatOption(bool enabled) => enabled ? "On" : "Off";
 }

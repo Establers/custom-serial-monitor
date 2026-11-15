@@ -1087,13 +1087,13 @@
                                      MaxWidth="495"
                                      VerticalAlignment="Center"
                                      KeyDown="SearchTextBox_KeyDown"
-                                     infra:AppToolTipService.ToolTip="Search visible log (click Search or press Enter to refresh and move next; Up/Down history)" />
+                                     infra:AppToolTipService.ToolTip="Search retained logs from the first match (Search or Enter; Shift+Enter from the last; F3 next; Up/Down history)" />
                             <Button x:Uid="SearchVisibleLogButton"
                                     Grid.Column="1"
                                     Style="{StaticResource NavigationIconButtonStyle}"
                                     Command="{Binding SearchVisibleLogCommand}"
                                     AutomationProperties.Name="Search"
-                                    infra:AppToolTipService.ToolTip="Search with current options and move to the next match (Enter)">
+                                    infra:AppToolTipService.ToolTip="Search with current options from the first match (Enter). F3 moves to the next match.">
                                 <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           FontSize="12"
                                           UseLayoutRounding="False"
@@ -1822,37 +1822,36 @@
                               MinWidth="0"
                               RowDefinitions="Auto,*">
                             <Border Style="{StaticResource InspectorTabHeaderBorderStyle}">
-                                <Grid ColumnSpacing="4"
-                                      MinWidth="0"
-                                      ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
-                                      RowDefinitions="Auto">
-                                    <TextBlock Text="Search"
-                                               Style="{StaticResource InspectorSectionHeaderTextStyle}"
-                                               Margin="0,0,4,0" />
-                                    <Button x:Uid="StaticUi029" Grid.Column="1"
-                                            Content="Refresh"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Command="{Binding RefreshSearchResultsCommand}"
-                                            infra:AppToolTipService.ToolTip="Refresh search results" />
-                                    <Button x:Uid="StaticUi030" Grid.Column="2"
-                                            Content="Prev"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Command="{Binding PreviousSearchResultsPageCommand}"
-                                            infra:AppToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
-                                    <Button x:Uid="StaticUi031" Grid.Column="3"
-                                            Content="Next"
-                                            Style="{StaticResource RuleActionButtonStyle}"
-                                            Command="{Binding NextSearchResultsPageCommand}"
-                                            infra:AppToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
-                                    <TextBlock Grid.Column="4"
-                                               Text="{Binding SearchSummaryText}"
-                                               Style="{StaticResource CompactCellTextStyle}" />
-                                    <TextBlock Grid.Column="5"
-                                               Text="{Binding SearchResultStatusText}"
-                                               Style="{StaticResource CompactCellTextStyle}"
-                                               MinWidth="0"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center" />
+                                <Grid x:Name="SearchResultsHeader" RowDefinitions="Auto,Auto" RowSpacing="4">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Text="{Binding AppliedSearchCriteriaText}"
+                                                   Style="{StaticResource InspectorSectionHeaderTextStyle}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   infra:AppToolTipService.ToolTip="{Binding AppliedSearchCriteriaText}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding SearchResultCountsText}"
+                                                   Style="{StaticResource CompactCellTextStyle}"
+                                                   infra:AppToolTipService.ToolTip="{Binding SearchResultCountsText}" />
+                                    </Grid>
+                                    <Grid Grid.Row="1" ColumnSpacing="4" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                                        <Button x:Uid="StaticUi029" Content="Refresh"
+                                                Style="{StaticResource RuleActionButtonStyle}"
+                                                Command="{Binding RefreshSearchResultsCommand}"
+                                                infra:AppToolTipService.ToolTip="Refresh results and keep the selected log. Changed conditions start at the first result." />
+                                        <Button x:Uid="StaticUi030" Grid.Column="1" Content="Prev"
+                                                Style="{StaticResource RuleActionButtonStyle}"
+                                                Command="{Binding PreviousSearchResultsPageCommand}"
+                                                infra:AppToolTipService.ToolTip="Show the previous 1,000 matching lines (older)" />
+                                        <Button x:Uid="StaticUi031" Grid.Column="2" Content="Next"
+                                                Style="{StaticResource RuleActionButtonStyle}"
+                                                Command="{Binding NextSearchResultsPageCommand}"
+                                                infra:AppToolTipService.ToolTip="Show the next 1,000 matching lines (newer). On the newest page, refresh and stay at the latest results." />
+                                        <TextBlock Grid.Column="3" Text="{Binding SearchResultStatusText}"
+                                                   Style="{StaticResource CompactCellTextStyle}"
+                                                   TextWrapping="Wrap" MaxLines="2"
+                                                   infra:AppToolTipService.ToolTip="{Binding SearchResultStatusText}" />
+                                        <TextBlock Grid.Column="4" Text="{Binding SearchResultPageText}"
+                                                   Style="{StaticResource CompactCellTextStyle}" />
+                                    </Grid>
                                 </Grid>
                             </Border>
 
@@ -1893,8 +1892,8 @@
                                                        infra:SearchTextHighlightBehavior.Segments="{Binding MessageSegments}"
                                                        FontFamily="Consolas"
                                                        Style="{StaticResource CompactCellTextStyle}"
-                                                       infra:AppToolTipService.ToolTip="{Binding MessagePreview}"
-                                                       AutomationProperties.Name="{Binding MessagePreview}" />
+                                                       infra:AppToolTipService.ToolTip="{Binding MessageText}"
+                                                       AutomationProperties.Name="{Binding MessageText}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
