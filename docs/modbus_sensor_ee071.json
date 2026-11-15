@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "name": "E+E EE071 · 온습도 읽기 예제",
+  "source": "E+E EE071 User's Guide v1.3 p.2 (https://www.epluse.com/fileadmin/data/product/ee071/BA_EE071_e.pdf), AN0103 rev1.4 pp.3,7 (https://www.epluse.com/fileadmin/data/product/ee071/AN0103.pdf). ID 247 / 9600 baud / 8E1. 온습도 읽기만 재현. 초기값은 시험용이며 실제 측정값이 아님. 측정 중 무응답, ID·통신 설정 변경, 보정·기압 설정은 재현하지 않음. FC03/04의 같은 항목은 함께 수정하세요.",
+  "unitId": 247,
+  "responseDelayMs": 0,
+  "points": [
+    { "name": "온도", "area": 3, "address": 25, "valueType": "Float32", "scale": 1, "unit": "°C", "swapWords": true, "initialValue": "25.5", "writable": false },
+    { "name": "온도 (화씨)", "area": 3, "address": 27, "valueType": "Float32", "scale": 1, "unit": "°F", "swapWords": true, "initialValue": "77.9", "writable": false },
+    { "name": "상대 습도", "area": 3, "address": 29, "valueType": "Float32", "scale": 1, "unit": "%RH", "swapWords": true, "initialValue": "50.0", "writable": false },
+    { "name": "온도 (정수)", "area": 3, "address": 39, "valueType": "Int16", "scale": 0.01, "unit": "°C", "initialValue": "25.5", "writable": false },
+    { "name": "온도 (화씨·정수)", "area": 3, "address": 40, "valueType": "Int16", "scale": 0.01, "unit": "°F", "initialValue": "77.9", "writable": false },
+    { "name": "상대 습도 (정수)", "area": 3, "address": 41, "valueType": "Int16", "scale": 0.01, "unit": "%RH", "initialValue": "50.0", "writable": false },
+    { "name": "온도", "area": 4, "address": 25, "valueType": "Float32", "scale": 1, "unit": "°C", "swapWords": true, "initialValue": "25.5", "writable": false },
+    { "name": "온도 (화씨)", "area": 4, "address": 27, "valueType": "Float32", "scale": 1, "unit": "°F", "swapWords": true, "initialValue": "77.9", "writable": false },
+    { "name": "상대 습도", "area": 4, "address": 29, "valueType": "Float32", "scale": 1, "unit": "%RH", "swapWords": true, "initialValue": "50.0", "writable": false },
+    { "name": "온도 (정수)", "area": 4, "address": 39, "valueType": "Int16", "scale": 0.01, "unit": "°C", "initialValue": "25.5", "writable": false },
+    { "name": "온도 (화씨·정수)", "area": 4, "address": 40, "valueType": "Int16", "scale": 0.01, "unit": "°F", "initialValue": "77.9", "writable": false },
+    { "name": "상대 습도 (정수)", "area": 4, "address": 41, "valueType": "Int16", "scale": 0.01, "unit": "%RH", "initialValue": "50.0", "writable": false }
+  ]
+}

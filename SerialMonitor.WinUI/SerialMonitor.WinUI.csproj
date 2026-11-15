@@ -81,7 +81,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\docs\modbus_sensor_authoring.md;..\docs\modbus_sensor_example.json;..\docs\modbus_sensor.schema.json;..\docs\sequence_authoring.md;..\docs\sequence_examples.json;..\docs\sequence_rx_example.json;..\docs\ai_control.md;..\docs\agent_skills.md;..\docs\agent_plugins.md">
+    <Content Include="..\docs\modbus_sensor_ee071.json;..\docs\modbus_sensor_ee071.md;..\docs\modbus_sensor_authoring.md;..\docs\modbus_sensor_example.json;..\docs\modbus_sensor.schema.json;..\docs\sequence_authoring.md;..\docs\sequence_examples.json;..\docs\sequence_rx_example.json;..\docs\ai_control.md;..\docs\agent_skills.md;..\docs\agent_plugins.md">
       <Link>docs\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

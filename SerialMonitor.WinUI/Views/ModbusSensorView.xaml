@@ -4,7 +4,7 @@
   <TextBlock Text="에어컨이 요청하면 이 PC가 센서 대신 응답해요. 실제 센서를 빼고 연결하세요. 통신 속도·패리티·정지 비트는 장치와 맞추세요." TextWrapping="Wrap" FontSize="12" />
   <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5">
    <Button Content="JSON 파일…" Click="Import_Click" IsEnabled="{Binding CanEdit}" Style="{StaticResource ModbusActionButtonStyle}" />
-   <Button Content="예제 불러오기" Command="{Binding ExampleCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Button Content="EE071 예제" Command="{Binding ExampleCommand}" ToolTipService.ToolTip="E+E EE071 온습도 읽기 예제 · ID 247 · 9600 / 8E1" Style="{StaticResource ModbusActionButtonStyle}" />
    <Button Content="AI 작성 지침 복사" Click="CopyGuide_Click" Style="{StaticResource ModbusActionButtonStyle}" />
    <Button Content="JSON 확인" Command="{Binding ValidateCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
   </StackPanel>

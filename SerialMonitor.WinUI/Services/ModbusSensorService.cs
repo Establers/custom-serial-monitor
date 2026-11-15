@@ -40,7 +40,7 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                 if (lastChunk != 0 && chunk.ReceivedTimestamp > lastChunk &&
                     Stopwatch.GetElapsedTime(lastChunk, chunk.ReceivedTimestamp).TotalMilliseconds > Math.Max(100, serial.AppliedReceiveIdleTimeoutMs * 2)) framer.Clear();
                 lastChunk = chunk.ReceivedTimestamp;
-                foreach (var request in framer.Feed(chunk.Bytes))
+                foreach (var request in framer.Feed(chunk.Bytes, chunk.EndsAtNativeIdleBoundary))
                 {
                     token.ThrowIfCancellationRequested();
                     if (Volatile.Read(ref overflow) != 0) throw new IOException("센서 수신 대기열 초과로 응답을 중지했어요.");
@@ -58,7 +58,6 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                     previousResponse = response; lastWrite = Stopwatch.GetTimestamp();
                     transmitted(response, lease.Generation); responded();
                 }
-                if (chunk.EndsAtNativeIdleBoundary) framer.Clear();
             }
         }
         finally { serial.CaptureBytesReceived -= Receive; serial.StatusChanged -= Changed; queue.Writer.TryComplete(); }

@@ -44,5 +44,6 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <None Include="..\docs\modbus_sensor_ee071.json" Link="docs\modbus_sensor_ee071.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

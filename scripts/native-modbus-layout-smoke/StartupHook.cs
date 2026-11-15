@@ -842,8 +842,9 @@ public static class StartupHook
                     await Flyout(protocol, "FilterFlyout", "PresentationSelector", "filter" + suffix);
                     S(protocolModel, "SelectedViewIndex", 4);
                     var sensor = P(mainModel, "Sensor")!;
-                    await (Task)Call(sensor, "LoadFileAsync", Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_example.json"))!;
-                    if (!((string)P(sensor, "Summary")!).Contains("25.0")) Issue("sensor JSON preview missing engineering value");
+                    await (Task)Call(sensor, "LoadExampleAsync")!;
+                    var sensorSummary = (string)P(sensor, "Summary")!;
+                    if (!sensorSummary.Contains("25.5") || !sensorSummary.Contains("EE071") || !sensorSummary.Contains("9600")) Issue("EE071 sensor preview missing values or communication settings");
                     var sensorView = New("SerialMonitor.WinUI.Views.ProtocolView");
                     await View(sensorView, "sensor-preview" + suffix, protocolModel);
                     if (P(Field(sensorView, "SensorPanel"), "Visibility")?.ToString() != "Visible") Issue("sensor editor hidden in sensor role");

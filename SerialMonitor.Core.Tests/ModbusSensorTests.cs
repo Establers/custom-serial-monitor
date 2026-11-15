@@ -63,6 +63,44 @@ public sealed class ModbusSensorTests
     }
     private static void CheckCrc(byte[] packet) => Assert.Equal(ModbusRtuCrc.Compute(packet.AsSpan(0,packet.Length-2)), BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(packet.Length-2)));
 
+    [Fact] public void IdleBoundaryDiscardsAnIncompleteRequestInsteadOfJoiningTheNextFrame()
+    {
+        var framer = new ModbusRequestFramer();
+        var request = ModbusRtuRequestBuilder.Read(1,3,0,1);
+        Assert.Empty(framer.Feed(request[..4], endsAtIdleBoundary: true));
+        Assert.Equal(request, Assert.Single(framer.Feed(request, endsAtIdleBoundary: true)));
+    }
+
+    [Fact] public void ValidMultipleWriteCanContainAWholeReadPacketAsItsData()
+    {
+        var nested = ModbusRtuRequestBuilder.Read(1,3,0,1);
+        var words = Enumerable.Range(0,4).Select(i => BinaryPrimitives.ReadUInt16BigEndian(nested.AsSpan(i*2))).ToArray();
+        var write = ModbusRtuRequestBuilder.WriteMultiple(1,16,0,words);
+        for (var split = 1; split < write.Length; split++)
+        {
+            var framer = new ModbusRequestFramer();
+            Assert.Empty(framer.Feed(write[..split]));
+            Assert.Equal(write, Assert.Single(framer.Feed(write[split..], endsAtIdleBoundary: true)));
+        }
+    }
+
+    [Fact] public void InvalidValuesRangesAndUnsupportedFunctionsHaveExplicitResponses()
+    {
+        var engine = new ModbusSensorEngine(Definition());
+        static byte[] Packet(params byte[] payload)
+        {
+            var result = new byte[payload.Length+2]; payload.CopyTo(result,0);
+            BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(payload.Length), ModbusRtuCrc.Compute(payload)); return result;
+        }
+        Assert.Equal("018303", Convert.ToHexString(engine.Respond(Packet(1,3,0,0,0,0))![..^2]));
+        Assert.Equal("018502", Convert.ToHexString(engine.Respond(Packet(1,5,255,255,255,0))![..^2]));
+        Assert.Equal("018503", Convert.ToHexString(engine.Respond(Packet(1,5,0,0,0,1))![..^2]));
+        Assert.Equal("018801", Convert.ToHexString(engine.Respond(Packet(1,8,0,0,0,0))![..^2]));
+        Assert.Null(engine.Respond(Packet(0,3,0,0,0,1)));
+        Assert.Null(engine.Respond(Packet(0,5,0,0,0,1)));
+        Assert.Equal("01010101", Convert.ToHexString(engine.Respond(ModbusRtuRequestBuilder.Read(1,1,0,1))![..^2]));
+    }
+
     [Theory]
     [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)]
     public void EveryReadAreaHasItsOwnAddressSpace(byte area)

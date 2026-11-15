@@ -26,7 +26,9 @@
 6. 에어컨이 요청하면 응답 횟수가 증가한다. 요청이 없으면 송신하지 않는다.
 
 [AI 작성 지침](modbus_sensor_authoring.md), [JSON Schema](modbus_sensor.schema.json),
-[온습도 센서 예제](modbus_sensor_example.json)를 함께 제공한다. 예제는 실제 제품 사양이 아니다.
+[기초 연습 예제](modbus_sensor_example.json)를 함께 제공한다. 기초 예제는 실제 제품 사양이 아니다.
+화면의 **EE071 예제**는 [E+E EE071 공식 문서 기반 온습도 읽기 예제](modbus_sensor_ee071.md)를 불러온다.
+제조사 전체 동작을 재현하는 예제는 아니며, 초기값·지원 범위·출처를 미리보기에 표시한다.
 JSON 파일의 문법·주소 중복·값 변환 검사는 앱이 수행하지만, PDF의 주소를 AI가 정확히 옮겼는지는
 사람이 확인해야 한다. 이 파일은 센서 시뮬레이터 입력용이며 직접 시험의 읽기 그룹 파일과 다르다.
 
@@ -55,3 +57,24 @@ JSON 파일의 문법·주소 중복·값 변환 검사는 앱이 수행하지�
   연결 끊김, 대기열 초과, 로컬 쓰기 에코 중지를 자동 검사했다.
 - 실제 RS-485 에어컨 마스터와의 통신 및 장시간 연속 운전은 이번 작업에서 실행하지 않았다.
   COM3 연결이나 펌웨어는 변경하지 않았다.
+
+## 센서 재검토 및 EE071 예제 검증 — 2026-11-15
+
+- 가변 길이 요청처럼 보이는 잡음 뒤에 정상 요청이 붙으면, 길이를 계속 기다리다 정상 요청까지
+  버리는 결함을 재현했다 (`artifacts/sensor-audit/red-test.log`: 수정 전 타임아웃 실패).
+  실제 수신의 idle 경계에서 불완전한 앞부분을 버리며 CRC가 맞는 뒤쪽 요청을 복구하도록 수정했다.
+  정상 다중 쓰기의 데이터 안에 CRC-valid 패킷이 들어 있어도 분할 수신 중에는 꺼내지 않는 검사도 추가했다.
+- E+E EE071: Float32 워드 교환, Int16 × 0.01, FC03/04, 장치 ID 247을 공식 자료와 대조했다.
+  앱의 요청 생성기와 독립적으로 계산한 고정 요청·응답 벡터로 예제 파일 자체를 검사한다.
+- 최종 Release 빌드: 경고 0, 오류 0 (`artifacts/sensor-audit/build.log`).
+- Core Modbus: 186 통과 (`artifacts/sensor-audit/core.trx`).
+- WinUI Modbus/Protocol: 609 통과, 선택적 가상 포트 검사 2건 제외 (`artifacts/sensor-audit/winui.trx`).
+  그중 새 센서 가상 포트 검사는 아래 별도 실행에서 통과했다.
+- **Windows 가상 COM 실통신**: 레지스트리로 com0com임을 확인한 CNCA0/CNCB0만 열었다.
+  9600/8E1 설정으로 EE071 요청·응답 60회, 580 응답 바이트가 기대값과 일치했다.
+  요청 전 무송신, 다른 ID·CRC 오류 무응답, 중지 후 무송신, 드라이버 오류 0도 확인했다
+  (`artifacts/sensor-audit/virtual-wire.trx`). 물리 RS-485 선로의 전기·타이밍 검증은 아니다.
+- 실제 WinUI 화면 88건·공통 폼 150건 통과. **EE071 예제**가 앱에 포함된 JSON을 읽고
+  값·통신 설정·지원 범위를 표시하는지 검사했다
+  (`artifacts/sensor-audit/native/efe642fc840841cbb33015bafca71dff/result.json`).
+- 실제 EE071나 에어컨과의 물리 통신, 장시간 운전, 제조사 고유 동작 검증은 미실행.

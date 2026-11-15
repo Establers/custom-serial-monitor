@@ -385,7 +385,8 @@ public sealed partial class ModbusRtuMonitorServiceTests
         public List<byte[]> Sent { get; } = [];
         public Func<byte[], Task> OnSend { get; set; } = _ => Task.CompletedTask;
 
-        public void Emit(byte[] bytes, long? generation = null) => _received?.Invoke(generation ?? Generation, ReceivedByteChunk.Capture(bytes));
+        public void Emit(byte[] bytes, long? generation = null, bool endsAtIdleBoundary = false) =>
+            _received?.Invoke(generation ?? Generation, ReceivedByteChunk.CaptureAt(bytes, System.Diagnostics.Stopwatch.GetTimestamp(), endsAtIdleBoundary));
         public void Disconnect()
         {
             WasOwnedWhenDisconnected = Owner is not null;

@@ -7,7 +7,9 @@
 **장치 직접 시험**은 PC가 요청하는 마스터 역할이다.
 **센서 시뮬레이터**는 PC가 센서 역할로 요청에 응답한다. JSON 불러오기·확인은 송신하지 않는다.
 실행 중에는 역할 변경을 막고 먼저 실행을 중지하도록 한다. 실행 상태는 저장·복원하지 않는다.
-JSON 계약은 [AI 작성 지침](modbus_sensor_authoring.md), 예제는 [센서 JSON](modbus_sensor_example.json)을 따른다.
+JSON 계약은 [AI 작성 지침](modbus_sensor_authoring.md)을 따른다.
+화면의 **EE071 예제**는 [실제 제품 기반 읽기 예제](modbus_sensor_ee071.md)를 불러온다.
+[기초 연습 JSON](modbus_sensor_example.json)도 별도로 제공한다.
 역할별 사용 순서와 구현·검증 범위는 [역할과 센서 시뮬레이터 안내](modbus-roles-and-sensor-simulator.md)에 기록한다.
 
 ## 장치 직접 시험 흐름

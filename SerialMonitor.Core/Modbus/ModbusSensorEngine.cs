@@ -83,21 +83,35 @@ public sealed class ModbusRequestFramer
 {
     private readonly List<byte> _buffer = new(256);
     public void Clear() => _buffer.Clear();
-    public IEnumerable<byte[]> Feed(byte[] chunk)
+    public IEnumerable<byte[]> Feed(byte[] chunk, bool endsAtIdleBoundary = false)
     {
         foreach (var value in chunk)
         {
             _buffer.Add(value);
-            while (_buffer.Count >= 8)
+            foreach (var frame in Drain(endOfFrame: false)) yield return frame;
+        }
+        if (!endsAtIdleBoundary) yield break;
+        // At a known idle boundary a truncated FC15/16 prefix cannot receive
+        // more bytes. Search its tail for complete CRC-valid requests before
+        // discarding it; otherwise line noise can hide an entire good request.
+        foreach (var frame in Drain(endOfFrame: true)) yield return frame;
+        Clear();
+    }
+    private IEnumerable<byte[]> Drain(bool endOfFrame)
+    {
+        while (_buffer.Count >= 8)
+        {
+            var length = _buffer[1] is 15 or 16 ? 9 + _buffer[6] : 8;
+            if (length > 256) { _buffer.RemoveAt(0); continue; }
+            if (_buffer.Count < length)
             {
-                var length = _buffer[1] is 15 or 16 ? 9 + _buffer[6] : 8;
-                if (length > 256) { _buffer.RemoveAt(0); continue; }
-                if (_buffer.Count < length) break;
-                var candidate = _buffer.Take(length).ToArray();
-                if (ModbusRtuCrc.Compute(candidate.AsSpan(0, length - 2)) == BinaryPrimitives.ReadUInt16LittleEndian(candidate.AsSpan(length - 2)))
-                { _buffer.RemoveRange(0, length); yield return candidate; }
-                else _buffer.RemoveAt(0);
+                if (!endOfFrame) yield break;
+                _buffer.RemoveAt(0); continue;
             }
+            var candidate = _buffer.Take(length).ToArray();
+            if (ModbusRtuCrc.Compute(candidate.AsSpan(0, length - 2)) == BinaryPrimitives.ReadUInt16LittleEndian(candidate.AsSpan(length - 2)))
+            { _buffer.RemoveRange(0, length); yield return candidate; }
+            else _buffer.RemoveAt(0);
         }
     }
 }

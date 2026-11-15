@@ -23,7 +23,7 @@ public sealed class ModbusSensorViewModel : ViewModelBase
         ValidateCommand = new AsyncRelayCommand(() => { Validate(); return Task.CompletedTask; }, () => !IsBusy);
         StartCommand = new AsyncRelayCommand(StartAsync, () => !IsBusy && _definition is not null && _available());
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsBusy);
-        ExampleCommand = new AsyncRelayCommand(async () => await LoadFileAsync(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_example.json")), () => !IsBusy);
+        ExampleCommand = new AsyncRelayCommand(LoadExampleAsync, () => !IsBusy);
     }
     public string Json { get => _json; set { if (IsBusy || !SetProperty(ref _json, value)) return; _definition = null; Status = "JSON 확인 필요"; Summary = "내용이 바뀌었어요. JSON 확인을 누르세요."; Refresh(); } }
     public string Summary { get => _summary; private set => SetProperty(ref _summary, value); }
@@ -35,6 +35,7 @@ public sealed class ModbusSensorViewModel : ViewModelBase
     public AsyncRelayCommand StartCommand { get; }
     public AsyncRelayCommand StopCommand { get; }
     public AsyncRelayCommand ExampleCommand { get; }
+    public Task LoadExampleAsync() => LoadFileAsync(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_ee071.json"));
     public void Validate()
     {
         if (IsBusy) return;
@@ -42,6 +43,7 @@ public sealed class ModbusSensorViewModel : ViewModelBase
         {
             _definition = ModbusSensorDefinition.Parse(Json);
             Summary = $"{_definition.Name} · ID {_definition.UnitId} · 응답 지연 {_definition.ResponseDelayMs} ms\n" +
+                (string.IsNullOrWhiteSpace(_definition.Source) ? "" : $"{_definition.Source}\n\n") + "시작할 때 사용할 초기값\n" +
                 string.Join("\n", _definition.Points.Select(p => $"FC{p.Area:00} · 주소 {(p.Item().RegisterCount == 2 ? $"{p.Address}–{p.Address + 1}" : p.Address.ToString())} · {p.Name} = {p.InitialValue} {p.Unit} · {p.ValueType} × {p.Scale} · {(p.Writable ? "읽기/쓰기" : "읽기 전용")}"));
             Status = "확인 완료 · 센서 응답 시작을 누르면 요청을 기다려요";
         }
