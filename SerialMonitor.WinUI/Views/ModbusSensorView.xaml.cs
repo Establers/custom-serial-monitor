@@ -21,6 +21,13 @@ public sealed partial class ModbusSensorView : UserControl
     {
         // Use the docked view's width, not the outer window's width.
         var narrow = width < 600;
+        var unconstrained = new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity);
+        ProductLabel.Measure(unconstrained);
+        ManagementButton.Measure(unconstrained);
+        RunActions.Measure(unconstrained);
+        var productChrome = ProductLabel.DesiredSize.Width + ManagementButton.DesiredSize.Width + ProductFields.ColumnSpacing * 2;
+        var available = width - 12 - (narrow ? 0 : RunActions.DesiredSize.Width + ProductToolbar.ColumnSpacing);
+        ProductFields.Width = Math.Max(0, Math.Min(available, productChrome + ProductSelector.MaxWidth));
         ProductToolbar.RowSpacing = narrow ? 6 : 0;
         Grid.SetColumnSpan(ProductFields, narrow ? 2 : 1);
         Grid.SetRow(RunActions, narrow ? 1 : 0);

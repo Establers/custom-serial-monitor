@@ -1,9 +1,9 @@
 <UserControl x:Class="SerialMonitor.WinUI.Views.ModbusSensorView"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Loaded="View_Loaded" SizeChanged="View_SizeChanged">
  <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6" Padding="6" MinWidth="0" MinHeight="0">
-  <Grid x:Name="ProductToolbar" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="5" RowSpacing="6">
+  <Grid x:Name="ProductToolbar" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="5" RowSpacing="6" HorizontalAlignment="Left">
    <Grid x:Name="ProductFields" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5">
-   <TextBlock Text="제품" FontSize="12" VerticalAlignment="Center" />
+   <TextBlock x:Name="ProductLabel" Text="제품" FontSize="12" VerticalAlignment="Center" />
    <ComboBox x:Name="ProductSelector" Grid.Column="1" ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct, Mode=TwoWay}" DisplayMemberPath="Label"
     HorizontalAlignment="Stretch" PlaceholderText="제품 선택" IsEnabled="{Binding CanManage}" Style="{StaticResource ModbusProductComboBoxStyle}" ToolTipService.ToolTip="{Binding SelectedProduct.Label}" AutomationProperties.Name="시뮬레이션할 제품" />
    <Button x:Name="ManagementButton" Grid.Column="2" Content="제품 관리" Style="{StaticResource ModbusActionButtonStyle}">
@@ -28,7 +28,7 @@
   </Grid>
   <Grid Grid.Row="1" RowDefinitions="Auto,Auto" RowSpacing="6">
    <TextBlock x:Name="ProductSummaryText" Text="{Binding ProductSummary}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProductSummary}" FontSize="12" />
-   <Grid x:Name="ValueToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="5">
+   <Grid x:Name="ValueToolbar" Grid.Row="1" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="5" HorizontalAlignment="Left">
    <StackPanel x:Name="ValueActions" Orientation="Horizontal" Spacing="5">
    <Button x:Name="ChangeValueButton" Content="값 변경…" Click="ChangeValue_Click" IsEnabled="{Binding CanChangeSelectedValue}" Style="{StaticResource ModbusActionButtonStyle}" ToolTipService.ToolTip="응답 시작 후 표에서 항목을 선택하세요. 읽기 전용 항목도 가상 값을 바꿀 수 있어요." />
    <Button x:Name="RestoreValuesButton" Content="초기값 복원" IsEnabled="{Binding CanChangeValues}" Style="{StaticResource ModbusActionButtonStyle}">

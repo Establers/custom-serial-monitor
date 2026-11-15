@@ -15,7 +15,7 @@ public static partial class StartupHook
         Rect Bounds(object element) => (Rect)Call(Call(element, "TransformToVisual", view)!, "TransformBounds",
             new Rect(0, 0, N(element, "ActualWidth"), N(element, "ActualHeight")))!;
         foreach (var height in new[] { 240d, 320 })
-        foreach (var width in new[] { 320d, 339, 340, 350, 560, 599, 600, 740, 350 })
+        foreach (var width in new[] { 320d, 339, 340, 350, 560, 599, 600, 740, 1080, 350 })
         {
             S(view, "Width", width); S(view,"Height",height); await Settle(view);
             Case = "sensor-narrow-" + width + "x" + height + suffix;
@@ -30,6 +30,15 @@ public static partial class StartupHook
                 Issue("summary does not retain a full-width single line");
             if (N(selector, "ActualWidth") < 190 || N(selector, "ActualWidth") > 481)
                 Issue("product selector was squeezed or exceeds the shared maximum");
+            var productLabel = Tree(Field(view,"ProductFields")).First(e => e.GetType().Name == "TextBlock" && P(e,"Text")?.ToString() == "제품");
+            var management = Field(view,"ManagementButton");
+            var labelGap = Bounds(selector).Left - Bounds(productLabel).Right;
+            var managementGap = Bounds(management).Left - Bounds(selector).Right;
+            var helpGap = Bounds(Field(view,"HelpActions")).Left - Bounds(Field(view,"ValueActions")).Right;
+            if (Math.Abs(labelGap - 5) > 2 || Math.Abs(managementGap - 5) > 2) Issue("product controls drifted apart");
+            if (width >= 600 && Math.Abs(Bounds(Field(view,"RunActions")).Left - Bounds(management).Right - 5) > 2)
+                Issue("response actions drifted away from product management");
+            if (width >= 340 && Math.Abs(helpGap - 5) > 2) Issue("help actions drifted away from value actions");
             foreach (var button in Tree(view).Where(e => e.GetType().Name == "Button" && Visible(e)))
             {
                 var bounds = Bounds(button);
@@ -67,6 +76,7 @@ public static partial class StartupHook
             Results.Add(new { name = Case, width, height = N(view,"ActualHeight"), summaryHeight = N(summary,"ActualHeight"),
                 productWidth = N(selector,"ActualWidth"), listHeight = N(list,"ActualHeight"), tableWidth = N(table,"ActualWidth"),
                 summaryWidth = summarySlot.Width, nameColumnWidth = N(nameColumn,"ActualWidth"), valueRight = Bounds(value).Right,
+                labelGap, managementGap, helpGap,
                 horizontalRange = N(scroll,"ScrollableWidth"), verticalRange = N(vertical,"ScrollableHeight") });
             Save();
         }
