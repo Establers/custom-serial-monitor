@@ -555,6 +555,28 @@
     <DataTemplate x:Key="ModbusDialogTitleTemplate">
         <TextBlock Text="{Binding}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
     </DataTemplate>
+    <Style x:Key="ModbusPreviewListItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="8,3,24,3" />
+        <Setter Property="MinHeight" Value="26" />
+    </Style>
+
+    <!-- JSON editing is isolated from live protocol rendering and uses its own scrollbars. -->
+    <Style x:Key="ModbusJsonEditorStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="MinHeight" Value="240" />
+        <Setter Property="FontFamily" Value="Consolas" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="IsSpellCheckEnabled" Value="False" />
+        <Setter Property="IsTextPredictionEnabled" Value="False" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+    </Style>
+
     <Style x:Key="ModbusActionButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
         <Setter Property="Height" Value="24" />
         <Setter Property="MinHeight" Value="24" />

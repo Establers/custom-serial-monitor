@@ -109,7 +109,7 @@ public sealed class ModbusSensorServiceTests
         model.Json = System.Text.Json.JsonSerializer.Serialize(Definition(), ModbusSensorDefinition.JsonOptions);
         model.Validate(); Assert.True(model.StartCommand.CanExecute(null)); Assert.Empty(device.Sent);
         model.Json += "x"; Assert.False(model.StartCommand.CanExecute(null));
-        model.Validate(); Assert.False(model.StartCommand.CanExecute(null)); Assert.Equal("JSON 확인 실패", model.Status); Assert.Empty(device.Sent);
+        model.Validate(); Assert.False(model.StartCommand.CanExecute(null)); Assert.Equal("제품 정의 오류", model.Status); Assert.Empty(device.Sent);
         model.Json = System.Text.Json.JsonSerializer.Serialize(Definition(), ModbusSensorDefinition.JsonOptions); model.Validate();
         var run = model.StartAsync(); Assert.True(model.IsBusy); Assert.False(model.ValidateCommand.CanExecute(null));
         await model.StopAsync(); await run; Assert.False(model.IsBusy); Assert.Empty(device.Sent);

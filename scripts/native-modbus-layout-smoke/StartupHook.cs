@@ -704,6 +704,38 @@ public static class StartupHook
                 await Task.Delay(350);
             }
             await Probe(dialog, name);
+            if (name.StartsWith("device-editor", StringComparison.Ordinal))
+            {
+                var editor = Field(dialog, "JsonEditor");
+                var json = (string)P(editor, "Text")!;
+                if (P(editor, "IsSpellCheckEnabled") is not false || P(editor, "IsTextPredictionEnabled") is not false)
+                    Issue("JSON editor enables background language services");
+                for (var selection = 0; selection < 20; selection++)
+                {
+                    Call(editor, "Select", 0, json.Length);
+                    await Task.Yield();
+                    if (P(editor, "SelectedText")?.ToString() != json) Issue("JSON selection was reset by periodic UI refresh");
+                }
+                if (P(editor, "Text")?.ToString() != json) Issue("JSON selection changed the draft");
+                if (N(editor, "ActualHeight") < 180) Issue("JSON editor has no usable viewport");
+                // Exercise the real ContentDialog save handler with its validation-only
+                // default callback. This fixture never writes a user's product catalog.
+                S(editor, "Text", "{");
+                var primary = Tree(dialog).First(e => e.GetType().Name == "Button" && P(e, "Name")?.ToString() == "PrimaryButton");
+                var peer = New("Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer", primary);
+                var invoke = Call(peer, "GetPattern", Enum.Parse(FindType("Microsoft.UI.Xaml.Automation.Peers.PatternInterface"), "Invoke"))!;
+                FindType("Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider").GetMethod("Invoke")!.Invoke(invoke, null);
+                for (var attempt = 0; attempt < 80 && P(Field(dialog, "ErrorText"), "Visibility")?.ToString() != "Visible"; attempt++) await Task.Delay(25);
+                if (P(Field(dialog, "ErrorText"), "Visibility")?.ToString() != "Visible" || ((IAsyncInfo)operation).Status != AsyncStatus.Started)
+                    Issue("invalid JSON did not keep the editor open with an error");
+                if (P(editor, "Text")?.ToString() != "{") Issue("failed JSON save discarded the draft");
+                await Probe(dialog, name + "-save-error");
+                S(editor, "Text", json);
+                FindType("Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider").GetMethod("Invoke")!.Invoke(invoke, null);
+                for (var attempt = 0; attempt < 80 && ((IAsyncInfo)operation).Status == AsyncStatus.Started; attempt++) await Task.Delay(25);
+                if (((IAsyncInfo)operation).Status != AsyncStatus.Completed) Issue("valid JSON save did not close the editor");
+                Save();
+            }
         }
         finally
         {
@@ -790,6 +822,9 @@ public static class StartupHook
                     S(defaultProtocolModel, "SelectedViewIndex", 2);
                     await View(New("SerialMonitor.WinUI.Views.ProtocolView"), defaultViewName, defaultProtocolModel);
                 }
+                var deviceEditor = New("SerialMonitor.WinUI.Views.ModbusDeviceEditorDialog");
+                S(deviceEditor, "Json", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_ee071.json")) + new string(' ', 120000));
+                await Dialog(deviceEditor, "device-editor-long" + suffix);
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-long" + suffix,
                     m => { S(m, "NameText", "긴 항목 / " + new string('N', 80)); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-long" + suffix);
@@ -848,6 +883,26 @@ public static class StartupHook
                     var sensorView = New("SerialMonitor.WinUI.Views.ProtocolView");
                     await View(sensorView, "sensor-preview" + suffix, protocolModel);
                     if (P(Field(sensorView, "SensorPanel"), "Visibility")?.ToString() != "Visible") Issue("sensor editor hidden in sensor role");
+                    if (P(Field(sensorView, "PresentationSelector"), "SelectedIndex") is not 3) Issue("device simulator is not adjacent to the other Modbus roles");
+                    var deviceView = Tree(sensorView).First(e => e.GetType().Name == "ModbusSensorView");
+                    var productSelector = Field(deviceView, "ProductSelector");
+                    if (P(P(productSelector, "SelectedItem")!, "IsBuiltIn") is not true) Issue("EE071 is not selected as the built-in product");
+                    if (Tree(deviceView).Any(e => e.GetType().Name == "TextBox" && Visible(e))) Issue("raw JSON editor remains on the main simulator surface");
+                    if (((IEnumerable)P(sensor, "Points")!).Cast<object>().Count() != 12) Issue("EE071 preview is missing register definitions");
+                    if (N(P(productSelector, "Padding")!, "Left") != 5) Issue("product dropdown left padding is not 5 DIP");
+                    var management = Field(deviceView, "ManagementFlyout");
+                    Call(management, "ShowAt", Field(deviceView, "ManagementButton"));
+                    await Settle(deviceView);
+                    var managementItems = ((IEnumerable)P(management, "Items")!).Cast<object>().Where(i => i.GetType().Name == "MenuFlyoutItem").ToArray();
+                    if (managementItems.Length != 8) Issue("product management menu is incomplete");
+                    foreach (var item in managementItems)
+                    {
+                        var delete = P(item, "Text")?.ToString() == "제품 삭제…";
+                        if (P(item, "IsEnabled") is not bool enabled || enabled == delete) Issue("product management availability is incorrect: " + P(item, "Text"));
+                    }
+                    Call(management, "Hide");
+                    await Flyout(deviceView, "SourceFlyout", "SourceButton", "device-source" + suffix);
+                    if (!Tree(P(Field(deviceView, "SourceFlyout"), "Content")!).Any(e => P(e, "Text")?.ToString()?.Contains("9600") == true)) Issue("product source is not bound in its flyout");
                     S(protocolModel, "SelectedViewIndex", 1);
                     await Settle(sensorView);
                     if (P(Field(sensorView, "SensorPanel"), "Visibility")?.ToString() != "Collapsed") Issue("sensor editor remains visible after returning to observation");

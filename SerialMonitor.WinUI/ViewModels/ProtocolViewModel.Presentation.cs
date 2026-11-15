@@ -14,19 +14,25 @@ public sealed partial class ProtocolViewModel
         get => _sensor;
         set
         {
+            if (ReferenceEquals(_sensor, value)) return;
+            if (_sensor is not null) _sensor.PropertyChanged -= SensorChanged;
             _sensor = value;
-            if (value is not null) value.PropertyChanged += (_, args) =>
-            { if (args.PropertyName == nameof(ModbusSensorViewModel.IsBusy)) { OnPropertyChanged(nameof(IsProtocolSelectionEnabled)); NotifyViewSelection(); } };
+            if (_sensor is not null) _sensor.PropertyChanged += SensorChanged;
             OnPropertyChanged();
         }
+    }
+    private void SensorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(ModbusSensorViewModel.IsBusy)) { OnPropertyChanged(nameof(IsProtocolSelectionEnabled)); NotifyViewSelection(); }
+        else if (args.PropertyName is nameof(ModbusSensorViewModel.Status) or nameof(ModbusSensorViewModel.ProductSummary)) NotifyWorkspaceHeader();
     }
     public bool IsSensorSelected => SelectedProtocolIndex == 1 && _sensorSelected;
     public Microsoft.UI.Xaml.Visibility SensorVisibility => IsSensorSelected ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     public string RoleHelp => SelectedViewIndex switch
     {
-        1 => "통신 관찰 · 이 연결의 송신 차단 · RX에는 제품의 요청과 센서의 응답이 함께 들어올 수 있어요",
+        1 => "통신 관찰 · 이 연결의 송신 차단 · RX에는 마스터의 요청과 슬레이브의 응답이 함께 들어올 수 있어요",
         2 => "장치 직접 시험 · PC가 요청을 보내요 · 같은 버스의 다른 마스터는 중지하세요",
-        4 => "센서 시뮬레이터 · 시작하면 제품의 요청에만 응답해요 · 같은 ID의 실제 센서는 분리하세요",
+        4 => "장치 시뮬레이터 · PC가 슬레이브로 응답해요 · 같은 ID의 실제 장치는 분리하세요",
         _ => "일반 통신 · 수동 TX와 시퀀스를 사용할 수 있어요"
     };
     // The five objects and labels stay stable after the first binding read.
@@ -36,9 +42,15 @@ public sealed partial class ProtocolViewModel
         new(DisabledLabel, IsProtocolSelectionEnabled),
         new(ModbusPacketViewLabel, IsModbusViewSelectionEnabled),
         new(ModbusReadWriteViewLabel, IsModbusViewSelectionEnabled),
-        new(MstpPacketViewLabel, IsProtocolSelectionEnabled),
-        new("Modbus RTU · 센서 시뮬레이터", IsProtocolSelectionEnabled)
+        new("Modbus RTU · 장치 시뮬레이터", IsProtocolSelectionEnabled),
+        new(MstpPacketViewLabel, IsProtocolSelectionEnabled)
     ];
+    // Preserve internal role IDs while keeping all Modbus choices adjacent.
+    public int SelectedPresentationIndex
+    {
+        get => SelectedViewIndex switch { 3 => 4, 4 => 3, var index => index };
+        set => SelectedViewIndex = value switch { 3 => 4, 4 => 3, var index => index };
+    }
     // Presentation indices are UI-only. Keep the analyzer's existing protocol
     // indices (off/Modbus/BACnet) independent from this combined menu.
     public int SelectedViewIndex
@@ -76,9 +88,9 @@ public sealed partial class ProtocolViewModel
     public string MstpPacketViewLabel => UiText.Get("ProtocolMstpPacketView", "BACnet MS/TP · Packet analysis");
 
     private bool ShowModbusHeader => RegisterMonitorVisibility == Microsoft.UI.Xaml.Visibility.Visible || Modbus?.IsBusy == true;
-    public string WorkspaceHeader => ShowModbusHeader && Modbus is { } model
+    public string WorkspaceHeader => IsSensorSelected && Sensor is { } simulator ? simulator.Status : ShowModbusHeader && Modbus is { } model
         ? $"{model.Status} · {model.RequestSummary}" : $"{Activity} · {RetainedSummary}";
-    public string WorkspaceHeaderHelp => ShowModbusHeader ? WorkspaceHeader : Status;
+    public string WorkspaceHeaderHelp => IsSensorSelected || ShowModbusHeader ? WorkspaceHeader : Status;
 
     private void NotifyViewSelection()
     {
@@ -92,6 +104,7 @@ public sealed partial class ProtocolViewModel
             options[4].IsEnabled = IsProtocolSelectionEnabled;
         }
         OnPropertyChanged(nameof(SelectedViewIndex));
+        OnPropertyChanged(nameof(SelectedPresentationIndex));
         OnPropertyChanged(nameof(SensorVisibility));
         OnPropertyChanged(nameof(PacketAnalysisVisibility));
         OnPropertyChanged(nameof(RoleHelp));

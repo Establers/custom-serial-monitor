@@ -243,7 +243,7 @@ public sealed class ModbusRtuViewModelTests
         var protocol = new ProtocolViewModel(analyzer) { Modbus = Model(service) };
         var options = protocol.PresentationOptions;
         Assert.Equal(new[] { protocol.DisabledLabel, protocol.ModbusPacketViewLabel,
-            protocol.ModbusReadWriteViewLabel, protocol.MstpPacketViewLabel, "Modbus RTU · 센서 시뮬레이터" }, options.Select(option => option.Label));
+            protocol.ModbusReadWriteViewLabel, "Modbus RTU · 장치 시뮬레이터", protocol.MstpPacketViewLabel }, options.Select(option => option.Label));
         Assert.All(options, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
 
         protocol.SelectedViewIndex = 2;
@@ -466,7 +466,7 @@ public sealed class ModbusRtuViewModelTests
         var protocol = Markup("Views/ProtocolView.xaml");
         Assert.Empty(protocol.Descendants(p + "RadioButton"));
         var selector = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "PresentationSelector"));
-        Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)selector.Attribute("SelectedIndex"));
+        Assert.Equal("{Binding SelectedPresentationIndex, Mode=TwoWay}", (string?)selector.Attribute("SelectedIndex"));
         Assert.Equal("{Binding PresentationOptions}", (string?)selector.Attribute("ItemsSource"));
         Assert.Equal("Label", (string?)selector.Attribute("DisplayMemberPath"));
         var activeStop = Assert.Single(protocol.Descendants().Where(e => (string?)e.Attribute(x + "Name") == "MonitorStopButton"));
