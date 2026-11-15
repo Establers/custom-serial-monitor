@@ -1093,19 +1093,19 @@
   <data name="ProtocolDisabled" xml:space="preserve"><value>사용 안 함</value></data>
   <data name="ProtocolClear" xml:space="preserve"><value>목록 비우기</value></data>
   <data name="ProtocolDetails" xml:space="preserve"><value>패킷 상세</value></data>
-  <data name="ProtocolRetention" xml:space="preserve"><value>최근 {0:N0}개 · 메모리 보관 · 백그라운드 분석</value></data>
+  <data name="ProtocolRetention" xml:space="preserve"><value>패킷 버퍼 최대 {0:N0}개</value></data>
   <data name="ProtocolMstpFrameType" xml:space="preserve"><value>프레임 종류</value></data>
   <data name="ProtocolMstpSource" xml:space="preserve"><value>출발지 MAC</value></data>
   <data name="ProtocolMstpFilterHelp" xml:space="preserve"><value>프레임 종류 HEX 완전 일치: 03 시험 요청, 04 시험 응답, 00 토큰.</value></data>
   <data name="ProtocolMstpCrcDetails" xml:space="preserve"><value> · 헤더 {0:N0} / 데이터 {1:N0}</value></data>
   <data name="ProtocolChoose" xml:space="preserve"><value>위에서 프로토콜을 선택하면 새 RX/TX 분석을 시작합니다.</value></data>
   <data name="ProtocolSelectHint" xml:space="preserve"><value>패킷을 선택하면 요약과 값을 확인할 수 있습니다. CRC 수치와 원본 HEX는 진단 정보를 펼쳐 확인하세요.</value></data>
-  <data name="ProtocolSelectionExpired" xml:space="preserve"><value>선택한 패킷이 최근 보관 범위에서 만료되었습니다.</value></data>
+  <data name="ProtocolSelectionExpired" xml:space="preserve"><value>선택한 패킷이 버퍼에 남아 있지 않습니다.</value></data>
   <data name="ProtocolRunning" xml:space="preserve"><value>분석 중</value></data>
-  <data name="ProtocolStatusFormat" xml:space="preserve"><value>{0} · 보관 {1:N0}/{2:N0} · 만료 {3:N0} · 분석 누락 {4:N0}개 조각 ({5:N0} B)</value></data>
+  <data name="ProtocolStatusFormat" xml:space="preserve"><value>{0} · 버퍼 {1:N0}/{2:N0} · 오래된 항목 삭제 {3:N0} · 분석 누락 {4:N0}개 조각 ({5:N0} B)</value></data>
   <data name="ProtocolResetStatistics" xml:space="preserve"><value>통계 초기화</value></data>
-  <data name="ProtocolStatisticsFormat" xml:space="preserve"><value>RX {0:N0} · TX {1:N0} · CRC 정상 {2:N0} / 오류 {3:N0} · 불완전 {4:N0} · 미해석 {5:N0} · 예외 {6:N0}</value></data>
-  <data name="ProtocolStatisticsPeriodFormat" xml:space="preserve"><value>집계 시작 {0} · 마지막 CRC 정상 {1}</value></data>
+  <data name="ProtocolStatisticsFormat" xml:space="preserve"><value>RX {0:N0} · TX {1:N0} · CRC 정상 {2:N0} / 오류 {3:N0} · 불완전 프레임 {4:N0} · 해석 불가 {5:N0} · 예외 응답 {6:N0}</value></data>
+  <data name="ProtocolStatisticsPeriodFormat" xml:space="preserve"><value>통계 시작 {0} · 최근 CRC 정상 패킷 {1}</value></data>
   <data name="ProtocolTime" xml:space="preserve"><value>시간</value></data>
   <data name="ProtocolFunction" xml:space="preserve"><value>기능</value></data>
   <data name="ProtocolPackets" xml:space="preserve"><value>패킷 목록</value></data>
@@ -1114,10 +1114,10 @@
   <data name="ProtocolEmpty" xml:space="preserve"><value>위에서 Modbus RTU를 선택해 분석을 시작하세요.</value></data>
   <data name="ProtocolWaitingHint" xml:space="preserve"><value>새 RX/TX 패킷이 여기에 표시됩니다. 다른 탭에서도 분석은 계속됩니다.</value></data>
   <data name="ProtocolError" xml:space="preserve"><value>분석 오류</value></data>
-  <data name="ProtocolRetainedFormat" xml:space="preserve"><value>보관 {0:N0} / {1:N0}</value></data>
+  <data name="ProtocolRetainedFormat" xml:space="preserve"><value>버퍼 {0:N0} / {1:N0}</value></data>
   <data name="ProtocolCrcValidFormat" xml:space="preserve"><value>CRC 정상 {0:N0}</value></data>
   <data name="ProtocolCrcErrorFormat" xml:space="preserve"><value>CRC 오류 {0:N0}</value></data>
-  <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>불완전 {0:N0} · 미해석 {1:N0} · 예외 {2:N0}</value></data>
+  <data name="ProtocolOtherStatisticsFormat" xml:space="preserve"><value>불완전 프레임 {0:N0} · 해석 불가 {1:N0} · 예외 응답 {2:N0}</value></data>
   <data name="ConnectDiagChecking" xml:space="preserve"><value>{0}: 연결에 실패하여 원인을 확인하고 있습니다…</value></data>
   <data name="ConnectDiagOwnerSummary" xml:space="preserve"><value>{0}: 연결 실패 · {1}(PID {2})에서 열고 있습니다.</value></data>
   <data name="ConnectDiagSummary" xml:space="preserve"><value>{0}: 연결 실패. {1}</value></data>
@@ -1141,37 +1141,37 @@
   <data name="ConnectDiagOpenFailed" xml:space="preserve"><value>포트를 열 수 없습니다. 장치, 케이블, 드라이버와 다른 시리얼 프로그램을 확인하세요.</value></data>
   <data name="ConnectDiagSessionStartup" xml:space="preserve"><value>연결 세션을 시작하지 못했습니다. 아래 원본 오류를 확인하세요. 세션 시작 단계의 오류이므로 포트 점유 조회는 수행하지 않았습니다.</value></data>
   <data name="ProtocolState" xml:space="preserve"><value>상태</value></data>
-  <data name="ProtocolStateHelp" xml:space="preserve"><value>CRC 오류·불완전 데이터·예외 응답을 구분합니다. CRC 정상은 요청 성공을 뜻하지 않습니다.</value></data>
+  <data name="ProtocolStateHelp" xml:space="preserve"><value>CRC 오류·불완전 프레임·예외 응답을 구분합니다. CRC가 정상이어도 요청이 성공한 것은 아닙니다.</value></data>
   <data name="ProtocolStateCrcError" xml:space="preserve"><value>CRC 오류</value></data>
-  <data name="ProtocolStateIncomplete" xml:space="preserve"><value>불완전</value></data>
-  <data name="ProtocolStateUndecoded" xml:space="preserve"><value>미해석</value></data>
+  <data name="ProtocolStateIncomplete" xml:space="preserve"><value>불완전 프레임</value></data>
+  <data name="ProtocolStateUndecoded" xml:space="preserve"><value>해석 불가</value></data>
   <data name="ProtocolStateException" xml:space="preserve"><value>예외 응답</value></data>
   <data name="ProtocolStateExceptionFormat" xml:space="preserve"><value>예외 {0:X2}</value></data>
-  <data name="ProtocolFollow" xml:space="preserve"><value>따라가기</value></data>
-  <data name="ProtocolFollowHelp" xml:space="preserve"><value>새 결과를 자동으로 따라갑니다. 패킷 선택·위로 스크롤·스크롤바 조작 시 해제됩니다.</value></data>
-  <data name="ProtocolPauseDisplay" xml:space="preserve"><value>표시 정지</value></data>
-  <data name="ProtocolResumeDisplayFormat" xml:space="preserve"><value>재개 (+{0:N0})</value></data>
-  <data name="ProtocolPauseHelp" xml:space="preserve"><value>이 목록의 표시만 멈춥니다. RX·분석·통계·최근 결과 보관은 계속됩니다.</value></data>
-  <data name="ProtocolResumeHelp" xml:space="preserve"><value>보관 중인 최근 목록으로 재개합니다. 표시 정지 이후 새 분석 결과 {0:N0}건이 발생했습니다.</value></data>
-  <data name="ProtocolStatisticsHelp" xml:space="preserve"><value>누적 통계는 필터·표시 정지와 관계없이 전체 분석 결과를 집계합니다.</value></data>
-  <data name="ProtocolDisplayPaused" xml:space="preserve"><value>목록 표시 정지 중</value></data>
-  <data name="ProtocolPausedEmptyHelp" xml:space="preserve"><value>새 결과는 최근 보관에 쌓입니다. 표시를 재개하면 확인할 수 있습니다.</value></data>
-  <data name="ProtocolPausedActivityFormat" xml:space="preserve"><value>{0} · 목록 정지</value></data>
-  <data name="ProtocolShownFormat" xml:space="preserve"><value>표시 {0:N0} / 보관 {1:N0}</value></data>
+  <data name="ProtocolFollow" xml:space="preserve"><value>자동 스크롤</value></data>
+  <data name="ProtocolFollowHelp" xml:space="preserve"><value>새 패킷이 들어오면 목록을 맨 아래로 스크롤합니다. 패킷을 선택하거나 위로 스크롤하거나 스크롤바를 조작하면 해제됩니다.</value></data>
+  <data name="ProtocolPauseDisplay" xml:space="preserve"><value>화면 일시정지</value></data>
+  <data name="ProtocolResumeDisplayFormat" xml:space="preserve"><value>화면 재개 (+{0:N0})</value></data>
+  <data name="ProtocolPauseHelp" xml:space="preserve"><value>화면 갱신만 멈춥니다. 수신·분석·통계 집계는 계속되며, 새 패킷은 메모리 버퍼에 임시 보관됩니다.</value></data>
+  <data name="ProtocolResumeHelp" xml:space="preserve"><value>버퍼에 남아 있는 최신 패킷 목록을 표시합니다. 일시정지 후 새로 분석한 항목은 {0:N0}건입니다.</value></data>
+  <data name="ProtocolStatisticsHelp" xml:space="preserve"><value>누적 통계는 필터·화면 일시정지와 관계없이 전체 분석 결과를 집계합니다.</value></data>
+  <data name="ProtocolDisplayPaused" xml:space="preserve"><value>화면 일시정지 중</value></data>
+  <data name="ProtocolPausedEmptyHelp" xml:space="preserve"><value>새 패킷은 버퍼에 임시 보관됩니다. 화면 재개를 누르면 확인할 수 있습니다.</value></data>
+  <data name="ProtocolPausedActivityFormat" xml:space="preserve"><value>{0} · 화면 일시정지</value></data>
+  <data name="ProtocolShownFormat" xml:space="preserve"><value>표시 {0:N0} / 버퍼 {1:N0}</value></data>
   <data name="ProtocolSelectionFiltered" xml:space="preserve"><value>선택한 패킷이 현재 필터에서 제외되었습니다.</value></data>
   <data name="ProtocolFilter" xml:space="preserve"><value>필터</value></data>
   <data name="ProtocolFilterCountFormat" xml:space="preserve"><value>필터 ({0})</value></data>
-  <data name="ProtocolFilterTitle" xml:space="preserve"><value>최근 패킷 필터</value></data>
+  <data name="ProtocolFilterTitle" xml:space="preserve"><value>패킷 필터</value></data>
   <data name="ProtocolFilterUnit" xml:space="preserve"><value>장치 ID</value></data>
   <data name="ProtocolFilterUnitHint" xml:space="preserve"><value>전체 또는 0–255 (10진수)</value></data>
   <data name="ProtocolFilterFunctionHint" xml:space="preserve"><value>전체 또는 03 / 0x03</value></data>
   <data name="ProtocolFilterFunctionHelp" xml:space="preserve"><value>03을 입력하면 예외 응답 83도 포함합니다. 83을 입력하면 해당 예외 기능만 표시합니다.</value></data>
-  <data name="ProtocolFilterDirection" xml:space="preserve"><value>방향</value></data>
+  <data name="ProtocolFilterDirection" xml:space="preserve"><value>송수신</value></data>
   <data name="ProtocolFilterApply" xml:space="preserve"><value>적용</value></data>
   <data name="ProtocolFilterReset" xml:space="preserve"><value>필터 초기화</value></data>
-  <data name="ProtocolFilterPausedHelp" xml:space="preserve"><value>표시 정지 중에는 고정된 목록에 필터를 적용합니다. 새 결과는 표시를 재개하면 반영됩니다.</value></data>
+  <data name="ProtocolFilterPausedHelp" xml:space="preserve"><value>일시정지한 목록에 필터를 적용합니다. 새 패킷은 화면 재개를 누르면 표시됩니다.</value></data>
   <data name="ProtocolFilterScopeHelp" xml:space="preserve"><value>필터는 이 목록에만 적용됩니다. 누적 통계는 전체 분석 결과를 집계합니다.</value></data>
-  <data name="ProtocolFilterAllDirections" xml:space="preserve"><value>전체 방향</value></data>
+  <data name="ProtocolFilterAllDirections" xml:space="preserve"><value>전체</value></data>
   <data name="ProtocolFilterAllStates" xml:space="preserve"><value>전체 상태</value></data>
   <data name="ProtocolFilterProblems" xml:space="preserve"><value>CRC 오류·예외 응답</value></data>
   <data name="ProtocolFilterCrcValid" xml:space="preserve"><value>CRC 정상 (예외 포함)</value></data>
@@ -1224,7 +1224,7 @@
   <data name="AgentMemoryDescription.Text" xml:space="preserve"><value>AI가 직접 읽고 정리하는 제품별 프로토콜·테스트 노트입니다. 플러그인 skill이 이 위치를 안내합니다.</value></data>
   <data name="AgentMemoryOpened" xml:space="preserve"><value>메모리 폴더를 열었습니다.</value></data>
   <data name="AgentMemoryOpenFailed" xml:space="preserve"><value>메모리 폴더를 열지 못했습니다. 표시된 경로와 폴더 권한을 확인하세요.</value></data>
-  <data name="ModbusBuilderButton" xml:space="preserve"><value>패킷 만들기</value></data>
+  <data name="ModbusBuilderButton" xml:space="preserve"><value>패킷 생성</value></data>
   <data name="ModbusBuilderButtonHelp" xml:space="preserve"><value>CRC를 포함한 Modbus RTU 요청을 만들고 HEX를 복사합니다.</value></data>
   <data name="ModbusValuesTitle" xml:space="preserve"><value>값 해석</value></data>
   <data name="ModbusValuesFormat" xml:space="preserve"><value>데이터 형식</value></data>
@@ -1246,7 +1246,7 @@
   <data name="ModbusValuesOverflow" xml:space="preserve"><value>배율 적용 범위 초과</value></data>
   <data name="ModbusValuesRawFormat" xml:space="preserve"><value> (원래 값 {0})</value></data>
   <data name="ModbusValuesRemainder" xml:space="preserve"><value>+{0} 레지스터는 32비트 값을 구성할 짝이 없어 해석하지 않았습니다.</value></data>
-  <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU 패킷 만들기</value></data>
+  <data name="ModbusBuilderTitle" xml:space="preserve"><value>Modbus RTU 패킷 생성</value></data>
   <data name="ModbusBuilderCopy" xml:space="preserve"><value>HEX 복사</value></data>
   <data name="ModbusBuilderClose" xml:space="preserve"><value>닫기</value></data>
   <data name="ModbusBuilderUnit" xml:space="preserve"><value>장치 ID (0–247)</value></data>
@@ -1267,7 +1267,7 @@
   <data name="ModbusBuilderNumberError" xml:space="preserve"><value>{0}: {1}–{2} 범위로 입력하세요 (10진수 또는 0x HEX).</value></data>
   <data name="ModbusBuilderCopied" xml:space="preserve"><value>HEX를 복사했습니다.</value></data>
   <data name="ModbusBuilderCopyFailed" xml:space="preserve"><value>HEX를 복사하지 못했습니다. 미리보기의 텍스트를 선택해 복사하세요.</value></data>
-  <data name="ModbusBuilderOpenFailed" xml:space="preserve"><value>패킷 만들기를 실행하지 못했습니다. Health 진단을 확인하세요.</value></data>
+  <data name="ModbusBuilderOpenFailed" xml:space="preserve"><value>패킷 생성 창을 열지 못했습니다. Health 진단을 확인하세요.</value></data>
   <data name="ModbusBuilderCustom" xml:space="preserve"><value>Custom · 기능 코드 + 원시 데이터</value></data>
   <data name="ModbusBuilderReadAddress" xml:space="preserve"><value>읽기 시작 주소 (0부터)</value></data>
   <data name="ModbusBuilderFifoAddress" xml:space="preserve"><value>FIFO 포인터 주소 (0부터)</value></data>
@@ -1593,8 +1593,8 @@
 <data name="ProtocolPacketDeviceFormat" xml:space="preserve"><value>장치 {0} · {1} ({2})</value></data>
 <data name="ProtocolPacketMacFormat" xml:space="preserve"><value>출발지 {0} → 목적지 {1}</value></data>
 <data name="ProtocolPacketCrcWarning" xml:space="preserve"><value>CRC가 일치하지 않아 값을 해석할 수 없습니다.</value></data>
-<data name="ProtocolPacketIncompleteWarning" xml:space="preserve"><value>불완전한 데이터로 필드와 값을 확인할 수 없습니다.</value></data>
-<data name="ProtocolPacketUndecodedWarning" xml:space="preserve"><value>해석하지 못한 프레임으로 값을 표시하지 않습니다.</value></data>
+<data name="ProtocolPacketIncompleteWarning" xml:space="preserve"><value>프레임 데이터가 부족해 필드와 값을 확인할 수 없습니다.</value></data>
+<data name="ProtocolPacketUndecodedWarning" xml:space="preserve"><value>프레임을 해석할 수 없어 값을 표시할 수 없습니다.</value></data>
 <data name="ProtocolPacketMstpScope" xml:space="preserve"><value>MS/TP 프레임만 확인하며 응용 데이터는 해석하지 않습니다.</value></data>
 <data name="ProtocolPacketRequest" xml:space="preserve"><value>요청</value></data>
 <data name="ProtocolPacketResponse" xml:space="preserve"><value>응답</value></data>
