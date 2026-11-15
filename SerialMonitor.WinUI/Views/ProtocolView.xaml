@@ -125,8 +125,8 @@
                         </StackPanel>
                         <Grid Visibility="{Binding RegisterMonitorVisibility}">
                             <StackPanel Orientation="Horizontal" Spacing="5" DataContext="{Binding Modbus}">
-                                <Button Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" Style="{StaticResource ToolbarButton}" />
-                                <Button Content="{Binding StartLabel}" Command="{Binding StartCommand}" Style="{StaticResource ToolbarButton}" />
+                                <Button Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" ToolTipService.ToolTip="{Binding ReadOnceHelp}" Style="{StaticResource ToolbarButton}" />
+                                <Button Content="{Binding StartLabel}" Command="{Binding StartCommand}" ToolTipService.ToolTip="{Binding StartHelp}" Style="{StaticResource ToolbarButton}" />
                             </StackPanel>
                         </Grid>
                         <Button x:Name="MonitorStopButton" DataContext="{Binding Modbus}" Content="{Binding StopLabel}"

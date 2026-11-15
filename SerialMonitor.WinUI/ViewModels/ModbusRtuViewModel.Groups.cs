@@ -16,8 +16,8 @@ public sealed partial class ModbusRtuViewModel
     private string _pollingSummary = "", _pollingHealthSummary = "";
 
     private static string P(string key, string fallback) => UiText.Get("ModbusPolling" + key, fallback);
-    public string GroupEditorLabel => P("Editor", "Polling groups…");
-    public string GroupSelectorLabel => P("Selector", "Selected group");
+    public string GroupEditorLabel => P("Editor", "Read groups…");
+    public string GroupSelectorLabel => P("Selector", "Read group shown in the table");
     public ObservableCollection<ModbusPollingGroupRow> PollingGroups { get; } = [];
     public string PollingSummary { get => _pollingSummary; private set => SetProperty(ref _pollingSummary, value); }
     public string PollingHealthSummary { get => _pollingHealthSummary; private set { if (SetProperty(ref _pollingHealthSummary, value)) NotifyMonitorSummary(); } }
@@ -25,6 +25,20 @@ public sealed partial class ModbusRtuViewModel
     public string EmptySetupLabel => NeedsPollingGroup ? GroupEditorLabel : SettingsLabel;
     public bool IsGroupSelectionEnabled => !_writeAdmitted && (!_operationAdmitted || _groupRunAdmitted);
     public Visibility PollingGroupsVisibility => _pollingSettings is null ? Visibility.Collapsed : Visibility.Visible;
+    public int EnabledGroupCount => PollingGroups.Count(row => row.IsEnabled);
+    public bool SelectedGroupIncluded
+    {
+        get => SelectedPollingGroup?.IsEnabled == true;
+        set
+        {
+            if (!IsTargetSettingsEnabled || SelectedPollingGroup?.Definition is not { } group || group.Enabled == value) return;
+            group.Enabled = value;
+            _settingsRevision++;
+            SelectedPollingGroup.RefreshDefinitionPresentation();
+            NotifyReadPresentation();
+            Refresh();
+        }
+    }
 
     public ModbusPollingGroupRow? SelectedPollingGroup
     {
@@ -158,7 +172,7 @@ public sealed partial class ModbusRtuViewModel
             catch (ArgumentException ex) { Error = ex.Message; }
             finally { _loadingPollingGroup = false; }
         }
-        else Status = P("SelectGroup", "Select a group");
+        else Status = P("SelectGroup", "Select a read group");
         _lastRevision = long.MinValue;
         NotifyPollingPresentation();
         Refresh();
@@ -238,7 +252,7 @@ public sealed partial class ModbusRtuViewModel
         var errors = PollingGroups.Where(row => row.HasError).ToArray();
         var disabled = PollingGroups.Count(row => !row.HasError && !row.IsEnabled);
         var current = PollingGroups.Count(row => !row.HasError && row.IsEnabled && row.Snapshot?.ValuesCurrent == true);
-        var health = UiText.Format("ModbusPollingHealth", "Groups {0} · Errors {1} · Current {2} · Waiting/stale {3} · Disabled {4}",
+        var health = UiText.Format("ModbusPollingHealth", "Groups {0} · Errors {1} · Current {2} · Not updated {3} · Excluded {4}",
             PollingGroups.Count, errors.Length, current, PollingGroups.Count - errors.Length - disabled - current, disabled);
         if (errors.Length > 0)
         {
@@ -272,6 +286,7 @@ public sealed partial class ModbusRtuViewModel
 
     private void NotifyPollingPresentation()
     {
+        NotifyReadPresentation();
         OnPropertyChanged(nameof(TargetSettingsSummary));
         foreach (var name in new[] { nameof(SelectedPollingGroup), nameof(PollingGroupsVisibility), nameof(StartLabel), nameof(RequestSummary), nameof(IsGroupSelectionEnabled), nameof(NeedsPollingGroup), nameof(EmptySetupLabel) })
             OnPropertyChanged(name);
@@ -284,28 +299,37 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
     private ModbusMonitorSnapshot? _snapshot;
     private string? _configurationError = ValidateDefinition(definition);
     public string? Id => Definition?.Id;
-    public string DisplayName => Definition is null ? UiText.Get("ModbusPollingInvalidGroupShort", "Invalid group")
-        : $"{Definition.Name} · ID {Definition.Settings?.UnitId} · FC {Definition.Settings?.Function:00} · {Definition.Settings?.Address}+{Definition.Settings?.Quantity}";
+    public string DisplayName => Definition?.Settings is not { } settings ? UiText.Get("ModbusPollingInvalidGroupShort", "Invalid group")
+        : Definition.Name + " · " + UiText.Format("ModbusMonitorReadRange", "ID {0} · FC{1:00} · Addresses {2}–{3} ({4})",
+            settings.UnitId, settings.Function, settings.Address, (long)settings.Address + settings.Quantity - 1, settings.Quantity);
     public string Name => Definition?.Name ?? "";
     public bool IsEnabled => Definition?.Enabled == true;
     public bool HasError => _configurationError is not null || Snapshot?.State is ModbusMonitorState.Error or ModbusMonitorState.Disconnected || !string.IsNullOrWhiteSpace(Snapshot?.Error);
-    public string SelectionLabel => HasError || !IsEnabled ? $"{SelectionState} · {DisplayName}" : DisplayName;
+    public string SelectionLabel
+    {
+        get
+        {
+            var label = Definition?.Settings is { } settings
+                ? $"{Name} · ID {settings.UnitId} · {settings.Address}–{(long)settings.Address + settings.Quantity - 1}" : DisplayName;
+            return HasError ? $"{SelectionState} · {label}" : !IsEnabled ? $"{label} · {SelectionState}" : label;
+        }
+    }
     private string SelectionState => HasError ? UiText.Get("ModbusPollingStateError", "Error")
-        : !IsEnabled ? UiText.Get("ModbusPollingDisabled", "Disabled")
+        : !IsEnabled ? UiText.Get("ModbusPollingDisabled", "Excluded from auto read")
         : Snapshot?.ValuesCurrent == true ? UiText.Get("ModbusPollingStateCurrent", "Read OK")
         : Snapshot?.IsBusy == true ? UiText.Get("ModbusPollingStateReading", "Reading")
         : Snapshot?.UpdatedAt is not null ? UiText.Get("ModbusPollingStateStale", "Stale")
         : UiText.Get("ModbusPollingStateWaiting", "Ready");
     public string StatusText => _configurationError ?? Snapshot?.Error ?? (Snapshot?.State switch
     {
-        ModbusMonitorState.Polling => UiText.Get("ModbusMonitorPolling", "Polling · connection reserved"),
+        ModbusMonitorState.Polling => UiText.Get("ModbusMonitorPolling", "Reading automatically"),
         ModbusMonitorState.Reading => UiText.Get("ModbusMonitorReading", "Reading"),
-        ModbusMonitorState.Error => UiText.Get("ModbusMonitorErrorState", "Communication error · retained values are stale"),
-        ModbusMonitorState.Disconnected => UiText.Get("ModbusMonitorDisconnected", "Disconnected · restart explicitly after connecting"),
+        ModbusMonitorState.Error => UiText.Get("ModbusMonitorErrorState", "Communication error"),
+        ModbusMonitorState.Disconnected => UiText.Get("ModbusMonitorDisconnected", "Disconnected"),
         ModbusMonitorState.Stopped => Snapshot?.ValuesCurrent == true
-            ? UiText.Get("ModbusMonitorReadComplete", "Read complete · last response shown")
-            : UiText.Get("ModbusMonitorStopped", "Stopped · retained values are stale"),
-        _ => IsEnabled ? UiText.Get("ModbusMonitorReady", "Ready · settings do not start communication") : UiText.Get("ModbusPollingDisabled", "Disabled")
+            ? UiText.Get("ModbusMonitorReadComplete", "Read complete")
+            : UiText.Get("ModbusMonitorStopped", "Stopped · last values shown"),
+        _ => IsEnabled ? UiText.Get("ModbusMonitorReady", "Ready to read") : UiText.Get("ModbusPollingDisabled", "Excluded from auto read")
     });
     public string ValueSummary => Snapshot?.Values is not { Length: > 0 } values ? "—" : string.Join(" ", values.Take(4).Select(value => value.ToString(System.Globalization.CultureInfo.CurrentCulture))) + (values.Length > 4 ? " …" : "");
     public string Summary => $"{DisplayName} · {StatusText} · [{ValueSummary}] · OK {Snapshot?.SuccessCount ?? 0} / ERR {Snapshot?.ErrorCount ?? 0}";
@@ -326,6 +350,7 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
     {
         _configurationError = ValidateDefinition(Definition);
         OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(SelectionLabel));

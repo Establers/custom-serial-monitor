@@ -42,41 +42,43 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         WriteCommand = new AsyncRelayCommand(WriteAsync, CanWrite);
         ExecuteCommand = new AsyncRelayCommand(ExecuteSelectedCommandAsync, CanExecuteSelectedCommand);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy && !_writeAdmitted);
-        Status = T("Ready", "Ready · settings do not start communication");
+        Status = T("Ready", "Ready to read");
         Refresh();
     }
 
     private static string T(string key, string fallback) => UiText.Get("ModbusMonitor" + key, fallback);
     public string TabTitle => "Modbus RTU";
-    public string StartLabel => _pollingSettings is null ? T("Start", "Start polling") : P("Start", "Start enabled groups");
-    public string StopLabel => T("Stop", "Stop");
-    public string ReadOnceLabel => T("ReadOnce", "Read once");
-    public string SettingsLabel => T("Settings", "Target settings");
-    public string SaveLabel => T("Save", "Save profile");
+    public string StartLabel => _pollingSettings is null ? T("Start", "Start automatic reading")
+        : UiText.Format("ModbusPollingStartCount", "Auto read ({0} groups)", EnabledGroupCount);
+    public string StopLabel => T("Stop", "Stop reading");
+    public string ReadOnceLabel => _pollingSettings is null ? T("ReadOnce", "Read current values") : P("ReadSelected", "Read selected group");
+    public string SettingsLabel => T("Settings", "Read settings");
+    public string SaveLabel => T("Save", "Save settings for next time");
     public string UnitLabel => T("Unit", "Unit ID (1–247)");
-    public string FunctionLabel => T("Function", "Read function");
+    public string FunctionLabel => T("Function", "Data area");
     public string AddressLabel => T("Address", "Start address (base 0)");
-    public string QuantityLabel => T("Quantity", "Quantity");
-    public string IntervalLabel => T("Interval", "Interval (100–60000 ms)");
-    public string TimeoutLabel => T("Timeout", "Response timeout (100–10000 ms)");
+    public string QuantityLabel => T("Quantity", "Number to read");
+    public string IntervalLabel => T("Interval", "Read interval (ms)");
+    public string TimeoutLabel => T("Timeout", "Response timeout (ms)");
     public string FormatLabel => T("Format", "Display type");
     public string ScaleLabel => T("Scale", "Display multiplier");
     public string SwapBytesLabel => T("SwapBytes", "Swap bytes");
     public string SwapWordsLabel => T("SwapWords", "Swap words (32-bit)");
-    public string SetupHelp => T("SetupHelp", "Addresses start at 0: holding register 40001 is address 0. Edits affect this monitor without transmitting. Save profile stores targets, items, groups and commands for later use.");
-    public string OwnershipHelp => T("OwnershipHelp", "Polling reserves this connection. Stop it before using sequences, manual TX or the bridge. Direct writes here are serialized with polling.");
+    public string SetupHelp => T("SetupHelp", "After changing the read settings, read current values to see the new range. Save settings to reuse them next time.");
+    public string OwnershipHelp => T("OwnershipHelp", "You can write values here while automatic reading runs. Stop reading before using manual TX, sequences or the bridge.");
     public string RawLabel => T("Raw", "Raw HEX");
     public string ValueLabel => T("Value", "Value");
     public string StateLabel => T("State", "State");
     public string UpdatedLabel => T("Updated", "Last response");
     public string TableAddressLabel => T("TableAddress", "Address (base 0)");
-    public string EmptyHelp => T("Empty", "Connect the device, open Target settings, then use Read once to check its values. Addresses follow the device register map. Open ? for help.");
-    public string WriteLabel => T("Write", "Write and verify");
-    public string WriteEditorLabel => T("WriteEditor", "Direct write…");
+    public string EmptyHelp => NeedsPollingGroup ? P("EmptyGroupsHelp", "Choose a read group above, or add a device ID and address range in Read groups.")
+        : UiText.Format("ModbusMonitorEmpty", "Choose which device values to read. Enter the ID, address and count in Read settings, then choose {0}.", ReadOnceLabel);
+    public string WriteLabel => T("Write", "Write to device and verify");
+    public string WriteEditorLabel => T("WriteEditor", "Write values…");
     public string WriteAddressLabel => T("WriteAddress", "Write address (base 0)");
-    public string WriteValuesLabel => WriteModeIndex == 1 ? T("WriteItemValue", "Item value or value name") : IsCoilFunction ? T("WriteCoils", "Raw coil values (0 / 1)") : T("WriteRegisters", "Raw UInt16 values (0–65535 / 0x HEX)");
-    public string WriteHelp => WriteModeIndex == 1 ? T("WriteItemHelp", "Enter one defined item's value. Its type, multiplier and byte/word order are applied before writing. Inspect the preview; a readback verifies the raw words. Writes are never retried automatically.") : T("WriteHelp", "Select a row or enter an address inside the monitored area. Values are raw and unscaled; multiple values use consecutive addresses. Writes are never retried automatically. A readback checks the result.");
-    public string ReadOnlyHelp => T("ReadOnly", "Discrete inputs and input registers are read-only. Select FC01 or FC03 in Settings to write.");
+    public string WriteValuesLabel => WriteModeIndex == 1 ? T("WriteItemValue", "Item value or value name") : IsCoilFunction ? T("WriteCoils", "Values to write (0=OFF / 1=ON)") : T("WriteRegisters", "Numbers to write (0–65535 / 0x HEX)");
+    public string WriteHelp => WriteModeIndex == 1 ? T("WriteItemHelp", "Enter the selected item value in its display units. Its type and multiplier determine the raw numbers. Check the preview before writing. A readback verifies the result; writes are never retried automatically.") : T("WriteHelp", "Select a row or enter an address in the read range. Separate multiple raw values with spaces or commas. Each write is read back for verification and is never retried automatically.");
+    public string ReadOnlyHelp => T("ReadOnly", "This data area is read-only. To write, select 01 Coils or 03 Holding registers in Read settings.");
     public string WriteAvailabilityHelp => IsWritableFunction ? WriteHelp : ReadOnlyHelp;
     public bool IsWriteEditorEnabled => !_writeAdmitted && !_commandAdmitted && !_stopRequested;
     public IReadOnlyList<string> Functions { get; } = ["01 · Coils", "02 · Discrete inputs", "03 · Holding registers", "04 · Input registers"];
@@ -98,6 +100,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public Visibility AvailabilityVisibility => AvailabilityText.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility BusyVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
     public Visibility EmptyVisibility => Rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RowsVisibility => Rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility ErrorVisibility => Error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility WriteVisibility => IsWritableFunction ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ReadOnlyVisibility => IsWritableFunction ? Visibility.Collapsed : Visibility.Visible;
@@ -178,12 +181,13 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             WriteAddressText = AddressText;
             WriteValuesText = "";
         }
-        Status = T("Ready", "Ready · settings do not start communication");
+        Status = T("Ready", "Ready to read");
         Statistics = "";
         _lastServiceError = null;
         Error = "";
         OnPropertyChanged(nameof(RequestSummary));
         OnPropertyChanged(nameof(TargetSettingsSummary));
+        NotifyReadPresentation();
         NotifyWritePresentation();
         RefreshAvailability();
     }
@@ -197,7 +201,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     private ModbusMonitorSettings BuildSettings(bool validateItems)
     {
         if (_pollingSettings is not null && SelectedPollingGroup?.Definition is null)
-            throw new ArgumentException(P("SelectGroup", "Select a group"));
+            throw new ArgumentException(P("SelectGroup", "Select a read group"));
         if (_pollingSettings?.HasInvalidMetadata == true || SelectedPollingGroup?.Definition?.HasInvalidMetadata == true)
             throw new ArgumentException(P("InvalidGroup", "Correct the imported group metadata in Polling groups before transmitting."));
         if (!TryNumber(UnitText, out var unit) || !TryNumber(AddressText, out var address) || !TryNumber(QuantityText, out var quantity) ||
@@ -262,7 +266,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         WriteAddressText = AddressText;
         WriteValuesText = "";
         SettingsChanged();
-        Status = T("Ready", "Ready · settings do not start communication");
+        Status = T("Ready", "Ready to read");
         try { copy.Validate(); }
         catch (ArgumentException) { Error = T("InvalidSettings", "Check ID 1–247, address 0–65535, quantity 1–125 registers / 1–2000 bits, address range, interval 100–60000 ms, timeout 100–10000 ms and a finite multiplier."); }
     }
@@ -270,7 +274,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public async Task RunAsync(bool repeat)
     {
         if (repeat && _pollingSettings is not null) { await RunPollingGroupsAsync(); return; }
-        if (!repeat && !CanReadSelected()) { Error = P("SelectGroup", "Select a group"); return; }
+        if (!repeat && !CanReadSelected()) { Error = P("SelectGroup", "Select a read group"); return; }
         if (!CanRun()) { Error = T("Busy", "Connect the device and stop sequences, automation and the bridge before starting Modbus."); return; }
         ModbusMonitorSettings settings;
         try { settings = CreateSettingsSnapshot(); }
@@ -303,7 +307,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
     public async Task StopAsync()
     {
         _stopRequested = true;
-        Status = T("Stopping", "Stopping · waiting for the current response (up to the response timeout)");
+        Status = T("Stopping", "Stopping reading");
         RefreshAvailability();
         try { await _service.StopAsync(); }
         catch (Exception ex) { Error = ex.Message; RuntimeDiagnostics.RecordError("ModbusMonitor.Stop", ex); }
@@ -409,14 +413,14 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
         if (_displaySettings is not null && _lastRevision != snapshot.Revision)
         {
             _lastRevision = snapshot.Revision;
-            Status = _stopRequested && IsBusy ? T("Stopping", "Stopping · waiting for the current response (up to the response timeout)") : snapshot.State switch
+            Status = _stopRequested && IsBusy ? T("Stopping", "Stopping reading") : snapshot.State switch
             {
                 ModbusMonitorState.Reading => T("Reading", "Reading"),
-                ModbusMonitorState.Polling => T("Polling", "Polling · connection reserved"),
-                ModbusMonitorState.Stopped => snapshot.ValuesCurrent ? T("ReadComplete", "Read complete · last response shown") : T("Stopped", "Stopped · retained values are stale"),
-                ModbusMonitorState.Error => T("ErrorState", "Communication error · retained values are stale"),
-                ModbusMonitorState.Disconnected => T("Disconnected", "Disconnected · restart explicitly after connecting"),
-                _ => T("Ready", "Ready · settings do not start communication")
+                ModbusMonitorState.Polling => T("Polling", "Reading automatically"),
+                ModbusMonitorState.Stopped => snapshot.ValuesCurrent ? T("ReadComplete", "Read complete") : T("Stopped", "Stopped · last values shown"),
+                ModbusMonitorState.Error => T("ErrorState", "Communication error"),
+                ModbusMonitorState.Disconnected => T("Disconnected", "Disconnected"),
+                _ => T("Ready", "Ready to read")
             };
             if (snapshot.WriteState != ModbusWriteState.None) Status += " · " + (snapshot.WriteState switch
             {
@@ -430,7 +434,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
             else if (_lastServiceError is not null && Error == _lastServiceError) Error = "";
             _lastServiceError = snapshot.Error;
             if (_displaySettings is { } settings)
-                foreach (var row in Rows) row.Update(snapshot.Values, settings, snapshot.ValuesCurrent, snapshot.UpdatedAt);
+                foreach (var row in Rows) row.UpdateReadState(snapshot.Values, settings, snapshot.ValuesCurrent, snapshot.UpdatedAt, snapshot.State);
         }
         var busy = IsBusy;
         if (_lastBusy != busy) { _lastBusy = busy; PublishAvailability(); }
@@ -487,7 +491,7 @@ public sealed partial class ModbusRtuViewModel : ViewModelBase
 public sealed class ModbusRegisterRow(int address, int offset, int count, int width, ModbusItemDefinition? definition = null) : ViewModelBase
 {
     private readonly ModbusItemDefinition? _definition = definition?.Clone();
-    private string _raw = "—", _value = "—", _status = UiText.Get("ModbusMonitorNoValue", "No value"), _updated = "—", _changed = "";
+    private string _raw = "—", _value = "—", _status = UiText.Get("ModbusMonitorNoValue", "Not read"), _updated = "—", _changed = "";
     public int Address { get; } = address;
     public string NameText => string.IsNullOrWhiteSpace(_definition?.Name) ? "—" : _definition.Name;
     public string EngineeringValueText { get; private set; } = "";
@@ -498,11 +502,24 @@ public sealed class ModbusRegisterRow(int address, int offset, int count, int wi
     public string StatusText { get => _status; private set => SetProperty(ref _status, value); }
     public string UpdatedText { get => _updated; private set => SetProperty(ref _updated, value); }
     public string ChangeText { get => _changed; private set => SetProperty(ref _changed, value); }
-    internal void Update(ushort[]? values, ModbusMonitorSettings settings, bool current, DateTimeOffset? updated)
+    internal void Update(ushort[]? values, ModbusMonitorSettings settings, bool current, DateTimeOffset? updated) =>
+        UpdateReadState(values, settings, current, updated, ModbusMonitorState.Idle);
+
+    internal void UpdateReadState(ushort[]? values, ModbusMonitorSettings settings, bool current, DateTimeOffset? updated, ModbusMonitorState state)
     {
         if (values is null || offset + count > values.Length)
         {
-            StatusText = UiText.Get("ModbusMonitorNoValue", "No value");
+            RawValues = null;
+            RawText = ValueText = UpdatedText = "—";
+            EngineeringValueText = ChangeText = "";
+            StatusText = state switch
+            {
+                ModbusMonitorState.Reading or ModbusMonitorState.Polling => UiText.Get("ModbusMonitorReading", "Reading"),
+                ModbusMonitorState.Error => UiText.Get("ModbusMonitorNoResponse", "No valid response"),
+                ModbusMonitorState.Disconnected => UiText.Get("ModbusMonitorRowDisconnected", "Disconnected"),
+                ModbusMonitorState.Stopped => UiText.Get("ModbusMonitorRowStopped", "Stopped"),
+                _ => UiText.Get("ModbusMonitorNoValue", "Not read")
+            };
             return;
         }
         var raw = values.AsSpan(offset, count).ToArray();

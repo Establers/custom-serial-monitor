@@ -13,10 +13,10 @@ public sealed partial class ModbusRtuViewModel
     private long _settingsRevision;
     public long SettingsRevision => _settingsRevision;
 
-    public string ItemsEditorLabel => T("ItemsEditor", "Item definitions…");
+    public string ItemsEditorLabel => T("ItemsEditor", "Names and units…");
     public string TableNameLabel => T("TableName", "Name");
     public string WriteModeLabel => T("WriteMode", "Write format");
-    public IReadOnlyList<string> WriteModes => [T("WriteModeRaw", "Raw values"), T("WriteModeItem", "Item value")];
+    public IReadOnlyList<string> WriteModes => [T("WriteModeRaw", "Raw number (before scaling)"), T("WriteModeItem", "Defined item value")];
     public int WriteModeIndex
     {
         get => _writeModeIndex;

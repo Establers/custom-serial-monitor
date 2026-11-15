@@ -248,7 +248,7 @@ public sealed class ModbusPollingViewModelTests
         model.PollingGroups[4].PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
         service.FailGroup("g5");
         model.Refresh();
-        Assert.Contains("Groups 5 · Errors 1 · Current 3 · Waiting/stale 0 · Disabled 1", model.PollingHealthSummary);
+        Assert.Contains("Groups 5 · Errors 1 · Current 3 · Not updated 0 · Excluded 1", model.PollingHealthSummary);
         Assert.Contains("Device 5", model.PollingHealthSummary);
         Assert.Equal(model.PollingHealthSummary, model.MonitorSummary);
         Assert.StartsWith("Error · Device 5", model.PollingGroups[4].SelectionLabel);
@@ -272,13 +272,13 @@ public sealed class ModbusPollingViewModelTests
         var model = Model(new GroupMonitor());
         model.ApplySavedPollingSettings(Workspace());
         await model.RunAsync(false);
-        Assert.Equal(model.SelectedPollingGroup!.DisplayName, model.SelectedPollingGroup.SelectionLabel);
+        Assert.Equal("Drive · ID 1 · 0–1", model.SelectedPollingGroup!.SelectionLabel);
         Assert.Contains("Read complete", model.SelectedPollingGroup.StatusText);
         model.UnitText = "9";
         model.CreatePersistablePollingSettingsSnapshot();
         model.Refresh();
         Assert.Contains("ID 9", model.SelectedPollingGroup.SelectionLabel);
-        Assert.Equal(model.SelectedPollingGroup.DisplayName, model.SelectedPollingGroup.SelectionLabel);
+        Assert.Equal("Drive · ID 9 · 0–1", model.SelectedPollingGroup.SelectionLabel);
         Assert.Contains("Current 0", model.PollingHealthSummary);
     }
 

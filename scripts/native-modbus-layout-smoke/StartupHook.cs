@@ -753,6 +753,7 @@ public static class StartupHook
             Call(rows, "Add", row);
         }
         monitor.GetType().GetMethod("OnPropertyChanged", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(monitor, ["EmptyVisibility"]);
+        monitor.GetType().GetMethod("OnPropertyChanged", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(monitor, ["RowsVisibility"]);
     }
     private static async Task Run(object mainWindow)
     {

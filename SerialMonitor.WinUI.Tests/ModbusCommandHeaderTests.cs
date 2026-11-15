@@ -18,7 +18,7 @@ public sealed class ModbusCommandHeaderTests
         settings.Commands[0].Name = "NUCLEO RAM sequence";
         model.ApplySavedCommandSettings(settings);
         var target = model.TargetSettingsSummary;
-        Assert.Equal("ID 1 · FC 03 · 0 + 10 · 1000 ms", target);
+        Assert.Equal("ID 1 · FC03 · Addresses 0–9 (10)", target);
 
         var run = model.ExecuteSelectedCommandAsync();
         model.Refresh();
@@ -32,7 +32,7 @@ public sealed class ModbusCommandHeaderTests
         var changed = new List<string?>();
         model.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
         model.AddressText = "42";
-        Assert.Contains("42 + 10", model.TargetSettingsSummary);
+        Assert.Contains("42–51 (10)", model.TargetSettingsSummary);
         Assert.Contains(nameof(model.TargetSettingsSummary), changed);
         Assert.Equal("NUCLEO RAM sequence", model.SelectedCommand!.Definition!.Name);
     }
@@ -108,7 +108,7 @@ public sealed class ModbusCommandHeaderTests
         await run;
         Assert.Equal(revision, service.GetSnapshot().Revision);
         Assert.Equal(monitorTarget, model.RequestSummary);
-        Assert.Contains("Polling", model.Status);
+        Assert.Contains("Reading automatically", model.Status);
         Assert.DoesNotContain("Command", model.Status);
         Assert.True(model.IsBusy);
         Assert.True(model.StopCommand.CanExecute(null));
@@ -166,7 +166,7 @@ public sealed class ModbusCommandHeaderTests
             default: await model.SaveSettingsAsync(); break;
         }
         model.Refresh();
-        Assert.Contains("ID 1 · FC 03 · 0 + 10", model.RequestSummary);
+        Assert.Contains("ID 1 · FC03 · Addresses 0–9 (10)", model.RequestSummary);
         Assert.NotEqual(model.CommandStatus, model.Status);
         Assert.NotEmpty(model.CommandResults);
         Assert.False(model.IsBusy);
@@ -189,7 +189,7 @@ public sealed class ModbusCommandHeaderTests
         await run;
         model.AddressText = "90";
         Assert.Contains("Ready", model.Status);
-        Assert.Contains("ID 1 · FC 03 · 90", model.RequestSummary);
+        Assert.Contains("ID 1 · FC03 · Addresses 90–99", model.RequestSummary);
     }
 
     [Fact]
@@ -295,7 +295,7 @@ public sealed class ModbusCommandHeaderTests
         var run = model.ExecuteSelectedCommandAsync();
         service.CompleteCommand(ModbusCommandState.Acknowledged);
         await run;
-        Assert.Contains("Polling", model.Status);
+        Assert.Contains("Reading automatically", model.Status);
         Assert.Contains("completion is not checked", model.RecentCommandSummary);
         var summary = model.RecentCommandSummary;
         await model.StopAsync();

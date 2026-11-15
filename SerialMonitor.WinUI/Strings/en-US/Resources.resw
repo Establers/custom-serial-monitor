@@ -1313,57 +1313,57 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="LogMemoryBudgetInput.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Retained log data budget: 64–2048 MiB, default 256. Applies immediately and is saved with the profile. Rendering and other app memory are additional. The separate 64 Mi character limit still applies.</value></data>
   <data name="LogMemoryBudgetApply.Text" xml:space="preserve"><value>Now</value></data>
   <data name="LogMemoryBudgetApply.[using:SerialMonitor.WinUI.Infrastructure]AppToolTipService.ToolTip" xml:space="preserve"><value>Lowering the budget removes the oldest screen logs. Increasing it keeps future history longer; removed logs are not reloaded.</value></data>
-<data name="ModbusMonitorStart" xml:space="preserve"><value>Start polling</value></data>
-<data name="ModbusMonitorStop" xml:space="preserve"><value>Stop</value></data>
-<data name="ModbusMonitorReadOnce" xml:space="preserve"><value>Read once</value></data>
-<data name="ModbusMonitorSettings" xml:space="preserve"><value>Target settings</value></data>
-<data name="ModbusMonitorSave" xml:space="preserve"><value>Save profile</value></data>
+<data name="ModbusMonitorStart" xml:space="preserve"><value>Start automatic reading</value></data>
+<data name="ModbusMonitorStop" xml:space="preserve"><value>Stop reading</value></data>
+<data name="ModbusMonitorReadOnce" xml:space="preserve"><value>Read current values</value></data>
+<data name="ModbusMonitorSettings" xml:space="preserve"><value>Read settings</value></data>
+<data name="ModbusMonitorSave" xml:space="preserve"><value>Save settings for next time</value></data>
 <data name="ModbusMonitorUnit" xml:space="preserve"><value>Unit ID (1–247)</value></data>
-<data name="ModbusMonitorFunction" xml:space="preserve"><value>Read function</value></data>
+<data name="ModbusMonitorFunction" xml:space="preserve"><value>Data area</value></data>
 <data name="ModbusMonitorAddress" xml:space="preserve"><value>Start address (base 0)</value></data>
-<data name="ModbusMonitorQuantity" xml:space="preserve"><value>Quantity</value></data>
-<data name="ModbusMonitorInterval" xml:space="preserve"><value>Interval (100–60000 ms)</value></data>
-<data name="ModbusMonitorTimeout" xml:space="preserve"><value>Response timeout (100–10000 ms)</value></data>
+<data name="ModbusMonitorQuantity" xml:space="preserve"><value>Number to read</value></data>
+<data name="ModbusMonitorInterval" xml:space="preserve"><value>Read interval (ms)</value></data>
+<data name="ModbusMonitorTimeout" xml:space="preserve"><value>Response timeout (ms)</value></data>
 <data name="ModbusMonitorFormat" xml:space="preserve"><value>Display type</value></data>
 <data name="ModbusMonitorScale" xml:space="preserve"><value>Display multiplier</value></data>
 <data name="ModbusMonitorSwapBytes" xml:space="preserve"><value>Swap bytes</value></data>
 <data name="ModbusMonitorSwapWords" xml:space="preserve"><value>Swap words (32-bit)</value></data>
-<data name="ModbusMonitorSetupHelp" xml:space="preserve"><value>Addresses start at 0: holding register 40001 is address 0. Edits affect this monitor without transmitting. Save profile stores targets, items, groups and commands for later use.</value></data>
-<data name="ModbusMonitorOwnershipHelp" xml:space="preserve"><value>Polling reserves this connection. Stop it before using sequences, manual TX or the bridge. Direct writes here are serialized with polling.</value></data>
+<data name="ModbusMonitorSetupHelp" xml:space="preserve"><value>After changing the read settings, read current values to see the new range. Save settings to reuse them next time.</value></data>
+<data name="ModbusMonitorOwnershipHelp" xml:space="preserve"><value>You can write values here while automatic reading runs. Stop reading before using manual TX, sequences or the bridge.</value></data>
 <data name="ModbusMonitorRaw" xml:space="preserve"><value>Raw HEX</value></data>
 <data name="ModbusMonitorValue" xml:space="preserve"><value>Value</value></data>
 <data name="ModbusMonitorState" xml:space="preserve"><value>State</value></data>
 <data name="ModbusMonitorUpdated" xml:space="preserve"><value>Last response</value></data>
 <data name="ModbusMonitorTableAddress" xml:space="preserve"><value>Address (base 0)</value></data>
-<data name="ModbusMonitorEmpty" xml:space="preserve"><value>Connect the device, open Target settings, then use Read once to check its values. Addresses follow the device register map. Open ? for help.</value></data>
+<data name="ModbusMonitorEmpty" xml:space="preserve"><value>Choose which device values to read. Enter the ID, address and count in Read settings, then choose {0}.</value></data>
 <data name="ModbusMonitorGuide" xml:space="preserve"><value>Usage guide</value></data>
 <data name="ModbusMonitorGuideTitle" xml:space="preserve"><value>Device monitoring &amp; control guide</value></data>
-<data name="ModbusMonitorGuidePurpose" xml:space="preserve"><value>View values that a Modbus device exposes at numbered addresses, such as temperatures, status and settings. Read repeatedly to watch changes, or edit values that the device allows you to write.</value></data>
+<data name="ModbusMonitorGuidePurpose" xml:space="preserve"><value>Read temperatures, status and settings from device addresses into the table. Turn on automatic reading to watch them change.</value></data>
 <data name="ModbusMonitorGuideModesTitle" xml:space="preserve"><value>Choose a view</value></data>
-<data name="ModbusMonitorGuideModesHelp" xml:space="preserve"><value>Device monitoring &amp; control is the default view for requested values and command results. Packet analysis inspects RX/TX packets. Data sent by the device without a request can be inspected in the log or packet analysis. Switching views does not start communication.</value></data>
-<data name="ModbusMonitorGuideStartTitle" xml:space="preserve"><value>Start with one read</value></data>
-<data name="ModbusMonitorGuideConnectStep" xml:space="preserve"><value>1. Connect using the device's COM port, baud rate and parity. Have its register map ready.</value></data>
-<data name="ModbusMonitorGuideSetupStep" xml:space="preserve"><value>2. Set the unit ID, read function, start address and quantity. For example, ID 1 / FC03 / address 0 / quantity 10 reads addresses 0–9. Addresses start at 0: holding register 40001 corresponds to address 0.</value></data>
-<data name="ModbusMonitorGuideReadStep" xml:space="preserve"><value>3. Use Read once to check the values, then Start polling to read repeatedly and update the table. The interval is the minimum wait after a response before the next read. Stop keeps the last values.</value></data>
+<data name="ModbusMonitorGuideModesHelp" xml:space="preserve"><value>Choose Device monitoring &amp; control to read or change values, or Packet analysis to inspect the original RX/TX packets.</value></data>
+<data name="ModbusMonitorGuideStartTitle" xml:space="preserve"><value>Read device values</value></data>
+<data name="ModbusMonitorGuideConnectStep" xml:space="preserve"><value>1. Connect at the top using the device's COM port, baud rate and parity.</value></data>
+<data name="ModbusMonitorGuideSetupStep" xml:space="preserve"><value>2. Enter the ID, data area, start address and count in Read settings. Example: ID 1 / 03 Holding registers / address 0 / count 10 → addresses 0–9.</value></data>
+<data name="ModbusMonitorGuideReadStep" xml:space="preserve"><value>3. Read current values to check the device. Start automatic reading to keep updating. Stopping leaves the last values in the table.</value></data>
 <data name="ModbusMonitorGuideGroupsTitle" xml:space="preserve"><value>Read separate areas or multiple devices</value></data>
-<data name="ModbusMonitorGuideGroupsHelp" xml:space="preserve"><value>Polling groups lets you register multiple named unit IDs, read areas and intervals. Start enabled groups polls the enabled groups in turn. Select a group to see its table. Read once and Direct write target the selected group. All groups on the same COM connection share its communication settings.</value></data>
+<data name="ModbusMonitorGuideGroupsHelp" xml:space="preserve"><value>A read group is a named device ID and address range. Add groups under Read groups and include the ones you want to read automatically. Automatic reading visits all included groups; Read selected group reads only the displayed group once.</value></data>
 <data name="ModbusMonitorGuideDisplayTitle" xml:space="preserve"><value>Display type and multiplier</value></data>
 <data name="ModbusMonitorGuideDisplayHelp" xml:space="preserve"><value>The display type interprets the device's raw data as numbers. UInt is an unsigned integer, Int also allows negative integers, and Float32 is a floating-point number. A 16-bit value uses one register; a 32-bit value uses two. A multiplier of 0.1 displays raw 253 as 25.3. Match the type, multiplier and byte/word order to the register map. Defined items use their own display settings.</value></data>
 <data name="ModbusMonitorGuideWriteTitle" xml:space="preserve"><value>Change a device value</value></data>
-<data name="ModbusMonitorGuideWriteHelp" xml:space="preserve"><value>Select a row, open Direct write, check the address and preview, then choose Write and verify. Raw values are numbers before scaling; Item value uses the defined item's display units. Only FC01 coils and FC03 holding registers are writable. Writing changes the actual device value.</value></data>
+<data name="ModbusMonitorGuideWriteHelp" xml:space="preserve"><value>Select a row → Write values → check the address and value → Write to device and verify. Raw numbers are before scaling. Only 01 Coils and 03 Holding registers support writes.</value></data>
 <data name="ModbusMonitorGuideConnectionTitle" xml:space="preserve"><value>Sequences and other senders</value></data>
-<data name="ModbusMonitorGuideSaveHelp" xml:space="preserve"><value>Target settings includes item definitions, polling groups and Save profile. Apply to monitor keeps the editor draft in this session; Save profile stores it for later. Loading or reconnecting never starts communication.</value></data>
-<data name="ModbusMonitorWrite" xml:space="preserve"><value>Write and verify</value></data>
+<data name="ModbusMonitorGuideSaveHelp" xml:space="preserve"><value>Manage names, units and read groups in Read settings. Apply updates this session; Save settings for next time keeps them for later.</value></data>
+<data name="ModbusMonitorWrite" xml:space="preserve"><value>Write to device and verify</value></data>
 <data name="ModbusMonitorWriteAddress" xml:space="preserve"><value>Write address (base 0)</value></data>
-<data name="ModbusMonitorWriteCoils" xml:space="preserve"><value>Raw coil values (0 / 1)</value></data>
-<data name="ModbusMonitorWriteRegisters" xml:space="preserve"><value>Raw UInt16 values (0–65535 / 0x HEX)</value></data>
-<data name="ModbusMonitorWriteHelp" xml:space="preserve"><value>Select a row or enter an address inside the monitored area. Values are raw and unscaled; multiple values use consecutive addresses. Writes are never retried automatically. A readback checks the result.</value></data>
-<data name="ModbusMonitorReadOnly" xml:space="preserve"><value>Discrete inputs and input registers are read-only. Select FC01 or FC03 in Settings to write.</value></data>
+<data name="ModbusMonitorWriteCoils" xml:space="preserve"><value>Values to write (0=OFF / 1=ON)</value></data>
+<data name="ModbusMonitorWriteRegisters" xml:space="preserve"><value>Numbers to write (0–65535 / 0x HEX)</value></data>
+<data name="ModbusMonitorWriteHelp" xml:space="preserve"><value>Select a row or enter an address in the read range. Separate multiple raw values with spaces or commas. Each write is read back for verification and is never retried automatically.</value></data>
+<data name="ModbusMonitorReadOnly" xml:space="preserve"><value>This data area is read-only. To write, select 01 Coils or 03 Holding registers in Read settings.</value></data>
 <data name="ModbusMonitorInvalidNumbers" xml:space="preserve"><value>Enter complete non-negative numbers. Unit ID, address and quantity also accept 0x HEX.</value></data>
 <data name="ModbusMonitorInvalidScale" xml:space="preserve"><value>Enter a finite display multiplier, for example 1 or 0.1.</value></data>
 <data name="ModbusMonitorInvalidSettings" xml:space="preserve"><value>Check ID 1–247, address 0–65535, quantity 1–125 registers / 1–2000 bits, address range, interval 100–60000 ms, timeout 100–10000 ms and a finite multiplier.</value></data>
 <data name="ModbusMonitorStopBeforeSettings" xml:space="preserve"><value>Stop Modbus before loading settings.</value></data>
-<data name="ModbusMonitorReady" xml:space="preserve"><value>Ready · settings do not start communication</value></data>
+<data name="ModbusMonitorReady" xml:space="preserve"><value>Ready to read</value></data>
 <data name="ModbusMonitorBusy" xml:space="preserve"><value>Connect the device and stop sequences, automation and the bridge before starting Modbus.</value></data>
 <data name="ModbusMonitorSaved" xml:space="preserve"><value>Settings saved in the app profile</value></data>
 <data name="ModbusMonitorWriteUnavailable" xml:space="preserve"><value>Writing is available for FC01 and FC03 when this connection is free or polling here.</value></data>
@@ -1371,41 +1371,41 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorInvalidWriteValues" xml:space="preserve"><value>Enter raw values separated by spaces or commas. Check the quantity and numeric range.</value></data>
 <data name="ModbusMonitorWriteRange" xml:space="preserve"><value>The complete write must be inside the monitored read area so it can be verified.</value></data>
 <data name="ModbusMonitorReading" xml:space="preserve"><value>Reading</value></data>
-<data name="ModbusMonitorPolling" xml:space="preserve"><value>Polling · connection reserved</value></data>
-<data name="ModbusMonitorStopped" xml:space="preserve"><value>Stopped · retained values are stale</value></data>
-<data name="ModbusMonitorErrorState" xml:space="preserve"><value>Communication error · retained values are stale</value></data>
-<data name="ModbusMonitorDisconnected" xml:space="preserve"><value>Disconnected · restart explicitly after connecting</value></data>
+<data name="ModbusMonitorPolling" xml:space="preserve"><value>Reading automatically</value></data>
+<data name="ModbusMonitorStopped" xml:space="preserve"><value>Stopped · last values shown</value></data>
+<data name="ModbusMonitorErrorState" xml:space="preserve"><value>Communication error</value></data>
+<data name="ModbusMonitorDisconnected" xml:space="preserve"><value>Disconnected</value></data>
 <data name="ModbusMonitorWriteQueued" xml:space="preserve"><value>Write queued</value></data>
 <data name="ModbusMonitorWriting" xml:space="preserve"><value>Writing</value></data>
 <data name="ModbusMonitorWriteVerified" xml:space="preserve"><value>Write verified</value></data>
 <data name="ModbusMonitorWriteNotVerified" xml:space="preserve"><value>Write not verified; inspect before retrying</value></data>
 <data name="ModbusMonitorWriteFailed" xml:space="preserve"><value>Write failed; inspect before retrying</value></data>
 <data name="ModbusMonitorStatistics" xml:space="preserve"><value>OK {0:N0} · Errors {1:N0} · Response {2}</value></data>
-<data name="ModbusMonitorNoValue" xml:space="preserve"><value>No value</value></data>
+<data name="ModbusMonitorNoValue" xml:space="preserve"><value>Not read</value></data>
 <data name="ModbusMonitorCurrent" xml:space="preserve"><value>Current</value></data>
 <data name="ModbusMonitorStale" xml:space="preserve"><value>Stale value</value></data>
 <data name="ModbusMonitorUnpaired" xml:space="preserve"><value>Missing 32-bit partner</value></data>
 <data name="ModbusMonitorOverflow" xml:space="preserve"><value>Scaling overflow</value></data>
 <data name="ModbusMonitorPacketMode" xml:space="preserve"><value>Packet analysis</value></data>
 <data name="ModbusMonitorRegisterMode" xml:space="preserve"><value>Register monitor</value></data>
-<data name="ModbusMonitorStopping" xml:space="preserve"><value>Stopping · waiting for the current response (up to the response timeout)</value></data>
-<data name="ModbusMonitorWriteEditor" xml:space="preserve"><value>Direct write…</value></data>
-<data name="ModbusMonitorReadComplete" xml:space="preserve"><value>Read complete · last response shown</value></data>
+<data name="ModbusMonitorStopping" xml:space="preserve"><value>Stopping reading</value></data>
+<data name="ModbusMonitorWriteEditor" xml:space="preserve"><value>Write values…</value></data>
+<data name="ModbusMonitorReadComplete" xml:space="preserve"><value>Read complete</value></data>
 <data name="ModbusMonitorLastAge" xml:space="preserve"><value>Last response {0:N0} s ago</value></data>
-<data name="ModbusMonitorNeedConnection" xml:space="preserve"><value>Connect the device to start Modbus RTU.</value></data>
+<data name="ModbusMonitorNeedConnection" xml:space="preserve"><value>Connect a COM port at the top</value></data>
 <data name="ModbusMonitorNeedEightBits" xml:space="preserve"><value>Modbus RTU requires 8 data bits. Disconnect, change the serial setting and reconnect.</value></data>
 <data name="ModbusMonitorDisableDirectInput" xml:space="preserve"><value>Switch to log view before starting Modbus RTU.</value></data>
 <data name="ModbusMonitorOtherOwner" xml:space="preserve"><value>Stop the sequence, automation or bridge using this connection before starting Modbus.</value></data>
 <data name="ModbusMonitorWait" xml:space="preserve"><value>Wait for the current connection, driver or settings operation to finish.</value></data>
-<data name="ModbusMonitorItemsEditor" xml:space="preserve"><value>Item definitions…</value></data>
+<data name="ModbusMonitorItemsEditor" xml:space="preserve"><value>Names and units…</value></data>
 <data name="ModbusMonitorTableName" xml:space="preserve"><value>Name</value></data>
 <data name="ModbusMonitorWriteMode" xml:space="preserve"><value>Write mode</value></data>
-<data name="ModbusMonitorWriteModeRaw" xml:space="preserve"><value>Raw values</value></data>
-<data name="ModbusMonitorWriteModeItem" xml:space="preserve"><value>Item value</value></data>
+<data name="ModbusMonitorWriteModeRaw" xml:space="preserve"><value>Raw number (before scaling)</value></data>
+<data name="ModbusMonitorWriteModeItem" xml:space="preserve"><value>Defined item value</value></data>
 <data name="ModbusMonitorWritePreview" xml:space="preserve"><value>Wire words: {0}</value></data>
 <data name="ModbusMonitorWriteItemSelect" xml:space="preserve"><value>Select a defined item for interpreted writes.</value></data>
 <data name="ModbusMonitorWriteItemValue" xml:space="preserve"><value>Item value or value name</value></data>
-<data name="ModbusMonitorWriteItemHelp" xml:space="preserve"><value>Enter one value or a configured value name for the selected item. Its type, multiplier and byte/word order determine the raw values. Review the preview before writing. Raw readback verifies the result; writes are never retried automatically.</value></data>
+<data name="ModbusMonitorWriteItemHelp" xml:space="preserve"><value>Enter the selected item value in its display units. Its type and multiplier determine the raw numbers. Check the preview before writing. A readback verifies the result; writes are never retried automatically.</value></data>
 <data name="ModbusItemTitle" xml:space="preserve"><value>Item definitions</value></data>
 <data name="ModbusItemApply" xml:space="preserve"><value>Apply to monitor</value></data>
 <data name="ModbusItemCancel" xml:space="preserve"><value>Cancel</value></data>
@@ -1437,12 +1437,12 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusItemInvalidScale" xml:space="preserve"><value>Enter a finite multiplier, for example 1 or 0.1.</value></data>
 <data name="ModbusItemInvalidValueNames" xml:space="preserve"><value>Use at most 128 value names, one integer = name per line.</value></data>
 <data name="ModbusMonitorItemTargetChanged" xml:space="preserve"><value>The Modbus settings changed while editing. Reopen item definitions for the current target.</value></data>
-<data name="ModbusPollingEditor" xml:space="preserve"><value>Polling groups…</value></data>
-<data name="ModbusPollingTitle" xml:space="preserve"><value>Polling groups</value></data>
-<data name="ModbusPollingSelector" xml:space="preserve"><value>Selected group</value></data>
-<data name="ModbusPollingApply" xml:space="preserve"><value>Apply to monitor</value></data>
+<data name="ModbusPollingEditor" xml:space="preserve"><value>Read groups…</value></data>
+<data name="ModbusPollingTitle" xml:space="preserve"><value>Read groups</value></data>
+<data name="ModbusPollingSelector" xml:space="preserve"><value>Read group shown in the table</value></data>
+<data name="ModbusPollingApply" xml:space="preserve"><value>Apply</value></data>
 <data name="ModbusPollingCancel" xml:space="preserve"><value>Cancel</value></data>
-<data name="ModbusPollingHelp" xml:space="preserve"><value>Define devices and read areas on this connection. Enabled groups are polled in turn. Applying does not send data or save the app profile.</value></data>
+<data name="ModbusPollingHelp" xml:space="preserve"><value>Give each read group a name, device ID and address range. Example: Temperature sensor / ID 1 / addresses 0–9. Automatic reading visits the included groups in turn.</value></data>
 <data name="ModbusPollingList" xml:space="preserve"><value>Groups</value></data>
 <data name="ModbusPollingNew" xml:space="preserve"><value>New group</value></data>
 <data name="ModbusPollingDuplicate" xml:space="preserve"><value>Duplicate</value></data>
@@ -1450,16 +1450,16 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusPollingClear" xml:space="preserve"><value>Clear all</value></data>
 <data name="ModbusPollingSaveGroup" xml:space="preserve"><value>Add / update group</value></data>
 <data name="ModbusPollingName" xml:space="preserve"><value>Group name</value></data>
-<data name="ModbusPollingEnabled" xml:space="preserve"><value>Include in polling</value></data>
-<data name="ModbusPollingDisabled" xml:space="preserve"><value>Disabled</value></data>
+<data name="ModbusPollingEnabled" xml:space="preserve"><value>Include in automatic reading</value></data>
+<data name="ModbusPollingDisabled" xml:space="preserve"><value>Excluded from auto read</value></data>
 <data name="ModbusPollingUnsavedDraft" xml:space="preserve"><value>Add/update this group before selecting another. Apply also saves the current draft; New discards it.</value></data>
 <data name="ModbusPollingInvalidItems" xml:space="preserve"><value>Invalid saved items · open Item definitions to correct them</value></data>
 <data name="ModbusPollingItemsCount" xml:space="preserve"><value>Defined items: {0}</value></data>
 <data name="ModbusPollingSaveBeforeSelection" xml:space="preserve"><value>Add/update this group first, or choose New to discard its draft.</value></data>
 <data name="ModbusPollingNewName" xml:space="preserve"><value>Group {0}</value></data>
 <data name="ModbusPollingDefaultGroup" xml:space="preserve"><value>Group 1</value></data>
-<data name="ModbusPollingStart" xml:space="preserve"><value>Start enabled groups</value></data>
-<data name="ModbusPollingSelectGroup" xml:space="preserve"><value>Select a group</value></data>
+<data name="ModbusPollingStart" xml:space="preserve"><value>Start automatic reading</value></data>
+<data name="ModbusPollingSelectGroup" xml:space="preserve"><value>Select a read group</value></data>
 <data name="ModbusPollingUnavailable" xml:space="preserve"><value>Connect a serial port and stop other operations before polling groups.</value></data>
 <data name="ModbusPollingInvalidGroup" xml:space="preserve"><value>This saved group is invalid. Correct its fields and add/update it, or remove it.</value></data>
 <data name="ModbusPollingInvalidGroupShort" xml:space="preserve"><value>Invalid saved group</value></data>
@@ -1563,7 +1563,7 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandStepNotVerified" xml:space="preserve"><value>Result not verified</value></data>
 <data name="ModbusCommandStepCanceled" xml:space="preserve"><value>Not continued</value></data>
 <data name="ModbusCommandStepFailed" xml:space="preserve"><value>Failed</value></data>
-<data name="ModbusPollingHealth" xml:space="preserve"><value>Groups {0} · Errors {1} · Current {2} · Waiting/stale {3} · Disabled {4}</value></data>
+<data name="ModbusPollingHealth" xml:space="preserve"><value>Groups {0} · Errors {1} · Current {2} · Not updated {3} · Excluded {4}</value></data>
 <data name="ModbusPollingStateError" xml:space="preserve"><value>Error</value></data>
 <data name="ModbusPollingStateCurrent" xml:space="preserve"><value>Read OK</value></data>
 <data name="ModbusPollingStateReading" xml:space="preserve"><value>Reading</value></data>
@@ -1574,9 +1574,9 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusCommandRecent" xml:space="preserve"><value>Recent command</value></data>
 <data name="ModbusCommandAdvanced" xml:space="preserve"><value>Value type, scaling and communication options</value></data>
 <data name="ModbusCommandChooseInterpretation" xml:space="preserve"><value>Choose a value type in the advanced options.</value></data>
-<data name="ModbusMonitorDetails" xml:space="preserve"><value>Communication details</value></data>
+<data name="ModbusMonitorDetails" xml:space="preserve"><value>Communication status</value></data>
 <data name="ModbusMonitorMoreActions" xml:space="preserve"><value>More actions</value></data>
-<data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>Usage details and precautions</value></data>
+<data name="ModbusMonitorUsageDetails" xml:space="preserve"><value>Usage help</value></data>
 <data name="ModbusCommandActionsWithResult" xml:space="preserve"><value>Commands / result…</value></data>
 <data name="ModbusValuesSingleWriteHelp" xml:space="preserve"><value>FC06 · Address {0} (0x{1}) · write/echo value, not a readback.</value></data>
 <data name="ModbusValuesInvalidSingleWrite" xml:space="preserve"><value>FC06 requires a complete 8-byte write request or echo with a valid device address.</value></data>
@@ -1608,4 +1608,30 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ProtocolPacketWriteRangeFormat" xml:space="preserve"><value>Write address (base 0): {0} · quantity: {1}</value></data>
 <data name="ProtocolPacketAddressFormat" xml:space="preserve"><value>Address (base 0): {0}</value></data>
 <data name="ProtocolPacketCoilFormat" xml:space="preserve"><value>Coil: {0}</value></data>
+<data name="ModbusMonitorNoResponse" xml:space="preserve"><value>No valid response</value></data>
+<data name="ModbusMonitorRowDisconnected" xml:space="preserve"><value>Disconnected</value></data>
+<data name="ModbusMonitorRowStopped" xml:space="preserve"><value>Stopped</value></data>
+<data name="ModbusMonitorReadRange" xml:space="preserve"><value>ID {0} · FC{1:00} · Addresses {2}–{3} ({4})</value></data>
+<data name="ModbusMonitorCheckReadSettings" xml:space="preserve"><value>Check the device ID and address range in Read settings</value></data>
+<data name="ModbusMonitorReadOnceHelp" xml:space="preserve"><value>Read the current values once: {0}</value></data>
+<data name="ModbusMonitorStartHelp" xml:space="preserve"><value>Read {0} repeatedly, waiting at least {1} ms after each response.</value></data>
+<data name="ModbusMonitorReadSetupHelp" xml:space="preserve"><value>Match the settings to the device's register map, then choose {0}.</value></data>
+<data name="ModbusMonitorAddressHelp" xml:space="preserve"><value>Use protocol addresses starting at 0. Example: holding register 40001 → address 0. Decimal and 0x HEX are accepted.</value></data>
+<data name="ModbusMonitorIntervalHelp" xml:space="preserve"><value>1000 ms = 1 second. Automatic reading waits this long after each response.</value></data>
+<data name="ModbusMonitorDisplaySettings" xml:space="preserve"><value>Value format and byte order</value></data>
+<data name="ModbusMonitorFirstReadHelp" xml:space="preserve"><value>Use {0} to fill the table. Use automatic reading to watch the values change.</value></data>
+<data name="ModbusPollingReadSelected" xml:space="preserve"><value>Read selected group</value></data>
+<data name="ModbusPollingStartCount" xml:space="preserve"><value>Auto read ({0} groups)</value></data>
+<data name="ModbusPollingNoEnabledGroups" xml:space="preserve"><value>Include at least one read group in automatic reading.</value></data>
+<data name="ModbusPollingExcludedHelp" xml:space="preserve"><value>This group is excluded from automatic reading. Use Read selected group to read it once, or include it in Read settings.</value></data>
+<data name="ModbusPollingStartHelp" xml:space="preserve"><value>Read these groups in turn. The dropdown selects which results to show:</value></data>
+<data name="ModbusPollingEmptyGroupsHelp" xml:space="preserve"><value>Choose a read group above, or add a device ID and address range in Read groups.</value></data>
+<data name="ModbusMonitorExceptionFunction" xml:space="preserve"><value>Modbus 01 · The device does not support this function. Check the data area.</value></data>
+<data name="ModbusMonitorExceptionAddress" xml:space="preserve"><value>Modbus 02 · The device rejected this address range. Check the start address and count.</value></data>
+<data name="ModbusMonitorExceptionValue" xml:space="preserve"><value>Modbus 03 · The device rejected the value or count. Check its allowed range.</value></data>
+<data name="ModbusMonitorExceptionDevice" xml:space="preserve"><value>Modbus 04 · The device could not process the request. Check the device status.</value></data>
+<data name="ModbusMonitorExceptionBusy" xml:space="preserve"><value>Modbus 06 · The device is busy processing another request.</value></data>
+<data name="ModbusMonitorResponseTimeoutHelp" xml:space="preserve"><value>No response within the timeout. Check the device ID and serial settings, then reconnect the port.</value></data>
+<data name="ModbusMonitorResponseCrcHelp" xml:space="preserve"><value>Response CRC check failed. Check the connection and serial settings, then reconnect the port.</value></data>
+<data name="ModbusMonitorResponseMismatchHelp" xml:space="preserve"><value>The response does not match the request. Check the device ID and other senders, then reconnect the port.</value></data>
 </root>

@@ -77,7 +77,7 @@
                                 <ScrollViewer x:Name="SummaryScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel x:Name="SummaryPanel" Width="420" Spacing="6" Margin="0,0,16,0">
                                         <TextBlock Text="{Binding MonitorDetailsLabel}" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
+                                        <TextBlock Text="{Binding ErrorHelp}" Visibility="{Binding ErrorVisibility}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource ErrorTextBrush}" />
                                         <TextBlock Text="{Binding AvailabilityText}" Visibility="{Binding AvailabilityVisibility}" Style="{StaticResource GuideBody}" />
                                         <TextBlock Text="{Binding PollingSummary}" Visibility="{Binding PollingSummary, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource GuideBody}" />
                                         <TextBlock Text="{Binding Statistics}" Visibility="{Binding Statistics, Converter={StaticResource NonEmptyTextVisibility}}" Style="{StaticResource GuideBody}" />
@@ -92,13 +92,16 @@
                                     FlyoutPresenterStyle="{StaticResource CompactFlyoutPresenterStyle}">
                                 <ScrollViewer x:Name="SettingsScroll" MaxHeight="460" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ContentControl x:Name="SettingsEditorRoot" IsEnabled="{Binding IsSettingsEnabled}" HorizontalContentAlignment="Stretch">
-                                    <StackPanel x:Name="SettingsPanel" Width="300" Spacing="6" Margin="0,0,16,0">
+                                    <StackPanel x:Name="SettingsPanel" Width="360" Spacing="6" Margin="0,0,16,0">
                                         <TextBlock Text="{Binding SettingsLabel}" FontSize="14" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding ReadSetupHelp}" Style="{StaticResource GuideBody}" />
                                         <TextBlock Text="{Binding TargetSettingsSummary}" FontSize="11" FontFamily="Consolas"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                        <CheckBox Content="{Binding IncludeGroupLabel}" IsChecked="{Binding SelectedGroupIncluded, Mode=TwoWay}"
+                                                  Visibility="{Binding PollingGroupsVisibility}" IsEnabled="{Binding IsTargetSettingsEnabled}" />
                                         <ContentControl IsEnabled="{Binding IsTargetSettingsEnabled}" HorizontalContentAlignment="Stretch">
                                         <StackPanel Spacing="4">
-                                        <Grid x:Name="TargetSettingsForm" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
+                                        <Grid x:Name="TargetSettingsForm" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
                                             <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding FunctionLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding UnitLabel}" />
@@ -115,23 +118,32 @@
                                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TimeoutLabel}" Style="{StaticResource FieldLabel}" />
                                             <TextBox Grid.Row="5" Text="{Binding IntervalText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding IntervalLabel}" />
                                             <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TimeoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" AutomationProperties.Name="{Binding TimeoutLabel}" />
-                                            <TextBlock Grid.Row="6" Text="{Binding FormatLabel}" Style="{StaticResource FieldLabel}" />
-                                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox Grid.Row="7" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
+                                        </Grid>
+                                        <TextBlock Text="{Binding AddressHelp}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding IntervalHelp}" Style="{StaticResource GuideBody}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Expander Header="{Binding DisplaySettingsLabel}" Style="{StaticResource ModbusExpanderStyle}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                            <StackPanel Spacing="4">
+                                            <Grid ColumnDefinitions="128,*" RowDefinitions="Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
+                                            <TextBlock Grid.Row="0" Text="{Binding FormatLabel}" Style="{StaticResource FieldLabel}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ScaleLabel}" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox Grid.Row="1" ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" Style="{StaticResource ModbusComboBoxStyle}" FontSize="12" MinWidth="0" HorizontalAlignment="Stretch" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}">
                                                 <ComboBox.Resources>
                                                     <!-- The native arrow otherwise keeps the closed field 32 pixels tall. -->
                                                     <x:Double x:Key="ComboBoxMinHeight">24</x:Double>
                                                 </ComboBox.Resources>
                                             </ComboBox>
-                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
+                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource NumberInput}" IsEnabled="{Binding IsRegisterFunction}" AutomationProperties.Name="{Binding ScaleLabel}" />
                                         </Grid>
-                                        <Border Height="1" Background="{ThemeResource AppSurfaceBorderBrush}" Margin="0,2" />
                                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                             <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegisterFunction}" Style="{StaticResource CompactCheckBoxStyle}" />
                                             <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding IsWordSwapEnabled}" Style="{StaticResource CompactCheckBoxStyle}" />
                                         </Grid>
+                                            </StackPanel>
+                                        </Expander>
                                         </StackPanel>
                                         </ContentControl>
+                                        <Button Content="{Binding ReadOnceLabel}" Command="{Binding ReadOnceCommand}" Click="ReadFromSettings_Click"
+                                                ToolTipService.ToolTip="{Binding ReadOnceHelp}" Style="{StaticResource ModbusAccentButtonStyle}" HorizontalAlignment="Right" />
                                         <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
                                             <StackPanel Spacing="6">
                                                 <TextBlock Text="{Binding SetupHelp}" Style="{StaticResource GuideBody}" />
@@ -286,15 +298,17 @@
                 </Grid>
         </Border>
         <Border Grid.Row="1" Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}" BorderThickness="1" CornerRadius="4" MinHeight="0">
-            <Grid MinHeight="0">
-                <ScrollViewer x:Name="TableScroll" HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
+            <Grid MinHeight="0" RowDefinitions="Auto,*">
+                <TextBlock Text="{Binding FirstReadHelp}" Visibility="{Binding FirstReadVisibility}" Margin="8,5"
+                           Style="{StaticResource GuideBody}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ScrollViewer Grid.Row="1" x:Name="TableScroll" Visibility="{Binding RowsVisibility}" HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
                     <Grid MinWidth="660" RowDefinitions="Auto,*" MinHeight="0">
                         <Border Background="{ThemeResource InspectorHeaderBrush}" Padding="8,5,24,5">
-                            <Grid ColumnDefinitions="90,100,*,1.4*,90,88" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="90,*,1.4*,100,90,88" ColumnSpacing="8">
                                 <TextBlock Text="{Binding TableAddressLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="1" Text="{Binding RawLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="2" Text="{Binding TableNameLabel}" Style="{StaticResource Cell}" FontSize="11" />
-                                <TextBlock Grid.Column="3" Text="{Binding ValueLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="3" Text="{Binding RawLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="1" Text="{Binding TableNameLabel}" Style="{StaticResource Cell}" FontSize="11" />
+                                <TextBlock Grid.Column="2" Text="{Binding ValueLabel}" Style="{StaticResource Cell}" FontSize="11" />
                                 <TextBlock Grid.Column="4" Text="{Binding StateLabel}" Style="{StaticResource Cell}" FontSize="11" />
                                 <TextBlock Grid.Column="5" Text="{Binding UpdatedLabel}" Style="{StaticResource Cell}" FontSize="11" />
                             </Grid>
@@ -313,11 +327,11 @@
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid ColumnDefinitions="90,100,*,1.4*,90,88" ColumnSpacing="8">
+                                    <Grid ColumnDefinitions="90,*,1.4*,100,90,88" ColumnSpacing="8">
                                         <TextBlock Text="{Binding AddressText}" Style="{StaticResource Cell}" FontFamily="Consolas" />
-                                        <TextBlock Grid.Column="1" Text="{Binding RawText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding RawText}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding NameText}" Style="{StaticResource Cell}" ToolTipService.ToolTip="{Binding NameText}" />
-                                        <Grid Grid.Column="3" ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                        <TextBlock Grid.Column="3" Text="{Binding RawText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding RawText}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding NameText}" Style="{StaticResource Cell}" ToolTipService.ToolTip="{Binding NameText}" />
+                                        <Grid Grid.Column="2" ColumnDefinitions="Auto,*" ColumnSpacing="4">
                                             <TextBlock Text="{Binding ChangeText}" Style="{StaticResource Cell}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                             <TextBlock Grid.Column="1" Text="{Binding ValueText}" Style="{StaticResource Cell}" FontFamily="Consolas" ToolTipService.ToolTip="{Binding ValueText}" />
                                         </Grid>
@@ -329,7 +343,7 @@
                         </ListView>
                     </Grid>
                 </ScrollViewer>
-                <StackPanel Visibility="{Binding EmptyVisibility}" MaxWidth="440" Margin="15" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Grid.Row="1" Visibility="{Binding EmptyVisibility}" MaxWidth="440" Margin="8" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="{Binding EmptyHelp}" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
                         <Button Content="{Binding EmptySetupLabel}" Click="ShowSettings_Click" IsEnabled="{Binding IsSettingsEnabled}" Style="{StaticResource Action}" />

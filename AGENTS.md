@@ -42,6 +42,13 @@ Stability is more important than visual polish.
 - Avoid blocking the UI thread.
 - Avoid unbounded memory growth.
 
+## UI Consistency
+
+- Before changing Modbus UI, read [the UI conventions](docs/modbus-monitor-ux.md) and [the shared form layout](docs/modbus-numeric-field-layout.md).
+- Reuse the shared control, flyout and form styles in `CompactControlStyles.xaml`; fix shared sizing there instead of adding per-screen heights or templates.
+- Use action labels that name what is read or changed. Show the device ID and address range before sending; distinguish the selected group's one-time read from automatic reading of all included groups.
+- Keep Korean guidance short and action-oriented. Explain optional protocol terms where needed, and distinguish not-yet-read, in-progress, failed and stale data.
+
 ## Implementation Order
 
 1. Create project skeleton and compile.

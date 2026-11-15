@@ -34,8 +34,9 @@ public sealed partial class ModbusRtuView : UserControl
     private void SettingsFlyout_Opening(object sender, object args)
     {
         SettingsEditorRoot.DataContext = Model;
-        FitEditor(SettingsScroll, SettingsPanel, 300, 460);
+        FitEditor(SettingsScroll, SettingsPanel, 360, 460);
     }
+    private void ReadFromSettings_Click(object sender, RoutedEventArgs args) => SettingsFlyout.Hide();
     private void WriteFlyout_Opening(object sender, object args)
     {
         WriteEditorRoot.DataContext = Model;
