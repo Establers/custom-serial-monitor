@@ -102,3 +102,23 @@ Header가 없는 컨트롤에서 템플릿의 `{Binding}`이 상위 DataContext�
 - 다섯 XAML은 폭과 가로 정렬 외의 컨트롤·바인딩·이벤트·접근성 속성이 동일함을 대조했다.
   검증한 포터블 파일 787개와 ZIP을 기존 경로로 복사한 뒤 해시가 모두 일치함을 확인했다.
   프로필은 유지됐고 Computer Use·COM 연결·송신은 사용하지 않았다.
+
+## 팝업 전환 검사 (1.7.0)
+
+네이티브 검사기는 Flyout의 `Opened`·`Closed` 이벤트를 기다린 후 측정하거나 다음 팝업을 연다.
+이전의 `Hide()` 후 고정 100ms 대기는 닫힘 애니메이션·포커스 복귀가 끝났음을 보장하지 않았다.
+설정 팝업 다음에 쓰기 팝업을 열면 측정 중 `XamlRoot`가 사라져 검사기가 실패할 수 있었다.
+`WriteFlyout`은 일반 Flyout이며 Content가 없는 MenuFlyout으로 바뀐 문제가 아니다.
+검사 중 분리된 콘텐츠는 명시적인 오류로 보고하고, 이벤트는 성공·실패 모두 구독 해제한다.
+
+빠른 재현·회귀 검사는 다음 명령으로 설정 → 쓰기 → 명령 → 도움말을 두 창 크기에서 연속 검사한다.
+실물 COM과 사용자 설정을 변경하지 않는 자식 프로세스에서 실행하며, 전체 검사도 같은 전환 도우미를 사용한다.
+
+```powershell
+./scripts/test_modbus_layout_native.ps1 -AppPath ./release/SerialMonitorPortable/SerialMonitor.WinUI.exe -CaseFilter monitor-flyouts
+```
+
+2026-11-16 검증: 기존 1.7.0 배포본을 교체하지 않고 빠른 검사 14건 및 전체 네이티브 검사
+172건·공통 폼 그리드 204건 통과. 검사기 Release 빌드 경고·오류 0, 배포 EXE/DLL 해시와
+사용자 프로필·창 배치 유지, 최종 시리얼 송신 바이트 0.
+전체 결과: `artifacts/release-1.7.0-native-fixed/85cca04efe884a669a362c822b37531a/result.json`.

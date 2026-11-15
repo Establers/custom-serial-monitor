@@ -816,7 +816,8 @@ public static partial class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), dialogFooter, closedViewCaption, viewOptionAvailability, groupNavigation, formGrids, scrolls, issues = Issues.Count - before });
+        var xamlRoot = P(root, "XamlRoot") ?? throw new InvalidOperationException($"{name}: inspected content was detached before measurement completed.");
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(xamlRoot, "RasterizationScale"), dialogFooter, closedViewCaption, viewOptionAvailability, groupNavigation, formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -929,16 +930,43 @@ public static partial class StartupHook
     private static async Task Flyout(object view, string field, string anchor, string name)
     {
         var flyout = Field(view, field);
-        Call(flyout, "ShowAt", Field(view, anchor));
+        // Hide() returns before Closed/focus restoration. Starting the next popup
+        // during that animation can dismiss it while its controls are measured.
+        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var openedEvent = flyout.GetType().GetEvent("Opened")!;
+        var closedEvent = flyout.GetType().GetEvent("Closed")!;
+        Action<object, object> onOpened = (_, _) => opened.TrySetResult();
+        Action<object, object> onClosed = (_, _) => closed.TrySetResult();
+        var openedHandler = Delegate.CreateDelegate(openedEvent.EventHandlerType!, onOpened.Target, onOpened.Method);
+        var closedHandler = Delegate.CreateDelegate(closedEvent.EventHandlerType!, onClosed.Target, onClosed.Method);
+        openedEvent.AddEventHandler(flyout, openedHandler);
+        closedEvent.AddEventHandler(flyout, closedHandler);
         try
         {
-            var content = P(flyout, "Content")!;
+            Call(flyout, "ShowAt", Field(view, anchor));
+            await opened.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var content = P(flyout, "Content") ?? throw new InvalidOperationException(
+                $"{field} ({flyout.GetType().FullName}) has no content to inspect.");
             await Probe(content, name);
             var expanders = Tree(content).Where(e => e.GetType().Name == "Expander").ToArray();
             foreach (var expander in expanders) S(expander, "IsExpanded", true);
             if (expanders.Length > 0) { await Task.Delay(350); await Probe(content, name + "-expanded"); }
         }
-        finally { Call(flyout, "Hide"); await Task.Delay(100); }
+        finally
+        {
+            try
+            {
+                Call(flyout, "Hide");
+                if (opened.Task.IsCompletedSuccessfully)
+                    await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            finally
+            {
+                openedEvent.RemoveEventHandler(flyout, openedHandler);
+                closedEvent.RemoveEventHandler(flyout, closedHandler);
+            }
+        }
     }
     private static object ResponseFrame()
     {
@@ -1004,6 +1032,20 @@ public static partial class StartupHook
                 var suffix = $"-{size.Width}x{size.Height}";
                 var defaultViewName = "default-view" + suffix;
                 var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (filter == "monitor-flyouts")
+                {
+                    var monitor = P(startupModel, "Modbus")!;
+                    Call(monitor, "ApplySettings", MonitorSettings());
+                    Call(monitor, "ApplySavedCommandSettings", CommandSettings());
+                    PopulateRegisters(monitor);
+                    S(monitor, "WriteAddressText", "65400");
+                    S(monitor, "WriteValuesText", string.Join(" ", Enumerable.Repeat("65535", 80)));
+                    var monitorView = New("SerialMonitor.WinUI.Views.ModbusRtuView");
+                    await View(monitorView, "monitor" + suffix, monitor);
+                    foreach (var entry in new[] { ("SettingsFlyout", "SettingsButton"), ("WriteFlyout", "MonitorMoreButton"), ("CommandsFlyout", "CommandsButton"), ("GuideFlyout", "MonitorMoreButton") })
+                        await Flyout(monitorView, entry.Item1, entry.Item2, entry.Item1 + suffix);
+                    continue;
+                }
                 if (filter == "rules") { await AuditRulesDialogs(suffix); continue; }
                 if (string.IsNullOrEmpty(filter) || filter == "sensor-narrow")
                     await CheckSensorNarrowLayout(startupModel, suffix);
