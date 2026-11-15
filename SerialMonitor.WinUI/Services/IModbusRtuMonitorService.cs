@@ -17,7 +17,8 @@ public sealed record ModbusMonitorSnapshot(
     double? ResponseMilliseconds,
     string? Error,
     bool ValuesCurrent,
-    ModbusWriteState WriteState = ModbusWriteState.None);
+    ModbusWriteState WriteState = ModbusWriteState.None,
+    int ReadRetryDelayMs = 0);
 
 public interface IModbusRtuMonitorService : IAsyncDisposable
 {

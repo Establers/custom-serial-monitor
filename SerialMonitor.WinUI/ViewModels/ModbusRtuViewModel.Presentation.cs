@@ -34,7 +34,13 @@ public sealed partial class ModbusRtuViewModel
 
     // Keep actionable failures visible in the single toolbar. Full, selectable
     // details stay in its flyout, without taking rows away from the register list.
-    public string ErrorHelp => DescribeCommunicationError(Error);
+    public string ErrorHelp => GetSelectedSnapshot() is { ReadRetryDelayMs: > 0 } snapshot && snapshot.Error == Error
+        ? DescribeSnapshotError(snapshot) : DescribeCommunicationError(Error);
+    internal static string DescribeSnapshotError(SerialMonitor.WinUI.Services.ModbusMonitorSnapshot snapshot) =>
+        snapshot.ReadRetryDelayMs > 0
+            ? UiText.Format("ModbusMonitorReadRetry", "Read failed · Retry interval {0} ms (after receive recovery). {1}",
+                snapshot.ReadRetryDelayMs, snapshot.Error)
+            : DescribeCommunicationError(snapshot.Error ?? "");
     internal static string DescribeCommunicationError(string error) => error switch
     {
         "Modbus exception 0x01." => T("ExceptionFunction", "Modbus 01 · The device does not support this function. Check the data area."),

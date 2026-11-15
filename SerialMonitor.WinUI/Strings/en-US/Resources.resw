@@ -1634,4 +1634,5 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusMonitorResponseTimeoutHelp" xml:space="preserve"><value>No response within the timeout. Check the device ID and serial settings, then reconnect the port.</value></data>
 <data name="ModbusMonitorResponseCrcHelp" xml:space="preserve"><value>Response CRC check failed. Check the connection and serial settings, then reconnect the port.</value></data>
 <data name="ModbusMonitorResponseMismatchHelp" xml:space="preserve"><value>The response does not match the request. Check the device ID and other senders, then reconnect the port.</value></data>
+<data name="ModbusMonitorReadRetry" xml:space="preserve"><value>Read failed · Retry interval {0} ms (after receive recovery). {1}</value></data>
 </root>

@@ -76,7 +76,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
             if (_snapshot.IsBusy)
             {
                 if (!_snapshot.IsPolling || _stop is null || _stop.IsCancellationRequested || _pendingWrite is not null ||
-                    _snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing)
+                    _snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing || _snapshot.State == ModbusMonitorState.Error)
                     throw new InvalidOperationException("A Modbus operation is already active.");
                 if (_settings?.Request != settings.Request)
                     throw new InvalidOperationException("The polling configuration changed.");
@@ -128,6 +128,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                 IsBusy = true, IsPolling = repeat, Values = sameRequest ? _snapshot.Values : null,
                 UpdatedAt = sameRequest ? _snapshot.UpdatedAt : null, ValuesCurrent = false,
                 SuccessCount = 0, ErrorCount = 0, Error = null, ResponseMilliseconds = null,
+                ReadRetryDelayMs = 0,
                 WriteState = firstWrite is null ? ModbusWriteState.None : ModbusWriteState.Queued });
         }
         // No UI context, filesystem access or parsing in the serial callback.
@@ -159,6 +160,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         ModbusReceiveInbox? inbox = null;
         PendingWrite? currentWrite = firstWrite;
         PendingCommand? currentCommand = null;
+        var readFailures = 0;
         try
         {
             stop.Token.ThrowIfCancellationRequested();
@@ -170,6 +172,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
             inbox = new ModbusReceiveInbox(_serial, lease.Generation);
             do
             {
+                var delayMs = settings.IntervalMs;
                 stop.Token.ThrowIfCancellationRequested();
                 if (currentWrite is not null)
                 {
@@ -197,14 +200,33 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                 }
                 else
                 {
-                    var result = await ExchangeAsync(lease, inbox, settings.Request.BuildPacket(), settings.TimeoutMs,
-                        settings, stop.Token).ConfigureAwait(false);
-                    PublishValues(result.Values, result.ElapsedMs, lease.Generation);
+                    try
+                    {
+                        var result = await ExchangeAsync(lease, inbox, settings.Request.BuildPacket(), settings.TimeoutMs,
+                            settings, stop.Token, recoverableRead: repeat).ConfigureAwait(false);
+                        readFailures = 0;
+                        PublishValues(result.Values, result.ElapsedMs, lease.Generation);
+                    }
+                    catch (ModbusExchangeException ex) when (repeat && ex.ReadRecoveryAllowed)
+                    {
+                        readFailures = Math.Min(6, readFailures + 1);
+                        delayMs = ReadRetryDelay(settings.IntervalMs, readFailures);
+                        lock (_gate)
+                        {
+                            var queued = _pendingWrite;
+                            _pendingWrite = null;
+                            SetSnapshot(_snapshot with { State = ModbusMonitorState.Error, ValuesCurrent = false,
+                                Error = ex.Message, ReadRetryDelayMs = delayMs, ErrorCount = _snapshot.ErrorCount + 1,
+                                WriteState = queued is null ? _snapshot.WriteState : ModbusWriteState.Failed });
+                            queued?.Completion.TrySetException(ex);
+                        }
+                        await RecoverReadAsync(lease, inbox, settings.TimeoutMs, ex, stop.Token).ConfigureAwait(false);
+                    }
                     if (!repeat) break;
                 }
                 // Fixed delay, without catch-up bursts; write queue capacity is one.
                 var until = Stopwatch.GetTimestamp();
-                while (Stopwatch.GetElapsedTime(until).TotalMilliseconds < settings.IntervalMs)
+                while (Stopwatch.GetElapsedTime(until).TotalMilliseconds < delayMs)
                 {
                     stop.Token.ThrowIfCancellationRequested();
                     inbox.EnsureConnection();
@@ -256,7 +278,8 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
                     IsBusy = false, IsPolling = false,
                     ValuesCurrent = failure is null && !repeat && _snapshot.ValuesCurrent && _serial.IsConnected &&
                         _serial.ReceiveSessionGeneration == _valueGeneration,
-                    Error = failure?.Message, ErrorCount = _snapshot.ErrorCount + (failure is null ? 0 : 1),
+                    Error = failure?.Message ?? _snapshot.Error, ReadRetryDelayMs = 0,
+                    ErrorCount = _snapshot.ErrorCount + (failure is null ? 0 : 1),
                     WriteState = failure is not null && _snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing
                         ? ModbusWriteState.Failed
                         : _snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing
@@ -303,7 +326,8 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
     }
 
     private async Task<(ushort[] Values, double ElapsedMs)> ExchangeAsync(ISerialExclusiveSession lease,
-        ModbusReceiveInbox inbox, byte[] packet, int timeoutMs, ModbusMonitorSettings? read, CancellationToken stop)
+        ModbusReceiveInbox inbox, byte[] packet, int timeoutMs, ModbusMonitorSettings? read, CancellationToken stop,
+        bool recoverableRead = false)
     {
         var baud = Math.Max(1, _serial.AppliedBaudRate);
         var gapMs = Math.Max(5, (int)Math.Ceiling(3.5 * 12 * 1000 / baud));
@@ -315,12 +339,16 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         // Once TX starts, Stop cannot release the owner until this exchange ends.
         // Only a transport disconnect/timeout aborts an outstanding response wait.
         using var deadline = new CancellationTokenSource(timeoutMs);
+        var sent = false;
         try
         {
             await lease.SendAsync(packet, deadline.Token).ConfigureAwait(false);
             _transmitted?.Invoke(packet, lease.Generation);
+            sent = true;
             var expectedLength = read is null ? 8 : 5 + (read.Function <= 2 ? (read.Quantity + 7) / 8 : read.Quantity * 2);
-            var frame = await inbox.ReadFrameAsync(expectedLength, started, deadline.Token).ConfigureAwait(false);
+            var frame = recoverableRead
+                ? await inbox.ReadPollingFrameAsync(packet[0], started, deadline.Token).ConfigureAwait(false)
+                : await inbox.ReadFrameAsync(expectedLength, started, deadline.Token).ConfigureAwait(false);
             if (LineErrors != errorCount) throw new ModbusExchangeException("Serial line errors occurred during the request.", true);
             var decoded = read is null ? ModbusResponseDecoder.DecodeWrite(packet, frame)
                 : ModbusResponseDecoder.DecodeRead(read.Request, frame);
@@ -333,7 +361,18 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
             };
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-        { throw new ModbusExchangeException("Modbus response timed out; reconnect before continuing.", true); }
+        {
+            inbox.EnsureConnection();
+            throw new ModbusExchangeException(recoverableRead && sent ? "Modbus response timed out."
+                : "Modbus response timed out; reconnect before continuing.", true, readRecoveryAllowed: recoverableRead && sent);
+        }
+        catch (ModbusExchangeException ex) when (recoverableRead && sent)
+        {
+            // Overflow and replaced/disconnected sessions must remain fatal.
+            inbox.EnsureConnection();
+            throw new ModbusExchangeException(ex.Message.Replace("; reconnect before continuing.", "."),
+                ex.UnknownCompletion, ex, readRecoveryAllowed: true);
+        }
         catch (ModbusExchangeException) { throw; }
         catch (Exception ex) { throw new ModbusExchangeException("Modbus exchange failed: " + ex.Message, true, ex); }
     }
@@ -347,6 +386,7 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
         {
             _valueGeneration = generation;
             SetSnapshot(_snapshot with { Values = values, UpdatedAt = DateTimeOffset.Now,
+                State = _snapshot.IsPolling ? ModbusMonitorState.Polling : _snapshot.State, Error = null, ReadRetryDelayMs = 0,
                 ValuesCurrent = true, SuccessCount = _snapshot.SuccessCount + 1, ResponseMilliseconds = elapsedMs });
         }
     }
@@ -365,8 +405,10 @@ public sealed partial class ModbusRtuMonitorService : IModbusRtuGroupMonitorServ
     }
 }
 
-internal sealed class ModbusExchangeException(string message, bool unknownCompletion, Exception? inner = null)
+internal sealed class ModbusExchangeException(string message, bool unknownCompletion, Exception? inner = null,
+    bool readRecoveryAllowed = false)
     : Exception(message, inner)
 {
     public bool UnknownCompletion { get; } = unknownCompletion;
+    public bool ReadRecoveryAllowed { get; } = readRecoveryAllowed;
 }

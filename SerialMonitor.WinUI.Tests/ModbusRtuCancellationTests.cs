@@ -263,7 +263,13 @@ public sealed class ModbusRtuCancellationTests
             return Task.CompletedTask;
         };
         await using var service = new ModbusRtuMonitorService(serial);
-        await Assert.ThrowsAsync<ModbusExchangeException>(() => service.RunAsync(Settings(), true, default));
+        var run = service.RunAsync(Settings(), true, default);
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (service.GetSnapshot().ErrorCount == 0) await Task.Delay(5, wait.Token);
+        Assert.False(service.GetSnapshot().ValuesCurrent);
+        // Stop during the recovery guard still fences an unresolved response.
+        await service.StopAsync();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(device.Connected);
         Assert.True(device.WasOwnedWhenDisconnected);
         Assert.Null(device.Owner);

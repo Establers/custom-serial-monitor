@@ -84,7 +84,7 @@ public sealed partial class ModbusRtuMonitorService
             if (!_serial.IsConnected || _serial.ReceiveSessionGeneration != _groupGeneration)
                 throw new InvalidOperationException("The original Modbus connection changed.");
             var group = _groupOrder.FirstOrDefault(candidate => candidate.Definition.Id == groupId);
-            if (group is null || !group.Definition.Enabled || group.Failed)
+            if (group is null || !group.Definition.Enabled || group.Failed || group.ReadFailures > 0)
                 throw new InvalidOperationException("The requested polling group is not active.");
             if (_pendingGroupWrite is not null || _groupWriteInProgress)
                 throw new InvalidOperationException("A Modbus group write is already active.");
@@ -200,11 +200,16 @@ public sealed partial class ModbusRtuMonitorService
                     {
                         var settings = group.Definition.Settings;
                         var result = await ExchangeAsync(lease, inbox, settings.Request.BuildPacket(), settings.TimeoutMs,
-                            settings, stop.Token).ConfigureAwait(false);
+                            settings, stop.Token, recoverableRead: true).ConfigureAwait(false);
                         PublishGroupValues(group, result.Values, result.ElapsedMs);
                     }
-                    catch (ModbusExchangeException ex) when (!ex.UnknownCompletion) { FailGroup(group, ex); }
-                    group.DueAt = NextDue(group.Definition.Settings.IntervalMs);
+                    catch (ModbusExchangeException ex) when (ex.ReadRecoveryAllowed)
+                    {
+                        FailGroup(group, ex, retryRead: true);
+                        await RecoverReadAsync(lease, inbox, group.Definition.Settings.TimeoutMs, ex, stop.Token).ConfigureAwait(false);
+                    }
+                    group.DueAt = NextDue(group.ReadFailures == 0 ? group.Definition.Settings.IntervalMs
+                        : ReadRetryDelay(group.Definition.Settings.IntervalMs, group.ReadFailures));
                     lock (_gate)
                     {
                         _pollingSnapshot = _pollingSnapshot with { ActiveGroupId = null };
@@ -258,7 +263,8 @@ public sealed partial class ModbusRtuMonitorService
                             : !group.Definition.Enabled ? ModbusMonitorState.Idle
                             : failure is not null ? ModbusMonitorState.Error
                             : !_serial.IsConnected ? ModbusMonitorState.Disconnected : ModbusMonitorState.Stopped,
-                        Error = group.Failed ? snapshot.Error : failure?.Message,
+                        Error = group.Failed || group.ReadFailures > 0 ? snapshot.Error : failure?.Message,
+                        ReadRetryDelayMs = 0,
                         WriteState = snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing
                             ? failure is null ? ModbusWriteState.None : ModbusWriteState.Failed : snapshot.WriteState
                     });
@@ -337,20 +343,23 @@ public sealed partial class ModbusRtuMonitorService
     {
         lock (_gate)
         {
+            group.ReadFailures = 0;
             SetGroupSnapshot(group, group.Snapshot with
             {
                 Values = values, UpdatedAt = DateTimeOffset.Now, ValuesCurrent = true,
+                State = ModbusMonitorState.Polling, IsBusy = true, IsPolling = true, Error = null, ReadRetryDelayMs = 0,
                 SuccessCount = group.Snapshot.SuccessCount + 1, ResponseMilliseconds = elapsedMs
             });
             PublishPollingSnapshot();
         }
     }
 
-    private void FailGroup(PollingGroupRun group, Exception error)
+    private void FailGroup(PollingGroupRun group, Exception error, bool retryRead = false)
     {
         lock (_gate)
         {
-            group.Failed = true;
+            group.Failed = !retryRead;
+            if (retryRead) group.ReadFailures = Math.Min(6, group.ReadFailures + 1);
             PendingGroupWrite? rejected = null;
             // A write admitted during this group's outstanding read must not run after that read failed.
             if (_pendingGroupWrite?.Group == group)
@@ -360,8 +369,10 @@ public sealed partial class ModbusRtuMonitorService
             }
             SetGroupSnapshot(group, group.Snapshot with
             {
-                State = ModbusMonitorState.Error, IsBusy = false, IsPolling = false, ValuesCurrent = false,
-                Error = error.Message, ErrorCount = group.Snapshot.ErrorCount + 1,
+                State = ModbusMonitorState.Error, IsBusy = retryRead, IsPolling = retryRead, ValuesCurrent = false,
+                Error = error.Message,
+                ReadRetryDelayMs = retryRead ? ReadRetryDelay(group.Definition.Settings.IntervalMs, group.ReadFailures) : 0,
+                ErrorCount = group.Snapshot.ErrorCount + 1,
                 WriteState = group.Snapshot.WriteState is ModbusWriteState.Queued or ModbusWriteState.Writing
                     ? ModbusWriteState.Failed : group.Snapshot.WriteState
             });
@@ -395,6 +406,7 @@ public sealed partial class ModbusRtuMonitorService
         public ModbusPollingGroup Definition { get; } = definition;
         public long DueAt { get; set; }
         public bool Failed { get; set; }
+        public int ReadFailures { get; set; }
         public ModbusMonitorSnapshot Snapshot { get; set; } = new(0,
             definition.Enabled ? ModbusMonitorState.Polling : ModbusMonitorState.Idle,
             definition.Enabled, definition.Enabled, null, null, 0, 0, null, null, false);

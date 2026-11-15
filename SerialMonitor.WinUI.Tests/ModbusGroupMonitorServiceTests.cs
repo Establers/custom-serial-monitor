@@ -79,7 +79,7 @@ public sealed partial class ModbusRtuMonitorServiceTests
     }
 
     [Fact]
-    public async Task KnownGroupExceptionStopsOnlyAffectedGroup()
+    public async Task KnownGroupExceptionBacksOffOnlyAffectedGroup()
     {
         var (serial, device) = Device();
         var settings = Groups();
@@ -103,37 +103,34 @@ public sealed partial class ModbusRtuMonitorServiceTests
     }
 
     [Fact]
-    public async Task AllKnownGroupFailuresReleaseHealthyConnectionAndRetainIndividualErrors()
+    public async Task AllKnownGroupFailuresKeepPollingUntilStoppedAndRetainIndividualErrors()
     {
         var (serial, device) = Device();
         device.OnSend = packet => { device.Emit(Crc([packet[0], 0x83, 2])); return Task.CompletedTask; };
         await using var service = new ModbusRtuMonitorService(serial);
-        await service.RunGroupsAsync(Groups(), default).WaitAsync(TimeSpan.FromSeconds(5));
+        var run = service.RunGroupsAsync(Groups(), default);
+        await Until(() => GroupSnapshot(service, "b").ErrorCount == 1);
+        Assert.True(service.IsBusy);
+        Assert.NotNull(device.Owner);
+        Assert.All(service.GetPollingSnapshot().Groups, group => Assert.True(group.Snapshot.ReadRetryDelayMs > 0));
+        await service.StopAsync();
+        await run;
         Assert.True(device.Connected);
         Assert.Null(device.Owner);
         Assert.False(service.IsBusy);
-        Assert.NotNull(service.GetPollingSnapshot().Error);
+        Assert.All(service.GetPollingSnapshot().Groups, group => Assert.NotNull(group.Snapshot.Error));
         Assert.All(service.GetPollingSnapshot().Groups, group => Assert.Equal(1, group.Snapshot.ErrorCount));
     }
 
-    [Theory]
-    [InlineData("timeout")]
-    [InlineData("crc")]
-    [InlineData("overflow")]
-    public async Task UnknownGroupCompletionDisconnectsBeforeReleaseAndStopsAllGroups(string failure)
+    [Fact]
+    public async Task ReceiveOverflowDisconnectsBeforeReleaseAndStopsAllGroups()
     {
         var (serial, device) = Device();
         var settings = Groups();
         settings.Groups[0].Settings.TimeoutMs = 100;
         device.OnSend = packet =>
         {
-            if (failure == "crc")
-            {
-                var reply = ReadReply(packet, [1, 2]);
-                reply[^1] ^= 1;
-                device.Emit(reply);
-            }
-            else if (failure == "overflow") device.Emit(new byte[65537]);
+            device.Emit(new byte[65537]);
             return Task.CompletedTask;
         };
         await using var service = new ModbusRtuMonitorService(serial);

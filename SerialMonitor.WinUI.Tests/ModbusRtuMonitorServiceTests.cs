@@ -61,11 +61,11 @@ public sealed partial class ModbusRtuMonitorServiceTests
     }
 
     [Fact]
-    public async Task TimeoutDisconnectsBeforeOwnershipReleaseAndNeverRetries()
+    public async Task OneTimeReadTimeoutDisconnectsBeforeOwnershipReleaseAndNeverRetries()
     {
         var (serial, device) = Device();
         await using var service = new ModbusRtuMonitorService(serial);
-        await Assert.ThrowsAsync<ModbusExchangeException>(() => service.RunAsync(Settings(timeout: 100), true, default));
+        await Assert.ThrowsAsync<ModbusExchangeException>(() => service.RunAsync(Settings(timeout: 100), false, default));
         Assert.Single(device.Sent);
         Assert.False(device.Connected);
         Assert.True(device.WasOwnedWhenDisconnected);
@@ -137,12 +137,12 @@ public sealed partial class ModbusRtuMonitorServiceTests
     }
 
     [Fact]
-    public async Task CompleteModbusExceptionStopsWithoutRetiringHealthyConnection()
+    public async Task OneTimeModbusExceptionStopsWithoutRetiringHealthyConnection()
     {
         var (serial, device) = Device();
         device.OnSend = packet => { device.Emit(Crc([packet[0], (byte)(packet[1] | 128), 2])); return Task.CompletedTask; };
         await using var service = new ModbusRtuMonitorService(serial);
-        var error = await Assert.ThrowsAsync<ModbusExchangeException>(() => service.RunAsync(Settings(), true, default));
+        var error = await Assert.ThrowsAsync<ModbusExchangeException>(() => service.RunAsync(Settings(), false, default));
         Assert.Contains("0x02", error.Message);
         Assert.True(device.Connected);
         Assert.Null(device.Owner);

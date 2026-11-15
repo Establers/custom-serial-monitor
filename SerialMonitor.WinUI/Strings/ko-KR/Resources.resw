@@ -1632,4 +1632,5 @@
 <data name="ModbusMonitorResponseTimeoutHelp" xml:space="preserve"><value>응답 시간이 지났어요. 장치 ID·통신 설정을 확인하고 포트를 다시 연결하세요.</value></data>
 <data name="ModbusMonitorResponseCrcHelp" xml:space="preserve"><value>응답의 CRC가 맞지 않아요. 연결 상태·통신 설정을 확인하고 포트를 다시 연결하세요.</value></data>
 <data name="ModbusMonitorResponseMismatchHelp" xml:space="preserve"><value>요청과 다른 응답이 왔어요. 장치 ID·다른 송신 작업을 확인하고 포트를 다시 연결하세요.</value></data>
+<data name="ModbusMonitorReadRetry" xml:space="preserve"><value>읽기 실패 · 수신 정리 후 {0}ms 간격으로 재시도. {1}</value></data>
 </root>

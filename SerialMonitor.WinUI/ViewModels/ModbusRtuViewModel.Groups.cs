@@ -60,7 +60,7 @@ public sealed partial class ModbusRtuViewModel
     private bool CanReadSelected() => CanRun() && (_pollingSettings is null || SelectedPollingGroup?.Definition?.Settings is not null);
     private bool CanWriteSelectedGroup()
     {
-        if (_pollingSettings is null) return true;
+        if (_pollingSettings is null) return _service.GetSnapshot().ReadRetryDelayMs == 0;
         if (SelectedPollingGroup?.Definition is not { Enabled: true, Settings: not null }) return false;
         return !_groupRunAdmitted || SelectedPollingGroup.Snapshot is { IsPolling: true, State: not ModbusMonitorState.Error };
     }
@@ -320,7 +320,7 @@ public sealed class ModbusPollingGroupRow(ModbusPollingGroup? definition) : View
         : Snapshot?.IsBusy == true ? UiText.Get("ModbusPollingStateReading", "Reading")
         : Snapshot?.UpdatedAt is not null ? UiText.Get("ModbusPollingStateStale", "Stale")
         : UiText.Get("ModbusPollingStateWaiting", "Ready");
-    public string StatusText => _configurationError ?? Snapshot?.Error ?? (Snapshot?.State switch
+    public string StatusText => _configurationError ?? (Snapshot?.Error is not null ? ModbusRtuViewModel.DescribeSnapshotError(Snapshot) : null) ?? (Snapshot?.State switch
     {
         ModbusMonitorState.Polling => UiText.Get("ModbusMonitorPolling", "Reading automatically"),
         ModbusMonitorState.Reading => UiText.Get("ModbusMonitorReading", "Reading"),
