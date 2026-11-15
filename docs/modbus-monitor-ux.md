@@ -33,6 +33,7 @@
 `SerialMonitor.WinUI/Resources/CompactControlStyles.xaml`이다.
 
 - 버튼·선택칸·펼침 메뉴는 기존 Modbus 공통 스타일을 사용한다. 높이·화살표·패딩을 화면마다 다시 만들지 않는다.
+- 드롭다운의 선택칸과 펼친 목록 항목은 왼쪽 Padding 5 DIP(100% 배율에서 5px)를 사용한다. 공통 `ComboBoxPadding`·`ComboBoxItemThemePadding`을 따르고 개별 스타일에서도 왼쪽 값을 덮어쓰지 않는다.
 - 기본 조작은 짧은 동사형으로 적고, 실제 작업 범위는 바로 옆 요약과 툴팁에 표시한다.
 - `대상`, `활성`, `폴링`만으로 사용자의 행동을 설명하지 않는다. 읽기 범위, 자동 읽기에 포함, 자동 읽기를 사용한다.
 - 한국어 설명은 짧은 행동 안내로 쓴다. 내부 잠금·예약·적용 경계 설명은 필요한 도움말에 둔다.
@@ -45,3 +46,16 @@
 관련 빌드·회귀 테스트에 더해 실제 WinUI 화면에서 설정 → 읽기 → 자동 읽기 → 중지 → 쓰기를 확인한다.
 800×600과 일반 창 크기에서 공통 레이아웃 검사로 잘림·스크롤·입력칸 정렬을 확인한다.
 장비 실기와 모의 테스트의 결과를 구분하고, COM 설정·펌웨어 빌드 ID·원본 RX 근거를 남긴다.
+
+## 드롭다운 좌측 여백 검증 (2026-11-15)
+
+- 선택칸·펼친 항목의 기본 왼쪽 Padding을 5 DIP로 통일했다. 화면 선택기, 로그 시간/규칙,
+  플러그인 선택, 시퀀스 결과의 개별 6/8 DIP 설정도 수정했다. 세로·오른쪽 여백은 유지했다.
+- 전체 XAML의 명시적 드롭다운 Padding을 점검했고 왼쪽 값은 모두 5였다.
+- 네이티브 검사에 ComboBox 파생 컨트롤을 포함한 실제 Padding 검사를 추가했다.
+  Modbus 화면 86건·공통 그리드 150건 통과:
+  `artifacts/dropdown-inset-native/e76f5e14660e4a35aab8249d2d5e4c5d/result.json`.
+- 마지막 플러그인 선택칸 수정 후 Release 솔루션 빌드 경고/오류 0,
+  Modbus/Protocol 검사 597 통과·가상 COM 환경 의존 1건 건너뜀.
+  근거: `artifacts/dropdown-inset-build-final.log`, `artifacts/dropdown-inset-tests/dropdown-inset.trx`.
+- Computer Use·COM 송신·펌웨어 변경 없이 검사했다. 모든 팝업의 육안 모양과 다른 DPI 배율은 미검증이다.

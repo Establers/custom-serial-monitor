@@ -178,6 +178,9 @@ public static class StartupHook
     {
         foreach (var e in Tree(root).Where(Visible))
         {
+            if (FindType("Microsoft.UI.Xaml.Controls.ComboBox").IsInstanceOfType(e) &&
+                P(e, "Padding") is { } selectorPadding && Math.Abs(N(selectorPadding, "Left") - 5) > 0.01)
+                Issue($"dropdown left padding {N(selectorPadding, "Left"):F1} != 5 DIP");
             string? savedName = null;
             if (e.GetType().Name == "ListViewItem" && P(e, "Content") is { } item)
                 savedName = (P(item, "Summary") ?? P(item, "DisplayName")) as string;

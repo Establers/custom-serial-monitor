@@ -124,7 +124,7 @@
                                     <TextBlock Text="사용할 AI 도구" FontSize="11" FontWeight="SemiBold" />
                                     <ComboBox ItemsSource="{Binding Clients}" SelectedIndex="{Binding SelectedClientIndex, Mode=TwoWay}"
                                               SelectionChanged="Client_SelectionChanged" HorizontalAlignment="Stretch"
-                                              FontSize="11" MinHeight="26" Height="26" Padding="8,2"
+                                              FontSize="11" MinHeight="26" Height="26" Padding="5,2,8,2"
                                               AutomationProperties.Name="플러그인 클라이언트 선택" />
                                 </StackPanel>
                                 <StackPanel x:Name="ToolPathField" Grid.Column="1" Spacing="3" Visibility="{Binding ToolPathVisibility}">

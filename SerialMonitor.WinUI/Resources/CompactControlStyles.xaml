@@ -452,6 +452,11 @@
                 Value="Center" />
     </Style>
 
+    <!-- Shared left inset for native selectors and their opened items.
+         Preserve native vertical spacing in non-compact dialogs. -->
+    <Thickness x:Key="ComboBoxPadding">5,5,0,7</Thickness>
+    <Thickness x:Key="ComboBoxItemThemePadding">5,5,11,7</Thickness>
+
     <Style x:Key="CompactComboBoxStyle"
            TargetType="ComboBox">
         <Setter Property="Height"
