@@ -82,15 +82,15 @@ public sealed class StreamingRuleProjectionTests
     }
 
     [Fact]
-    public void HexSplitPattern_RemainsRecordLocalWhileLaterWholePatternMatches()
+    public void HexSplitPattern_MatchesAcrossFragmentsOfTheVisibleLine()
     {
         var log = Log(RxDisplayMode.Hex);
         log.SetHighlightRules([Rule("FAULT", RxDisplayMode.Hex)]);
         log.SetViewFilter(Rule("FAULT", RxDisplayMode.Hex));
         log.AddRange([Rx("FA", 1), Rx("ULT", 2)]);
-        Assert.Empty(log.GetVisibleSearchContentSnapshot());
-        log.AddRange([Rx("FAULT", 3), LogLine.RxPartialTerminator(4)]);
         Assert.Equal("46 41 55 4C 54", Assert.Single(log.GetVisibleSearchContentSnapshot()).PayloadText);
+        log.AddRange([Rx("FAULT", 3), LogLine.RxPartialTerminator(4)]);
+        Assert.Equal("46 41 55 4C 54 46 41 55 4C 54", Assert.Single(log.GetVisibleSearchContentSnapshot()).PayloadText);
         Assert.Contains(Red, log.GetVisibleTextSnapshot());
     }
 

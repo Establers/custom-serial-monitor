@@ -198,7 +198,9 @@ public sealed class LogViewModelModeSwitchTests
             LogLine.RxPartialTerminator()
         });
 
-        Assert.Equal(2, viewModel.XtermFormattingErrorCount);
+        // Both fragments of the first matching HEX line use its color, then
+        // the second line uses it once. Trimming must not reformat them again.
+        Assert.Equal(3, viewModel.XtermFormattingErrorCount);
         Assert.Equal(2, viewModel.TotalRetainedLineCount);
         Assert.Equal(1, viewModel.CurrentVisibleLineCount);
     }

@@ -132,7 +132,7 @@ public sealed class LogViewModelRetainedFilterTests
 
         Assert.True(ui.Complete(pending));
         var filtered = Assert.Single(log.GetVisibleSearchContentSnapshot());
-        Assert.Equal("AA AA", filtered.PayloadText);
+        Assert.Equal("AA BB AA", filtered.PayloadText);
         Assert.True(ui.Complete(log.SetViewFiltersAsync([])));
         var restored = Assert.Single(log.GetVisibleSearchContentSnapshot());
         Assert.Equal("AA BB AA", restored.PayloadText);

@@ -99,7 +99,7 @@ public sealed class RuleContextRetentionTests
     }
 
     [Fact]
-    public void Hex_ReformatAndRefilterStillMatchOnlyWholeRecords()
+    public void Hex_ReformatAndRefilterPreserveCrossFragmentMatches()
     {
         using var ui = new UiContext();
         var log = new LogViewModel(100, SmallPolicy);
@@ -110,7 +110,8 @@ public sealed class RuleContextRetentionTests
         log.SetViewFilter(rule);
         log.AddRange([Rx(new string('x', 198) + "FA", 1), Rx("ULT", 2)]);
         log.RefreshVisibleFormatting();
-        Assert.Empty(log.GetVisibleSearchContentSnapshot());
+        Assert.Single(log.GetVisibleSearchContentSnapshot());
+        Assert.Contains(Red, log.GetVisibleTextSnapshot());
         var whole = Rx("FAULT", 3);
         log.AddRange([whole]);
         Assert.Contains(Red, log.GetVisibleTextSnapshot());

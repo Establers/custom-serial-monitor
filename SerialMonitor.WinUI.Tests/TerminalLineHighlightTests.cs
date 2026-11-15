@@ -175,7 +175,7 @@ public sealed class TerminalLineHighlightTests
     }
 
     [Fact]
-    public void HexHighlightingRemainsRecordLocal()
+    public void HexHighlightingContinuesAcrossTheWholeVisibleLine()
     {
         var log = Log();
         log.SetRxDisplayMode(RxDisplayMode.Hex);
@@ -184,7 +184,7 @@ public sealed class TerminalLineHighlightTests
         log.SetHighlightRules([rule]);
         log.AddRange([LogLine.Rx("", [0xAA], 1, isPartialRxSegment: true),
             LogLine.Rx("", [0xBB], 2, isPartialRxSegment: true), LogLine.RxPartialTerminator(3)]);
-        Assert.Equal("\u001b[31mAA\u001b[0m BB" + Environment.NewLine, log.GetVisibleTextSnapshot());
+        Assert.Equal("\u001b[31mAA\u001b[0m\u001b[31m BB\u001b[0m" + Environment.NewLine, log.GetVisibleTextSnapshot());
     }
 
     [Theory]

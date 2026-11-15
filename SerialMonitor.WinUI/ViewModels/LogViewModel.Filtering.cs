@@ -164,6 +164,7 @@ public sealed partial class LogViewModel
         // screen-only rejected records which the worker never received.
         _filterMatcher = rebuilt._filterMatcher.WithLatestContext(
             _filterMatcher, _highlightMatcher, filters, ActiveRuleMode);
+        _hexFilterLine = rebuilt._hexFilterLine;
         _visibleLines = rebuilt._visibleLines;
         _retainedVisibleLineContributions = rebuilt._retainedVisibleLineContributions;
         _lastVisibleLine = rebuilt._lastVisibleLine;

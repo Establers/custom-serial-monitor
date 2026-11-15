@@ -33,7 +33,7 @@ public sealed partial class LogViewModel
 
     private void TrackTerminalHighlightLine(VisibleLine line)
     {
-        if (_rxDisplayMode == RxDisplayMode.Terminal && line.Direction == LogDirection.Rx)
+        if (line.Direction == LogDirection.Rx)
             _terminalHighlightLines.Enqueue(line);
     }
 
@@ -47,7 +47,7 @@ public sealed partial class LogViewModel
         RetainedLogLine retained, StreamingHighlightRuleMatcher.MatchResult match, StringBuilder? appendedText)
     {
         var line = retained.Line;
-        if (_rxDisplayMode != RxDisplayMode.Terminal || line.Direction != LogDirection.Rx)
+        if (line.Direction != LogDirection.Rx)
             return match.Rule;
 
         if (match.BreakBefore ||
@@ -62,7 +62,8 @@ public sealed partial class LogViewModel
 
         // Receipt-time state survives screen eviction. It is scoped to this
         // rule snapshot, so editing rules never recolors older logical lines.
-        var winner = PreferTerminalHighlight(_terminalLineHighlight, retained.TerminalLineHighlight);
+        var winner = PreferTerminalHighlight(_terminalLineHighlight,
+            retained.TerminalLineHighlight?.Rule.Mode == ActiveRuleMode ? retained.TerminalLineHighlight : null);
         winner = PreferTerminalHighlight(winner, match.Rule);
         if (!ReferenceEquals(winner, _terminalLineHighlight))
         {

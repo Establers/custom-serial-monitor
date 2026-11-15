@@ -553,7 +553,7 @@ public sealed class EventDetector : IEventDetector
 
                 if (sourceRule.Mode == LogRuleMatchMode.Hex)
                 {
-                    RecordHexRuleMatch(sourceRule, line);
+                    RecordHexRuleMatch(sourceRule, matchedLine);
                 }
 
                 var buildMessageSegments = sourceRule.ShowInEventList;

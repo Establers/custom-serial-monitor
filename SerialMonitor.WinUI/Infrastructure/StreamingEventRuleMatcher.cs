@@ -5,9 +5,12 @@ namespace SerialMonitor.WinUI.Infrastructure;
 // Owned by the detector worker. Keep only keyword.Length - 1 characters per
 // literal Terminal rule, so retained text alone cannot repeat a match. Regex
 // uses a separate bounded buffer and evaluates only completed logical lines.
+// HEX keeps pattern.Length - 1 bytes across fragments of the same RX group.
 internal sealed class StreamingEventRuleMatcher
 {
     private readonly Dictionary<LogRuleMatcher.CompiledEventRule, string> _tails = new();
+    private readonly Dictionary<LogRuleMatcher.CompiledEventRule, byte[]> _hexTails = new();
+    internal int RetainedByteCount => _hexTails.Values.Sum(tail => tail.Length);
     private readonly RegexLineBuffer _regexBuffer = new();
     private string? _regexLine;
     private object? _rules;
@@ -20,6 +23,7 @@ internal sealed class StreamingEventRuleMatcher
     public void Reset()
     {
         _tails.Clear();
+        _hexTails.Clear();
         _regexBuffer.Reset();
         _regexLine = null;
         _rules = null;
@@ -34,6 +38,7 @@ internal sealed class StreamingEventRuleMatcher
         if (!ReferenceEquals(_rules, rules) || _activeMode != activeMode)
         {
             _tails.Clear();
+            _hexTails.Clear();
             _regexBuffer.Reset();
             if (_previousRxPartial) _regexBuffer.Invalidate();
         }
@@ -46,10 +51,11 @@ internal sealed class StreamingEventRuleMatcher
         if (_contentMode != line.ContentMode || sequenceGap)
         {
             _tails.Clear();
+            _hexTails.Clear();
             _regexBuffer.Reset();
             if (_previousRxPartial || sequenceGap) _regexBuffer.Invalidate();
         }
-        if (line.IsPartialRxTerminator) _tails.Clear();
+        if (line.IsPartialRxTerminator) { _tails.Clear(); _hexTails.Clear(); }
         if (_afterBoundary) { _regexBuffer.Invalidate(); _afterBoundary = false; }
         var hasRegex = rules is LogRuleMatcher.CompiledEventRule single ? single.Rule.UseRegex
             : rules is LogRuleMatcher.CompiledEventRule[] array && array.Any(r => r.Rule.UseRegex);
@@ -77,6 +83,19 @@ internal sealed class StreamingEventRuleMatcher
         }
 
         var source = rule.Rule;
+        if (line.Direction == LogDirection.Rx && activeMode == LogRuleMatchMode.Hex &&
+            rule.IsHexRule && source.Enabled && source.MatchDirection != EventMatchDirection.TxOnly)
+        {
+            _hexTails.TryGetValue(rule, out var prefix);
+            var bytes = HexRuleTail.Join(prefix, line.RawBytes);
+            if (line.IsPartialRxSegment)
+                _hexTails[rule] = HexRuleTail.Keep(bytes, rule.HexPattern!.Length - 1);
+            else _hexTails.Remove(rule);
+            error = null;
+            var matched = bytes.AsSpan().IndexOf(rule.HexPattern) >= 0;
+            if (matched) matchedLine = HexRuleTail.WithPrefix(line, prefix);
+            return matched;
+        }
         if (line.Direction != LogDirection.Rx || activeMode != LogRuleMatchMode.Terminal ||
             !rule.IsTerminalRule || !source.Enabled || string.IsNullOrWhiteSpace(source.Keyword) ||
             source.MatchDirection == EventMatchDirection.TxOnly)
