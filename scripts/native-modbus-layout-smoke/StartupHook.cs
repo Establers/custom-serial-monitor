@@ -373,6 +373,7 @@ public static class StartupHook
                         Issue("form label/input gap is not 4 DIP");
                 }
             }
+            var inputEdges = new List<object>();
             foreach (var input in children.Where(e => e.GetType().Name is "TextBox" or "ComboBox" or "ToggleSwitch"))
             {
                 var column = Cell(input, "Column");
@@ -387,15 +388,17 @@ public static class StartupHook
                 var allocatedWidth = columns.Skip(column).Take(span).Sum(c => N(c, "ActualWidth")) + (span - 1) * 8;
                 if (fieldBounds.Width > allocatedWidth + 2)
                     Issue("form input exceeds its allocated column");
-                if (balanced && Math.Abs(fieldBounds.Width - allocatedWidth) > 1)
-                    Issue("target settings input does not fill its column");
+                if (input.GetType().Name is "TextBox" or "ComboBox" && Math.Abs(fieldBounds.Width - allocatedWidth) > 1)
+                    Issue($"form input does not reach its column's right edge: column {column}, {fieldBounds.Width:F1}/{allocatedWidth:F1}");
                 if (P(input, "Header") is not null) Issue("paired form input still has a separate native header");
                 if (input.GetType().Name is "TextBox" or "ComboBox" && P(input, "AcceptsReturn") is not true && N(input, "ActualHeight") > 26)
                     Issue($"headerless compact input is taller than 24 DIP: {N(input, "ActualHeight"):F1}");
                 var automation = FindType("Microsoft.UI.Xaml.Automation.AutomationProperties").GetMethod("GetName")!.Invoke(null, [input]);
                 if (automation?.ToString() != P(label, "Text")?.ToString()) Issue("form input lost its accessible label");
+                if (input.GetType().Name is "TextBox" or "ComboBox")
+                    inputEdges.Add(new { column, label = automation?.ToString(), width = fieldBounds.Width, allocatedWidth, rightGap = allocatedWidth - fieldBounds.Width });
             }
-            measurements.Add(new { left, width = N(grid, "ActualWidth"), firstColumn = N(columns[0], "ActualWidth"), fields = children.Count(e => Cell(e, "Row") % 2 == 1) });
+            measurements.Add(new { left, width = N(grid, "ActualWidth"), firstColumn = N(columns[0], "ActualWidth"), fields = children.Count(e => Cell(e, "Row") % 2 == 1), inputEdges });
         }
         return measurements;
     }

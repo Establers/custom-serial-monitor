@@ -31,9 +31,7 @@
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource GroupInput}" />
         <Style x:Key="GroupNumberInput" TargetType="TextBox" BasedOn="{StaticResource GroupInput}">
-            <Setter Property="Width" Value="128" />
-            <Setter Property="MaxWidth" Value="128" />
-            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
@@ -97,7 +95,7 @@
                     <TextBlock Text="{Binding FormatLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBlock Text="{Binding ScaleLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <ComboBox ItemsSource="{Binding Formats}" SelectedIndex="{Binding FormatIndex, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding FormatLabel}" ToolTipService.ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
-                    <TextBox Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource GroupNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScaleLabel}" />
+                    <TextBox Grid.Column="1" Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource GroupNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScaleLabel}" />
                 </Grid>
                 <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
                     <CheckBox Content="{Binding SwapBytesLabel}" IsChecked="{Binding SwapBytes, Mode=TwoWay}" IsEnabled="{Binding IsRegister}" Style="{StaticResource CompactCheckBoxStyle}" />

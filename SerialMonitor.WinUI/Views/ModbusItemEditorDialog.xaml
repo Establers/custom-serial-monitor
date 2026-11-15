@@ -31,9 +31,7 @@
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource ItemInput}" />
         <Style x:Key="ItemNumberInput" TargetType="TextBox" BasedOn="{StaticResource ItemInput}">
-            <Setter Property="Width" Value="128" />
-            <Setter Property="MaxWidth" Value="128" />
-            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="FontFamily" Value="Consolas" />
         </Style>
@@ -88,7 +86,7 @@
                 <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{Binding ScaleLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
                     <TextBlock Text="{Binding UnitLabel}" Grid.Column="1" Style="{StaticResource ModbusFieldLabelStyle}" />
-                    <TextBox Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource ItemNumberInput}" MaxWidth="128" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScaleLabel}" />
+                    <TextBox Text="{Binding ScaleText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRegister}" Style="{StaticResource ItemNumberInput}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding ScaleLabel}" />
                     <TextBox Grid.Column="1" Text="{Binding UnitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" VerticalAlignment="Top" AutomationProperties.Name="{Binding UnitLabel}" />
                 </Grid>
                 <Grid ColumnDefinitions="128,*" ColumnSpacing="8">
