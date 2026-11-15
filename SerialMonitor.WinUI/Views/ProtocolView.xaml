@@ -231,10 +231,6 @@
                             <views:ModbusValueInterpreterView DataContext="{Binding ValueInterpreter}" />
                             <Expander x:Name="RawDetailsExpander" Header="{Binding RawDetailsLabel}" IsExpanded="False"
                                       Visibility="{Binding DetailsVisibility}" Style="{StaticResource PacketDetailsExpanderStyle}">
-                                <Expander.Resources>
-                                    <StaticResource x:Key="ExpanderChevronMargin" ResourceKey="PacketDetailsChevronMargin" />
-                                    <StaticResource x:Key="ExpanderChevronButtonSize" ResourceKey="PacketDetailsChevronButtonSize" />
-                                </Expander.Resources>
                                 <TextBlock Text="{Binding Details}" IsTextSelectionEnabled="True" VerticalAlignment="Top"
                                            FontFamily="Consolas" FontSize="11" LineHeight="16" TextWrapping="Wrap" />
                             </Expander>

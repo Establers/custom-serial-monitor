@@ -517,18 +517,18 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="HeaderTemplate" Value="{StaticResource CompactExpanderHeaderTemplate}" />
     </Style>
-    <Style x:Key="ModbusExpanderStyle" TargetType="Expander" BasedOn="{StaticResource CompactExpanderStyle}">
-        <Setter Property="infra:ExpanderHeaderLayout.Padding" Value="5,0,5,0" />
-        <Setter Property="Padding" Value="5,4,5,4" />
-    </Style>
-    <Thickness x:Key="PacketDetailsChevronMargin">4,0,4,0</Thickness>
-    <x:Double x:Key="PacketDetailsChevronButtonSize">16</x:Double>
-    <DataTemplate x:Key="PacketDetailsExpanderHeaderTemplate">
+    <DataTemplate x:Key="ModbusExpanderHeaderTemplate">
         <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" />
     </DataTemplate>
-    <Style x:Key="PacketDetailsExpanderStyle" TargetType="Expander" BasedOn="{StaticResource ModbusExpanderStyle}">
+    <Style x:Key="ModbusExpanderStyle" TargetType="Expander" BasedOn="{StaticResource CompactExpanderStyle}">
+        <Setter Property="infra:ExpanderHeaderLayout.Padding" Value="5,0,5,0" />
+        <Setter Property="infra:ExpanderHeaderLayout.ChevronButtonSize" Value="16" />
+        <Setter Property="infra:ExpanderHeaderLayout.ChevronMargin" Value="4,0,4,0" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="HeaderTemplate" Value="{StaticResource PacketDetailsExpanderHeaderTemplate}" />
+        <Setter Property="HeaderTemplate" Value="{StaticResource ModbusExpanderHeaderTemplate}" />
+        <Setter Property="Padding" Value="5,4,5,4" />
+    </Style>
+    <Style x:Key="PacketDetailsExpanderStyle" TargetType="Expander" BasedOn="{StaticResource ModbusExpanderStyle}">
         <Setter Property="Background" Value="{ThemeResource InspectorBodyBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AppSurfaceBorderBrush}" />
     </Style>

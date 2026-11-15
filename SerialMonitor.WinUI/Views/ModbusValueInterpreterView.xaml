@@ -6,8 +6,6 @@
     SizeChanged="View_SizeChanged"
     HorizontalContentAlignment="Stretch">
     <UserControl.Resources>
-        <StaticResource x:Key="ExpanderChevronMargin" ResourceKey="PacketDetailsChevronMargin" />
-        <StaticResource x:Key="ExpanderChevronButtonSize" ResourceKey="PacketDetailsChevronButtonSize" />
         <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="6,1" />

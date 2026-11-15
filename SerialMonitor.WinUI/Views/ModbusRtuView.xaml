@@ -133,10 +133,6 @@
                                         </StackPanel>
                                         </ContentControl>
                                         <Expander Header="{Binding UsageDetailsLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-                                            <Expander.Resources>
-                                                <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                                                <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                                            </Expander.Resources>
                                             <StackPanel Spacing="6">
                                                 <TextBlock Text="{Binding SetupHelp}" Style="{StaticResource GuideBody}" />
                                                 <TextBlock Text="{Binding OwnershipHelp}" Style="{StaticResource GuideBody}" />
@@ -224,10 +220,6 @@
                                             <TextBlock Text="{Binding CommandTargetPreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" Margin="5,0,5,0" />
                                         </ScrollViewer>
                                         <Expander Header="{Binding WirePreviewLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-                                            <Expander.Resources>
-                                                <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                                                <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                                            </Expander.Resources>
                                             <TextBlock Text="{Binding CommandWirePreview}" Style="{StaticResource GuideBody}" FontFamily="Consolas" />
                                         </Expander>
                                         <Button Content="{Binding ExecuteCommandLabel}" Command="{Binding ExecuteCommand}" Style="{StaticResource Action}" HorizontalAlignment="Stretch" />

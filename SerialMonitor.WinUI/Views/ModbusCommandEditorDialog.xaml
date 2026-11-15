@@ -45,10 +45,6 @@
     </ContentDialog.Resources>
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="0" MinWidth="340" MaxHeight="620">
         <Expander Header="{Binding HelpLabel}" Margin="0,0,20,0" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-            <Expander.Resources>
-                <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-            </Expander.Resources>
             <TextBlock Text="{Binding Help}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </Expander>
         <Grid Grid.Row="1" Margin="0,4,20,0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
@@ -111,10 +107,6 @@
                 </Grid>
                 <TextBlock Text="{Binding InterpretationSummary}" Visibility="{Binding InterpretationSummary, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Expander Header="{Binding AdvancedLabel}" HeaderTemplate="{StaticResource FieldHeader}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-                    <Expander.Resources>
-                        <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                        <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                    </Expander.Resources>
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="128,*" Style="{StaticResource ModbusFormGridStyle}" RowDefinitions="Auto,Auto">
                             <TextBlock Text="{Binding FormatLabel}" Style="{StaticResource ModbusFieldLabelStyle}" />
@@ -133,10 +125,6 @@
                             <CheckBox Grid.Column="1" Content="{Binding SwapWordsLabel}" IsChecked="{Binding SwapWords, Mode=TwoWay}" IsEnabled="{Binding CanSwapWords}" Style="{StaticResource CompactCheckBoxStyle}" />
                         </Grid>
                         <Expander Header="{Binding ValueNamesLabel}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-                            <Expander.Resources>
-                                <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                                <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                            </Expander.Resources>
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding ValueNamesHelp}" TextWrapping="Wrap" FontSize="11" />
                                 <TextBox Text="{Binding ValueNamesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
@@ -172,10 +160,6 @@
                     </Grid>
                 </StackPanel>
                 <Expander Header="{Binding WirePreviewLabel}" HeaderTemplate="{StaticResource FieldHeader}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource ModbusExpanderStyle}">
-                    <Expander.Resources>
-                        <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-                        <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
-                    </Expander.Resources>
                     <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" IsTextSelectionEnabled="True" />
                 </Expander>
                 <TextBlock Text="{Binding DraftHelp}" Visibility="{Binding DraftHelp, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
