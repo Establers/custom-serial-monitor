@@ -521,6 +521,17 @@
         <Setter Property="infra:ExpanderHeaderLayout.Padding" Value="5,0,5,0" />
         <Setter Property="Padding" Value="5,4,5,4" />
     </Style>
+    <Thickness x:Key="PacketDetailsChevronMargin">4,0,4,0</Thickness>
+    <x:Double x:Key="PacketDetailsChevronButtonSize">16</x:Double>
+    <DataTemplate x:Key="PacketDetailsExpanderHeaderTemplate">
+        <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" />
+    </DataTemplate>
+    <Style x:Key="PacketDetailsExpanderStyle" TargetType="Expander" BasedOn="{StaticResource ModbusExpanderStyle}">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HeaderTemplate" Value="{StaticResource PacketDetailsExpanderHeaderTemplate}" />
+        <Setter Property="Background" Value="{ThemeResource InspectorBodyBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppSurfaceBorderBrush}" />
+    </Style>
 
     <infra:NonEmptyTextVisibilityConverter x:Key="NonEmptyTextVisibility" />
     <Style x:Key="ModbusFormGridStyle" TargetType="Grid">

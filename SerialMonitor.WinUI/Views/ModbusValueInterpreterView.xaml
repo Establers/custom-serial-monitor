@@ -6,8 +6,8 @@
     SizeChanged="View_SizeChanged"
     HorizontalContentAlignment="Stretch">
     <UserControl.Resources>
-        <Thickness x:Key="ExpanderChevronMargin">4,0,4,0</Thickness>
-        <x:Double x:Key="ExpanderChevronButtonSize">16</x:Double>
+        <StaticResource x:Key="ExpanderChevronMargin" ResourceKey="PacketDetailsChevronMargin" />
+        <StaticResource x:Key="ExpanderChevronButtonSize" ResourceKey="PacketDetailsChevronButtonSize" />
         <Style TargetType="TextBox" BasedOn="{StaticResource CompactTextBoxStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="6,1" />
@@ -20,12 +20,7 @@
         <Style TargetType="CheckBox" BasedOn="{StaticResource CompactCheckBoxStyle}" />
     </UserControl.Resources>
     <Expander Header="{Binding Title}" Visibility="{Binding Visibility}" IsExpanded="True"
-              Style="{StaticResource ModbusExpanderStyle}" MinWidth="0" MinHeight="24" CornerRadius="4"
-              Background="{ThemeResource InspectorBodyBrush}" BorderBrush="{ThemeResource AppSurfaceBorderBrush}"
-              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-        <Expander.HeaderTemplate>
-            <DataTemplate><TextBlock Text="{Binding}" FontSize="11" /></DataTemplate>
-        </Expander.HeaderTemplate>
+              Style="{StaticResource PacketDetailsExpanderStyle}">
         <StackPanel Spacing="3">
             <StackPanel Visibility="{Binding EditorVisibility}" Spacing="3">
                 <Grid x:Name="FieldsGrid" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="6">
