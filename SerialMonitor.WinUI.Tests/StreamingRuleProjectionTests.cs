@@ -106,12 +106,12 @@ public sealed class StreamingRuleProjectionTests
     }
 
     [Fact]
-    public void HiddenCompletedLine_EndsThePreviousVisiblePartialLine()
+    public void CompletedFragment_RemainsVisibleAndEndsTheMatchingPartialLine()
     {
         var log = Log(RxDisplayMode.Terminal);
         log.SetViewFilter(Rule("KEEP"));
         log.AddRange([Rx("KEEP-A", 1), LogLine.Rx("hidden", sequenceNumber: 2), Rx("KEEP-B", 3)]);
-        Assert.Equal(new[] { "KEEP-A", "KEEP-B" }, log.GetVisibleSearchContentSnapshot().Select(line => line.PayloadText));
+        Assert.Equal(new[] { "KEEP-Ahidden", "KEEP-B" }, log.GetVisibleSearchContentSnapshot().Select(line => line.PayloadText));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class StreamingRuleProjectionTests
     {
         var log = new LogViewModel(2);
         log.SetViewFilter(Rule("FAULT"));
-        log.AddRange([Rx("FA", 1), Rx("ULT", 2)]);
+        log.AddRange([Rx("FA", 1), LogLine.Rx("ULT", "ULT"u8.ToArray(), 2)]);
         Assert.Equal("FAULT", Assert.Single(log.GetVisibleSearchContentSnapshot()).PayloadText);
         var rebuilds = 0;
         var appends = 0;

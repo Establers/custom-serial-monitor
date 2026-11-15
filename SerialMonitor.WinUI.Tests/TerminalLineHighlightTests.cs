@@ -120,7 +120,7 @@ public sealed class TerminalLineHighlightTests
     }
 
     [Fact]
-    public void FilterStillSelectsFragmentsAndHiddenMatchesCanRecolorVisibleText()
+    public void FilterShowsWholeLineAndLaterMatchesRecolorIt()
     {
         var log = Log();
         log.SetHighlightRules([Rule("ERROR")]);
@@ -129,7 +129,7 @@ public sealed class TerminalLineHighlightTests
         LogTextBatch? update = null;
         log.TextBatchAppended += (_, batch) => update = batch;
         log.AddRange([Rx("ERROR hidden match", 4)]);
-        Assert.Equal("KEEP first KEEP last ", Assert.Single(log.GetVisibleSearchContentSnapshot()).PayloadText);
+        Assert.Equal("KEEP first hidden middle KEEP last ERROR hidden match", Assert.Single(log.GetVisibleSearchContentSnapshot()).PayloadText);
         AssertColor(log.GetVisibleTextSnapshot(), Red);
         Assert.Contains("\u001b]778;1;31\u0007", Assert.IsType<LogTextBatch>(update).AppendedText);
         Assert.Equal(1, update!.LineCount);

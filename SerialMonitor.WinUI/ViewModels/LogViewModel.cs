@@ -52,7 +52,8 @@ public sealed partial class LogViewModel : ViewModelBase
         string HighlightPrefix = "", string FilterPrefix = "", long PreviousRxPosition = 0,
         LogRuleMatcher.CompiledHighlightRule? TerminalLineHighlight = null, long TerminalLineStart = 0,
         string RegexPrefix = "", bool ContinuesRxLine = false, byte[]? HexPrefix = null,
-        bool HexFilterMatched = false, LogRuleMatcher.CompiledHighlightRule[]? HexFilterRules = null)
+        bool FilterLineMatched = false, LogRuleMatcher.CompiledHighlightRule[]? FilterLineRules = null,
+        LogRuleMatchMode FilterLineMode = LogRuleMatchMode.Terminal)
     {
         // Immutable receipt-time suffixes survive screen eviction/reformatting.
         // Their size is bounded by keyword lengths and the retained byte budget.
@@ -101,6 +102,7 @@ public sealed partial class LogViewModel : ViewModelBase
     private StreamingHighlightRuleMatcher _highlightMatcher = new();
     private StreamingHighlightRuleMatcher _filterMatcher = new();
     private HexFilterLineContext _hexFilterLine = new();
+    private TerminalFilterLineContext _terminalFilterLine = new();
     private bool _showTimestampInLogView = true;
     private bool _showRxTxDirectionPrefixInLogView = true;
     private TimestampDisplayFormat _timestampDisplayFormat = TimestampDisplayFormat.DateTimeMilliseconds;
@@ -363,6 +365,13 @@ public sealed partial class LogViewModel : ViewModelBase
             var retainedBytes = retainedLine.EstimatedBytes;
             if (retainedBytes > _memoryPolicy.RetainedBytes)
             {
+                // Matchers keep their small suffix, but a screen-rejected
+                // fragment must not return through the filter's display buffer.
+                if (line.Direction == LogDirection.Rx)
+                {
+                    _terminalFilterLine.DiscardPendingPrefix();
+                    _hexFilterLine.DiscardPendingPrefix();
+                }
                 if (line.Direction == LogDirection.Rx && (prepared.BreakBefore || !line.IsPartialRxSegment))
                     CompleteActivePartialRxVisualLine(builder);
                 memoryDropped++;
@@ -676,6 +685,7 @@ public sealed partial class LogViewModel : ViewModelBase
         _highlightMatcher.Reset();
         _filterMatcher.Reset();
         _hexFilterLine.Reset();
+        _terminalFilterLine.Reset();
         ResetTerminalLineHighlight();
         if (_retainedLines.Count == 0 &&
             _visibleLines.Count == 0)
@@ -713,6 +723,7 @@ public sealed partial class LogViewModel : ViewModelBase
         _highlightMatcher = new();
         _filterMatcher = new();
         _hexFilterLine = new();
+        _terminalFilterLine = new();
         ResetTerminalLineHighlight();
         _visibleLines.Clear();
         _lastVisibleLine = null;
@@ -1244,24 +1255,33 @@ public sealed partial class LogViewModel : ViewModelBase
                 TerminalLineStart = retained.Line.Direction == LogDirection.Rx
                     ? _terminalHighlightStart : 0
             };
-        var visibleLine = string.IsNullOrEmpty(filter.HiddenPrefix)
-            ? retained.Line
-            : retained.Line.IsPartialRxTerminator
-                ? StreamingHighlightRuleMatcher.WithCompletedText(retained.Line, filter.HiddenPrefix + retained.Line.Text)
-                : StreamingHighlightRuleMatcher.WithText(retained.Line, filter.HiddenPrefix + retained.Line.Text);
+        var visibleLine = retained.Line;
         var visible = _viewFilters.Length == 0 || filter.Rule is not null;
+        var previouslyMatched = retained.FilterLineMatched && retained.FilterLineMode == ActiveRuleMode &&
+            LogRuleMatcher.SameFilterConditions(retained.FilterLineRules, _viewFilters);
         if (ActiveRuleMode == LogRuleMatchMode.Hex && _viewFilters.Length > 0)
         {
-            var previouslyMatched = retained.HexFilterMatched && HexFilterLineContext.SameRules(retained.HexFilterRules, _viewFilters);
             var hex = _hexFilterLine.Evaluate(retained.Line, retained.LineId, retained.PreviousRxPosition,
                 _retainedLines.TryPeek(out var first) ? first.LineId : retained.LineId, _viewFilters,
                 filter.BreakBefore, filter.Rule is not null || previouslyMatched, filter.HexHiddenPrefix, _capacity,
                 (int)Math.Min(_memoryPolicy.RetainedBytes, Math.Max(1, _memoryPolicy.ContinuousLineCharacters / 3)));
             visible = hex.Visible;
             visibleLine = HexRuleTail.WithPrefix(retained.Line, hex.Prefix);
-            if (captureContext && visible && retained.Line.Direction == LogDirection.Rx)
-                retained = retained with { HexFilterMatched = true, HexFilterRules = _viewFilters };
         }
+        else if (_viewFilters.Length > 0)
+        {
+            var terminal = _terminalFilterLine.Evaluate(retained.Line, retained.LineId, retained.PreviousRxPosition,
+                _retainedLines.TryPeek(out var first) ? first.LineId : retained.LineId, _viewFilters,
+                filter.BreakBefore, filter.Rule is not null || previouslyMatched, filter.HiddenPrefix, _capacity,
+                (int)Math.Min(_memoryPolicy.RetainedBytes / 2, _memoryPolicy.ContinuousLineCharacters));
+            visible = terminal.Visible;
+            if (terminal.Prefix.Length > 0)
+                visibleLine = retained.Line.IsPartialRxTerminator
+                    ? StreamingHighlightRuleMatcher.WithCompletedText(retained.Line, terminal.Prefix + retained.Line.Text)
+                    : StreamingHighlightRuleMatcher.WithText(retained.Line, terminal.Prefix + retained.Line.Text);
+        }
+        if (captureContext && _viewFilters.Length > 0 && visible && retained.Line.Direction == LogDirection.Rx)
+            retained = retained with { FilterLineMatched = true, FilterLineRules = _viewFilters, FilterLineMode = ActiveRuleMode };
         return new(retained, visibleLine, lineHighlight, visible,
             highlight.BreakBefore || (_viewFilters.Length > 0 && filter.BreakBefore), filter.MatchPrefix, filter.HexMatchPrefix);
     }

@@ -225,7 +225,7 @@ public sealed class LogViewModelSearchContentTests
     }
 
     [Fact]
-    public void TryGetSearchLine_ResolvesMergedPartialSourceAndRejectsFilteredSegments()
+    public void TryGetSearchLine_ResolvesEveryFragmentOfMatchingLine()
     {
         var first = LogLine.Rx("KEEP first", isPartialRxSegment: true);
         var hidden = LogLine.Rx("hidden", isPartialRxSegment: true);
@@ -237,8 +237,9 @@ public sealed class LogViewModelSearchContentTests
         Assert.True(viewModel.TryGetSearchLine(second, out var found));
         Assert.True(viewModel.TryGetSearchLine(first, out var firstLine));
         Assert.Equal(firstLine.LineId, found.LineId);
-        Assert.Equal("KEEP first KEEP second", found.PayloadText);
-        Assert.False(viewModel.TryGetSearchLine(hidden, out _));
+        Assert.Equal("KEEP firsthidden KEEP second", found.PayloadText);
+        Assert.True(viewModel.TryGetSearchLine(hidden, out var middleLine));
+        Assert.Equal(found, middleLine);
         viewModel.SetCapacity(1);
         Assert.False(viewModel.TryGetSearchLine(first, out _));
         Assert.False(viewModel.TryGetSearchLine(second, out _));
@@ -267,7 +268,7 @@ public sealed class LogViewModelSearchContentTests
     }
 
     [Fact]
-    public async Task TryGetSearchLine_StreamingSourceCannotBypassOriginalFragmentFilter()
+    public async Task TryGetSearchLine_StreamingSourceResolvesMatchingWholeLineButNotFilteredLine()
     {
         var timestamp = DateTimeOffset.UtcNow;
         var first = new LogLine(timestamp, LogDirection.Rx, "FA", sequenceNumber: 1, isPartialRxSegment: true);
@@ -279,6 +280,9 @@ public sealed class LogViewModelSearchContentTests
         var detectedEvent = await DetectStreamingEventAsync(first, hidden);
 
         Assert.True(viewModel.TryGetSearchLine(first, out _));
+        Assert.True(viewModel.TryGetSearchLine(detectedEvent.SourceLogLine!, out var found));
+        Assert.Equal("FAULT", found.PayloadText);
+        viewModel.SetViewFilter(new HighlightRule { Keyword = "unrelated" });
         Assert.False(viewModel.TryGetSearchLine(detectedEvent.SourceLogLine!, out _));
     }
 

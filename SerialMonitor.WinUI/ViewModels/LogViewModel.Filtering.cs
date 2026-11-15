@@ -165,6 +165,7 @@ public sealed partial class LogViewModel
         _filterMatcher = rebuilt._filterMatcher.WithLatestContext(
             _filterMatcher, _highlightMatcher, filters, ActiveRuleMode);
         _hexFilterLine = rebuilt._hexFilterLine;
+        _terminalFilterLine = rebuilt._terminalFilterLine;
         _visibleLines = rebuilt._visibleLines;
         _retainedVisibleLineContributions = rebuilt._retainedVisibleLineContributions;
         _lastVisibleLine = rebuilt._lastVisibleLine;

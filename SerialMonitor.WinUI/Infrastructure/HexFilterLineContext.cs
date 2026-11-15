@@ -13,26 +13,7 @@ internal sealed class HexFilterLineContext
     private bool _matched;
     internal int RetainedByteCount => _bytes;
 
-    // Receipt-time visibility survives eviction of an earlier matching fragment,
-    // but is reusable only for the same filter conditions (not just its name).
-    internal static bool SameRules(LogRuleMatcher.CompiledHighlightRule[]? before,
-        LogRuleMatcher.CompiledHighlightRule[] after)
-    {
-        if (ReferenceEquals(before, after)) return true;
-        if (before is null || before.Length != after.Length) return false;
-        for (var i = 0; i < before.Length; i++)
-        {
-            var a = before[i]; var b = after[i];
-            if (a.Rule.Enabled != b.Rule.Enabled || a.Rule.Mode != b.Rule.Mode || a.Rule.UseRegex != b.Rule.UseRegex ||
-                a.Rule.MatchDirection != b.Rule.MatchDirection || a.Rule.CaseSensitive != b.Rule.CaseSensitive) return false;
-            if (a.IsHexRule && b.IsHexRule)
-            {
-                if (!a.HexPattern!.AsSpan().SequenceEqual(b.HexPattern)) return false;
-            }
-            else if (a.Rule.Keyword != b.Rule.Keyword) return false;
-        }
-        return true;
-    }
+    internal void DiscardPendingPrefix() { _pending.Clear(); _bytes = 0; }
 
     internal void Reset()
     {

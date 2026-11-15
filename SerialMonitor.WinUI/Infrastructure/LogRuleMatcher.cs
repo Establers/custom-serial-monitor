@@ -5,6 +5,26 @@ namespace SerialMonitor.WinUI.Infrastructure;
 
 public static class LogRuleMatcher
 {
+    // Receipt-time visibility survives eviction of an earlier matching fragment,
+    // but is reusable only for the same filter conditions (not just its name).
+    internal static bool SameFilterConditions(CompiledHighlightRule[]? before, CompiledHighlightRule[] after)
+    {
+        if (ReferenceEquals(before, after)) return true;
+        if (before is null || before.Length != after.Length) return false;
+        for (var i = 0; i < before.Length; i++)
+        {
+            var a = before[i]; var b = after[i];
+            if (a.Rule.Enabled != b.Rule.Enabled || a.Rule.Mode != b.Rule.Mode || a.Rule.UseRegex != b.Rule.UseRegex ||
+                a.Rule.MatchDirection != b.Rule.MatchDirection || a.Rule.CaseSensitive != b.Rule.CaseSensitive) return false;
+            if (a.IsHexRule && b.IsHexRule)
+            {
+                if (!a.HexPattern!.AsSpan().SequenceEqual(b.HexPattern)) return false;
+            }
+            else if (a.Rule.Keyword != b.Rule.Keyword) return false;
+        }
+        return true;
+    }
+
     public sealed class CompiledHighlightRule
     {
         internal CompiledHighlightRule(
