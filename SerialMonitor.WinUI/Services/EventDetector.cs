@@ -265,7 +265,7 @@ public sealed class EventDetector : IEventDetector
         {
             // A rejected reconnect/terminator must not let the next accepted
             // record inherit matching state, including sources without IDs.
-            if ((!_inputGapPending || TryWriteInput(LogLine.RxPartialTerminator())) && TryWriteInput(line))
+            if ((!_inputGapPending || TryWriteInput(LogLine.RxStreamBoundary())) && TryWriteInput(line))
             {
                 _inputGapPending = false;
                 return true;
@@ -407,14 +407,14 @@ public sealed class EventDetector : IEventDetector
             {
                 _inputMemory.Release(line);
                 Interlocked.Decrement(ref _pendingInputLineCount);
-                if (line.IsPartialRxTerminator)
+                if (line.IsRxStreamBoundary)
                 {
-                    _streamingMatcher.Reset();
+                    _streamingMatcher.BeginLine(line, Volatile.Read(ref _rules), ActiveRuleMode);
                     continue;
                 }
-                var contextLine = await ArchiveContextLineAsync(line, cancellationToken);
+                var contextLine = line.IsPartialRxTerminator ? null : await ArchiveContextLineAsync(line, cancellationToken);
                 if (contextLine is not null) CaptureAfterContext(contextLine);
-                else CompletePendingContextCaptures();
+                else if (!line.IsPartialRxTerminator) CompletePendingContextCaptures();
 
                 var captureContextForNewEvents = !IsContextCaptureOverloadActive;
                 foreach (var detectedEvent in Detect(line, captureContextForNewEvents))
@@ -444,6 +444,8 @@ public sealed class EventDetector : IEventDetector
                         // display text. Evidence stores the actual received row;
                         // the preceding original row is already in before-context.
                         var source = contextLine;
+                        if (line.IsPartialRxTerminator && detectedEvent.SourceLine is { } completedLine)
+                            source = await ArchiveContextLineAsync(completedLine, cancellationToken);
                         if (source is not null)
                         {
                             var captureEvent = new DetectedEvent(detectedEvent.Timestamp, detectedEvent.RuleName,
@@ -893,6 +895,7 @@ public sealed class EventDetector : IEventDetector
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,

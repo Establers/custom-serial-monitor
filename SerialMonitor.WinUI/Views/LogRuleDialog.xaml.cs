@@ -15,6 +15,7 @@ public sealed partial class LogRuleDialog : ContentDialog
         KeywordBox.Text = source.Keyword;
         EnabledBox.IsChecked = source.Enabled;
         CaseBox.IsChecked = source.CaseSensitive;
+        RegexBox.IsChecked = source.UseRegex;
         EventBox.IsChecked = source.UseForEvent;
         HighlightBox.IsChecked = source.UseForHighlight;
         FilterBox.IsChecked = source.UseAsViewFilter;
@@ -85,7 +86,16 @@ public sealed partial class LogRuleDialog : ContentDialog
         }
     }
 
-    private void UpdateCaseAvailability() => CaseBox.IsEnabled = ModeBox.SelectedIndex != 1;
+    private void Regex_Click(object sender, RoutedEventArgs args) => UpdateCaseAvailability();
+
+    private void UpdateCaseAvailability()
+    {
+        CaseBox.IsEnabled = ModeBox.SelectedIndex != 1;
+        RegexBox.IsEnabled = CaseBox.IsEnabled;
+        RegexHint.Visibility = RegexBox.IsEnabled && RegexBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        RegexHint.Text = UiText.Get("RuleRegexHint", "Regex checks completed Terminal lines (up to 16,384 characters). Example: ERROR|WARN or temp=\\d+. Lookarounds/backreferences are unsupported; empty matches are ignored.");
+        KeywordBox.PlaceholderText = RegexBox.IsEnabled && RegexBox.IsChecked == true ? @"ERROR|WARN or temp=\d+" : "ERROR or 49 4E";
+    }
 
     private void Save_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
@@ -110,6 +120,17 @@ public sealed partial class LogRuleDialog : ContentDialog
             return;
         }
 
+        var pattern = new LogRule
+        {
+            Keyword = KeywordBox.Text, Mode = ModeBox.SelectedIndex == 1 ? LogRuleMatchMode.Hex : LogRuleMatchMode.Terminal,
+            UseRegex = RegexBox.IsEnabled && RegexBox.IsChecked == true, CaseSensitive = CaseBox.IsChecked == true
+        };
+        if (!LogRuleValidation.TryValidatePattern(pattern, out var patternError))
+        {
+            ShowError(args, KeywordBox, patternError);
+            return;
+        }
+
         var background = BackgroundBox.SelectedItem as string;
         var sequence = TriggerSequenceBox.SelectedItem as string;
         Rule = new LogRule
@@ -118,6 +139,7 @@ public sealed partial class LogRuleDialog : ContentDialog
             Keyword = KeywordBox.Text,
             Enabled = EnabledBox.IsChecked == true,
             CaseSensitive = CaseBox.IsChecked == true,
+            UseRegex = RegexBox.IsEnabled && RegexBox.IsChecked == true,
             UseForEvent = EventBox.IsChecked == true,
             UseForHighlight = HighlightBox.IsChecked == true,
             UseAsViewFilter = FilterBox.IsChecked == true,

@@ -12,6 +12,10 @@ public static class EventMatchRangeResolver
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(rule);
 
+        if (rule.UseRegex)
+            return RuleRegex.TryCreate(rule.Keyword, rule.CaseSensitive, out var regex, out _)
+                ? regex!.Ranges(line.DisplayText) : Array.Empty<TextMatchRange>();
+
         return rule.Mode == LogRuleMatchMode.Hex
             ? ResolveHex(line, rule.Keyword)
             : ResolveTerminal(line.DisplayText, rule.Keyword, rule.CaseSensitive);

@@ -132,7 +132,8 @@ public readonly record struct VisibleLogFilterKey(
     string Keyword,
     LogRuleMatchMode Mode,
     HighlightMatchDirection MatchDirection,
-    bool CaseSensitive)
+    bool CaseSensitive,
+    bool UseRegex = false)
 {
     public static VisibleLogFilterKey All { get; } = new(
         "__all",
@@ -7164,7 +7165,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         _observeLogsTask = null;
         // The detector survives automatic reconnect. End the old RX text before
         // accepting bytes from the next transport session.
-        _eventDetector.TryEnqueue(LogLine.RxPartialTerminator());
+        _eventDetector.TryEnqueue(LogLine.RxStreamBoundary());
         IsConnected = false;
         RestartSerialBusUtilizationMeasurement("serial reconnect cleanup");
 
@@ -9586,7 +9587,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         return rule.Enabled &&
             rule.Mode == ToLogRuleMode(SelectedRxDisplayMode) &&
             rule.UseAsViewFilter &&
-            !string.IsNullOrWhiteSpace(rule.Keyword);
+            LogRuleValidation.TryValidatePattern(rule, out _);
     }
 
     internal static VisibleLogFilterKey BuildViewFilterKey(LogRule rule)
@@ -9597,15 +9598,16 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         var normalizedName = rule.CaseSensitive
             ? name.Trim()
             : name.Trim().ToUpperInvariant();
-        var normalizedKeyword = rule.CaseSensitive
-            ? rule.Keyword.Trim()
-            : rule.Keyword.Trim().ToUpperInvariant();
+        var normalizedKeyword = rule.CaseSensitive || rule.UseRegex
+            ? rule.Keyword
+            : rule.Keyword.ToUpperInvariant();
         return new VisibleLogFilterKey(
             normalizedName,
             normalizedKeyword,
             rule.Mode,
             rule.MatchDirection,
-            rule.CaseSensitive);
+            rule.CaseSensitive,
+            rule.UseRegex);
     }
 
     private static bool IsInvalidHexLogRule(LogRule rule)
@@ -9818,19 +9820,18 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private bool TryNormalizeLogRule(LogRule rule, out LogRule normalized, out string error)
+    private bool TryNormalizeLogRule(LogRule rule, out LogRule normalized, out string error, bool validatePattern = true)
     {
         normalized = new LogRule();
         error = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(rule.Keyword))
+        if (validatePattern && !LogRuleValidation.TryValidatePattern(rule, out error))
         {
-            error = "Log rule keyword is required.";
             return false;
         }
 
         normalized = CloneLogRule(rule);
-        normalized.Keyword = normalized.Keyword.Trim();
+        normalized.Keyword = normalized.Mode == LogRuleMatchMode.Hex ? normalized.Keyword.Trim() : normalized.Keyword;
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name)
             ? normalized.Keyword
             : normalized.Name.Trim();
@@ -9938,7 +9939,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         normalized = CloneEventRule(rule);
-        normalized.Keyword = normalized.Keyword.Trim();
+        normalized.Keyword = normalized.Mode == LogRuleMatchMode.Hex ? normalized.Keyword.Trim() : normalized.Keyword;
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name)
             ? normalized.Keyword
             : normalized.Name.Trim();
@@ -9969,7 +9970,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         normalized = CloneHighlightRule(rule);
-        normalized.Keyword = normalized.Keyword.Trim();
+        normalized.Keyword = normalized.Mode == LogRuleMatchMode.Hex ? normalized.Keyword.Trim() : normalized.Keyword;
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name)
             ? normalized.Keyword
             : normalized.Name.Trim();
@@ -12308,7 +12309,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             LogRules.Clear();
             foreach (var rule in profile.LogRules.Select(CloneLogRule))
             {
-                if (TryNormalizeLogRule(rule, out var normalizedRule, out _))
+                if (TryNormalizeLogRule(rule, out var normalizedRule, out _, validatePattern: false))
                 {
                     LogRules.Add(normalizedRule);
                 }
@@ -12610,6 +12611,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,
@@ -12636,6 +12638,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             MatchDirection = ConvertDirection(rule.MatchDirection),
             HighlightColor = rule.ForegroundColor,
@@ -12657,6 +12660,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
@@ -12674,6 +12678,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,

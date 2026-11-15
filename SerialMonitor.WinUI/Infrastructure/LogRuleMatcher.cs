@@ -11,12 +11,13 @@ public static class LogRuleMatcher
             HighlightRule rule,
             byte[]? hexPattern,
             string? compileError,
-            StringComparison textComparison)
+            StringComparison textComparison, RuleRegex? regex = null)
         {
             Rule = rule;
             HexPattern = hexPattern;
             CompileError = compileError;
             TextComparison = textComparison;
+            Regex = regex;
         }
 
         public HighlightRule Rule { get; }
@@ -26,6 +27,8 @@ public static class LogRuleMatcher
         public bool IsHexRule => Rule.Mode == LogRuleMatchMode.Hex && CompileError is null;
 
         public bool IsInvalid => CompileError is not null;
+
+        internal RuleRegex? Regex { get; }
 
         internal byte[]? HexPattern { get; }
 
@@ -40,12 +43,13 @@ public static class LogRuleMatcher
             EventRule rule,
             byte[]? hexPattern,
             string? compileError,
-            StringComparison textComparison)
+            StringComparison textComparison, RuleRegex? regex = null)
         {
             Rule = rule;
             HexPattern = hexPattern;
             CompileError = compileError;
             TextComparison = textComparison;
+            Regex = regex;
         }
 
         public EventRule Rule { get; }
@@ -55,6 +59,8 @@ public static class LogRuleMatcher
         public bool IsHexRule => Rule.Mode == LogRuleMatchMode.Hex && CompileError is null;
 
         public bool IsInvalid => CompileError is not null;
+
+        internal RuleRegex? Regex { get; }
 
         internal byte[]? HexPattern { get; }
 
@@ -71,6 +77,15 @@ public static class LogRuleMatcher
         var comparison = snapshot.CaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
+        if (snapshot.UseRegex)
+        {
+            RuleRegex? regex = null;
+            string? error = "Regex is available only in Terminal mode.";
+            if (snapshot.Mode == LogRuleMatchMode.Terminal)
+                RuleRegex.TryCreate(snapshot.Keyword, snapshot.CaseSensitive, out regex, out error);
+            return new CompiledHighlightRule(snapshot, null, error, comparison, regex);
+        }
+
         if (snapshot.Mode != LogRuleMatchMode.Hex)
         {
             return new CompiledHighlightRule(snapshot, null, null, comparison);
@@ -96,6 +111,15 @@ public static class LogRuleMatcher
         var comparison = snapshot.CaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
+        if (snapshot.UseRegex)
+        {
+            RuleRegex? regex = null;
+            string? error = "Regex is available only in Terminal mode.";
+            if (snapshot.Mode == LogRuleMatchMode.Terminal)
+                RuleRegex.TryCreate(snapshot.Keyword, snapshot.CaseSensitive, out regex, out error);
+            return new CompiledEventRule(snapshot, null, error, comparison, regex);
+        }
+
         if (snapshot.Mode != LogRuleMatchMode.Hex)
         {
             return new CompiledEventRule(snapshot, null, null, comparison);
@@ -131,7 +155,7 @@ public static class LogRuleMatcher
             return false;
         }
 
-        return IsMatch(line, rule.Keyword, rule.Mode, rule.CaseSensitive, rule.Name, out error);
+        return IsMatch(line, Compile(rule), activeMode, out error);
     }
 
     public static bool IsMatch(
@@ -153,6 +177,7 @@ public static class LogRuleMatcher
             rule.HexPattern,
             rule.CompileError,
             rule.TextComparison,
+            rule.Regex,
             activeMode,
             out error);
     }
@@ -175,7 +200,7 @@ public static class LogRuleMatcher
             return false;
         }
 
-        return IsMatch(line, rule.Keyword, rule.Mode, rule.CaseSensitive, rule.Name, out error);
+        return IsMatch(line, Compile(rule), activeMode, out error);
     }
 
     public static bool IsMatch(
@@ -197,6 +222,7 @@ public static class LogRuleMatcher
             rule.HexPattern,
             rule.CompileError,
             rule.TextComparison,
+            rule.Regex,
             activeMode,
             out error);
     }
@@ -259,33 +285,6 @@ public static class LogRuleMatcher
             : string.Join(' ', parts);
     }
 
-    private static bool IsMatch(
-        LogLine line,
-        string keyword,
-        LogRuleMatchMode matchMode,
-        bool caseSensitive,
-        string? ruleName,
-        out string? error)
-    {
-        error = null;
-        if (matchMode == LogRuleMatchMode.Hex)
-        {
-            if (!TryParseHexPattern(keyword, out var pattern, out var parseError))
-            {
-                error = $"Invalid HEX rule pattern: {FormatRuleName(ruleName, keyword)} ({parseError})";
-                return false;
-            }
-
-            return ContainsBytes(line.RawBytes, pattern);
-        }
-
-        var comparison = caseSensitive
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
-
-        return line.Text.Contains(keyword, comparison);
-    }
-
     private static bool IsCompiledMatch(
         LogLine line,
         bool enabled,
@@ -295,6 +294,7 @@ public static class LogRuleMatcher
         byte[]? hexPattern,
         string? compileError,
         StringComparison textComparison,
+        RuleRegex? regex,
         LogRuleMatchMode activeMode,
         out string? error)
     {
@@ -302,11 +302,13 @@ public static class LogRuleMatcher
         if (!enabled ||
             string.IsNullOrWhiteSpace(keyword) ||
             activeMode != ruleMode ||
-            !directionMatches ||
-            compileError is not null)
+            !directionMatches)
         {
             return false;
         }
+
+        if (compileError is not null) { error = compileError; return false; }
+        if (regex is not null) return regex.IsMatch(line.Text, out error);
 
         return ruleMode == LogRuleMatchMode.Hex
             ? hexPattern is not null && ContainsBytes(line.RawBytes, hexPattern)
@@ -420,6 +422,7 @@ public static class LogRuleMatcher
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,
@@ -437,6 +440,7 @@ public static class LogRuleMatcher
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             MatchDirection = rule.MatchDirection,
             HighlightColor = rule.HighlightColor,

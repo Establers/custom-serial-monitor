@@ -11,14 +11,14 @@ internal interface IStoredContextLine : IArchivedLogLine { ContextLineLocation L
 
 internal sealed record ArchivedLogRecord(DateTimeOffset Timestamp, LogDirection Direction, string Text,
     byte[]? RawBytes, long? SequenceNumber, bool IsPartialRxSegment, bool IsPartialRxTerminator,
-    string? DisplayText, LogRuleMatchMode ContentMode, string? FileText)
+    string? DisplayText, LogRuleMatchMode ContentMode, string? FileText, bool IsRxStreamBoundary = false)
 {
     internal static ArchivedLogRecord From(LogLine line) => new(line.Timestamp, line.Direction, line.Text,
         line.RawBytes, line.SequenceNumber, line.IsPartialRxSegment, line.IsPartialRxTerminator,
         ReferenceEquals(line.DisplayText, line.Text) ? null : line.DisplayText, line.ContentMode,
-        ReferenceEquals(line.FileText, line.DisplayText) ? null : line.FileText);
+        ReferenceEquals(line.FileText, line.DisplayText) ? null : line.FileText, line.IsRxStreamBoundary);
     internal LogLine ToLine() => new(Timestamp, Direction, Text, RawBytes, SequenceNumber,
-        IsPartialRxSegment, IsPartialRxTerminator, DisplayText, ContentMode, FileText);
+        IsPartialRxSegment, IsPartialRxTerminator, DisplayText, ContentMode, FileText, IsRxStreamBoundary);
 }
 
 // Detector-worker-owned, segmented journal. Segments hold weak references to

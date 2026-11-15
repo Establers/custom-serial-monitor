@@ -1386,7 +1386,7 @@ public sealed class ProfileService : IProfileService
                 rule.Name = rule.Name.Trim();
             }
 
-            rule.Keyword = rule.Keyword?.Trim() ?? string.Empty;
+            rule.Keyword = rule.Keyword ?? string.Empty;
 
             if (!Enum.IsDefined(rule.MatchDirection))
             {
@@ -1428,7 +1428,7 @@ public sealed class ProfileService : IProfileService
 
             if (!string.IsNullOrWhiteSpace(rule.Keyword))
             {
-                rule.Keyword = rule.Keyword.Trim();
+                rule.Keyword = rule.Mode == LogRuleMatchMode.Hex ? rule.Keyword.Trim() : rule.Keyword;
             }
 
             rule.ForegroundColor = NormalizeHighlightColorName(rule.ForegroundColor, "highlight rule foreground", warnings);
@@ -1460,7 +1460,7 @@ public sealed class ProfileService : IProfileService
                 continue;
             }
 
-            rule.Keyword = rule.Keyword.Trim();
+            rule.Keyword = rule.Mode == LogRuleMatchMode.Hex ? rule.Keyword.Trim() : rule.Keyword;
             rule.Name = string.IsNullOrWhiteSpace(rule.Name)
                 ? rule.Keyword
                 : rule.Name.Trim();
@@ -1479,6 +1479,11 @@ public sealed class ProfileService : IProfileService
                 warnings.Add("A log rule match mode was invalid.");
             }
 
+            if (!LogRuleValidation.TryValidatePattern(rule, out var patternError))
+            {
+                rule.Enabled = false;
+                warnings.Add($"Rule '{rule.Name}' disabled: {patternError}");
+            }
             rule.NotificationCooldownSeconds = RuleNotificationLimits.ClampCooldown(rule.NotificationCooldownSeconds);
             rule.TriggerSequenceName = string.IsNullOrWhiteSpace(rule.TriggerSequenceName)
                 ? null
@@ -1577,12 +1582,13 @@ public sealed class ProfileService : IProfileService
             merged.Add(new LogRule
             {
                 Name = string.IsNullOrWhiteSpace(eventRule.Name) ? eventRule.Keyword.Trim() : eventRule.Name.Trim(),
-                Keyword = eventRule.Keyword.Trim(),
+                Keyword = eventRule.Keyword,
                 Enabled = eventRule.Enabled,
                 UseForEvent = eventRule.ShowInEventList,
                 UseForHighlight = false,
                 UseAsViewFilter = false,
                 CaseSensitive = eventRule.CaseSensitive,
+                UseRegex = eventRule.UseRegex,
                 Mode = eventRule.Mode,
                 MatchDirection = ConvertDirection(eventRule.MatchDirection),
                 ForegroundColor = string.IsNullOrWhiteSpace(eventRule.HighlightColor) ? "Default" : eventRule.HighlightColor.Trim(),
@@ -1609,12 +1615,13 @@ public sealed class ProfileService : IProfileService
                 merged.Add(new LogRule
                 {
                     Name = string.IsNullOrWhiteSpace(highlightRule.Name) ? highlightRule.Keyword.Trim() : highlightRule.Name.Trim(),
-                    Keyword = highlightRule.Keyword.Trim(),
+                    Keyword = highlightRule.Keyword,
                     Enabled = highlightRule.Enabled,
                     UseForEvent = false,
                     UseForHighlight = true,
                     UseAsViewFilter = highlightRule.UseAsViewFilter,
                     CaseSensitive = highlightRule.CaseSensitive,
+                    UseRegex = highlightRule.UseRegex,
                     Mode = highlightRule.Mode,
                     MatchDirection = highlightRule.MatchDirection,
                     ForegroundColor = string.IsNullOrWhiteSpace(highlightRule.ForegroundColor) ? "Default" : highlightRule.ForegroundColor.Trim(),
@@ -1643,11 +1650,12 @@ public sealed class ProfileService : IProfileService
     {
         return !rule.UseForHighlight &&
             string.Equals(rule.Name?.Trim(), highlightRule.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(rule.Keyword?.Trim(), highlightRule.Keyword?.Trim(),
-                rule.Mode == LogRuleMatchMode.Terminal && rule.CaseSensitive
+            string.Equals(rule.Keyword, highlightRule.Keyword,
+                rule.Mode == LogRuleMatchMode.Terminal && (rule.CaseSensitive || rule.UseRegex)
                     ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) &&
             rule.MatchDirection == highlightRule.MatchDirection &&
             rule.CaseSensitive == highlightRule.CaseSensitive &&
+            rule.UseRegex == highlightRule.UseRegex &&
             rule.Mode == highlightRule.Mode &&
             rule.Enabled == highlightRule.Enabled;
     }
@@ -1664,6 +1672,7 @@ public sealed class ProfileService : IProfileService
                 Keyword = rule.Keyword,
                 Enabled = rule.Enabled,
                 CaseSensitive = rule.CaseSensitive,
+                UseRegex = rule.UseRegex,
                 Mode = rule.Mode,
                 MatchDirection = ConvertDirection(rule.MatchDirection),
                 HighlightColor = rule.ForegroundColor,
@@ -1688,6 +1697,7 @@ public sealed class ProfileService : IProfileService
                 Keyword = rule.Keyword,
                 Enabled = rule.Enabled,
                 CaseSensitive = rule.CaseSensitive,
+                UseRegex = rule.UseRegex,
                 Mode = rule.Mode,
                 UseAsViewFilter = rule.UseAsViewFilter,
                 ForegroundColor = rule.ForegroundColor,

@@ -24,6 +24,8 @@ public sealed class LogRule
 
     public bool CaseSensitive { get; set; }
 
+    public bool UseRegex { get; set; }
+
     public LogRuleMatchMode Mode { get; set; } = LogRuleMatchMode.Terminal;
 
     [JsonPropertyName("MatchMode")]
@@ -55,6 +57,9 @@ public sealed class LogRule
     public string? TriggerSequenceName { get; set; }
 
     [JsonIgnore]
+    public string MatchLabel => Mode == LogRuleMatchMode.Hex ? "HEX" : UseRegex ? "Regex" : "Terminal";
+
+    [JsonIgnore]
     public bool RequiresEventDetection => UseForEvent ||
         TrayNotificationEnabled || SoundNotificationEnabled || PopupNotificationEnabled ||
         !string.IsNullOrWhiteSpace(TriggerSequenceName);
@@ -70,6 +75,7 @@ public sealed class LogRule
             UseForHighlight = UseForHighlight,
             UseAsViewFilter = UseAsViewFilter,
             CaseSensitive = CaseSensitive,
+            UseRegex = UseRegex,
             Mode = Mode,
             MatchDirection = MatchDirection,
             ForegroundColor = ForegroundColor,

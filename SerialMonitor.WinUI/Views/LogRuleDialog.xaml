@@ -25,12 +25,17 @@
             <TextBlock Text="Name" Style="{StaticResource FieldLabelStyle}" />
             <TextBlock Grid.Column="1" Text="Keyword" Style="{StaticResource FieldLabelStyle}" />
             <TextBox x:Name="NameBox" Grid.Row="1" PlaceholderText="e.g. RESET" AutomationProperties.Name="Name" />
-            <TextBox x:Name="KeywordBox" Grid.Row="1" Grid.Column="1" PlaceholderText="ERROR or 49 4E" AutomationProperties.Name="Keyword" />
+            <TextBox x:Name="KeywordBox" Grid.Row="1" Grid.Column="1" FontFamily="Consolas" PlaceholderText="ERROR or 49 4E" AutomationProperties.Name="Keyword" />
         </Grid>
 
-        <Grid ColumnDefinitions="*,*" Style="{StaticResource ModbusFormGridStyle}">
+        <TextBlock x:Name="ErrorText" Visibility="Collapsed"
+                   FontSize="12" TextWrapping="WrapWholeWords"
+                   Foreground="{ThemeResource ErrorTextBrush}" AutomationProperties.LiveSetting="Assertive" />
+
+        <Grid ColumnDefinitions="*,*,*" Style="{StaticResource ModbusFormGridStyle}">
             <CheckBox x:Name="EnabledBox" Content="Enabled" />
             <CheckBox x:Name="CaseBox" Grid.Column="1" Content="Case sensitive" />
+            <CheckBox x:Uid="RuleRegexCheckBox" x:Name="RegexBox" Grid.Column="2" Content="Regex" Click="Regex_Click" />
         </Grid>
 
         <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Style="{StaticResource ModbusFormGridStyle}">
@@ -42,6 +47,8 @@
             </ComboBox>
             <ComboBox x:Name="DirectionBox" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Direction" />
         </Grid>
+
+        <TextBlock x:Name="RegexHint" Visibility="Collapsed" Style="{StaticResource FieldLabelStyle}" />
 
         <Grid ColumnDefinitions="*,*,*" Style="{StaticResource ModbusFormGridStyle}">
             <CheckBox x:Name="EventBox" Content="Event" />
@@ -84,8 +91,5 @@
             </StackPanel>
         </Border>
 
-        <TextBlock x:Name="ErrorText" Visibility="Collapsed"
-                   FontSize="12" TextWrapping="WrapWholeWords"
-                   Foreground="{ThemeResource ErrorTextBrush}" AutomationProperties.LiveSetting="Assertive" />
     </StackPanel>
 </ContentDialog>

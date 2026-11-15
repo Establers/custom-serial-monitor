@@ -177,6 +177,7 @@ public sealed partial class LogViewModel
         PublishTerminalHighlightState(rebuilt);
         XtermFormattingErrorCount += rebuilt.XtermFormattingErrorCount;
         ViewFilterMatchErrorCount += rebuilt.ViewFilterMatchErrorCount;
+        if (rebuilt.LastRuleEvaluationError is not null) LastRuleEvaluationError = rebuilt.LastRuleEvaluationError;
         _visibleRebuildVersion++;
         RaiseVisibleCountProperties();
         TextRebuilt?.Invoke(this, EventArgs.Empty);

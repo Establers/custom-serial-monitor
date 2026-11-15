@@ -2249,7 +2249,7 @@
                             <Border Grid.Row="0"
                                     Style="{StaticResource InspectorTabHeaderBorderStyle}">
                                 <Grid ColumnSpacing="8"
-                                      ColumnDefinitions="Auto,Auto,*">
+                                      ColumnDefinitions="Auto,Auto,Auto,Auto,*">
                                     <TextBlock Text="Log Rules"
                                                Style="{StaticResource InspectorSectionHeaderTextStyle}" />
                                     <Button x:Uid="StaticUi056" x:Name="AddLogRuleButton" Grid.Column="1"
@@ -2257,7 +2257,11 @@
                                             Style="{StaticResource RuleActionButtonStyle}"
                                             Click="AddLogRule_Click"
                                             infra:AppToolTipService.ToolTip="Add log rule" />
-                                    <TextBlock x:Uid="StaticUi055" Grid.Column="2"
+                                    <Button x:Uid="RulesExportButton" Grid.Column="2" Content="Export"
+                                            Style="{StaticResource RuleActionButtonStyle}" Click="ExportLogRules_Click" />
+                                    <Button x:Uid="RulesImportButton" Grid.Column="3" Content="Import"
+                                            Style="{StaticResource RuleActionButtonStyle}" Click="ImportLogRules_Click" />
+                                    <TextBlock x:Uid="StaticUi055" Grid.Column="4"
                                                Text="Events/highlights: new logs"
                                                Style="{StaticResource SettingApplyHintTextStyle}"
                                                HorizontalAlignment="Right"
@@ -2389,7 +2393,7 @@
                                                                    FontFamily="Consolas"
                                                                    Style="{StaticResource RuleCellTextStyle}" />
                                                         <TextBlock x:Uid="StaticUi071" Grid.Column="6"
-                                                                   Text="{Binding Mode, Converter={StaticResource DisplayModeNameConverter}}"
+                                                                   Text="{Binding MatchLabel}"
                                                                    Style="{StaticResource RuleCellTextStyle}"
                                                                    infra:AppToolTipService.ToolTip="The rule is active only while the app is in the same Terminal/HEX mode. Terminal rules match decoded text; HEX rules match raw bytes." />
                                                         <TextBlock Grid.Column="7"

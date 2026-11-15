@@ -3,14 +3,16 @@ using SerialMonitor.WinUI.Models;
 namespace SerialMonitor.WinUI.Infrastructure;
 
 // One instance per projection/worker. HEX patterns are record-local; only
-// Terminal RX keeps a bounded suffix, never a complete unterminated line.
+// literal Terminal RX keeps a bounded suffix. Regex keeps at most 16K characters
+// until the logical RX line completes; longer lines are skipped.
 internal sealed class StreamingHighlightRuleMatcher
 {
     internal readonly record struct MatchResult(
         LogRuleMatcher.CompiledHighlightRule? Rule, string HiddenPrefix, bool BreakBefore,
-        string ContextPrefix, string MatchPrefix);
+        string ContextPrefix, string MatchPrefix, string RegexPrefix = "", string? Error = null);
 
     private readonly Dictionary<LogRuleMatcher.CompiledHighlightRule, string> _tails = new();
+    private RegexLineBuffer _regexBuffer = new();
     private object? _rules;
     private LogRuleMatchMode _activeMode;
     private LogRuleMatchMode _contentMode;
@@ -18,18 +20,22 @@ internal sealed class StreamingHighlightRuleMatcher
     private bool _previousRxPartial;
     private int _hiddenCharacters;
     private long _lastRxPosition;
+    private bool _afterBoundary;
 
-    internal int RetainedCharacterCount => _tails.Values.Sum(tail => tail.Length);
+    internal int RetainedCharacterCount => _regexBuffer.Length + _tails.Values.Sum(tail => tail.Length);
+    internal bool PreviousRxPartial => _previousRxPartial;
     internal long LastRxPosition => _lastRxPosition;
 
     public void Reset()
     {
         _tails.Clear();
+        _regexBuffer.Reset();
         _rules = null;
         _lastRxSequence = null;
         _previousRxPartial = false;
         _hiddenCharacters = 0;
         _lastRxPosition = 0;
+        _afterBoundary = false;
     }
 
     // A screen-only rejected record is absent from a filter worker's history.
@@ -41,12 +47,21 @@ internal sealed class StreamingHighlightRuleMatcher
     {
         var latest = live._lastRxPosition >= highlight._lastRxPosition ? live : highlight;
         if (_lastRxPosition >= latest._lastRxPosition) return this;
+        // Regex context is line-wide, independent of the pattern. A filter
+        // without regex may have no buffer while highlighting kept the full
+        // prefix (or the overflow marker) for the same input position.
+        var regexSource = new[] { live, highlight }
+            .Where(source => source._lastRxPosition == latest._lastRxPosition && source._activeMode == mode)
+            .OrderByDescending(source => source._regexBuffer.Prefix.Length).FirstOrDefault();
         var result = new StreamingHighlightRuleMatcher
         {
             _rules = rules, _activeMode = mode, _contentMode = latest._contentMode,
             _lastRxSequence = latest._lastRxSequence, _previousRxPartial = latest._previousRxPartial,
-            _lastRxPosition = latest._lastRxPosition
+            _lastRxPosition = latest._lastRxPosition,
+            _regexBuffer = regexSource?._regexBuffer.Copy() ?? new(), _afterBoundary = latest._afterBoundary
         };
+        if (result._previousRxPartial && result._regexBuffer.Prefix.Length == 0)
+            result._regexBuffer.Invalidate();
         foreach (var source in new[] { live, highlight })
         {
             if (source._lastRxPosition != latest._lastRxPosition || source._activeMode != mode) continue;
@@ -55,25 +70,38 @@ internal sealed class StreamingHighlightRuleMatcher
             {
                 if (rule.IsTerminalRule && previous.IsTerminalRule &&
                     rule.Rule.Keyword == previous.Rule.Keyword &&
-                    rule.Rule.CaseSensitive == previous.Rule.CaseSensitive)
+                    rule.Rule.CaseSensitive == previous.Rule.CaseSensitive &&
+                    rule.Rule.UseRegex == previous.Rule.UseRegex)
                     result._tails[rule] = tail;
             }
         }
-        result._hiddenCharacters = result._tails.Values.Select(tail => tail.Length).DefaultIfEmpty().Max();
+        result._hiddenCharacters = Math.Max(result._regexBuffer.Length, result._tails.Values.Select(tail => tail.Length).DefaultIfEmpty().Max());
         return result;
     }
 
     public MatchResult Evaluate(LogLine line,
         LogRuleMatcher.CompiledHighlightRule[] rules, LogRuleMatchMode activeMode,
-        string retainedPrefix = "", long position = 0, long? previousRxPosition = null)
+        string retainedPrefix = "", long position = 0, long? previousRxPosition = null,
+        string regexRetainedPrefix = "", bool continuesRxLine = false)
     {
         var isRx = line.Direction == LogDirection.Rx;
+        var previousRxPartial = _previousRxPartial;
+        if (line.IsRxStreamBoundary)
+        {
+            Reset();
+            _afterBoundary = true;
+            _lastRxPosition = position;
+            return new(null, "", true, "", "");
+        }
+        var sequenceGap = _lastRxSequence is { } previous && line.SequenceNumber is { } current && current != previous + 1;
         var breakBefore = isRx && (!_previousRxPartial || _contentMode != line.ContentMode ||
             (previousRxPosition.HasValue && previousRxPosition.Value != _lastRxPosition) ||
-            (_lastRxSequence is { } previous && line.SequenceNumber is { } current && current != previous + 1));
-        if (!ReferenceEquals(_rules, rules) || _activeMode != activeMode || breakBefore || line.IsPartialRxTerminator)
+            sequenceGap);
+        var rulesChanged = !ReferenceEquals(_rules, rules) || _activeMode != activeMode;
+        if (rulesChanged || breakBefore)
         {
             _tails.Clear();
+            _regexBuffer.Reset();
             _hiddenCharacters = 0;
         }
         _rules = rules;
@@ -85,8 +113,16 @@ internal sealed class StreamingHighlightRuleMatcher
             _previousRxPartial = line.IsPartialRxSegment && !line.IsPartialRxTerminator;
             _lastRxPosition = position;
         }
-        if (line.IsPartialRxTerminator)
-            return new(null, string.Empty, true, string.Empty, string.Empty);
+        var hasRegex = activeMode == LogRuleMatchMode.Terminal && rules.Any(r => r.Rule.UseRegex && r.Rule.Enabled);
+        if (_afterBoundary && isRx) { _regexBuffer.Invalidate(); _afterBoundary = false; }
+        if (hasRegex && (rulesChanged && previousRxPartial ||
+            isRx && (sequenceGap || (breakBefore || rulesChanged) && continuesRxLine)) && regexRetainedPrefix.Length == 0)
+            _regexBuffer.Invalidate();
+        var bufferedPrefix = hasRegex && isRx ? _regexBuffer.Prefix : "";
+        var regexPrefix = regexRetainedPrefix.Length > bufferedPrefix.Length ? regexRetainedPrefix : bufferedPrefix;
+        var regexLine = hasRegex ? _regexBuffer.Append(line, regexRetainedPrefix) : null;
+        string? matchError = null;
+        if (line.IsPartialRxTerminator) _tails.Clear();
 
         LogRuleMatcher.CompiledHighlightRule? best = null;
         var prefix = string.Empty;
@@ -96,6 +132,28 @@ internal sealed class StreamingHighlightRuleMatcher
         foreach (var rule in rules)
         {
             var source = rule.Rule;
+            if (source.UseRegex)
+            {
+                maxRetainedLength = Math.Max(maxRetainedLength, _regexBuffer.Length);
+                if (regexLine is null) continue;
+                if (!LogRuleMatcher.IsMatch(WithCompletedText(line, regexLine), rule, activeMode, out var regexError))
+                {
+                    if (regexError is not null) matchError = source.Name + ": " + regexError;
+                    continue;
+                }
+                if (best is null || source.Priority > best.Rule.Priority) best = rule;
+                if (isRx)
+                {
+                    var tailLength = Math.Max(0, regexLine.Length - line.Text.Length);
+                    var regexTail = regexLine[..tailLength];
+                    if (regexTail.Length > matchPrefix.Length) matchPrefix = regexTail;
+                    var hidden = Math.Min(regexTail.Length, _hiddenCharacters);
+                    if (regexRetainedPrefix.Length > 0 && _hiddenCharacters == 0 && breakBefore) hidden = regexTail.Length;
+                    if (hidden > prefix.Length) prefix = regexTail[^hidden..];
+                }
+                continue;
+            }
+            if (line.IsPartialRxTerminator) continue;
             var candidate = line;
             string? tail = null;
             var restoredContext = false;
@@ -144,11 +202,15 @@ internal sealed class StreamingHighlightRuleMatcher
         if (isRx)
             _hiddenCharacters = best is null && line.IsPartialRxSegment
                 ? (int)Math.Min(maxRetainedLength, (long)_hiddenCharacters + line.Text.Length) : 0;
-        return new(best, prefix, breakBefore, contextPrefix, matchPrefix);
+        return new(best, prefix, breakBefore, contextPrefix, matchPrefix, regexPrefix, matchError);
     }
+
+    internal static LogLine WithCompletedText(LogLine line, string text) => new(
+        line.Timestamp, line.Direction, text, line.RawBytes, line.SequenceNumber,
+        contentMode: line.ContentMode, fileText: text);
 
     internal static LogLine WithText(LogLine line, string text) => new(
         line.Timestamp, line.Direction, text, line.RawBytes, line.SequenceNumber,
         line.IsPartialRxSegment, line.IsPartialRxTerminator, contentMode: line.ContentMode,
-        fileText: line.FileText);
+        fileText: line.FileText, isRxStreamBoundary: line.IsRxStreamBoundary);
 }

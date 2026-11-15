@@ -1728,4 +1728,61 @@ Review commands and Terminal/HEX mode before running.</value></data>
   <data name="InspectorLayoutStorageError" xml:space="preserve">
     <value>Panel placement could not be saved or restored. Changes apply to this session.</value>
   </data>
+  <data name="RulesExportButton.Content" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="RulesImportButton.Content" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="RulesExportTitle" xml:space="preserve">
+    <value>Export rules</value>
+  </data>
+  <data name="RulesImportTitle" xml:space="preserve">
+    <value>Import rules</value>
+  </data>
+  <data name="RulesCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="RulesImport" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="RulesClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="RulesExportHelp" xml:space="preserve">
+    <value>Copy the text and share it in a message. Paste it into Import rules on another PC.</value>
+  </data>
+  <data name="RulesImportHelp" xml:space="preserve">
+    <value>Paste exported rule text. Existing rules stay; exact duplicates are skipped. Rules linked to a sequence are added disabled so you can check the local sequence first.</value>
+  </data>
+  <data name="RulesSelectedOnly" xml:space="preserve">
+    <value>Selected rule only</value>
+  </data>
+  <data name="RulesTransferText" xml:space="preserve">
+    <value>Rule sharing text</value>
+  </data>
+  <data name="RulesShareCount" xml:space="preserve">
+    <value>{0} rules · settings only; sequences are not included.</value>
+  </data>
+  <data name="RulesImportCount" xml:space="preserve">
+    <value>{0} rules ready to add. Click Import to apply.</value>
+  </data>
+  <data name="RulesInvalidText" xml:space="preserve">
+    <value>Cannot import this text: </value>
+  </data>
+  <data name="RulesCopied" xml:space="preserve">
+    <value>Copied. Paste the text into a message or Import rules.</value>
+  </data>
+  <data name="RulesCopyFailed" xml:space="preserve">
+    <value>Copy failed. Select the text and press Ctrl+C. </value>
+  </data>
+  <data name="RuleRegexHint" xml:space="preserve">
+    <value>Regex checks completed Terminal lines (up to 16,384 characters). Example: ERROR|WARN or temp=\d+. Lookarounds/backreferences are unsupported; empty matches are ignored.</value>
+  </data>
+  <data name="RulesImportedStatus" xml:space="preserve">
+    <value>Imported {0} rules; skipped {1} duplicates; {2} sequence-trigger rules kept disabled.</value>
+  </data>
+  <data name="RuleRegexCheckBox.Content" xml:space="preserve">
+    <value>Regex</value>
+  </data>
 </root>

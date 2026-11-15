@@ -22,7 +22,8 @@ public sealed class LogLine
         bool isPartialRxTerminator = false,
         string? displayText = null,
         LogRuleMatchMode contentMode = LogRuleMatchMode.Terminal,
-        string? fileText = null)
+        string? fileText = null,
+        bool isRxStreamBoundary = false)
     {
         Timestamp = timestamp;
         Direction = direction;
@@ -33,6 +34,7 @@ public sealed class LogLine
         SequenceNumber = sequenceNumber;
         IsPartialRxSegment = isPartialRxSegment;
         IsPartialRxTerminator = isPartialRxTerminator;
+        IsRxStreamBoundary = isRxStreamBoundary;
         ContentMode = contentMode;
     }
 
@@ -59,6 +61,10 @@ public sealed class LogLine
     public bool IsPartialRxSegment { get; }
 
     public bool IsPartialRxTerminator { get; }
+
+    // A disconnect, mode switch or missing input ends display continuity but
+    // is not an actual newline on which a completed-line regex may fire.
+    public bool IsRxStreamBoundary { get; }
 
     // Captures the mode used when this line was created. Rule activation is
     // based on the app's current mode, not this historical value.
@@ -122,6 +128,10 @@ public sealed class LogLine
 
     public static LogLine RxPartialTerminator(long? sequenceNumber = null) =>
         new(DateTimeOffset.Now, LogDirection.Rx, string.Empty, null, sequenceNumber, isPartialRxTerminator: true);
+
+    public static LogLine RxStreamBoundary(long? sequenceNumber = null) =>
+        new(DateTimeOffset.Now, LogDirection.Rx, string.Empty, null, sequenceNumber,
+            isPartialRxTerminator: true, isRxStreamBoundary: true);
 
     public static LogLine Tx(
         string text,

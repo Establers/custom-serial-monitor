@@ -1004,6 +1004,7 @@ public static partial class StartupHook
                 var suffix = $"-{size.Width}x{size.Height}";
                 var defaultViewName = "default-view" + suffix;
                 var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (filter == "rules") { await AuditRulesDialogs(suffix); continue; }
                 if (string.IsNullOrEmpty(filter) || filter == "sensor-narrow")
                     await CheckSensorNarrowLayout(startupModel, suffix);
                 if (filter == "sensor-narrow") continue;

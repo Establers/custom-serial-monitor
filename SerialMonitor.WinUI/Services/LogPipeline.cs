@@ -668,7 +668,7 @@ public sealed class LogPipeline : ILogPipeline
 
         await FlushHexSegmentAsync(settings, cancellationToken);
         var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
-        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+        await _logs.Writer.WriteAsync(LogLine.RxStreamBoundary(sequenceNumber), cancellationToken);
         Volatile.Write(ref _lastHexGroupByteCount, Volatile.Read(ref _hexCurrentGroupByteCount));
         Volatile.Write(ref _hexCurrentGroupByteCount, 0);
         Volatile.Write(ref _hexGroupOpen, 0);
@@ -695,7 +695,7 @@ public sealed class LogPipeline : ILogPipeline
         }
 
         var sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
-        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(sequenceNumber), cancellationToken);
+        await _logs.Writer.WriteAsync(LogLine.RxStreamBoundary(sequenceNumber), cancellationToken);
         RecordPartialBufferLength();
     }
 
@@ -729,7 +729,7 @@ public sealed class LogPipeline : ILogPipeline
         else await FinalizeTerminalPartialForModeSwitchAsync(settings, cancellationToken);
         _lineParser.Clear();
         _terminalDecoder = null;
-        await _logs.Writer.WriteAsync(LogLine.RxPartialTerminator(Interlocked.Increment(ref _sequenceNumber)), cancellationToken);
+        await _logs.Writer.WriteAsync(LogLine.RxStreamBoundary(Interlocked.Increment(ref _sequenceNumber)), cancellationToken);
         var message = offset > expected
             ? $"RX data gap: {offset - expected:N0} byte(s) omitted before parser input."
             : "RX data gap: parser input moved backwards in the transport stream.";

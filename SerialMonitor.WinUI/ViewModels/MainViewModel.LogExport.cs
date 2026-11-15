@@ -91,6 +91,8 @@ public sealed partial class MainViewModel
 
     private void OnLogHistoryPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(LogViewModel.LastRuleEvaluationError) && Log.LastRuleEvaluationError is { } ruleError)
+            RecordRuleEditError(ruleError);
         if (args.PropertyName == nameof(LogViewModel.TotalRetainedLineCount))
             OnPropertyChanged(nameof(CanExportLogHistory));
     }

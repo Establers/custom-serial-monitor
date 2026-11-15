@@ -50,12 +50,13 @@ public sealed partial class LogViewModel : ViewModelBase
         LogLine Line,
         LogRuleMatcher.CompiledHighlightRule[] HighlightRules,
         string HighlightPrefix = "", string FilterPrefix = "", long PreviousRxPosition = 0,
-        LogRuleMatcher.CompiledHighlightRule? TerminalLineHighlight = null, long TerminalLineStart = 0)
+        LogRuleMatcher.CompiledHighlightRule? TerminalLineHighlight = null, long TerminalLineStart = 0,
+        string RegexPrefix = "", bool ContinuesRxLine = false)
     {
         // Immutable receipt-time suffixes survive screen eviction/reformatting.
         // Their size is bounded by keyword lengths and the retained byte budget.
         public long EstimatedBytes => LogViewMemoryPolicy.EstimateRetainedBytes(Line) +
-            2L * HighlightPrefix.Length +
+            2L * RegexPrefix.Length + 2L * HighlightPrefix.Length +
             (ReferenceEquals(HighlightPrefix, FilterPrefix) ? 0 : 2L * FilterPrefix.Length);
     }
 
@@ -113,6 +114,12 @@ public sealed partial class LogViewModel : ViewModelBase
     private long _highlightedLineCount;
     private long _xtermFormattingErrorCount;
     private long _viewFilterMatchErrorCount;
+    private string? _lastRuleEvaluationError;
+    public string? LastRuleEvaluationError
+    {
+        get => _lastRuleEvaluationError;
+        private set => SetProperty(ref _lastRuleEvaluationError, value);
+    }
     private long _visibleCharacterCount;
     private long _maxRetainedLineCountSeen;
     private long _partialRxAppendInPlaceCount;
@@ -346,7 +353,7 @@ public sealed partial class LogViewModel : ViewModelBase
         foreach (var line in lines)
         {
             var retainedLine = new RetainedLogLine(++_nextLineId, line, _highlightRules,
-                PreviousRxPosition: _highlightMatcher.LastRxPosition);
+                PreviousRxPosition: _highlightMatcher.LastRxPosition, ContinuesRxLine: _highlightMatcher.PreviousRxPartial);
             var prepared = PrepareRuleLine(retainedLine, captureContext: true, appendedText: builder);
             var terminalHighlight = CaptureTerminalHighlightContext();
             retainedLine = prepared.Source;
@@ -372,7 +379,7 @@ public sealed partial class LogViewModel : ViewModelBase
             var visibleContribution = 0;
             if (prepared.BreakBefore && CompleteActivePartialRxVisualLine(builder))
                 appendedVisibleLineCount++;
-            if (line.IsPartialRxTerminator)
+            if (prepared.Line.IsPartialRxTerminator)
             {
                 if (CompleteActivePartialRxVisualLine(builder))
                 {
@@ -592,6 +599,7 @@ public sealed partial class LogViewModel : ViewModelBase
             }
 
             var contribution = contributions.Current;
+            var completedPartialLineId = retained.Line.IsPartialRxTerminator ? activePartialLineId : 0;
             if (contribution > 0)
             {
                 activePartialLineId = ShouldMergePartialRxVisually(retained.Line)
@@ -623,6 +631,11 @@ public sealed partial class LogViewModel : ViewModelBase
             else if (activePartialLineId > 0 && contribution < 0)
             {
                 targetLineId = activePartialLineId;
+            }
+            else if (completedPartialLineId > 0)
+            {
+                // A completed-line regex event uses the terminator's identity.
+                targetLineId = completedPartialLineId;
             }
             break;
         }
@@ -727,7 +740,7 @@ public sealed partial class LogViewModel : ViewModelBase
             var prepared = PrepareRuleLine(retainedLine);
             if (evicted > 0) prepared = RestoreEvictedMatchPrefix(prepared);
             if (prepared.BreakBefore) CompleteActivePartialRxVisualLine();
-            if (line.IsPartialRxTerminator)
+            if (prepared.Line.IsPartialRxTerminator)
             {
                 CompleteActivePartialRxVisualLine();
                 _retainedVisibleLineContributions.Enqueue(visibleContribution);
@@ -1199,16 +1212,23 @@ public sealed partial class LogViewModel : ViewModelBase
         StringBuilder? appendedText = null)
     {
         var highlight = _highlightMatcher.Evaluate(retained.Line, retained.HighlightRules, ActiveRuleMode,
-            retained.HighlightPrefix, retained.LineId, retained.PreviousRxPosition);
+            retained.HighlightPrefix, retained.LineId, retained.PreviousRxPosition, retained.RegexPrefix, retained.ContinuesRxLine);
         if (ActiveRuleMode == LogRuleMatchMode.Terminal && retained.Line.Direction == LogDirection.Rx &&
             _terminalLineRules is not null && !ReferenceEquals(_terminalLineRules, retained.HighlightRules))
             highlight = highlight with { BreakBefore = true };
         var filter = _filterMatcher.Evaluate(retained.Line, _viewFilters, ActiveRuleMode,
-            retained.FilterPrefix, retained.LineId, retained.PreviousRxPosition);
+            retained.FilterPrefix, retained.LineId, retained.PreviousRxPosition, retained.RegexPrefix, retained.ContinuesRxLine);
+        var ruleError = highlight.Error ?? filter.Error;
+        if (ruleError is not null && ruleError != LastRuleEvaluationError)
+        {
+            LastRuleEvaluationError = ruleError;
+            ViewFilterMatchErrorCount++;
+        }
         var lineHighlight = ResolveTerminalLineHighlight(retained, highlight, appendedText);
         if (captureContext)
             retained = retained with
             {
+                RegexPrefix = highlight.RegexPrefix.Length >= filter.RegexPrefix.Length ? highlight.RegexPrefix : filter.RegexPrefix,
                 HighlightPrefix = highlight.ContextPrefix,
                 FilterPrefix = filter.ContextPrefix.Length > highlight.ContextPrefix.Length
                     ? filter.ContextPrefix : highlight.ContextPrefix,
@@ -1219,7 +1239,9 @@ public sealed partial class LogViewModel : ViewModelBase
             };
         var visibleLine = string.IsNullOrEmpty(filter.HiddenPrefix)
             ? retained.Line
-            : StreamingHighlightRuleMatcher.WithText(retained.Line, filter.HiddenPrefix + retained.Line.Text);
+            : retained.Line.IsPartialRxTerminator
+                ? StreamingHighlightRuleMatcher.WithCompletedText(retained.Line, filter.HiddenPrefix + retained.Line.Text)
+                : StreamingHighlightRuleMatcher.WithText(retained.Line, filter.HiddenPrefix + retained.Line.Text);
         return new(retained, visibleLine, lineHighlight, _viewFilters.Length == 0 || filter.Rule is not null,
             highlight.BreakBefore || (_viewFilters.Length > 0 && filter.BreakBefore), filter.MatchPrefix);
     }
@@ -1227,8 +1249,9 @@ public sealed partial class LogViewModel : ViewModelBase
     private PreparedRuleLine RestoreEvictedMatchPrefix(PreparedRuleLine prepared) =>
         _viewFilters.Length == 0 || prepared.MatchPrefix.Length == 0 ? prepared : prepared with
         {
-            Line = StreamingHighlightRuleMatcher.WithText(prepared.Source.Line,
-                prepared.MatchPrefix + prepared.Source.Line.Text),
+            Line = prepared.Source.Line.IsPartialRxTerminator
+                ? StreamingHighlightRuleMatcher.WithCompletedText(prepared.Source.Line, prepared.MatchPrefix)
+                : StreamingHighlightRuleMatcher.WithText(prepared.Source.Line, prepared.MatchPrefix + prepared.Source.Line.Text),
             BreakBefore = true
         };
 
@@ -1392,6 +1415,7 @@ public sealed partial class LogViewModel : ViewModelBase
             Keyword = rule.Keyword,
             Enabled = rule.Enabled,
             CaseSensitive = rule.CaseSensitive,
+            UseRegex = rule.UseRegex,
             Mode = rule.Mode,
             UseAsViewFilter = rule.UseAsViewFilter,
             ForegroundColor = rule.ForegroundColor,

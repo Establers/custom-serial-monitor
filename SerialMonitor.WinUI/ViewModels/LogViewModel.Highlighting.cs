@@ -50,7 +50,7 @@ public sealed partial class LogViewModel
         if (_rxDisplayMode != RxDisplayMode.Terminal || line.Direction != LogDirection.Rx)
             return match.Rule;
 
-        if (match.BreakBefore || line.IsPartialRxTerminator ||
+        if (match.BreakBefore ||
             !ReferenceEquals(_terminalLineRules, retained.HighlightRules))
         {
             _terminalHighlightLines.Clear();
@@ -59,7 +59,6 @@ public sealed partial class LogViewModel
         }
         _terminalLineRules = retained.HighlightRules;
         _terminalHighlightPosition = retained.LineId;
-        if (line.IsPartialRxTerminator) return null;
 
         // Receipt-time state survives screen eviction. It is scoped to this
         // rule snapshot, so editing rules never recolors older logical lines.

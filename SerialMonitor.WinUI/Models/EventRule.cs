@@ -19,6 +19,8 @@ public sealed class EventRule
 
     public bool CaseSensitive { get; set; }
 
+    public bool UseRegex { get; set; }
+
     public LogRuleMatchMode Mode { get; set; } = LogRuleMatchMode.Terminal;
 
     [JsonPropertyName("MatchMode")]
