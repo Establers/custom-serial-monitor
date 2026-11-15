@@ -13,7 +13,23 @@ public sealed partial class ModbusSensorView : UserControl
     private nint WindowHandle => Microsoft.UI.Win32Interop.GetWindowFromWindowId(XamlRoot.ContentIslandEnvironment.AppWindowId);
     private async void View_Loaded(object sender, RoutedEventArgs args)
     {
+        FitToolbar(ActualWidth);
         if (Model is { } model) await model.InitializeLibraryAsync();
+    }
+    private void View_SizeChanged(object sender, SizeChangedEventArgs args) => FitToolbar(args.NewSize.Width);
+    private void FitToolbar(double width)
+    {
+        // Use the docked view's width, not the outer window's width.
+        var narrow = width < 600;
+        ProductToolbar.RowSpacing = narrow ? 6 : 0;
+        Grid.SetColumnSpan(ProductFields, narrow ? 2 : 1);
+        Grid.SetRow(RunActions, narrow ? 1 : 0);
+        Grid.SetColumn(RunActions, narrow ? 0 : 1);
+        var wrapActions = width < 340;
+        ValueToolbar.RowSpacing = wrapActions ? 6 : 0;
+        Grid.SetRow(HelpActions, wrapActions ? 1 : 0);
+        Grid.SetColumn(HelpActions, wrapActions ? 0 : 1);
+        Grid.SetColumnSpan(ValueActions, wrapActions ? 2 : 1);
     }
     private void Management_Opening(object sender, object args)
     {
