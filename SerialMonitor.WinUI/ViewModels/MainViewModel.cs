@@ -304,7 +304,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly DispatcherQueueTimer _statusTimer;
     private readonly SerialBusUtilizationMeter _serialBusUtilizationMeter = new();
     private readonly object _eventNotificationGate = new();
-    private readonly Dictionary<string, PendingEventNotification> _pendingEventNotifications = new(StringComparer.Ordinal);
+    private readonly Dictionary<EventNotificationKey, PendingEventNotification> _pendingEventNotifications = new();
     private readonly SinglePendingGate _triggeredSequenceGate = new();
     private readonly object _backgroundHealthErrorGate = new();
     private readonly Dictionary<string, string> _activeBackgroundHealthErrors = new(StringComparer.Ordinal);
@@ -7315,7 +7315,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var key = $"{detectedEvent.RuleName}\u001F{detectedEvent.Keyword}";
+        var key = EventNotificationKey.From(detectedEvent);
         TimeSpan delay;
         PendingEventNotification scheduledState;
         lock (_eventNotificationGate)
@@ -7351,7 +7351,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private async Task DispatchPendingEventNotificationAsync(
-        string key,
+        EventNotificationKey key,
         PendingEventNotification scheduledState,
         TimeSpan delay,
         CancellationToken cancellationToken)

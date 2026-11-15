@@ -613,6 +613,10 @@ LAB 부하 생성은 RTU 시험을 끝낸 다음 별도 구간에서 실행한�
 - [ ] Confirm a matching MOCK event shows one non-blocking popup after about 1 second.
 - [ ] Confirm the popup closes automatically after about 8 seconds.
 - [ ] Generate repeated matches and confirm they are grouped into at most one notification per 30 seconds.
+- [ ] Give two rules the same name and pattern, but enable Popup on one and Sound
+  on the other. Both actions must remain active when both rules match. Repeat
+  with identical actions and different cooldowns (5 and 30 seconds); each
+  notification batch must keep its own cooldown.
 - [ ] Enable Sound and confirm one sound plays per grouped notification, not once per event.
 - [ ] Enable Tray and confirm a Windows tray balloon appears.
 - [ ] Disable all three options and confirm events continue to populate without any notification.
