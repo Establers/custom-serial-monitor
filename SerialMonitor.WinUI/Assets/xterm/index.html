@@ -2273,8 +2273,16 @@
       pendingFit = window.setTimeout(() => {
         pendingFit = 0;
         window.serialMonitorFit();
-      }, 25);
+      }, 120);
     }
+
+    // Native docking/tab events and browser viewport events must use the same
+    // trailing debounce. A direct fit from the host bypasses this protection and
+    // repeatedly reflows the entire scrollback during a side-panel drag.
+    window.serialMonitorRequestFit = function () {
+      queueFit();
+      return true;
+    };
 
     function clearNavigationHighlight() {
       if (navigationHighlightTimer) window.clearTimeout(navigationHighlightTimer);

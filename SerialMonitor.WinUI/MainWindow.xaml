@@ -3892,6 +3892,7 @@
                                        PointerMoved="InspectorResizeHandle_PointerMoved"
                                        PointerReleased="InspectorResizeHandle_PointerReleased"
                                        PointerCaptureLost="InspectorResizeHandle_PointerCaptureLost"
+                                       PointerCanceled="InspectorResizeHandle_PointerCaptureLost"
                                        AutomationProperties.Name="Resize inspector panel"
                                        AutomationProperties.HelpText="Drag to resize. Double-click to collapse or restore."
                                        infra:AppToolTipService.ToolTip="Drag to resize. Double-click to collapse or restore.">

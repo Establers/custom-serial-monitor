@@ -38,12 +38,14 @@ public sealed partial class MainWindow
 
     private void InspectorWorkspace_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        CancelInspectorDockDrag();
+        if (IsClosingOrClosed) return;
+        InterruptInspectorInteraction();
         ApplyInspectorLayout();
     }
 
     private void ApplyInspectorLayout()
     {
+        if (IsClosingOrClosed) return;
         var bottom = _inspectorDockPosition == InspectorDockPosition.Bottom;
         var left = _inspectorDockPosition == InspectorDockPosition.Left;
         var extent = _isInspectorCollapsed ? 0 :
@@ -91,6 +93,7 @@ public sealed partial class MainWindow
 
     private void DockInspector(InspectorDockPosition position)
     {
+        if (IsClosingOrClosed || !Enum.IsDefined(position)) return;
         CancelInspectorDockDrag();
         if (_isInspectorResizeDragging) return;
         if (!_isInspectorCollapsed && InspectorExtent > InspectorCollapseThreshold)
@@ -107,6 +110,7 @@ public sealed partial class MainWindow
 
     private void InspectorDockHandle_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
+        if (IsClosingOrClosed) return;
         var point = args.GetCurrentPoint(MainContentGrid);
         if (_activeDockPointerId is not null || _isInspectorResizeDragging || !point.Properties.IsLeftButtonPressed) return;
         InspectorDockHandle.Focus(FocusState.Pointer);
@@ -137,7 +141,7 @@ public sealed partial class MainWindow
             MainContentGrid.ActualWidth, MainContentGrid.ActualHeight) : null;
         CancelInspectorDockDrag();
         if (target is { } position) DockInspector(position);
-        else if (!moved) FlyoutBase.ShowAttachedFlyout(InspectorDockHandle);
+        else if (!moved && !IsClosingOrClosed) FlyoutBase.ShowAttachedFlyout(InspectorDockHandle);
         args.Handled = true;
     }
 
@@ -157,6 +161,7 @@ public sealed partial class MainWindow
 
     private void InspectorDockHandle_KeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (IsClosingOrClosed) return;
         if (AppShortcuts.Matches(AppShortcutAction.EditorCancel, args.Key))
         {
             CancelInspectorDockDrag();

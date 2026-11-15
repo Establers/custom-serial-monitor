@@ -153,5 +153,6 @@ public static partial class StartupHook
                     panel = Bounds(panel), terminal = Bounds(log), tabsChecked = tabItems.Length });
             }
         }
+        await RunInspectorStability(window);
     }
 }

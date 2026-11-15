@@ -32,6 +32,7 @@ public sealed partial class MainWindow
 
     private void InspectorResizeHandle_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
+        if (IsClosingOrClosed) return;
         var point = args.GetCurrentPoint(MainContentGrid);
         if (_activeDockPointerId is not null || _isInspectorResizeDragging ||
             !point.Properties.IsLeftButtonPressed ||
@@ -213,7 +214,17 @@ public sealed partial class MainWindow
         {
             _liveInspectorResizeHeight = double.NaN;
             ResetXtermResizeShieldVisual();
+            QueueXtermFit();
         }
+    }
+
+    private void InterruptInspectorInteraction()
+    {
+        CancelInspectorDockDrag();
+        ResetInspectorClickTracking();
+        // Window activation/geometry can change before CaptureLost is delivered.
+        // Clear the gesture before releasing capture so reentrant events are inert.
+        FinishInspectorResize(InspectorResizeHandle, releasePointerCapture: true);
     }
 
     private void ApplyInspectorResize(double inspectorHeight, bool persistExpandedHeight)
@@ -232,6 +243,7 @@ public sealed partial class MainWindow
 
     private void ToggleInspectorCollapsed()
     {
+        if (IsClosingOrClosed) return;
         _liveInspectorResizeHeight = double.NaN;
         if (!_isInspectorCollapsed && InspectorExtent > InspectorCollapseThreshold)
         {

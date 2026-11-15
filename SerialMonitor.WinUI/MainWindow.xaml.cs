@@ -84,7 +84,8 @@ public sealed partial class MainWindow : Window
     private bool _searchResultScrollQueued;
     private bool _eventAutoScrollPendingAfterBackpressure;
     private bool _isPointerOverEventList;
-    private bool _xtermFitQueued;
+    private bool _xtermFitDispatchQueued;
+    private LatestRequestAsyncOperation<bool>? _xtermFitOperation;
     private bool _closeAllowed;
     private bool _closeCleanupStarted;
     private bool _isWindowMinimized;
@@ -308,7 +309,7 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState == WindowActivationState.Deactivated) CancelInspectorDockDrag();
+        if (args.WindowActivationState == WindowActivationState.Deactivated) InterruptInspectorInteraction();
         UpdateWindowMinimizedState(IsAppWindowCurrentlyMinimized());
         if (!_isWindowMinimized &&
             !_xtermNeedsFullRerenderAfterRestore &&
@@ -3999,14 +4000,14 @@ public sealed partial class MainWindow : Window
 
     private async Task FitXtermAsync()
     {
-        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize)
+        if (!_isXtermReady || IsClosingOrClosed || _isVisualAppendSuspendedForMinimize || _isInspectorResizeDragging)
         {
             return;
         }
 
         try
         {
-            await ExecuteXtermScriptAsync("window.serialMonitorFit && window.serialMonitorFit();");
+            await ExecuteXtermScriptAsync("window.serialMonitorRequestFit && window.serialMonitorRequestFit();");
             _viewModel.RecordXtermFitResizeSuccess();
         }
         catch (Exception ex)
@@ -4017,23 +4018,26 @@ public sealed partial class MainWindow : Window
 
     private void QueueXtermFit()
     {
-        if (_xtermFitQueued || IsClosingOrClosed)
+        if (_xtermFitDispatchQueued || IsClosingOrClosed || _isInspectorResizeDragging)
         {
             return;
         }
 
-        _xtermFitQueued = true;
-        if (!DispatcherQueue.TryEnqueue(async () =>
+        // Keep one active WebView call and only the latest follow-up. Clearing a
+        // queued flag before awaiting the browser allowed resize bursts to pile up
+        // concurrent calls when reflow of a large history made the browser slow.
+        _xtermFitDispatchQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() =>
         {
-            await Task.Delay(50);
-            // Coalesce requests throughout the delay. Release before fitting so
-            // a size change during the WebView call can schedule a final fit.
-            _xtermFitQueued = false;
-            await FitXtermAsync();
-        }))
-        {
-            _xtermFitQueued = false;
-        }
+            _xtermFitDispatchQueued = false;
+            if (IsClosingOrClosed) return;
+            _xtermFitOperation ??= new LatestRequestAsyncOperation<bool>(async (_, token) =>
+            {
+                await Task.Delay(50, token);
+                await FitXtermAsync();
+            }, _xtermSearchCancellation.Token);
+            _ = _xtermFitOperation.RunAsync(true);
+        })) _xtermFitDispatchQueued = false;
     }
 
     private async Task SearchXtermAsync(XtermSearchRequest request, CancellationToken cancellationToken)
