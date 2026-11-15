@@ -2,6 +2,7 @@
 #include "lab_fixtures.h"
 #include "lab_modbus.h"
 #include "lab_mstp.h"
+#include "lab_master.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -688,6 +689,51 @@ static void export_contract(const char *directory) {
     }
 }
 
+static void master_tests(void) {
+    const char *cases[]={"RETRY6","RETRY22"};
+    for (unsigned n=0;n<2;++n) {
+        char command_text[40]; uint8_t request[10];
+        init(0); snprintf(command_text,sizeof(command_text),"MASTER %s\r\n",cases[n]); send(command_text);
+        assert(lab_master_active()); ++checks; clear(); poll(999,1); equals("");
+        poll(1000,1); size_t length=used;
+        assert(length==(n==0 ? 8u : 10u) && out[1]==(n==0 ? 6u : 22u)); ++checks;
+        assert(lab_modbus_crc(out,length)==0); ++checks; memcpy(request,out,length); clear();
+        poll(1210,1); equals(""); poll(1211,1); assert(used==length && !memcmp(out,request,length)); ++checks;
+        clock_ms=1600; feed_bytes(request,length); assert(lab_master_active()); ++checks;
+        clock_ms=2200; feed_bytes(request,length);
+        lab_master_status s=lab_master_get_status();
+        assert(!lab_master_active() && !strcmp(s.result,"PASS") && s.sent==2 && s.received==2 &&
+            s.retry_ms==211 && s.first_ms==600 && s.second_ms==1200); ++checks;
+        clear(); send("MASTER?\r\n"); contains("result=PASS sent=2 received=2 retry_ms=211");
+    }
+    static const uint8_t replies[][10]={
+        {1,22,0,0,0,0xf2,0,0x25,0x96,0x2e}, {1,3,2,0,0x17,0xf8,0x4a},
+        {1,23,4,0x12,0x34,0xab,0xcd,3,0x34}, {1,3,4,0x12,0x34,0xab,0xcd,0,0x20},
+        {1,0x98,1,0x8a,0}};
+    static const size_t reply_lengths[]={10,7,9,9,5};
+    static const uint8_t functions[]={22,3,23,3,24};
+    init(0); send("MASTER ADVANCED\r\n"); clear();
+    for (unsigned n=0;n<5;++n) {
+        uint32_t now=1000+n*20;
+        poll(now,1); assert(used>=6 && out[1]==functions[n] && lab_modbus_crc(out,used)==0); ++checks;
+        clear(); feed_bytes(replies[n],reply_lengths[n]);
+        poll(now+9,1); equals("");
+    }
+    assert(!strcmp(lab_master_get_status().result,"PASS") && lab_master_get_status().received==5); ++checks;
+    init(0); send("MASTER RETRY6\n"); clear(); poll(1000,1); lab_receive(2,1001);
+    assert(!strcmp(lab_master_get_status().result,"RESPONSE_MISMATCH")); ++checks;
+    init(0); send("MASTER RETRY6\n"); clear(); poll(8000,1); equals("");
+    assert(!strcmp(lab_master_get_status().result,"TIMEOUT")); ++checks;
+    init(0); send("MASTER RETRY6\n"); clear(); blocked=true; poll(1000,1); blocked=false; poll(1001,1); equals("");
+    assert(!strcmp(lab_master_get_status().result,"TX_REJECTED") && lab_master_get_status().sent==0); ++checks;
+    init(0); blocked=true; send("MASTER RETRY6\n"); blocked=false; poll(1000,1); equals("");
+    assert(!lab_master_active()); ++checks;
+    init(0); send("MASTER INVALID\n"); assert(!lab_master_active()); ++checks;
+    init(UINT32_MAX-500u); send("MASTER RETRY6\n"); clear(); poll(498,1); equals(""); poll(499,1);
+    assert(used==8); ++checks;
+    init(0); assert(!lab_master_active()); ++checks;
+}
+
 int main(int argc, char **argv) {
     assert(lab_crc16((const uint8_t *)"123456789",9) == 0x29b1); ++checks;
     text_tests(); scheduling_tests(); generator_tests(); binary_tests(); malformed_tests();
@@ -701,6 +747,7 @@ int main(int argc, char **argv) {
     mstp_tests();
     rtu_fault_tests();
     checks += lab_modbus_extended_tests();
+    master_tests();
     printf("PASS: %u protocol checks (text, timing/wrap, bounded backpressure, faults, CRC, malformed recovery)\n", checks);
     if (argc == 3 && !strcmp(argv[1],"--export")) export_contract(argv[2]);
     return 0;

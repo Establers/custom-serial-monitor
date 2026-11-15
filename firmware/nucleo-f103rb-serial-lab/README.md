@@ -4,6 +4,9 @@ NUCLEO-F103RB 한 장과 현재 연결한 USB 케이블로 Serial Monitor를 시
 기본 통신, 시퀀스 응답 검사, Terminal/HEX, UTF-8, 이벤트, 대량 수신, 지연·분할 응답,
 CRC와 순번 검증, 의도적인 누락·중복·CRC 오류를 재현합니다.
 
+**1.8.0은 PC 장치 시뮬레이터를 검사하는 명시적 마스터 시험을 추가합니다.** 부팅 동작과 기존 슬레이브는 유지하며,
+`LAB`에서만 `MASTER RETRY6|RETRY22|ADVANCED`로 시작합니다. [실기 결과·CLI 재실행 방법](SIMULATOR-VALIDATION.md)을 참고하세요.
+
 ## 기본 동작: HEX Modbus RTU 슬레이브
 
 **1.7.1은 전원 인가·실제 MCU 리셋 때만 한글 테스트 안내문을 한 번 출력한 뒤 RTU 대기로 들어갑니다.**

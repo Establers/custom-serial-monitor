@@ -2,6 +2,7 @@
 #include "lab_fixtures.h"
 #include "lab_modbus.h"
 #include "lab_mstp.h"
+#include "lab_master.h"
 #ifdef LAB_TARGET_BUILD
 #include "lab_build_info.h"
 #else
@@ -92,6 +93,7 @@ static bool output(const void *data, size_t length) {
     ++tx_rejected;
     return false;
 }
+static bool master_output(const uint8_t *data, size_t length) { return output(data,length); }
 
 static bool say(const char *format, ...) {
     char text[768];
@@ -386,6 +388,7 @@ static void command(uint32_t now) {
                   "RTU RESET | RTU STATUS? | RTU FAULT CLEAR|DROP|CRC|TRUNCATE|WRONGID\r\n"
                   "RTU FAULT DELAY|SPLIT 1..5000 (one addressed reply only)\r\n"
                   "CONSOLE ON|OFF (remote echo); BS/DEL delete; Tab completes commands\r\n");
+        (void)say("MASTER RETRY6|RETRY22|ADVANCED (1s arm, 8s deadline); MASTER? reports results\r\n");
     } else if (!strcmp(cmd, "CONSOLE")) {
         char *state = token(&cursor);
         if (state && !*cursor && (!strcmp(state,"ON") || !strcmp(state,"OFF"))) {
@@ -444,6 +447,20 @@ static void command(uint32_t now) {
     } else if (!strcmp(cmd, "LAB") && !*cursor) {
         clear_rtu_state(true);
         (void)say("OK LAB\r\n");
+    } else if (!strcmp(cmd,"MASTER?") && !*cursor) {
+        lab_master_status s=lab_master_get_status();
+        (void)say("MASTER case=%s result=%s sent=%lu received=%lu retry_ms=%lu first_ms=%lu second_ms=%lu\r\n",
+            s.name,s.result,(unsigned long)s.sent,(unsigned long)s.received,(unsigned long)s.retry_ms,
+            (unsigned long)s.first_ms,(unsigned long)s.second_ms);
+    } else if (!strcmp(cmd,"MASTER")) {
+        char *name=token(&cursor);
+        if (!name || *cursor) { error("ARGS MASTER RETRY6|RETRY22|ADVANCED"); return; }
+        if (monitor_enabled || stream_interval || burst_remaining || hex_remaining || pending_len || modbus_remaining ||
+            baud_pending || reset_pending || drop_every || dup_every || crc_every || rtu_response_length) {
+            error("BUSY MASTER requires idle LAB and FAULT CLEAR"); return;
+        }
+        if (!lab_master_start(name,now)) { error("ARGS MASTER RETRY6|RETRY22|ADVANCED"); return; }
+        if (!say("OK MASTER %s\r\n",name)) lab_master_reset();
     } else if (!strcmp(cmd, "MODBUS?" ) && !*cursor) {
         (void)say("MODBUS active=%u remaining=%lu sent=%lu bytes=%u gap_ms=%lu split_gap_ms=%u\r\n",
             modbus_remaining ? 1u : 0u, (unsigned long)modbus_remaining, (unsigned long)modbus_sent,
@@ -586,6 +603,7 @@ static void command(uint32_t now) {
 void lab_init(const lab_platform *platform, uint32_t now) {
     io = *platform;
     boot_guide_written = false;
+    lab_master_reset();
     line_len = frame_len = frame_expected = 0;
     line_discard = swallow_lf = console_echo = false;
     commands = parse_errors = tx_rejected = 0;
@@ -678,6 +696,11 @@ static void receive_rtu(uint8_t byte, uint32_t now) {
 }
 
 void lab_receive(uint8_t byte, uint32_t now) {
+    if (lab_master_active()) {
+        /* Ignore a CRLF command's trailing LF while the fixture is arming. */
+        if (swallow_lf) { swallow_lf=false; if (byte=='\n') return; }
+        lab_master_receive(byte,now); return;
+    }
     if (rtu_mode) { receive_rtu(byte,now); return; }
     if (frame_len && (uint32_t)(now - last_byte) > 500) {
         frame_len = frame_expected = 0; ++parse_errors;
@@ -752,6 +775,7 @@ static bool numbered(const uint8_t *data, size_t length, uint32_t seq) {
 }
 
 void lab_poll(uint32_t now) {
+    if (lab_master_active()) { lab_master_poll(now,master_output); return; }
     if (rtu_mode) { poll_rtu(now); return; }
     poll_monitor(now);
     if (baud_pending) {

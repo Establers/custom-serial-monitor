@@ -1,0 +1,10 @@
+{
+  "name": "F103RB LAB - Last simulator master result",
+  "repeatCount": 1,
+  "steps": [
+    { "name": "LAB 진입", "command": "LAB", "txMode": "text", "lineEnding": "crlf", "captureMs": 300, "delayAfterMs": 100, "expect": { "kind": "text", "value": "OK LAB" } },
+    { "name": "펌웨어 확인", "command": "BUILD?", "txMode": "text", "lineEnding": "crlf", "captureMs": 300, "delayAfterMs": 100 },
+    { "name": "마지막 마스터 시험 결과 조회", "command": "MASTER?", "txMode": "text", "lineEnding": "crlf", "captureMs": 300, "delayAfterMs": 100 },
+    { "name": "RTU 대기로 복귀", "command": "RTU", "txMode": "text", "lineEnding": "crlf", "captureMs": 300, "delayAfterMs": 0, "expect": { "kind": "text", "value": "OK RTU" } }
+  ]
+}
