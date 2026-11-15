@@ -92,18 +92,186 @@ public sealed class ModbusPollingEditorTests
     }
 
     [Fact]
-    public void DirtyDraftCannotDisappearWhenSelectingAnotherGroup()
+    public void ValidDraftIsIncludedWhenSelectingAnotherGroup()
+    {
+        var original = Workspace();
+        var editor = new ModbusPollingEditorViewModel(original);
+        var second = editor.Groups[1];
+        editor.NameText = "Edited";
+        editor.UnitText = "3";
+        editor.ApplyItemDefinitions([new() { Address = 10, Name = "Mode" }]);
+        editor.SelectedGroup = second;
+        Assert.Same(second, editor.SelectedGroup);
+        Assert.Equal("Second", editor.NameText);
+        Assert.Equal("2", editor.UnitText);
+        Assert.Empty(editor.Error);
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal("second", result.SelectedGroupId);
+        Assert.Equal("first", result.Groups[0].Id);
+        Assert.Equal("Edited", result.Groups[0].Name);
+        Assert.Equal(3, result.Groups[0].Settings.UnitId);
+        Assert.Equal("Mode", Assert.Single(result.Groups[0].Settings.Items).Name);
+        Assert.Equal("First", original.Groups[0].Name);
+        Assert.Empty(original.Groups[0].Settings.Items);
+        result.Groups[0].Settings.Items[0].Name = "Changed result";
+        Assert.True(editor.TryApply(out var next), editor.Error);
+        Assert.Equal("Mode", next.Groups[0].Settings.Items[0].Name);
+    }
+
+    [Fact]
+    public void NewGroupIncludesValidEditsWithoutAddingUntouchedDefaults()
+    {
+        var original = Workspace();
+        var editor = new ModbusPollingEditorViewModel(original) { NameText = "Edited existing" };
+        editor.NewGroup();
+        Assert.Null(editor.SelectedGroup);
+        Assert.Equal("Edited existing", editor.Groups[0].Group!.Name);
+        Assert.Equal("first", editor.Groups[0].Group!.Id);
+        Assert.Equal(2, editor.Groups.Count);
+        editor.NameText = "New area";
+        editor.AddressText = "100";
+        editor.NewGroup();
+        Assert.Null(editor.SelectedGroup);
+        var added = editor.Groups[2].Group!;
+        Assert.Equal("New area", added.Name);
+        Assert.Equal(100, added.Settings.Address);
+        Assert.NotEqual("first", added.Id);
+        editor.NewGroup();
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal(3, result.Groups.Count);
+        Assert.Equal(added.Id, result.SelectedGroupId);
+        Assert.Equal(2, original.Groups.Count);
+        Assert.Equal("First", original.Groups[0].Name);
+    }
+
+    [Theory]
+    [InlineData(false, "new")]
+    [InlineData(false, "other")]
+    [InlineData(false, "deselect")]
+    [InlineData(true, "new")]
+    [InlineData(true, "other")]
+    public void InvalidNavigationKeepsTheDraftUntilItCanBeIncluded(bool newDraft, string action)
+    {
+        var original = Workspace();
+        var editor = new ModbusPollingEditorViewModel(original);
+        if (newDraft) editor.NewGroup();
+        var selected = editor.SelectedGroup;
+        var second = editor.Groups[1];
+        var entries = editor.Groups.ToArray();
+        editor.NameText = "Keep this draft";
+        editor.UnitText = "248";
+        editor.AddressText = "10";
+        editor.QuantityText = "4";
+        editor.ApplyItemDefinitions([new() { Address = 10, Name = "Keep this item" }]);
+        Navigate();
+        Assert.Same(selected, editor.SelectedGroup);
+        Assert.Equal("Keep this draft", editor.NameText);
+        Assert.Equal("248", editor.UnitText);
+        Assert.Equal(entries, editor.Groups);
+        Assert.NotEmpty(editor.Error);
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, editor.ErrorVisibility);
+        Assert.False(editor.TryApply(out _));
+
+        editor.UnitText = "3";
+        Assert.Equal("Keep this item", Assert.Single(editor.CreateItemEditorSettings()!.Items).Name);
+        Navigate();
+        Assert.Empty(editor.Error);
+        if (action == "other") Assert.Same(second, editor.SelectedGroup);
+        else Assert.Null(editor.SelectedGroup);
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal(newDraft ? 3 : 2, result.Groups.Count);
+        var saved = result.Groups[newDraft ? 2 : 0];
+        Assert.Equal("Keep this draft", saved.Name);
+        Assert.Equal(3, saved.Settings.UnitId);
+        Assert.Equal("Keep this item", Assert.Single(saved.Settings.Items).Name);
+        Assert.Equal("First", original.Groups[0].Name);
+        Assert.Empty(original.Groups[0].Settings.Items);
+
+        void Navigate()
+        {
+            if (action == "new") editor.NewGroup();
+            else editor.SelectedGroup = action == "deselect" ? null : second;
+        }
+    }
+
+    [Fact]
+    public void CollectionAndSelectionReentryCannotRedirectOrDuplicateAutomaticInclusion()
     {
         var editor = new ModbusPollingEditorViewModel(Workspace());
-        var first = editor.SelectedGroup;
-        editor.NameText = "Edited";
+        var second = editor.Groups[1];
+        var collectionReentries = 0;
+        var selectionReentries = 0;
+        editor.Groups.CollectionChanged += (_, _) =>
+        {
+            collectionReentries++;
+            editor.SelectedGroup = null;
+            editor.NewGroup();
+        };
+        editor.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(editor.SelectedGroup) || selectionReentries++ >= 10) return;
+            editor.SelectedGroup = null;
+            editor.NewGroup();
+        };
+        editor.NameText = "Included first";
+        editor.SelectedGroup = second;
+        Assert.Same(second, editor.SelectedGroup);
+        Assert.Equal("Second", editor.NameText);
+        Assert.Equal("Included first", editor.Groups[0].Group!.Name);
+        editor.NameText = "Included second";
+        editor.NewGroup();
+        Assert.Null(editor.SelectedGroup);
+        editor.NameText = "Included third";
+        editor.SelectedGroup = editor.Groups[0];
+        Assert.Equal("Included first", editor.NameText);
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal(new[] { "Included first", "Included second", "Included third" }, result.Groups.Select(group => group.Name));
+        Assert.Equal("first", result.SelectedGroupId);
+        Assert.True(collectionReentries > 0);
+        Assert.True(selectionReentries > 0);
+    }
+
+    [Fact]
+    public void DetachedSelectionCannotCommitOrReplaceTheCurrentDraft()
+    {
+        var editor = new ModbusPollingEditorViewModel(Workspace());
+        var detached = editor.SelectedGroup;
+        editor.NameText = "Included";
         editor.SelectedGroup = editor.Groups[1];
-        Assert.Same(first, editor.SelectedGroup);
-        Assert.Equal("Edited", editor.NameText);
-        Assert.NotEmpty(editor.Error);
-        Assert.True(editor.SaveGroup(), editor.Error);
+        var current = editor.SelectedGroup;
+        editor.NameText = "Still editing";
+        editor.SelectedGroup = detached;
+        Assert.Same(current, editor.SelectedGroup);
+        Assert.Equal("Still editing", editor.NameText);
+        Assert.Equal("Second", current!.Group!.Name);
+        Assert.Empty(editor.Error);
+    }
+
+    [Fact]
+    public void ImportedInvalidGroupsCanBeRepairedOneAtATimeBeforeApplying()
+    {
+        var original = Workspace();
+        original.Groups.ForEach(group => group.Settings = null!);
+        var editor = new ModbusPollingEditorViewModel(original);
         editor.SelectedGroup = editor.Groups[1];
         Assert.Equal("Second", editor.NameText);
+        Repair(200);
+        editor.SelectedGroup = editor.Groups[0];
+        Assert.Equal(200, editor.Groups[1].Group!.Settings.Address);
+        Assert.False(editor.TryApply(out _));
+        Repair(100);
+        editor.NewGroup();
+        Assert.True(editor.TryApply(out var result), editor.Error);
+        Assert.Equal(new[] { 100, 200 }, result.Groups.Select(group => group.Settings.Address));
+        Assert.All(original.Groups, group => Assert.Null(group.Settings));
+
+        void Repair(int address)
+        {
+            editor.UnitText = "1";
+            editor.AddressText = address.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            editor.QuantityText = "2";
+            editor.FunctionIndex = 2;
+        }
     }
 
     [Fact]

@@ -14,7 +14,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
 {
     private ModbusPollingEditorEntry? _selectedGroup;
     private string? _selectedGroupId;
-    private bool _loading, _draftDirty, _enabled = true;
+    private bool _loading, _navigating, _draftDirty, _enabled = true;
     private bool _hasInvalidMetadata;
     private string _draftId = Guid.NewGuid().ToString("N");
     private string _name = "", _unit = "1", _address = "0", _quantity = "10", _interval = "1000", _timeout = "1000", _scale = "1", _error = "";
@@ -61,7 +61,8 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
     public string ScaleLabel => M("Scale", "Display multiplier");
     public string SwapBytesLabel => M("SwapBytes", "Swap bytes");
     public string SwapWordsLabel => M("SwapWords", "Swap words (32-bit)");
-    public string DraftHelp => _draftDirty ? T("UnsavedDraft", "Add/update this group before selecting another. Apply also saves the current draft; New discards it.") : "";
+    // Valid edits are included on navigation; validation errors use Error.
+    public string DraftHelp => "";
     public string ItemsSummary => _draftItems is null
         ? T("InvalidItems", "Invalid saved items · open Item definitions to correct them")
         : UiText.Format("ModbusPollingItemsCount", "Defined items: {0}", _draftItems.Count);
@@ -78,21 +79,21 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
         get => _selectedGroup;
         set
         {
-            if (ReferenceEquals(_selectedGroup, value)) return;
-            if (!_loading && _draftDirty)
+            if (_loading || _navigating || ReferenceEquals(_selectedGroup, value) || (value is not null && !Groups.Contains(value))) return;
+            _navigating = true;
+            try
             {
-                Error = T("SaveBeforeSelection", "Add/update this group first, or choose New to discard its draft.");
-                OnPropertyChanged();
-                return;
-            }
-            if (!SetProperty(ref _selectedGroup, value)) return;
-            if (!_loading && value is not null)
-            {
+                if (!CommitNavigationDraft()) { OnPropertyChanged(); return; }
+                if (value is null) { ResetDraft(); return; }
+                SetSelectedGroup(value);
                 _selectedGroupId = value.Group?.Id;
                 Load(value.Group);
             }
+            finally { _navigating = false; }
         }
     }
+    private void SetSelectedGroup(ModbusPollingEditorEntry? value) => SetProperty(ref _selectedGroup, value, nameof(SelectedGroup));
+    private bool CommitNavigationDraft() => !_draftDirty || SaveGroup();
 
     public string NameText { get => _name; set => SetDraft(ref _name, value ?? "", nameof(NameText)); }
     public bool Enabled { get => _enabled; set => SetDraft(ref _enabled, value, nameof(Enabled)); }
@@ -128,14 +129,20 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
         OnPropertyChanged(nameof(DraftHelp));
     }
 
-    public void NewGroup() => ResetDraft();
+    public void NewGroup()
+    {
+        if (_loading || _navigating) return;
+        _navigating = true;
+        try { if (CommitNavigationDraft()) ResetDraft(); }
+        finally { _navigating = false; }
+    }
 
     private void ResetDraft()
     {
         _loading = true;
         try
         {
-            SelectedGroup = null;
+            SetSelectedGroup(null);
             _draftId = Guid.NewGuid().ToString("N");
             NameText = UiText.Format("ModbusPollingNewName", "Group {0}", Groups.Count + 1);
             Enabled = true;
@@ -251,7 +258,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
             try
             {
                 if (index < 0) Groups.Add(replacement); else Groups[index] = replacement;
-                SelectedGroup = replacement;
+                SetSelectedGroup(replacement);
                 _selectedGroupId = group.Id;
             }
             finally { _loading = false; }
@@ -283,7 +290,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
             var entry = new ModbusPollingEditorEntry(copy);
             _hasInvalidMetadata = false;
             _loading = true;
-            try { Groups.Add(entry); SelectedGroup = entry; _selectedGroupId = copy.Id; }
+            try { Groups.Add(entry); SetSelectedGroup(entry); _selectedGroupId = copy.Id; }
             finally { _loading = false; }
             Load(copy);
             return true;
@@ -296,7 +303,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
         if (SelectedGroup is not { } selected) return;
         _hasInvalidMetadata = false;
         _loading = true;
-        try { Groups.Remove(selected); SelectedGroup = null; }
+        try { Groups.Remove(selected); SetSelectedGroup(null); }
         finally { _loading = false; }
         ResetDraft();
         var next = Groups.FirstOrDefault();
@@ -308,7 +315,7 @@ public sealed class ModbusPollingEditorViewModel : ViewModelBase
     {
         _hasInvalidMetadata = false;
         _loading = true;
-        try { Groups.Clear(); SelectedGroup = null; _selectedGroupId = null; }
+        try { Groups.Clear(); SetSelectedGroup(null); _selectedGroupId = null; }
         finally { _loading = false; }
         ResetDraft();
     }

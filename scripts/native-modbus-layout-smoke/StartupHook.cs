@@ -543,6 +543,111 @@ public static class StartupHook
             Issue("presentation availability probe did not leave the device view selected with its popup closed");
         return new { simulatedAdmissionOnly = true, originalAdmission, original, phases, closed, finalSelectedIndex };
     }
+    private static async Task<object> CheckGroupNavigation(object dialog)
+    {
+        var model = P(dialog, "Model")!;
+        var list = Field(dialog, "GroupList");
+        var groups = (IList)P(model, "Groups")!;
+        var getAutomationName = FindType("Microsoft.UI.Xaml.Automation.AutomationProperties").GetMethod("GetName")!;
+        object? unitInput = null;
+        var states = new List<object>();
+        object? Group(object? entry) => entry is null ? null : P(entry, "Group");
+        string? Id(object? entry) => Group(entry) is { } group ? P(group, "Id")?.ToString() : null;
+        bool SelectionMatches() => ReferenceEquals(P(list, "SelectedItem"), P(model, "SelectedGroup"));
+        void Check(bool condition, string message) { if (!condition) Issue("group navigation: " + message); }
+        void Capture(string phase)
+        {
+            Check(unitInput is not null && P(unitInput, "Text")?.ToString() == P(model, "UnitText")?.ToString(),
+                "visible unit input differs from the draft during " + phase);
+            states.Add(new
+            {
+                phase, groupCount = groups.Count, modelSelectedId = Id(P(model, "SelectedGroup")),
+                listSelectedId = Id(P(list, "SelectedItem")), selectionMatches = SelectionMatches(),
+                name = P(model, "NameText"), unit = P(model, "UnitText"), unitInputText = unitInput is null ? null : P(unitInput, "Text"),
+                error = P(model, "Error"), draftDirty = Field(model, "_draftDirty")
+            });
+        }
+        async Task Turns() { await Settle(dialog); await Settle(dialog); }
+        for (var attempt = 0; attempt < 20 && (P(dialog, "IsLoaded") is not true || !Visible(list) || !SelectionMatches()); attempt++)
+            await Settle(dialog);
+        if (P(dialog, "IsLoaded") is not true || !Visible(list) || groups.Count < 2 || P(model, "SelectedGroup") is null)
+        {
+            Issue("group navigation dialog/list was not ready with two groups");
+            return new { ready = false, states };
+        }
+        unitInput = Tree(dialog).FirstOrDefault(element => element.GetType().Name == "TextBox" &&
+            getAutomationName.Invoke(null, [element])?.ToString() == P(model, "UnitLabel")?.ToString());
+        var count = groups.Count;
+        var firstId = Id(groups[0]);
+        var second = groups[1]!;
+        S(model, "NameText", "Navigation saved first");
+        S(list, "SelectedItem", second); // Exercise the actual TwoWay ListView binding.
+        await Turns();
+        Check(P(Group(groups[0])!, "Name")?.ToString() == "Navigation saved first" && Id(groups[0]) == firstId,
+            "valid name edit was not included before selecting another row");
+        Check(ReferenceEquals(P(model, "SelectedGroup"), second) && SelectionMatches(), "valid navigation left model and list selection different");
+        Capture("valid-navigation");
+
+        S(model, "UnitText", "248");
+        S(list, "SelectedItem", groups[0]);
+        await Turns();
+        var invalidError = P(model, "Error")?.ToString();
+        Check(P(model, "UnitText")?.ToString() == "248" && !string.IsNullOrEmpty(invalidError), "invalid navigation lost its field or validator error");
+        Check(ReferenceEquals(P(model, "SelectedGroup"), second) && SelectionMatches(), "invalid navigation did not restore the rejected visible selection");
+        Capture("invalid-navigation-restored");
+        Call(model, "NewGroup");
+        await Turns();
+        Check(groups.Count == count && P(model, "UnitText")?.ToString() == "248" &&
+            P(model, "Error")?.ToString() == invalidError && ReferenceEquals(P(model, "SelectedGroup"), second) && SelectionMatches(),
+            "New discarded an invalid draft or its selected group");
+        Capture("invalid-new-rejected");
+
+        S(model, "UnitText", "2");
+        S(model, "NameText", "Navigation saved second");
+        Call(model, "NewGroup");
+        await Turns();
+        Check(P(Group(groups[1])!, "Name")?.ToString() == "Navigation saved second" &&
+            P(P(Group(groups[1])!, "Settings")!, "UnitId") is 2, "New did not include the corrected group");
+        Check(groups.Count == count && P(model, "SelectedGroup") is null && P(list, "SelectedItem") is null &&
+            Field(model, "_draftDirty") is false && P(model, "Error")?.ToString() == "", "New did not leave a clean unselected draft");
+        Capture("corrected-new-included");
+        Call(model, "NewGroup");
+        Call(model, "NewGroup");
+        await Turns();
+        Check(groups.Count == count && Field(model, "_draftDirty") is false && P(model, "SelectedGroup") is null && SelectionMatches(),
+            "repeated untouched New created phantom groups");
+        Capture("untouched-new-repeat");
+
+        // Invoke the production Unloaded handler, without claiming an actual
+        // visual unload, before an already queued restore callback can execute.
+        S(list, "SelectedItem", groups[1]);
+        await Turns();
+        S(model, "UnitText", "248");
+        S(list, "SelectedItem", groups[0]);
+        if (Field(dialog, "_restoreQueued") is not true)
+            dialog.GetType().GetMethod("GroupSelection_Changed", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, [list, null]);
+        var queued = Field(dialog, "_restoreQueued") is true;
+        var beforeGeneration = (int)Field(dialog, "_selectionGeneration");
+        var visibleBeforeUnloadHandler = P(list, "SelectedItem");
+        var differedBeforeUnloadHandler = !SelectionMatches();
+        dialog.GetType().GetMethod("Dialog_Unloaded", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(dialog, [dialog, New("Microsoft.UI.Xaml.RoutedEventArgs")]);
+        var afterGeneration = (int)Field(dialog, "_selectionGeneration");
+        await Turns();
+        var staleCallbackLeftSelection = ReferenceEquals(P(list, "SelectedItem"), visibleBeforeUnloadHandler);
+        Check(queued && afterGeneration == beforeGeneration + 1 && Field(dialog, "_restoreQueued") is false && staleCallbackLeftSelection,
+            "Unloaded generation did not invalidate the queued selection callback");
+        var unloadGeneration = new
+        {
+            handlerInvokedByReflection = true, actualVisualUnload = false, queued, beforeGeneration, afterGeneration,
+            differedBeforeUnloadHandler, staleCallbackLeftSelection
+        };
+        Capture("unloaded-handler-generation");
+        S(model, "UnitText", "2");
+        Call(model, "NewGroup");
+        await Turns();
+        return new { ready = true, offlinePrivateDialog = true, states, unloadGeneration };
+    }
     private static async Task Probe(object root, string name)
     {
         Case = name;
@@ -550,6 +655,7 @@ public static class StartupHook
         await Settle(root);
         var closedViewCaption = name.StartsWith("default-view", StringComparison.Ordinal) ? CheckClosedViewCaption(root) : null;
         var viewOptionAvailability = name.StartsWith("default-view", StringComparison.Ordinal) ? await CheckViewOptionAvailability(root) : null;
+        var groupNavigation = name.StartsWith("groups-navigation", StringComparison.Ordinal) ? await CheckGroupNavigation(root) : null;
         CheckTextAndButtons(root);
         var formGrids = CheckFormGrids(root);
         if ((name.StartsWith("items-") || name.StartsWith("groups-") || name.StartsWith("commands-") ||
@@ -568,7 +674,7 @@ public static class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, viewOptionAvailability, formGrids, scrolls, issues = Issues.Count - before });
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, viewOptionAvailability, groupNavigation, formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -675,6 +781,7 @@ public static class StartupHook
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-long" + suffix,
                     m => { S(m, "NameText", "긴 항목 / " + new string('N', 80)); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-long" + suffix);
+                await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-navigation" + suffix);
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusCommandEditorDialog", CommandSettings()), "commands-advanced" + suffix,
                     m => { S(m, "IsAdvancedExpanded", true); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-error" + suffix,
