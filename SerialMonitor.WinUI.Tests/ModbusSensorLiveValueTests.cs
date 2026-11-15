@@ -64,6 +64,63 @@ public sealed class ModbusSensorLiveValueTests
         await rig.Session.SetValueAsync(1,"20"); // Barrier after the cancelled command.
         Assert.Equal((ushort)25,rig.Session.Snapshot!.Points[0].Words[0]); Assert.True(rig.Session.IsRunning);
     }
+
+    [Theory]
+    [InlineData("disconnect", false)] [InlineData("disconnect", true)]
+    [InlineData("reconnect", false)] [InlineData("reconnect", true)]
+    [InlineData("stop", false)] [InlineData("stop", true)]
+    public async Task ConnectionChangeDiscardsRemainingWritesInTheCurrentRxChunk(string transition, bool broadcast)
+    {
+        await using var rig = new Rig();
+        rig.Device.OnSend = _ =>
+        {
+            if (transition == "stop") rig.Stop.Cancel();
+            else
+            {
+                rig.Device.Disconnect();
+                if (transition == "reconnect") rig.Device.Reconnect();
+            }
+            return Task.CompletedTask;
+        };
+        var read = ModbusRtuRequestBuilder.Read(1, 4, 0, 1);
+        var write = ModbusRtuRequestBuilder.WriteSingle((byte)(broadcast ? 0 : 1), 6, 0, 99);
+        rig.Device.Emit([.. read, .. write], endsAtIdleBoundary: true);
+        if (transition == "stop") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => rig.Run.WaitAsync(TimeSpan.FromSeconds(2)));
+        else await Assert.ThrowsAsync<IOException>(() => rig.Run.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal((ushort)10, rig.Session.Snapshot!.Points[1].Words[0]);
+        Assert.Equal(ModbusSensorChangeSource.Initial, rig.Session.Snapshot.Points[1].Source);
+        Assert.Single(rig.Device.Sent);
+        Assert.False(rig.Session.IsRunning); Assert.Null(rig.Device.Owner);
+    }
+
+    [Fact] public async Task SendFailureStopsLiveEditingAndKeepsTheErrorVisible()
+    {
+        var serial = DispatchProxy.Create<ISerialService, ModbusRtuMonitorServiceTests.TestSerial>();
+        var device = (ModbusRtuMonitorServiceTests.TestSerial)(object)serial;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        device.OnSend = async _ => { entered.TrySetResult(); await release.Task; throw new IOException("simulated send failure"); };
+        var model = new ModbusSensorViewModel(new(serial, (_, _) => {}), () => true, () => {});
+        model.Json = JsonSerializer.Serialize(Definition(), ModbusSensorDefinition.JsonOptions); model.Validate();
+        var run = model.StartAsync();
+        try
+        {
+            await Ready(model);
+            var session = model.LiveSession!;
+            device.Emit(ModbusRtuRequestBuilder.Read(1, 4, 0, 1));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var edit = model.ChangeValueAsync(session, model.Points[0], "35");
+            release.TrySetResult();
+            await run.WaitAsync(TimeSpan.FromSeconds(2));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => edit.WaitAsync(TimeSpan.FromSeconds(2)));
+            model.Refresh();
+            Assert.Contains("simulated send failure", model.HeaderText);
+            Assert.False(model.IsBusy); Assert.False(model.CanChangeValues);
+            Assert.False(session.IsRunning); Assert.Null(device.Owner);
+            Assert.Equal("25", model.Points[0].CurrentValue);
+        }
+        finally { release.TrySetResult(); await model.StopAsync(); await run; }
+    }
     [Fact] public async Task FullControlQueueRejectsNewWorkAndStopSettlesAllPendingEdits()
     {
         await using var rig = new Rig(1000);

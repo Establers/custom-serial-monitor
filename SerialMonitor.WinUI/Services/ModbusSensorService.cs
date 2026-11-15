@@ -85,6 +85,11 @@ public sealed class ModbusSensorService(ISerialService serial, Action<byte[], lo
                 foreach (var request in framer.Feed(chunk.Bytes, chunk.EndsAtNativeIdleBoundary))
                 {
                     token.ThrowIfCancellationRequested();
+                    // A previous response can await while this RX chunk still
+                    // contains requests. Do not mutate live values from an old
+                    // connection, including broadcasts that never reach TX checks.
+                    if (!serial.IsConnected || serial.ReceiveSessionGeneration != lease.Generation)
+                        throw new IOException("연결이 바뀌었어요. 장치 응답을 다시 시작하세요.");
                     if (Volatile.Read(ref overflow) != 0) throw new IOException("시뮬레이터 수신 대기열 초과로 응답을 중지했어요.");
                     // FC05/06/22 echoes are indistinguishable from identical requests.
                     // Stop on a rapid echo instead of creating a self-sustaining TX loop.
