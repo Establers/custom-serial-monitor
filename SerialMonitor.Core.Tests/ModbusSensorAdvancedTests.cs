@@ -97,7 +97,7 @@ public sealed class ModbusSensorAdvancedTests
     }
     [Fact] public void AdvancedRequestsSurviveEverySplitAndCoalescedFrames()
     {
-        var requests = new[] { Packet(1,22,0,0,0,0xF2,0,0x25), ReadWrite(0,2,0,7,8) };
+        var requests = new[] { Packet(1,7), Packet(1,22,0,0,0,0xF2,0,0x25), Packet(1,24,0,0), ReadWrite(0,2,0,7,8) };
         foreach (var request in requests)
         {
             for (var split = 1; split < request.Length; split++)
@@ -107,7 +107,18 @@ public sealed class ModbusSensorAdvancedTests
                 Assert.Equal(request, Assert.Single(framer.Feed(request[split..], true)));
             }
         }
-        Assert.Equal(requests, new ModbusRequestFramer().Feed([.. requests[0], .. requests[1]], true).ToArray());
+        Assert.Equal(requests, new ModbusRequestFramer().Feed(requests.SelectMany(request => request).ToArray(), true).ToArray());
+    }
+    [Fact] public void CombinedWriteDoesNotExtractFifoRequestFromItsPayload()
+    {
+        // The data contains the complete CRC-valid FC24 request 0118000081DF.
+        var write = ReadWrite(0,3,0,0x0118,0x0000,0x81DF);
+        for (var split = 1; split < write.Length; split++)
+        {
+            var framer = new ModbusRequestFramer();
+            Assert.Empty(framer.Feed(write[..split]));
+            Assert.Equal(write, Assert.Single(framer.Feed(write[split..], true)));
+        }
     }
     [Fact] public void TruncatedCombinedPrefixCannotHideAValidRequestAtIdle()
     {

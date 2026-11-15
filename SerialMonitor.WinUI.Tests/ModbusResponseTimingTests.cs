@@ -26,6 +26,8 @@ public sealed class ModbusResponseTimingTests
     {
         var serial = DispatchProxy.Create<ISerialService,ModbusRtuMonitorServiceTests.TestSerial>();
         var device = (ModbusRtuMonitorServiceTests.TestSerial)(object)serial; device.BaudRate = 1200;
+        var starts = System.Threading.Channels.Channel.CreateUnbounded<long>();
+        device.OnSend = async _ => { starts.Writer.TryWrite(Stopwatch.GetTimestamp()); await Task.Delay(120); };
         var times = System.Threading.Channels.Channel.CreateUnbounded<long>();
         var service = new ModbusSensorService(serial,(_,_) => times.Writer.TryWrite(Stopwatch.GetTimestamp()));
         using var stop = new CancellationTokenSource();
@@ -37,10 +39,13 @@ public sealed class ModbusResponseTimingTests
             var request = ModbusRtuRequestBuilder.Read(1,3,0,1);
             device.Emit([..request,..request]);
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            var first = await times.Reader.ReadAsync(deadline.Token);
-            var second = await times.Reader.ReadAsync(deadline.Token);
-            Assert.True(Stopwatch.GetElapsedTime(before,first).TotalMilliseconds >= 32);
-            Assert.True(Stopwatch.GetElapsedTime(first,second).TotalMilliseconds >= 96);
+            var firstStart = await starts.Reader.ReadAsync(deadline.Token);
+            var firstCompleted = await times.Reader.ReadAsync(deadline.Token);
+            var secondStart = await starts.Reader.ReadAsync(deadline.Token);
+            await times.Reader.ReadAsync(deadline.Token);
+            Assert.True(Stopwatch.GetElapsedTime(before,firstStart).TotalMilliseconds >= 32);
+            // Count the queued wire time and gap after SendAsync completes, not when it starts.
+            Assert.True(Stopwatch.GetElapsedTime(firstCompleted,secondStart).TotalMilliseconds >= 96);
         }
         finally { stop.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>run); }
     }

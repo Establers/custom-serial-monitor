@@ -68,7 +68,7 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
     }
 
     [Com0comPair0Fact]
-    public async Task MaskAndCombinedWritesRoundTripAcrossTheWindowsDriver()
+    public async Task UnsupportedRequestsAndAdvancedWritesRoundTripAcrossTheWindowsDriver()
     {
         VerifyEmulator("CNCA0"); VerifyEmulator("CNCB0");
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
@@ -88,16 +88,18 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
         {
             // Independent fixed packets, including wire CRCs; FC22 example: 0x12 -> 0x17.
             var vectors = new[] {
+                ("010741E2","0187018230"),
                 ("0116000000F20025962E","0116000000F20025962E"),
                 ("010300000001840A","0103020017F84A"),
+                ("0118000081DF","0198018A00"),
                 ("01170000000200000002041234ABCD3D53","0117041234ABCD0334") };
             foreach (var (request,response) in vectors)
             {
                 await master.SendBytesAsync(Convert.FromHexString(request),"Advanced simulator test",token);
                 Assert.Equal(response,Convert.ToHexString(await ReadExact(master,response.Length/2,token)));
             }
-            Assert.Equal(26,serial.WrittenByteCount);
-            output.WriteLine("FC22 mask write, FC03 readback, FC23 write-before-read: 3 exact request/response exchanges at 9600 8E1.");
+            Assert.Equal(36,serial.WrittenByteCount);
+            output.WriteLine("FC07/24 exceptions, FC22 mask write, FC03 readback, FC23 write-before-read: 5 exact exchanges at 9600 8E1.");
         }
         finally
         {
