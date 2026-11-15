@@ -1,13 +1,76 @@
 using System.Text;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using SerialMonitor.Core.Protocols;
 using SerialMonitor.WinUI.Models;
 using SerialMonitor.WinUI.Services;
 using SerialMonitor.WinUI.Infrastructure;
+using SerialMonitor.WinUI.ViewModels;
 
 namespace SerialMonitor.WinUI.Tests;
 
 public sealed class ProtocolReceiveIntegrationTests
 {
+    [Fact]
+    public async Task MonitoringSequenceTransmitsAndAnalyzesBothDirectionsWithoutChangingRole()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var serial = new SerialService();
+        await using var analyzer = new ProtocolAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { SelectedViewIndex = 1 };
+        var settings = new SerialSettings { PortName = "MOCK" };
+        var model = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(MainViewModel).GetField("_serialService", flags)!.SetValue(model, serial);
+        typeof(MainViewModel).GetField("_currentSerialSettings", flags)!.SetValue(model, settings);
+        typeof(MainViewModel).GetField("<Protocol>k__BackingField", flags)!.SetValue(model, protocol);
+        var receive = typeof(MainViewModel).GetMethod("OnProtocolBytesReceived", flags)!
+            .CreateDelegate<Action<long, ReceivedByteChunk>>(model);
+        var transmit = typeof(MainViewModel).GetMethod("OfferProtocolTransmit", flags)!
+            .CreateDelegate<Action<LogLine, long?>>(model);
+        serial.CaptureBytesReceived += receive;
+        serial.SetTransmitMode(SerialTransmitMode.Observe);
+        await serial.ConnectAsync(settings, new(), timeout.Token);
+        try
+        {
+            // All bytes are ASCII, including the CRC, so MOCK's text echo
+            // preserves this valid request for the production RX analysis path.
+            var request = Convert.FromHexString("010300030002340B");
+            var sequence = new CommandSequence
+            {
+                Name = "monitor and send", RepeatCount = 2,
+                Steps = [new() { CommandText = Convert.ToHexString(request), TxMode = TxSendMode.Hex, DelayAfterMs = 0 }]
+            };
+            var completed = 0;
+            await new CommandSequenceRunner().RunAsync(sequence,
+                _ => Task.FromResult(serial.IsConnected),
+                async (step, token) =>
+                {
+                    var payload = TxPayloadEncoder.Encode(step.CommandText, step.TxMode!.Value, TxLineEndingMode.None);
+                    var generation = serial.ReceiveSessionGeneration;
+                    await serial.SendBytesAsync(payload, Encoding.ASCII.GetString(payload), token);
+                    transmit(LogLine.Tx(step.CommandText, payload, contentMode: LogRuleMatchMode.Hex), generation);
+                    return true;
+                }, () => false, _ => { }, count => completed = count, timeout.Token);
+            while (true)
+            {
+                var frames = analyzer.Snapshot().Frames!.Where(frame => frame.Bytes.Span.SequenceEqual(request)).ToArray();
+                if (frames.Count(frame => frame.Direction == ProtocolDirection.Tx) == 2 &&
+                    frames.Count(frame => frame.Direction == ProtocolDirection.Rx) >= 2) break;
+                await Task.Delay(5, timeout.Token);
+            }
+            Assert.Equal(2, completed);
+            Assert.Equal(2 * request.Length, serial.WrittenByteCount);
+            Assert.Equal(1, protocol.SelectedViewIndex);
+            Assert.True(analyzer.Enabled);
+        }
+        finally
+        {
+            serial.CaptureBytesReceived -= receive;
+            await serial.DisconnectAsync(CancellationToken.None);
+        }
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

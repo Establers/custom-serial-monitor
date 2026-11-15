@@ -31,7 +31,7 @@ public sealed partial class ProtocolViewModel
     public Microsoft.UI.Xaml.Visibility SensorVisibility => IsSensorSelected ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     public string RoleHelp => SelectedViewIndex switch
     {
-        1 => "통신 모니터링 · 수신 전용 · RX에는 마스터 요청과 슬레이브 응답이 모두 포함될 수 있습니다",
+        1 => "통신 모니터링 · 수동 TX·시퀀스 사용 가능 · TX는 PC 송신, RX는 수신한 요청·응답입니다",
         2 => "장치 직접 시험 · PC가 요청을 보내요 · 같은 버스의 다른 마스터는 중지하세요",
         4 => "장치 시뮬레이터 · PC가 슬레이브로 응답해요 · 같은 ID의 실제 장치는 분리하세요",
         _ => "일반 통신 · 수동 TX와 시퀀스를 사용할 수 있어요"
@@ -84,7 +84,7 @@ public sealed partial class ProtocolViewModel
     public bool IsModbusViewSelectionEnabled => IsProtocolSelectionEnabled;
     public string ViewSelectionLabel => UiText.Get("ProtocolViewSelection", "Protocol and view");
     public string MoreActionsLabel => UiText.Get("ProtocolMoreActions", "More actions");
-    public string ModbusPacketViewLabel => "Modbus RTU · 통신 모니터링 (수신 전용)";
+    public string ModbusPacketViewLabel => "Modbus RTU · 통신 모니터링";
     public string ModbusReadWriteViewLabel => "Modbus RTU · 장치 직접 시험";
     public string MstpPacketViewLabel => UiText.Get("ProtocolMstpPacketView", "BACnet MS/TP · Packet analysis");
 

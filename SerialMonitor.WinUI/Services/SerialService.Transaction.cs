@@ -48,9 +48,10 @@ public sealed partial class SerialService
         lock (_transmitAdmissionGate)
         {
             ThrowIfDisposed();
-            if (transmitting && (_transmitMode == SerialTransmitMode.Observe ||
-                _transmitMode == SerialTransmitMode.Sensor && exclusive?.Owner != ModbusSensorService.Owner))
-                throw new InvalidOperationException("현재 역할에서는 송신할 수 없어요. 직접 요청하려면 장치 직접 시험을 선택하세요.");
+            // Observation analyzes both directions and permits explicit TX.
+            // Only the simulator role restricts writes to its response session.
+            if (transmitting && _transmitMode == SerialTransmitMode.Sensor && exclusive?.Owner != ModbusSensorService.Owner)
+                throw new InvalidOperationException("장치 시뮬레이터에서는 자동 응답만 송신해요. 직접 보내려면 통신 모니터링이나 장치 직접 시험을 선택하세요.");
             if (exclusive is not null)
             {
                 if (!ReferenceEquals(_exclusiveSession, exclusive) || exclusive.Closing)

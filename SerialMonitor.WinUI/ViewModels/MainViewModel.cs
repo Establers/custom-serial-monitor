@@ -1484,7 +1484,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanEditBridgePort => !IsBridgeActive && !IsBridgeStarting && !IsBusy;
 
     public bool CanStartBridge =>
-        Protocol?.SelectedViewIndex is not (1 or 4) && !IsShuttingDown && IsConnected &&
+        Protocol?.SelectedViewIndex is not 4 && !IsShuttingDown && IsConnected &&
         !IsModbusBusy &&
         !IsTerminalDirectInputEnabled &&
         !IsAutomationBusy &&
@@ -1555,7 +1555,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private bool IsShuttingDown => Volatile.Read(ref _shutdownStarted) != 0;
 
-    public bool CanSendManualTx => Protocol?.SelectedViewIndex is not (1 or 4) && !IsShuttingDown && IsConnected && !IsBusy && !IsModbusBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning && !_serialControlLineBusy && !_serialConfigurationBusy;
+    public bool CanSendManualTx => Protocol?.SelectedViewIndex is not 4 && !IsShuttingDown && IsConnected && !IsBusy && !IsModbusBusy && !IsManualTxBusy && !IsAutomationBusy && !IsSequenceRunning && !_serialControlLineBusy && !_serialConfigurationBusy;
 
     public string ManualTxStateText => ManualTxState switch
     {
@@ -7945,7 +7945,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         var sequence = parameter is SequenceRunRequest request
             ? request.Sequence
             : SelectedCommandSequence;
-        return Protocol?.SelectedViewIndex is not (1 or 4) && !IsShuttingDown && IsConnected &&
+        return Protocol?.SelectedViewIndex is not 4 && !IsShuttingDown && IsConnected &&
             !IsBusy &&
             !IsModbusBusy &&
             !IsAutomationBusy &&

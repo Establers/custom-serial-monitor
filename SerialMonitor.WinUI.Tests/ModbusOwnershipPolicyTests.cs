@@ -11,11 +11,14 @@ namespace SerialMonitor.WinUI.Tests;
 
 public sealed class ModbusOwnershipPolicyTests
 {
-    [Fact]
-    public async Task ModbusDisablesEveryCompetingGuiOperationButKeepsDisconnectAvailable()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ModbusDisablesEveryCompetingGuiOperationButKeepsDisconnectAvailable(int view)
     {
         await using var fixture = await Fixture.Create();
         var model = fixture.Model;
+        model.Protocol.SelectedViewIndex = view;
         Assert.True(model.CanSendManualTx);
         Assert.True(CanRun(model));
         Assert.True(model.CanStartBridge);
@@ -40,6 +43,27 @@ public sealed class ModbusOwnershipPolicyTests
         Set(model, "_isConnected", false);
         Assert.False(model.CanConnect);
         Assert.False(model.CanEditConnectionSettings);
+    }
+
+    [Fact]
+    public async Task MonitoringAllowsExplicitTxWithoutEnablingTheDeviceReadWorkflow()
+    {
+        await using var fixture = await Fixture.Create();
+        var model = fixture.Model;
+        model.Protocol.SelectedViewIndex = 1;
+        fixture.Serial.SetTransmitMode(SerialTransmitMode.Observe);
+        Assert.True(model.CanSendManualTx);
+        Assert.True(CanRun(model));
+        Assert.True(model.CanStartBridge);
+        Assert.True(model.CanEnableTerminalDirectInput);
+        Assert.False((bool)Invoke(model, "CanStartModbusOperation")!);
+        Assert.Equal(0, fixture.Serial.WrittenByteCount);
+
+        model.Protocol.SelectedViewIndex = 4;
+        Assert.False(model.CanSendManualTx);
+        Assert.False(CanRun(model));
+        Assert.False(model.CanStartBridge);
+        Assert.False(model.CanEnableTerminalDirectInput);
     }
 
     [Theory]
