@@ -68,6 +68,9 @@ JSON 계약은 [AI 작성 지침](modbus_sensor_authoring.md)을 따른다.
 `SerialMonitor.WinUI/Resources/CompactControlStyles.xaml`이다.
 
 - 버튼·선택칸·펼침 메뉴는 기존 Modbus 공통 스타일을 사용한다. 높이·화살표·패딩을 화면마다 다시 만들지 않는다.
+- 대화상자는 `CompactContentDialogStyle`을 사용한다. 버튼은 높이 24 DIP·동일 너비,
+  안쪽 여백은 12 DIP다. 포커스/누름 상태에서도 크기를 유지하며 개별 버튼 스타일로 덮어쓰지 않는다.
+  공통 템플릿과 전체 점검 범위는 [대화상자 기준](dialog-layout.md)을 따른다.
 - 드롭다운의 선택칸과 펼친 목록 항목은 왼쪽 Padding 5 DIP(100% 배율에서 5px)를 사용한다. 공통 `ComboBoxPadding`·`ComboBoxItemThemePadding`을 따르고 개별 스타일에서도 왼쪽 값을 덮어쓰지 않는다.
 - 기본 조작은 짧은 동사형으로 적고, 실제 작업 범위는 바로 옆 요약과 툴팁에 표시한다.
 - `대상`, `활성`, `폴링`만으로 사용자의 행동을 설명하지 않는다. 읽기 범위, 자동 읽기에 포함, 자동 읽기를 사용한다.

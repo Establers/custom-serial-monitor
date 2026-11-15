@@ -6,7 +6,8 @@ using Windows.Foundation;
 using Windows.Graphics;
 
 // Runs native layout assertions in a disposable portable-app child process.
-// No desktop automation, input injection, COM connection or profile saves.
+// Default fixtures need no desktop input. The opt-in dialog-keyboard fixture
+// waits for operator input; neither path connects COM ports or saves profiles.
 public static partial class StartupHook
 {
     private static string Output => Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_RESULT")!;
@@ -676,11 +677,124 @@ public static partial class StartupHook
         await Turns();
         return new { ready = true, offlinePrivateDialog = true, states, unloadGeneration };
     }
+    private static async Task<object?> CheckDialogFooter(object root)
+    {
+        if (P(root, "DefaultButton") is not { } originalDefault) return null;
+        async Task Turns() { await Task.Delay(20); Call(root, "UpdateLayout"); }
+        var buttons = Tree(root).Where(e => e.GetType().Name == "Button" && Visible(e) &&
+            P(e, "Name")?.ToString() is "PrimaryButton" or "SecondaryButton" or "CloseButton").ToArray();
+        if (buttons.Length == 0) Issue("dialog footer has no visible buttons");
+        var commandSpace = Tree(root).First(e => P(e, "Name")?.ToString() == "CommandSpace");
+        var padding = P(commandSpace, "Padding")!;
+        if (new[] { "Left", "Top", "Right", "Bottom" }.Any(side => Math.Abs(N(padding, side) - 12) > 0.1))
+            Issue("dialog footer padding differs from the shared 12 DIP inset");
+        var measurements = new List<object>();
+        var vsm = FindType("Microsoft.UI.Xaml.VisualStateManager").GetMethod("GoToState")!;
+        foreach (var defaultButton in new[] { "None", "Primary", "Secondary", "Close" })
+        {
+            S(root, "DefaultButton", defaultButton);
+            await Turns();
+            foreach (var button in buttons)
+            {
+                var name = P(button, "Name")!.ToString()!;
+                if (P(button, "IsEnabled") is true)
+                    Call(button, "Focus", Enum.Parse(FindType("Microsoft.UI.Xaml.FocusState"), "Keyboard"));
+                await Turns();
+                vsm.Invoke(null, [root, defaultButton == "None" ? "NoDefaultButton" : defaultButton + "AsDefaultButton", false]);
+                await Turns();
+                foreach (var state in new[] { "Normal", "PointerOver", "Pressed", "Disabled" })
+                {
+                    vsm.Invoke(null, [button, state, false]);
+                    Call(root, "UpdateLayout");
+                    var width = N(button, "ActualWidth"); var height = N(button, "ActualHeight");
+                    if (Math.Abs(height - 24) > 1) Issue($"{name} height changes from 24 DIP ({defaultButton}/{state}: {height})");
+                    if (buttons.Any(other => Math.Abs(N(other, "ActualWidth") - width) > 1 || Math.Abs(N(other, "ActualHeight") - height) > 1))
+                        Issue($"dialog footer buttons differ in size ({defaultButton}/{state})");
+                    if (!ReferenceEquals(P(button, "Style"), P(root, name + "Style")))
+                        Issue($"{name} style replaced on focus/default change ({defaultButton}/{state})");
+                    measurements.Add(new { name, defaultButton, state, width, height });
+                    if (defaultButton == "Close" && name == "CloseButton" && state == "Pressed" &&
+                        (Case.StartsWith("sensor-value",StringComparison.Ordinal) || Case.Contains("confirm-Dark",StringComparison.Ordinal)))
+                        await CaptureDialog(root,Case+"-cancel-pressed");
+                }
+                vsm.Invoke(null, [button, P(button, "IsEnabled") is true ? "Normal" : "Disabled", false]);
+            }
+        }
+        S(root, "DefaultButton", originalDefault);
+        await Turns();
+        return measurements;
+    }
+    private static async Task CaptureDialog(object root, string name)
+    {
+        if (Environment.GetEnvironmentVariable("SERIAL_DIALOG_SCREENSHOTS") != "1") return;
+        var surface = Tree(root).First(e => P(e,"Name")?.ToString() == "BackgroundElement");
+        var bitmap = New("Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap");
+        await (IAsyncAction)Call(bitmap,"RenderAsync",surface)!;
+        var pixels = await (IAsyncOperation<Windows.Storage.Streams.IBuffer>)Call(bitmap,"GetPixelsAsync")!;
+        using var reader = Windows.Storage.Streams.DataReader.FromBuffer(pixels);
+        var bytes = new byte[pixels.Length]; reader.ReadBytes(bytes);
+        using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,stream);
+        encoder.SetPixelData(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied,
+            (uint)(int)P(bitmap,"PixelWidth")!, (uint)(int)P(bitmap,"PixelHeight")!,96,96,bytes);
+        await encoder.FlushAsync();
+        using var encoded = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+        await encoded.LoadAsync((uint)stream.Size);
+        var png = new byte[stream.Size]; encoded.ReadBytes(png);
+        File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(Output)!,name+".png"),png);
+    }
+    private static async Task FooterDialog(object dialog, string name)
+    {
+        var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+        if (!string.IsNullOrEmpty(filter) && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) return;
+        Case = name; var before = Issues.Count;
+        S(dialog, "XamlRoot", P(Root, "XamlRoot"));
+        Call(dialog, "ShowAsync");
+        try
+        {
+            await Settle(dialog);
+            var dialogFooter = await CheckDialogFooter(dialog);
+            await CaptureDialog(dialog,name);
+            var surface = Tree(dialog).First(e => P(e, "Name")?.ToString() == "BackgroundElement");
+            Results.Add(new { name, width = N(surface,"ActualWidth"), height = N(surface,"ActualHeight"), dialogFooter, formGrids = Array.Empty<object>(), issues = Issues.Count - before });
+            Save();
+        }
+        finally { Call(dialog, "Hide"); await Task.Delay(100); }
+    }
+    private static async Task AuditDialogFooters(string suffix)
+    {
+        var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+        if (!string.IsNullOrEmpty(filter) && !filter.Contains("dialog-footer", StringComparison.OrdinalIgnoreCase)) return;
+        // All non-Modbus dialog classes and every plain-dialog button topology.
+        // Modbus subclasses are covered by the existing full-content fixtures.
+        var navigation = New("SerialMonitor.WinUI.Views.LogNavigationDialog");
+        S(navigation,"Title","로그 위치 이동"); S(navigation,"Content",New("SerialMonitor.WinUI.Views.LogNavigationView"));
+        S(navigation,"PrimaryButtonText","이동"); S(navigation,"SecondaryButtonText","돌아가기"); S(navigation,"CloseButtonText","취소");
+        S(navigation,"DefaultButton","Primary");
+        await FooterDialog(navigation, "dialog-footer-log-navigation" + suffix);
+        var rule = New("SerialMonitor.WinUI.Models.LogRule");
+        var sequences = Array.CreateInstance(FindType("SerialMonitor.WinUI.Models.CommandSequence"),0);
+        await FooterDialog(New("SerialMonitor.WinUI.Views.LogRuleDialog", rule, Array.Empty<string>(), sequences), "dialog-footer-log-rule" + suffix);
+        await FooterDialog(New("SerialMonitor.WinUI.Views.SequenceStepDialog", New("SerialMonitor.WinUI.Models.CommandSequenceStep"),
+            Enum.Parse(FindType("SerialMonitor.WinUI.Models.TxSendMode"),"Terminal"), null), "dialog-footer-sequence-step" + suffix);
+        foreach (var theme in new[] { "Light", "Dark" })
+        foreach (var topology in new[] { "close", "confirm", "three" })
+        {
+            var dialog = New("Microsoft.UI.Xaml.Controls.ContentDialog");
+            S(dialog,"RequestedTheme",theme); S(dialog,"Title","모든 항목을 초기값으로 복원");
+            S(dialog,"Content","현재 값 12개를 제품 JSON의 초기값으로 되돌릴까요? 응답은 계속 진행돼요.");
+            S(dialog,"CloseButtonText","취소"); S(dialog,"DefaultButton","Close");
+            if (topology != "close") S(dialog,"PrimaryButtonText","모두 복원");
+            if (topology == "three") S(dialog,"SecondaryButtonText","다른 이름으로 저장");
+            await FooterDialog(dialog,"dialog-footer-" + topology + "-" + theme + suffix);
+        }
+    }
     private static async Task Probe(object root, string name)
     {
         Case = name;
         var before = Issues.Count;
         await Settle(root);
+        var dialogFooter = await CheckDialogFooter(root);
         var closedViewCaption = name.StartsWith("default-view", StringComparison.Ordinal) ? CheckClosedViewCaption(root) : null;
         var viewOptionAvailability = name.StartsWith("default-view", StringComparison.Ordinal) ? await CheckViewOptionAvailability(root) : null;
         var groupNavigation = name.StartsWith("groups-navigation", StringComparison.Ordinal) ? await CheckGroupNavigation(root) : null;
@@ -702,7 +816,7 @@ public static partial class StartupHook
                     Issue("dialog footer button lies outside the dialog surface: " + P(button, "Name"));
             }
         }
-        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), closedViewCaption, viewOptionAvailability, groupNavigation, formGrids, scrolls, issues = Issues.Count - before });
+        Results.Add(new { name, width = N(surface, "ActualWidth"), height = N(surface, "ActualHeight"), rasterizationScale = N(P(root, "XamlRoot")!, "RasterizationScale"), dialogFooter, closedViewCaption, viewOptionAvailability, groupNavigation, formGrids, scrolls, issues = Issues.Count - before });
         Save();
     }
     private static async Task Dialog(object dialog, string name, Action<object>? configure = null)
@@ -721,6 +835,7 @@ public static partial class StartupHook
                 await Task.Delay(350);
             }
             await Probe(dialog, name);
+            if (name.StartsWith("sensor-value",StringComparison.Ordinal)) await CaptureDialog(dialog,name);
             if (name.StartsWith("sensor-value", StringComparison.Ordinal))
             {
                 var editor = Field(dialog,"ValueEditor");
@@ -734,6 +849,8 @@ public static partial class StartupHook
                 if (P(Field(dialog,"ErrorText"),"Visibility")?.ToString() != "Visible" || ((IAsyncInfo)operation).Status != AsyncStatus.Started)
                     Issue("invalid simulator value did not keep the dialog open");
                 if (P(editor,"Text")?.ToString() != "not a number") Issue("invalid simulator value discarded the draft");
+                if (P(Field(dialog,"ErrorText"),"Text")?.ToString()?.Contains("target of an invocation",StringComparison.Ordinal) == true)
+                    Issue("reflection wrapper hid the user's validation error");
                 await Probe(dialog,name+"-invalid");
                 S(editor,"Text","35"); Apply();
                 for (var attempt=0;attempt<80 && ((IAsyncInfo)operation).Status == AsyncStatus.Started;attempt++) await Task.Delay(25);
@@ -865,6 +982,8 @@ public static partial class StartupHook
             Host = New("Microsoft.UI.Xaml.Window");
             Root = New("Microsoft.UI.Xaml.Controls.Grid");
             S(Host, "Content", Root); Call(Host, "Activate");
+            if (Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER")?.StartsWith("dialog-keyboard",StringComparison.Ordinal) == true)
+                await RunDialogKeyboardAudit();
             foreach (var size in new[] { new SizeInt32(1280, 900), new SizeInt32(800, 600) })
             {
                 Call(P(Host, "AppWindow")!, "Resize", size);
@@ -872,9 +991,11 @@ public static partial class StartupHook
                 var suffix = $"-{size.Width}x{size.Height}";
                 var defaultViewName = "default-view" + suffix;
                 var filter = Environment.GetEnvironmentVariable("SERIAL_MODBUS_LAYOUT_FILTER");
+                if (filter?.StartsWith("dialog-keyboard",StringComparison.Ordinal) == true) continue;
                 if (string.IsNullOrEmpty(filter) || filter == "settings-position")
                     await CheckSettingsFlyoutPosition(startupModel, suffix);
                 if (filter == "settings-position") continue;
+                await AuditDialogFooters(suffix);
                 if (string.IsNullOrEmpty(filter) || filter == "packet-details")
                 {
                     var packetModel = P(startupModel, "Protocol")!;
@@ -919,7 +1040,9 @@ public static partial class StartupHook
                 var liveDialog = New("SerialMonitor.WinUI.Views.ModbusSensorValueDialog");
                 S(liveDialog,"DataContext",liveRow); S(liveDialog,"Value","25");
                 S(liveDialog,"ApplyValue",(Func<string,Task>)(value => {
-                    Call(liveEngine,"SetPointValue",0,value);
+                    try { Call(liveEngine,"SetPointValue",0,value); }
+                    catch (TargetInvocationException ex) when (ex.InnerException is not null)
+                    { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw(); }
                     var state = ((IEnumerable)P(Call(liveEngine,"GetSnapshot")!,"Points")!).Cast<object>().First();
                     liveRow.GetType().GetMethod("Update",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(liveRow,[state]);
                     return Task.CompletedTask;

@@ -14,6 +14,7 @@ internal sealed class SequenceStepDialog : ContentDialog
 
     public SequenceStepDialog(CommandSequenceStep source, TxSendMode inheritedMode, TxSendMode? defaultTxMode = null)
     {
+        Style = (Style)Application.Current.Resources["CompactContentDialogStyle"];
         var edit = new SequenceStepEditSession(source);
         source = edit.Draft;
         Title = "시퀀스 단계";

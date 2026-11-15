@@ -33,7 +33,9 @@ if ($CaseFilter) { $start.Environment['SERIAL_MODBUS_LAYOUT_FILTER'] = $CaseFilt
 $process = $null
 try {
     $process = [Diagnostics.Process]::Start($start)
-    if (-not $process.WaitForExit(180000)) { throw "Layout test timed out. Partial report: $result" }
+    # Includes every dialog footer's focus/default/press states at both window sizes.
+    $timeout = if ($CaseFilter -like 'dialog-keyboard*') { 900000 } else { 300000 }
+    if (-not $process.WaitForExit($timeout)) { throw "Layout test timed out. Partial report: $result" }
     if (-not (Test-Path -LiteralPath $result)) { throw "No native layout report was produced (exit $($process.ExitCode))." }
     $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
     if ($report.fatal) { throw $report.fatal }

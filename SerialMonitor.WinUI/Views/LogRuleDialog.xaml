@@ -2,7 +2,7 @@
     x:Class="SerialMonitor.WinUI.Views.LogRuleDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Style="{StaticResource DefaultContentDialogStyle}"
+    Style="{StaticResource CompactContentDialogStyle}"
     PrimaryButtonText="Save"
     CloseButtonText="Cancel"
     DefaultButton="Primary"

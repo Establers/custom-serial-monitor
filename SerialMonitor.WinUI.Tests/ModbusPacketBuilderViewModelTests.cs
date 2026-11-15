@@ -48,14 +48,12 @@ public sealed class ModbusPacketBuilderViewModelTests
     public void DialogUsesNativeCopyAndCloseButtonsWithoutATxAction()
     {
         var dialog = DialogMarkup().Root!;
-        Assert.Equal("{StaticResource DefaultContentDialogStyle}", (string?)dialog.Attribute("Style"));
+        Assert.Equal("{StaticResource CompactContentDialogStyle}", (string?)dialog.Attribute("Style"));
         Assert.Equal("{Binding CopyLabel}", (string?)dialog.Attribute("PrimaryButtonText"));
         Assert.Equal("Primary", (string?)dialog.Attribute("DefaultButton"));
         var presentation = dialog.Name.Namespace;
-        var primaryStyle = Assert.Single(dialog.Element(presentation + "ContentDialog.PrimaryButtonStyle")!.Elements(presentation + "Style"));
-        var closeStyle = Assert.Single(dialog.Element(presentation + "ContentDialog.CloseButtonStyle")!.Elements(presentation + "Style"));
-        Assert.Equal("{StaticResource AccentButtonStyle}", (string?)primaryStyle.Attribute("BasedOn"));
-        Assert.Equal("{StaticResource DefaultButtonStyle}", (string?)closeStyle.Attribute("BasedOn"));
+        Assert.Null(dialog.Element(presentation + "ContentDialog.PrimaryButtonStyle"));
+        Assert.Null(dialog.Element(presentation + "ContentDialog.CloseButtonStyle"));
         Assert.Equal("Copy_Click", (string?)dialog.Attribute("PrimaryButtonClick"));
         Assert.Equal("{Binding CloseLabel}", (string?)dialog.Attribute("CloseButtonText"));
         Assert.Null(dialog.Attribute("SecondaryButtonText"));

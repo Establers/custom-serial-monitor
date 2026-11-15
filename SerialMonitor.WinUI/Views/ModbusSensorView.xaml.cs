@@ -124,10 +124,8 @@ public sealed partial class ModbusSensorView : UserControl
             var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "모든 항목을 초기값으로 복원",
                 Content = $"현재 값 {model.Points.Count}개를 제품 JSON의 초기값으로 되돌릴까요? 응답은 계속 진행돼요.",
                 PrimaryButtonText = "모두 복원", CloseButtonText = "취소", DefaultButton = ContentDialogButton.Close,
-                Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
-                TitleTemplate = (DataTemplate)Application.Current.Resources["ModbusDialogTitleTemplate"],
-                PrimaryButtonStyle = (Style)Application.Current.Resources["ModbusAccentButtonStyle"],
-                CloseButtonStyle = (Style)Application.Current.Resources["ModbusActionButtonStyle"] };
+                Style = (Style)Application.Current.Resources["CompactContentDialogStyle"],
+                TitleTemplate = (DataTemplate)Application.Current.Resources["ModbusDialogTitleTemplate"] };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary) await model.RestoreValuesAsync(session, null);
         }
         catch (Exception ex) { model.ShowFeedback(ex.Message); }
