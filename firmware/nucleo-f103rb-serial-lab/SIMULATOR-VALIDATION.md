@@ -68,3 +68,19 @@ CRC를 포함한 응답 불일치·예상 밖 RX·TX 큐 거절·시간 초과�
   설정을 실제 적용값으로 기록하고 앱 DLL 두 개를 모두 고정한 **verified 결과만 최종 근거**로 사용한다.
 - ST-LINK UART에서 실제 보드와 교환한 결과다. WinUI 버튼·렌더링, RS-485 2선식의 전기적 충돌/방향 전환,
   정밀 t1.5/t3.5 적합성과 장시간 운전은 검증하지 않았다.
+
+## 보고서 종료 처리 회귀 검사
+
+검사기는 drain과 시리얼 종료 오류를 기존 시험 실패에 덧붙이고, RX 구독 해제 후 잠금 안에서 수신 기록을 확정한다.
+진행 중인 RX 콜백의 큐 실패까지 포함한 복사본만 직렬화하며, 종료 뒤 호출된 콜백은 기록·큐에 진입하지 않는다.
+최종 overflow나 시리얼 오류가 있으면 `passed`와 `hardwareVerified`는 false다.
+종료 시 적용 통신 설정은 초기화되므로 보고서에는 종료 직전 설정을 보존한다.
+
+저장소 루트에서 장비 없이 실행한다:
+
+```powershell
+dotnet run --project firmware/nucleo-f103rb-serial-lab/tests/SimulatorCheck.Regression/SimulatorCheck.Regression.csproj -c Release
+```
+
+JSON 생성 중 RX, 진행 중 RX의 큐 실패, drain·종료 오류, 최종 오류 카운터, 정상·비정상 취소를 검증한다.
+이 종료 처리 보완은 COM3 접속·송신·펌웨어 변경 없이 검증했으며 위 실기 결과는 기존 시험 기록이다.

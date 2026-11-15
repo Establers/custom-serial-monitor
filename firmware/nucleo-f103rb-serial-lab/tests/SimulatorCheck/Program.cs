@@ -13,21 +13,17 @@ if (args is not ["identity", "COM3", _] && args is not ["live", "COM3", _, _])
 var directory=Path.GetFullPath(args[2]);
 if (Directory.Exists(directory)) throw new IOException("Use a new evidence directory.");
 Directory.CreateDirectory(directory);
-var wire=new List<Wire>(); var results=new List<object>();
-var phase="connect"; var overflow=0; string? failure=null;
+var evidence=new EvidenceBuffer(); var results=new List<object>();
+string? failure=null;
 var rx=Channel.CreateBounded<byte[]>(256);
 using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(60));
 Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;deadline.Cancel();};
-await using var serial=new SerialService();
-void Record(string direction,byte[] bytes,long timestamp)
-{
-    lock(wire) { if(wire.Count>=512) { Interlocked.Exchange(ref overflow,1);return; } wire.Add(new(phase,direction,timestamp,Convert.ToHexString(bytes))); }
-}
-void SetPhase(string value) {lock(wire) phase=value;}
-serial.CaptureBytesReceived+=(_,chunk)=> {
-    Record("rx",chunk.Bytes,chunk.ReceivedTimestamp);
-    if(!rx.Writer.TryWrite(chunk.Bytes.ToArray())) Interlocked.Exchange(ref overflow,1);
-};
+var serial=new SerialService();
+void Record(string direction,byte[] bytes,long timestamp) => evidence.Record(direction,bytes,timestamp);
+void SetPhase(string value) => evidence.SetPhase(value);
+void Capture(long generation,ReceivedByteChunk chunk) => evidence.Record("rx",chunk.Bytes,chunk.ReceivedTimestamp,
+    ()=>rx.Writer.TryWrite(chunk.Bytes.ToArray()));
+serial.CaptureBytesReceived+=Capture;
 Task? drain=null;
 try
 {
@@ -52,21 +48,28 @@ try
             Require(Number(before,field)==Number(after,field),$"Firmware {field} increased.");
         await Text("RTU","OK RTU\r\n");
     }
-    Require(Volatile.Read(ref overflow)==0,"Evidence overflow.");
-    Require(serial.SerialFrameErrorCount+serial.SerialParityErrorCount+serial.SerialOverrunErrorCount+serial.SerialRxOverErrorCount==0,"Serial driver errors.");
 }
 catch(Exception ex) { failure=ex.ToString(); Console.Error.WriteLine(ex); }
 finally
 {
-    deadline.Cancel();
-    if(drain is not null) {try {await drain;} catch(OperationCanceledException){} }
-    var report=new {passed=failure is null,hardwareVerified=failure is null && args[0]=="live",failure,
-        port="COM3",baudRate=serial.AppliedBaudRate,serialFormat="8N1",byteTimeoutMs=serial.AppliedReceiveIdleTimeoutMs,
-        nativeIdle=serial.UsesNativeReceiveIdleTimeout,overflow=Volatile.Read(ref overflow)!=0,results,
-        serialErrors=serial.SerialFrameErrorCount+serial.SerialParityErrorCount+serial.SerialOverrunErrorCount+serial.SerialRxOverErrorCount,
+    // Disconnect resets applied settings; preserve them before closing the receiver.
+    var baudRate=serial.AppliedBaudRate;
+    var byteTimeoutMs=serial.AppliedReceiveIdleTimeoutMs;
+    var nativeIdle=serial.UsesNativeReceiveIdleTimeout;
+    var final=await EvidenceFinalizer.FinishAsync(evidence,failure,deadline,drain,async()=>
+    {
+        await serial.DisposeAsync();
+        if(serial.ConnectionState==SerialConnectionState.Faulted)
+            throw new IOException("Serial shutdown did not complete cleanly.");
+    },()=>serial.CaptureBytesReceived-=Capture,
+        ()=>serial.SerialFrameErrorCount+serial.SerialParityErrorCount+serial.SerialOverrunErrorCount+serial.SerialRxOverErrorCount);
+    failure=final.Failure;
+    var report=new {passed=final.Passed,hardwareVerified=final.Passed && args[0]=="live",failure,
+        port="COM3",baudRate,serialFormat="8N1",byteTimeoutMs,nativeIdle,overflow=final.Overflow,results,
+        serialErrors=final.SerialErrors,
         productionAssembly=typeof(ModbusSensorService).Assembly.Location,
         productionSha256=Hash(typeof(ModbusSensorService).Assembly.Location),coreSha256=Hash(typeof(ModbusSensorEngine).Assembly.Location),
-        scope="Production SerialService/ModbusSensorService over ST-LINK UART; board validates exact PC responses. No Computer Use or electrical RS-485 timing certification.",wire};
+        scope="Production SerialService/ModbusSensorService over ST-LINK UART; board validates exact PC responses. No Computer Use or electrical RS-485 timing certification.",wire=final.Wire};
     await File.WriteAllTextAsync(Path.Combine(directory,"report.json"),JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}));
     Console.WriteLine($"Evidence: {directory}; passed={failure is null}");
 }
@@ -98,7 +101,7 @@ async Task Check(string name)
     using var stop=CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
     using var responseDeadline=CancellationTokenSource.CreateLinkedTokenSource(deadline.Token); responseDeadline.CancelAfter(10000);
     var replies=Channel.CreateBounded<byte[]>(8);
-    var simulator=new ModbusSensorService(serial,(bytes,_)=>{Record("simulator-tx",bytes,Stopwatch.GetTimestamp()); if(!replies.Writer.TryWrite(bytes)) Interlocked.Exchange(ref overflow,1);});
+    var simulator=new ModbusSensorService(serial,(bytes,_)=>evidence.Record("simulator-tx",bytes,Stopwatch.GetTimestamp(),()=>replies.Writer.TryWrite(bytes)));
     var run=simulator.RunAsync(new(){SchemaVersion=1,Name="Hardware test",UnitId=1,ResponseDelayMs=name=="ADVANCED"?0:600,
         Points=[new(){Name="Flags",Area=3,Address=0,InitialValue="18",Writable=true},new(){Name="Value",Area=3,Address=1,InitialValue="18",Writable=true}]},()=>{},stop.Token);
     try
@@ -116,8 +119,7 @@ async Task Check(string name)
         stop.Cancel(); try {await run;} catch(OperationCanceledException) when(stop.IsCancellationRequested){}
         serial.SetTransmitMode(SerialTransmitMode.DirectTest);
     }
-    string received;
-    lock(wire) received=string.Concat(wire.Where(w=>w.Phase==name && w.Direction=="rx").Select(w=>w.Hex));
+    var received=evidence.Received(name);
     Require(received==string.Concat(requests),"Actual device request stream differs from independent vectors.");
     var status=await Text("MASTER?",$"MASTER case={name} result=PASS sent={requests.Length} received={responses.Length} ");
     if(name!="ADVANCED")
@@ -131,4 +133,3 @@ async Task Check(string name)
 static long Number(string text,string name)=>long.Parse(Regex.Match(text,@"\b"+name+@"=(\d+)\b").Groups[1].Value);
 static void Require(bool ok,string reason) {if(!ok) throw new IOException(reason);}
 static string Hash(string path)=>Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
-internal sealed record Wire(string Phase,string Direction,long Timestamp,string Hex);
