@@ -151,6 +151,29 @@ public sealed class ModbusDeviceLibraryTests : IDisposable
         Assert.Same(points, model.Points); Assert.Same(menu, protocol.PresentationOptions);
     }
 
+    [Fact] public async Task ConnectionAndFeedbackUseTheExistingHeaderWithoutChangingPreview()
+    {
+        var serial = DispatchProxy.Create<ISerialService, ModbusRtuMonitorServiceTests.TestSerial>();
+        var available = false;
+        var model = new ModbusSensorViewModel(new(serial,(_,_)=>{}),()=>available,()=>{},()=>"상단에서 COM 포트를 연결하세요",Library);
+        await model.InitializeLibraryAsync();
+        await using var analyzer = new ProtocolAnalyzer();
+        var protocol = new ProtocolViewModel(analyzer) { Sensor=model, SelectedViewIndex=4 };
+        var points = model.Points;
+        Assert.Equal("상단에서 COM 포트를 연결하세요",protocol.WorkspaceHeader);
+        model.ShowFeedback("제품을 저장했어요.");
+        Assert.Equal("제품을 저장했어요.",protocol.WorkspaceHeader);
+        Assert.Equal(protocol.WorkspaceHeader,protocol.WorkspaceHeaderHelp);
+        model.ClearFeedback(); available = true; model.Refresh();
+        Assert.Equal(model.Status,protocol.WorkspaceHeader);
+        Assert.Same(points,model.Points);
+        var running = model.StartAsync();
+        available = false;
+        ((ModbusRtuMonitorServiceTests.TestSerial)(object)serial).Disconnect();
+        await running;
+        Assert.StartsWith("응답 중지:", protocol.WorkspaceHeader);
+    }
+
     [Fact] public async Task PendingSaveBlocksStartAndSelectionUntilItCompletes()
     {
         var blocking = new BlockingLibrary(Library);

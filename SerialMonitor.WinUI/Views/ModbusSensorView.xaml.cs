@@ -8,7 +8,6 @@ using Windows.Storage.Pickers;
 namespace SerialMonitor.WinUI.Views;
 public sealed partial class ModbusSensorView : UserControl
 {
-    private bool _copying;
     public ModbusSensorView() => InitializeComponent();
     private ModbusSensorViewModel? Model => DataContext as ModbusSensorViewModel;
     private nint WindowHandle => Microsoft.UI.Win32Interop.GetWindowFromWindowId(XamlRoot.ContentIslandEnvironment.AppWindowId);
@@ -83,22 +82,17 @@ public sealed partial class ModbusSensorView : UserControl
     {
         if (Model is { } model) await model.ReloadLibraryAsync();
     }
-    private async void CopyGuide_Click(object sender, RoutedEventArgs args)
+    private async void ShowAiGuide_Click(object sender, RoutedEventArgs args)
     {
-        if (_copying || Model is not { } model) return;
-        _copying = true;
         try
         {
-            var text = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_authoring.md"));
-            await ClipboardTextCopy.CopyAsync(text, CancellationToken.None);
-            model.ShowFeedback("AI 작성 지침을 복사했어요. PDF와 함께 다른 AI에 붙여 넣으세요.");
+            await new ModbusDeviceAiGuideDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme }.ShowAsync();
         }
-        catch (Exception ex) { model.ShowFeedback("복사 실패: " + ex.Message); }
-        finally { _copying = false; }
+        catch (Exception ex) { Model?.ShowFeedback("AI 안내를 열지 못했어요: " + ex.Message); }
     }
     private void Support_Click(object sender, RoutedEventArgs args)
     {
         if (sender is not FrameworkElement button) return;
-        new Flyout { Content = new TextBlock { Text = ModbusSensorViewModel.SupportedFunctions, MaxWidth = 420, FontSize = 12, TextWrapping = TextWrapping.Wrap } }.ShowAt(button);
+        new Flyout { Content = new ScrollViewer { MaxHeight = 360, Content = new TextBlock { Text = ModbusSensorViewModel.SupportedFunctions, MaxWidth = 420, Margin = new Thickness(0,0,16,0), FontSize = 12, TextWrapping = TextWrapping.Wrap } } }.ShowAt(button);
     }
 }

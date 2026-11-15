@@ -24,7 +24,8 @@ public sealed partial class ProtocolViewModel
     private void SensorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(ModbusSensorViewModel.IsBusy)) { OnPropertyChanged(nameof(IsProtocolSelectionEnabled)); NotifyViewSelection(); }
-        else if (args.PropertyName is nameof(ModbusSensorViewModel.Status) or nameof(ModbusSensorViewModel.ProductSummary)) NotifyWorkspaceHeader();
+        else if (args.PropertyName is nameof(ModbusSensorViewModel.Status) or nameof(ModbusSensorViewModel.ProductSummary)
+            or nameof(ModbusSensorViewModel.Feedback) or nameof(ModbusSensorViewModel.AvailabilityHint)) NotifyWorkspaceHeader();
     }
     public bool IsSensorSelected => SelectedProtocolIndex == 1 && _sensorSelected;
     public Microsoft.UI.Xaml.Visibility SensorVisibility => IsSensorSelected ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -88,7 +89,7 @@ public sealed partial class ProtocolViewModel
     public string MstpPacketViewLabel => UiText.Get("ProtocolMstpPacketView", "BACnet MS/TP · Packet analysis");
 
     private bool ShowModbusHeader => RegisterMonitorVisibility == Microsoft.UI.Xaml.Visibility.Visible || Modbus?.IsBusy == true;
-    public string WorkspaceHeader => IsSensorSelected && Sensor is { } simulator ? simulator.Status : ShowModbusHeader && Modbus is { } model
+    public string WorkspaceHeader => IsSensorSelected && Sensor is { } simulator ? simulator.HeaderText : ShowModbusHeader && Modbus is { } model
         ? $"{model.Status} · {model.RequestSummary}" : $"{Activity} · {RetainedSummary}";
     public string WorkspaceHeaderHelp => IsSensorSelected || ShowModbusHeader ? WorkspaceHeader : Status;
 

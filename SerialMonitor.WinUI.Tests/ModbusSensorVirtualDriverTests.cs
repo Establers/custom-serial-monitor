@@ -67,6 +67,45 @@ public sealed class ModbusSensorVirtualDriverTests(ITestOutputHelper output)
         }
     }
 
+    [Com0comPair0Fact]
+    public async Task MaskAndCombinedWritesRoundTripAcrossTheWindowsDriver()
+    {
+        VerifyEmulator("CNCA0"); VerifyEmulator("CNCB0");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var token = deadline.Token;
+        await using var serial = new SerialService();
+        await using var master = new SerialService();
+        serial.SetTransmitMode(SerialTransmitMode.Sensor); master.SetTransmitMode(SerialTransmitMode.DirectTest);
+        await serial.ConnectAsync(Settings("CNCA0"), new(), token);
+        await master.ConnectAsync(Settings("CNCB0"), new(), token);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var service = new ModbusSensorService(serial, (_,_)=>{});
+        var run = service.RunAsync(new() { SchemaVersion=1,Name="Controller",UnitId=1,
+            Points=[new() {Name="Flags",Area=3,Address=0,InitialValue="18",Writable=true},
+                    new() {Name="Setpoint",Area=3,Address=1,InitialValue="18",Writable=true}] },()=>{},stop.Token);
+        var drain = Task.Run(async () => { await foreach(var _ in serial.ReceivedBytes.ReadAllAsync(token)) {} },token);
+        try
+        {
+            // Independent fixed packets, including wire CRCs; FC22 example: 0x12 -> 0x17.
+            var vectors = new[] {
+                ("0116000000F20025962E","0116000000F20025962E"),
+                ("010300000001840A","0103020017F84A"),
+                ("01170000000200000002041234ABCD3D53","0117041234ABCD0334") };
+            foreach (var (request,response) in vectors)
+            {
+                await master.SendBytesAsync(Convert.FromHexString(request),"Advanced simulator test",token);
+                Assert.Equal(response,Convert.ToHexString(await ReadExact(master,response.Length/2,token)));
+            }
+            Assert.Equal(26,serial.WrittenByteCount);
+            output.WriteLine("FC22 mask write, FC03 readback, FC23 write-before-read: 3 exact request/response exchanges at 9600 8E1.");
+        }
+        finally
+        {
+            stop.Cancel(); deadline.Cancel();
+            await Record.ExceptionAsync(()=>run); await Record.ExceptionAsync(()=>drain);
+        }
+    }
+
     private static SerialSettings Settings(string port) => new()
     { PortName = port, BaudRate = 9600, DataBits = 8, Parity = SerialParityMode.Even, StopBits = SerialStopBitsMode.One };
 

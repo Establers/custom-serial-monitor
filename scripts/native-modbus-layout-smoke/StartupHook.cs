@@ -704,6 +704,26 @@ public static class StartupHook
                 await Task.Delay(350);
             }
             await Probe(dialog, name);
+            if (name.StartsWith("device-ai-guide", StringComparison.Ordinal))
+            {
+                string? copied = null;
+                var copy = dialog.GetType().GetProperty("CopyTextAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                copy.SetValue(dialog, (Func<string,CancellationToken,Task>)((text, _) => { copied = text; return Task.CompletedTask; }));
+                var primary = Tree(dialog).First(e => e.GetType().Name == "Button" && P(e, "Name")?.ToString() == "PrimaryButton");
+                var peer = New("Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer", primary);
+                var invoke = Call(peer, "GetPattern", Enum.Parse(FindType("Microsoft.UI.Xaml.Automation.Peers.PatternInterface"), "Invoke"))!;
+                void ClickCopy() => FindType("Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider").GetMethod("Invoke")!.Invoke(invoke, null);
+                ClickCopy();
+                for (var attempt=0; attempt<80 && P(Field(dialog,"CopyStatus"),"Text")?.ToString()?.StartsWith("복사했어요") != true; attempt++) await Task.Delay(25);
+                if (copied?.Contains("schemaVersion") != true || !copied.Contains("통신 프로토콜 자료")) Issue("AI guide copy is missing the protocol instructions or JSON example");
+                if (P(Field(dialog,"CopyStatus"),"Text")?.ToString()?.StartsWith("복사했어요") != true || ((IAsyncInfo)operation).Status != AsyncStatus.Started)
+                    Issue("AI guide did not keep its success feedback inside the open dialog");
+                copy.SetValue(dialog, (Func<string,CancellationToken,Task>)((_,_) => Task.FromException(new IOException("Test clipboard unavailable"))));
+                ClickCopy();
+                for (var attempt=0; attempt<80 && P(Field(dialog,"CopyStatus"),"Text")?.ToString()?.StartsWith("복사하지 못했어요") != true; attempt++) await Task.Delay(25);
+                if (P(Field(dialog,"CopyStatus"),"Text")?.ToString()?.StartsWith("복사하지 못했어요") != true) Issue("AI guide did not display clipboard failure");
+                await Probe(dialog, name+"-copy-feedback");
+            }
             if (name.StartsWith("device-editor", StringComparison.Ordinal))
             {
                 var editor = Field(dialog, "JsonEditor");
@@ -825,6 +845,7 @@ public static class StartupHook
                 var deviceEditor = New("SerialMonitor.WinUI.Views.ModbusDeviceEditorDialog");
                 S(deviceEditor, "Json", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "docs", "modbus_sensor_ee071.json")) + new string(' ', 120000));
                 await Dialog(deviceEditor, "device-editor-long" + suffix);
+                await Dialog(New("SerialMonitor.WinUI.Views.ModbusDeviceAiGuideDialog"), "device-ai-guide" + suffix);
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusItemEditorDialog", MonitorSettings(), null), "items-long" + suffix,
                     m => { S(m, "NameText", "긴 항목 / " + new string('N', 80)); S(m, "ValueNamesText", Lines); });
                 await Dialog(New("SerialMonitor.WinUI.Views.ModbusPollingEditorDialog", PollingSettings()), "groups-long" + suffix);
@@ -890,6 +911,14 @@ public static class StartupHook
                     if (Tree(deviceView).Any(e => e.GetType().Name == "TextBox" && Visible(e))) Issue("raw JSON editor remains on the main simulator surface");
                     if (((IEnumerable)P(sensor, "Points")!).Cast<object>().Count() != 12) Issue("EE071 preview is missing register definitions");
                     if (N(P(productSelector, "Padding")!, "Left") != 5) Issue("product dropdown left padding is not 5 DIP");
+                    if (N(P(productSelector,"BorderThickness")!,"Left") < 1 || N(productSelector,"ActualWidth") > 481)
+                        Issue("product selector has no visible field boundary or exceeds its compact width");
+                    var pointsList = Field(deviceView,"PointList");
+                    var beforeFeedback = N(pointsList,"ActualHeight");
+                    Call(sensor,"ShowFeedback","제품을 저장했어요."); await Settle(sensorView);
+                    if (Math.Abs(N(pointsList,"ActualHeight")-beforeFeedback)>1) Issue("feedback consumed a preview row");
+                    if (P(protocolModel,"WorkspaceHeader")?.ToString() != "제품을 저장했어요.") Issue("feedback is missing from the existing status header");
+                    Call(sensor,"ClearFeedback");
                     var management = Field(deviceView, "ManagementFlyout");
                     Call(management, "ShowAt", Field(deviceView, "ManagementButton"));
                     await Settle(deviceView);

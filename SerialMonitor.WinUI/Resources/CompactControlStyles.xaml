@@ -489,6 +489,15 @@
         <Setter Property="BorderBrush" Value="{ThemeResource CompactButtonBorderBrush}" />
     </Style>
     <Style x:Key="ModbusFunctionComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ModbusComboBoxStyle}" />
+    <!-- Keep a visible field edge and the native dropdown arrow even at rest. -->
+    <Style x:Key="ModbusProductComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ModbusToolbarComboBoxStyle}">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="MaxWidth" Value="480" />
+        <Setter Property="Padding" Value="5,0,28,0" />
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
 
     <Style x:Key="CompactCheckBoxStyle"
            TargetType="CheckBox">

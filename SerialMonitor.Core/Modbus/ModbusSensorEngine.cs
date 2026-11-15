@@ -25,6 +25,8 @@ public sealed class ModbusSensorEngine
         if (!broadcast && request[0] != _unit) return null;
         var fc = request[1];
         byte[] Exception(byte code) => Finish([(byte)_unit, (byte)(fc | 128), code]);
+        if (fc == 22) return MaskWrite(request, broadcast);
+        if (fc == 23) return broadcast ? null : ReadWrite(request);
         if (fc is not (1 or 2 or 3 or 4 or 5 or 6 or 15 or 16)) return broadcast ? null : Exception(1);
         if (request.Length < 8) return broadcast ? null : Exception(3);
         int address = BinaryPrimitives.ReadUInt16BigEndian(request[2..]);
@@ -71,6 +73,43 @@ public sealed class ModbusSensorEngine
             else BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(3 + i * 2), values[i]);
         return Finish(payload);
     }
+    private byte[]? MaskWrite(ReadOnlySpan<byte> request, bool broadcast)
+    {
+        if (request.Length != 10) return broadcast ? null : Error(22, 3);
+        var address = BinaryPrimitives.ReadUInt16BigEndian(request[2..]);
+        if (!_cells.TryGetValue((3, address), out var cell) || !cell.Writable)
+            return broadcast ? null : Error(22, 2);
+        var andMask = BinaryPrimitives.ReadUInt16BigEndian(request[4..]);
+        var orMask = BinaryPrimitives.ReadUInt16BigEndian(request[6..]);
+        _cells[(3, address)] = ((ushort)((cell.Value & andMask) | (orMask & ~andMask)), true);
+        return broadcast ? null : request.ToArray();
+    }
+
+    private byte[] ReadWrite(ReadOnlySpan<byte> request)
+    {
+        if (request.Length < 13) return Error(23, 3);
+        int readAddress = BinaryPrimitives.ReadUInt16BigEndian(request[2..]);
+        int readCount = BinaryPrimitives.ReadUInt16BigEndian(request[4..]);
+        int writeAddress = BinaryPrimitives.ReadUInt16BigEndian(request[6..]);
+        int writeCount = BinaryPrimitives.ReadUInt16BigEndian(request[8..]);
+        if (readCount is < 1 or > 125 || writeCount is < 1 or > 121 ||
+            request[10] != writeCount * 2 || request.Length != 13 + writeCount * 2) return Error(23, 3);
+        // Reject either invalid range before writing. Overlapping reads observe the new values.
+        for (var i = 0; i < readCount; i++)
+            if (!_cells.ContainsKey((3, readAddress + i))) return Error(23, 2);
+        for (var i = 0; i < writeCount; i++)
+            if (!_cells.TryGetValue((3, writeAddress + i), out var cell) || !cell.Writable) return Error(23, 2);
+        for (var i = 0; i < writeCount; i++)
+            _cells[(3, writeAddress + i)] = (BinaryPrimitives.ReadUInt16BigEndian(request[(11 + i * 2)..]), true);
+        var payload = new byte[3 + readCount * 2];
+        payload[0] = (byte)_unit; payload[1] = 23; payload[2] = (byte)(readCount * 2);
+        for (var i = 0; i < readCount; i++)
+            BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(3 + i * 2), _cells[(3, readAddress + i)].Value);
+        return Finish(payload);
+    }
+
+    private byte[] Error(byte function, byte code) => Finish([(byte)_unit, (byte)(function | 128), code]);
+
     private static byte[] Finish(byte[] payload)
     {
         var packet = new byte[payload.Length + 2]; payload.CopyTo(packet, 0);
@@ -91,7 +130,7 @@ public sealed class ModbusRequestFramer
             foreach (var frame in Drain(endOfFrame: false)) yield return frame;
         }
         if (!endsAtIdleBoundary) yield break;
-        // At a known idle boundary a truncated FC15/16 prefix cannot receive
+        // At a known idle boundary a truncated variable-length prefix cannot receive
         // more bytes. Search its tail for complete CRC-valid requests before
         // discarding it; otherwise line noise can hide an entire good request.
         foreach (var frame in Drain(endOfFrame: true)) yield return frame;
@@ -101,7 +140,12 @@ public sealed class ModbusRequestFramer
     {
         while (_buffer.Count >= 8)
         {
-            var length = _buffer[1] is 15 or 16 ? 9 + _buffer[6] : 8;
+            if (_buffer[1] == 23 && _buffer.Count < 11)
+            {
+                if (!endOfFrame) yield break;
+                _buffer.RemoveAt(0); continue;
+            }
+            var length = _buffer[1] switch { 15 or 16 => 9 + _buffer[6], 22 => 10, 23 => 13 + _buffer[10], _ => 8 };
             if (length > 256) { _buffer.RemoveAt(0); continue; }
             if (_buffer.Count < length)
             {

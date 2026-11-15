@@ -22,10 +22,13 @@ public sealed partial class ModbusSensorViewModel
     public bool HasSelectedProduct => SelectedProduct is not null;
     public bool CanDeleteSelected => CanManageSelected && SelectedProduct?.IsBuiltIn == false;
     public string Feedback { get => _feedback; private set => SetProperty(ref _feedback, value); }
+    public string HeaderText => IsBusy || Status.StartsWith("응답 중지:", StringComparison.Ordinal) ? Status :
+        !string.IsNullOrWhiteSpace(Feedback) ? Feedback :
+        !string.IsNullOrWhiteSpace(AvailabilityHint) ? AvailabilityHint : Status;
     public string ProductSummary => _definition is null ? "제품을 선택하거나 제품 관리에서 추가하세요." :
         $"장치 ID {_definition.UnitId} · {_definition.Points.Count}개 항목 · 응답 지연 {_definition.ResponseDelayMs} ms";
     public string ProductSource => _definition?.Source ?? "";
-    public const string SupportedFunctions = "읽기: FC01 코일, FC02 입력 비트, FC03 보유 레지스터, FC04 입력 레지스터\n쓰기: FC05/06 한 개 쓰기, FC15/16 여러 개 쓰기\n값: 비트, 16/32비트 정수, Float32, 배율·바이트/워드 순서\n\n선택한 장치 ID 하나에 응답해요. 진단·장치 식별·파일·FIFO·사용자 정의 기능, 문자열 자료형, 값 자동 변화와 오류 주입은 아직 지원하지 않아요.\n쓰기는 메모리에 반영되고 다시 시작하면 초기값으로 돌아가요.";
+    public const string SupportedFunctions = "읽기: FC01 코일, FC02 입력 비트, FC03 보유 레지스터, FC04 입력 레지스터\n쓰기: FC05/06 한 개 쓰기, FC15/16 여러 개 쓰기\nFC22 (0x16): 마스크로 비트 변경\nFC23 (0x17): 레지스터 쓰기 후 읽기\n값: 비트, 16/32비트 정수, Float32, 배율·바이트/워드 순서\n\n선택한 장치 ID 하나에 응답해요. 쓰기 결과는 메모리에 반영되고 다시 시작하면 초기값으로 돌아가요.\n\n통신: 응답 전 최소 프레임 간격을 기다려요. Windows·USB 수신 시각으로는 실제 바이트 사이 간격이나 RS-485 방향 전환 시간을 검증할 수 없어요. 정밀 타이밍 시험은 별도 장비로 확인하세요.\n\n미지원: 진단·장치 식별·파일·FIFO·사용자 정의 기능, 문자열 자료형, 값 자동 변화와 오류 주입.";
 
     public ModbusDevicePreset? SelectedProduct
     {

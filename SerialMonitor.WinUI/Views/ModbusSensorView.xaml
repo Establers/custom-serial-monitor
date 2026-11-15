@@ -1,10 +1,11 @@
 <UserControl x:Class="SerialMonitor.WinUI.Views.ModbusSensorView"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Loaded="View_Loaded">
- <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" RowSpacing="6" Padding="6">
-  <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
-   <ComboBox x:Name="ProductSelector" ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct, Mode=TwoWay}" DisplayMemberPath="Label"
-    PlaceholderText="제품 선택" IsEnabled="{Binding CanManage}" Style="{StaticResource ModbusToolbarComboBoxStyle}" ToolTipService.ToolTip="{Binding SelectedProduct.Label}" AutomationProperties.Name="시뮬레이션할 제품" />
-   <Button x:Name="ManagementButton" Grid.Column="1" Content="제품 관리" Style="{StaticResource ModbusActionButtonStyle}">
+ <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="6" Padding="6">
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="5">
+   <TextBlock Text="제품" FontSize="12" VerticalAlignment="Center" />
+   <ComboBox x:Name="ProductSelector" Grid.Column="1" ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct, Mode=TwoWay}" DisplayMemberPath="Label"
+    PlaceholderText="제품 선택" IsEnabled="{Binding CanManage}" Style="{StaticResource ModbusProductComboBoxStyle}" ToolTipService.ToolTip="{Binding SelectedProduct.Label}" AutomationProperties.Name="시뮬레이션할 제품" />
+   <Button x:Name="ManagementButton" Grid.Column="2" Content="제품 관리" Style="{StaticResource ModbusActionButtonStyle}">
     <Button.Flyout><MenuFlyout x:Name="ManagementFlyout" Opening="Management_Opening">
      <MenuFlyoutItem Text="새 제품…" Click="New_Click" IsEnabled="{Binding CanManage}" />
      <MenuFlyoutItem Text="JSON 불러오기…" Click="Import_Click" IsEnabled="{Binding CanManage}" />
@@ -15,11 +16,11 @@
      <MenuFlyoutItem Text="제품 삭제…" Click="Delete_Click" IsEnabled="{Binding CanDeleteSelected}" />
      <MenuFlyoutSeparator />
      <MenuFlyoutItem Text="목록 새로 고침" Click="Reload_Click" IsEnabled="{Binding CanManage}" />
-     <MenuFlyoutItem Text="AI 작성 지침 복사" Click="CopyGuide_Click" />
+     <MenuFlyoutItem Text="AI로 제품 정의 만들기…" Click="ShowAiGuide_Click" />
     </MenuFlyout></Button.Flyout>
    </Button>
-   <Button Grid.Column="2" Content="응답 시작" Command="{Binding StartCommand}" Style="{StaticResource ModbusAccentButtonStyle}" />
-   <Button Grid.Column="3" Content="중지" Command="{Binding StopCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
+   <Border Grid.Column="3" ToolTipService.ToolTip="{Binding AvailabilityHint}"><Button Content="응답 시작" Command="{Binding StartCommand}" Style="{StaticResource ModbusAccentButtonStyle}" /></Border>
+   <Button Grid.Column="4" Content="중지" Command="{Binding StopCommand}" Style="{StaticResource ModbusActionButtonStyle}" />
   </Grid>
   <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
    <TextBlock Text="{Binding ProductSummary}" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" />
@@ -28,13 +29,11 @@
    </Button>
    <Button Grid.Column="2" Content="지원 기능" Click="Support_Click" Style="{StaticResource ModbusActionButtonStyle}" />
   </Grid>
-  <TextBlock Grid.Row="2" Text="{Binding AvailabilityHint}" Visibility="{Binding AvailabilityHint, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" FontSize="12" />
-  <TextBlock Grid.Row="3" Text="{Binding Feedback}" Visibility="{Binding Feedback, Converter={StaticResource NonEmptyTextVisibility}}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Feedback}" FontSize="12" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite" />
-  <Grid Grid.Row="4" ColumnDefinitions="*,125,105,155" Padding="8,3,24,3" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+  <Grid Grid.Row="2" ColumnDefinitions="*,125,105,155" Padding="8,3,24,3" Background="{ThemeResource ControlFillColorSecondaryBrush}">
    <TextBlock Text="항목" FontSize="12" /><TextBlock Grid.Column="1" Text="주소 (0부터)" FontSize="12" />
    <TextBlock Grid.Column="2" Text="시작할 때 값" FontSize="12" /><TextBlock Grid.Column="3" Text="자료형 · 접근" FontSize="12" />
   </Grid>
-  <ListView x:Name="PointList" Grid.Row="5" ItemsSource="{Binding Points}" SelectionMode="None" IsItemClickEnabled="False" MinHeight="0" HorizontalContentAlignment="Stretch">
+  <ListView x:Name="PointList" Grid.Row="3" ItemsSource="{Binding Points}" SelectionMode="None" IsItemClickEnabled="False" MinHeight="0" HorizontalContentAlignment="Stretch">
    <ListView.ItemContainerStyle><StaticResource ResourceKey="ModbusPreviewListItemStyle" /></ListView.ItemContainerStyle>
    <ListView.ItemTemplate><DataTemplate><Grid ColumnDefinitions="*,125,105,155">
     <TextBlock Text="{Binding Name}" ToolTipService.ToolTip="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="12" />
