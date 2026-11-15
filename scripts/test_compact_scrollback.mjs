@@ -10,7 +10,10 @@ const { install, pack, unpack } = require('../SerialMonitor.WinUI/Assets/xterm/c
 const write = (terminal, text) => new Promise(resolve => terminal.write(text, resolve));
 
 test('xterm dependency is pinned to the cell layout validated by these tests', () => {
-  const source = readFileSync(new URL('../SerialMonitor.WinUI/Assets/xterm/xterm.js', import.meta.url));
+  // Git may check this JavaScript out with CRLF on Windows. Pin the code, while
+  // accepting the checkout's line-ending convention without changing the asset.
+  const source = readFileSync(new URL('../SerialMonitor.WinUI/Assets/xterm/xterm.js', import.meta.url), 'utf8')
+    .replace(/\r\n/g, '\n');
   assert.equal(createHash('sha256').update(source).digest('hex'),
     '14903579ff54664cd72f8e8699e6961a6272c21863ec1c3b118cdc8af5d4a972',
     'An xterm update requires reviewing the compact adapter and rerunning the differential and memory tests.');
