@@ -1468,8 +1468,8 @@
 <data name="ModbusPollingCopySuffix" xml:space="preserve"><value> 복사본</value></data>
 <data name="ProtocolViewSelection" xml:space="preserve"><value>프로토콜 및 보기</value></data>
 <data name="ProtocolMoreActions" xml:space="preserve"><value>더 보기</value></data>
-<data name="ProtocolModbusPacketView" xml:space="preserve"><value>패킷 분석</value></data>
-<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>장치 감시·제어</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · 패킷 분석</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · 장치 감시·제어</value></data>
 <data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · 패킷 분석</value></data>
 <data name="ModbusCommandEditorTitle" xml:space="preserve"><value>명령 정의</value></data>
 <data name="ModbusCommandApply" xml:space="preserve"><value>모니터에 적용</value></data>

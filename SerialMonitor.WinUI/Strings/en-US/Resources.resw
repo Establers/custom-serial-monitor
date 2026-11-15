@@ -1470,8 +1470,8 @@ Review commands and Terminal/HEX mode before running.</value></data>
 <data name="ModbusPollingCopySuffix" xml:space="preserve"><value> copy</value></data>
 <data name="ProtocolViewSelection" xml:space="preserve"><value>Protocol and view</value></data>
 <data name="ProtocolMoreActions" xml:space="preserve"><value>More actions</value></data>
-<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Packet analysis</value></data>
-<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Device monitoring &amp; control</value></data>
+<data name="ProtocolModbusPacketView" xml:space="preserve"><value>Modbus RTU · Packet analysis</value></data>
+<data name="ProtocolModbusReadWriteView" xml:space="preserve"><value>Modbus RTU · Device monitoring &amp; control</value></data>
 <data name="ProtocolMstpPacketView" xml:space="preserve"><value>BACnet MS/TP · Packet analysis</value></data>
 <data name="ModbusCommandEditorTitle" xml:space="preserve"><value>Command definitions</value></data>
 <data name="ModbusCommandApply" xml:space="preserve"><value>Apply to monitor</value></data>

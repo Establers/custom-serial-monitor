@@ -48,7 +48,7 @@
     <Grid Padding="6,4,6,6" RowSpacing="5" RowDefinitions="Auto,*" MinHeight="0" MinWidth="0">
         <Border Background="{ThemeResource InspectorHeaderBrush}" CornerRadius="4" Padding="6,4">
             <Grid RowDefinitions="Auto,Auto">
-                <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
+                <Grid ColumnDefinitions="270,*,Auto" ColumnSpacing="10">
                     <views:ProtocolViewSelector x:Name="PresentationSelector" ItemsSource="{Binding PresentationOptions}" DisplayMemberPath="Label"
                               SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" MinWidth="0" MinHeight="24" Height="24"

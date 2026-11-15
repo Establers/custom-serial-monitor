@@ -46,8 +46,8 @@ public sealed partial class ProtocolViewModel
     public bool IsModbusViewSelectionEnabled => IsProtocolSelectionEnabled || SelectedProtocolIndex == 1;
     public string ViewSelectionLabel => UiText.Get("ProtocolViewSelection", "Protocol and view");
     public string MoreActionsLabel => UiText.Get("ProtocolMoreActions", "More actions");
-    public string ModbusPacketViewLabel => UiText.Get("ProtocolModbusPacketView", "Packet analysis");
-    public string ModbusReadWriteViewLabel => UiText.Get("ProtocolModbusReadWriteView", "Device monitoring & control");
+    public string ModbusPacketViewLabel => UiText.Get("ProtocolModbusPacketView", "Modbus RTU · Packet analysis");
+    public string ModbusReadWriteViewLabel => UiText.Get("ProtocolModbusReadWriteView", "Modbus RTU · Device monitoring & control");
     public string MstpPacketViewLabel => UiText.Get("ProtocolMstpPacketView", "BACnet MS/TP · Packet analysis");
 
     private bool ShowModbusHeader => RegisterMonitorVisibility == Microsoft.UI.Xaml.Visibility.Visible || Modbus?.IsBusy == true;
